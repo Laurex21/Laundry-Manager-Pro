@@ -108,11 +108,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         {/* Mobile Header */}
         <header className="lg:hidden h-16 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-20 shadow-sm">
           <div className="flex items-center gap-3">
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
+            <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
+              <Menu className="w-5 h-5" />
+            </Button>
             <span className="font-display font-bold text-lg">CleanEase</span>
           </div>
         </header>
