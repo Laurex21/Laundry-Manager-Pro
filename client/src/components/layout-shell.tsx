@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -9,26 +10,38 @@ import {
   X, 
   LogOut,
   Shirt,
-  DollarSign
+  DollarSign,
+  Languages
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-  { icon: ShoppingBag, label: "Orders", href: "/orders" },
-  { icon: Users, label: "Customers", href: "/customers" },
-  { icon: Shirt, label: "Services", href: "/services" },
-  { icon: DollarSign, label: "Expenses", href: "/expenses" },
+  { icon: LayoutDashboard, labelKey: "dashboard", href: "/" },
+  { icon: ShoppingBag, labelKey: "orders", href: "/orders" },
+  { icon: Users, labelKey: "customers", href: "/customers" },
+  { icon: Shirt, labelKey: "services", href: "/services" },
+  { icon: DollarSign, labelKey: "expenses", href: "/expenses" },
 ];
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { t, i18n } = useTranslation();
+
+  const toggleLanguage = (lang: string) => {
+    i18n.changeLanguage(lang);
+  };
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
@@ -39,7 +52,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           </div>
           <div>
             <h1 className="font-display font-bold text-xl tracking-tight">CleanEase</h1>
-            <p className="text-xs text-muted-foreground font-medium">Laundry Manager</p>
+            <p className="text-xs text-muted-foreground font-medium">{t('laundry_manager')}</p>
           </div>
         </div>
       </div>
@@ -59,14 +72,27 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 onClick={() => setMobileOpen(false)}
               >
                 <item.icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary")} />
-                {item.label}
+                {t(item.labelKey)}
               </div>
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border mt-auto">
+      <div className="p-4 border-t border-sidebar-border mt-auto space-y-4">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
+              <Languages className="w-4 h-4 mr-2" />
+              {i18n.language.toUpperCase()}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem onClick={() => toggleLanguage('en')}>English</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => toggleLanguage('fr')}>Français</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <div className="flex items-center gap-3 px-2 mb-4">
           <Avatar className="w-9 h-9 border border-border">
             <AvatarImage src={user?.profileImageUrl} />
@@ -83,7 +109,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           onClick={() => logout()}
         >
           <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
+          {t('sign_out')}
         </Button>
       </div>
     </div>

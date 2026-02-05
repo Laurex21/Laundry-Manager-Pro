@@ -1,6 +1,7 @@
 import { useStats } from "@/hooks/use-stats";
 import { useOrders } from "@/hooks/use-orders";
 import { Link } from "wouter";
+import { useTranslation } from "react-i18next";
 import { 
   ArrowUpRight, 
   ShoppingBag, 
@@ -19,6 +20,7 @@ import { format } from "date-fns";
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
+  const { t } = useTranslation();
 
   // Sort orders by id desc to get recent ones, take top 5
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 5) || [];
@@ -31,13 +33,13 @@ export default function Dashboard() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back! Here's what's happening today.</p>
+          <h1 className="text-3xl font-display font-bold text-foreground">{t('dashboard')}</h1>
+          <p className="text-muted-foreground mt-1">{t('welcome')}! Here's what's happening today.</p>
         </div>
         <div className="flex gap-3">
           <Link href="/orders">
             <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              <Plus className="w-4 h-4 mr-2" /> New Order
+              <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
             </Button>
           </Link>
         </div>
@@ -46,27 +48,27 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard 
-          title="Total Revenue" 
+          title={t('total_revenue')} 
           value={`$${stats?.totalRevenue.toFixed(2) || "0.00"}`} 
           icon={DollarSign} 
           trend="+12% from last month"
           className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-card"
         />
         <StatsCard 
-          title="Total Orders" 
+          title={t('total_orders')} 
           value={stats?.totalOrders || 0} 
           icon={ShoppingBag} 
           trend="+5 new today"
         />
         <StatsCard 
-          title="Pending Orders" 
+          title={t('pending_orders')} 
           value={stats?.pendingOrders || 0} 
           icon={Clock} 
           trend="Requires attention"
           className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-card"
         />
         <StatsCard 
-          title="Active Customers" 
+          title={t('active_customers')} 
           value={stats?.activeCustomers || 0} 
           icon={Users} 
           trend="+3 this week"

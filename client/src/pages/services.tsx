@@ -3,6 +3,7 @@ import { useServices, useCreateService } from "@/hooks/use-services";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertServiceSchema, type InsertService } from "@shared/schema";
+import { useTranslation } from "react-i18next";
 import { 
   Plus, 
   Tag,
@@ -31,18 +32,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Services() {
   const { data: services, isLoading } = useServices();
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">Services Catalog</h1>
+          <h1 className="text-3xl font-display font-bold">{t('services')}</h1>
           <p className="text-muted-foreground mt-1">Manage service prices and units</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              <Plus className="w-4 h-4 mr-2" /> Add Service
+              <Plus className="w-4 h-4 mr-2" /> {t('add_service')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">

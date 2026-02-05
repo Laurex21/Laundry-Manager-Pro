@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { createOrderWithItemsSchema } from "@shared/routes";
 import { z } from "zod";
 import { Link } from "wouter";
+import { useTranslation } from "react-i18next";
 import { 
   Plus, 
   Search, 
@@ -48,6 +49,7 @@ export default function Orders() {
   const { data: orders, isLoading } = useOrders();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   // Simple search filtering
   const filteredOrders = orders?.filter((o: any) => 
@@ -59,13 +61,13 @@ export default function Orders() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">Orders</h1>
+          <h1 className="text-3xl font-display font-bold">{t('orders')}</h1>
           <p className="text-muted-foreground mt-1">Manage laundry orders and status</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              <Plus className="w-4 h-4 mr-2" /> New Order
+              <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
@@ -81,7 +83,7 @@ export default function Orders() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="Search orders..." 
+            placeholder={t('search_orders')} 
             className="pl-10 bg-background border-border"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -98,11 +100,11 @@ export default function Orders() {
             <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
               <tr>
                 <th className="px-6 py-4">Order ID</th>
-                <th className="px-6 py-4">Customer</th>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Payment</th>
-                <th className="px-6 py-4 text-right">Amount</th>
+                <th className="px-6 py-4">{t('customers')}</th>
+                <th className="px-6 py-4">{t('date')}</th>
+                <th className="px-6 py-4">{t('status')}</th>
+                <th className="px-6 py-4">{t('payment')}</th>
+                <th className="px-6 py-4 text-right">{t('amount')}</th>
                 <th className="px-6 py-4"></th>
               </tr>
             </thead>

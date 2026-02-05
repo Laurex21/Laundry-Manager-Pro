@@ -3,6 +3,7 @@ import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCustomerSchema, type InsertCustomer } from "@shared/schema";
+import { useTranslation } from "react-i18next";
 import { 
   Plus, 
   Search, 
@@ -36,6 +37,7 @@ export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   const filteredCustomers = customers?.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -46,13 +48,13 @@ export default function Customers() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">Customers</h1>
+          <h1 className="text-3xl font-display font-bold">{t('customers')}</h1>
           <p className="text-muted-foreground mt-1">Manage your customer base</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              <Plus className="w-4 h-4 mr-2" /> Add Customer
+              <Plus className="w-4 h-4 mr-2" /> {t('add_customer')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
@@ -67,7 +69,7 @@ export default function Customers() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input 
-          placeholder="Search by name or phone..." 
+          placeholder={t('search_customers')} 
           className="pl-10 max-w-sm bg-background border-border focus:ring-primary/20 transition-all"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

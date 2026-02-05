@@ -3,6 +3,7 @@ import { useExpenditures, useCreateExpenditure } from "@/hooks/use-expenditures"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertExpenditureSchema, type InsertExpenditure } from "@shared/schema";
+import { useTranslation } from "react-i18next";
 import { 
   Plus, 
   DollarSign,
@@ -40,6 +41,7 @@ import { format } from "date-fns";
 export default function Expenses() {
   const { data: expenditures, isLoading } = useExpenditures();
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   const totalExpenses = expenditures?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
@@ -47,13 +49,13 @@ export default function Expenses() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">Expenditures</h1>
+          <h1 className="text-3xl font-display font-bold">{t('expenses')}</h1>
           <p className="text-muted-foreground mt-1">Track business expenses and costs</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              <Plus className="w-4 h-4 mr-2" /> Log Expense
+              <Plus className="w-4 h-4 mr-2" /> {t('log_expense')}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
