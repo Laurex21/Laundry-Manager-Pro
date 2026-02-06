@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
+import { useCurrency, type Currency } from "@/hooks/use-currency";
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -11,7 +12,8 @@ import {
   LogOut,
   Shirt,
   DollarSign,
-  Languages
+  Languages,
+  Coins
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 
 const NAV_ITEMS = [
@@ -38,6 +42,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { t, i18n } = useTranslation();
+  const { currency, setCurrency } = useCurrency();
 
   const toggleLanguage = (lang: string) => {
     i18n.changeLanguage(lang);
@@ -79,21 +84,40 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border mt-auto space-y-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
-              <Languages className="w-4 h-4 mr-2" />
-              {i18n.language.toUpperCase()}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem onClick={() => toggleLanguage('en')}>English</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toggleLanguage('fr')}>Français</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="p-4 border-t border-sidebar-border mt-auto space-y-2">
+        <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="flex-1 justify-start text-muted-foreground h-8 px-2">
+                <Languages className="w-4 h-4 mr-2" />
+                {i18n.language.toUpperCase()}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Language</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => toggleLanguage('en')}>English</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toggleLanguage('fr')}>Français</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <div className="flex items-center gap-3 px-2 mb-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="flex-1 justify-start text-muted-foreground h-8 px-2">
+                <Coins className="w-4 h-4 mr-2" />
+                {currency}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Currency</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setCurrency('USD')}>USD ($)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCurrency('NGN')}>NAIRA (₦)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCurrency('XOF')}>FCFA (CFA)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCurrency('EUR')}>EURO (€)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="flex items-center gap-3 px-2 mb-2 pt-2">
           <Avatar className="w-9 h-9 border border-border">
             <AvatarImage src={user?.profileImageUrl} />
             <AvatarFallback>{user?.firstName?.[0]}{user?.lastName?.[0]}</AvatarFallback>
@@ -105,7 +129,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </div>
         <Button 
           variant="outline" 
-          className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 hover:border-destructive/20" 
+          className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 hover:border-destructive/20 h-9" 
           onClick={() => logout()}
         >
           <LogOut className="w-4 h-4 mr-2" />

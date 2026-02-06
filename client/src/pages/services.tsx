@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertServiceSchema, type InsertService } from "@shared/schema";
 import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/use-currency";
 import { 
   Plus, 
   Tag,
@@ -33,6 +34,8 @@ export default function Services() {
   const { data: services, isLoading } = useServices();
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -72,7 +75,7 @@ export default function Services() {
                 <p className="text-sm text-muted-foreground mt-1">{service.category}</p>
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-lg font-mono font-bold text-primary">
-                    ${Number(service.price).toFixed(2)}
+                    {symbol}{Number(service.price).toFixed(2)}
                   </span>
                   <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
                     per {service.unit}

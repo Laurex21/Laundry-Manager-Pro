@@ -8,6 +8,7 @@ import { createOrderWithItemsSchema } from "@shared/routes";
 import { z } from "zod";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/use-currency";
 import { 
   Plus, 
   Search, 
@@ -50,6 +51,8 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
 
   // Simple search filtering
   const filteredOrders = orders?.filter((o: any) => 
@@ -135,7 +138,7 @@ export default function Orders() {
                       <StatusBadge status={order.paymentStatus} />
                     </td>
                     <td className="px-6 py-4 text-right font-mono font-medium">
-                      ${Number(order.totalAmount).toFixed(2)}
+                      {symbol}{Number(order.totalAmount).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link href={`/orders/${order.id}`}>
@@ -159,6 +162,8 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const { mutate, isPending } = useCreateOrder();
   const { data: customers } = useCustomers();
   const { data: services } = useServices();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
   
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
@@ -246,7 +251,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                       <SelectContent>
                         {services?.filter(s => s.active).map((service) => (
                           <SelectItem key={service.id} value={service.id.toString()}>
-                            {service.name} (${Number(service.price).toFixed(2)}/{service.unit})
+                            {service.name} ({symbol}{Number(service.price).toFixed(2)}/{service.unit})
                           </SelectItem>
                         ))}
                       </SelectContent>

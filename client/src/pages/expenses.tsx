@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertExpenditureSchema, type InsertExpenditure } from "@shared/schema";
 import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/use-currency";
 import { 
   Plus, 
   DollarSign,
@@ -42,6 +43,8 @@ export default function Expenses() {
   const { data: expenditures, isLoading } = useExpenditures();
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
 
   const totalExpenses = expenditures?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
@@ -89,7 +92,7 @@ export default function Expenses() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-mono font-medium text-orange-600">-${Number(item.amount).toFixed(2)}</p>
+                      <p className="font-mono font-medium text-orange-600">-{symbol}{Number(item.amount).toFixed(2)}</p>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground justify-end">
                         <Calendar className="w-3 h-3" />
                         {format(new Date(item.date!), "MMM d")}
@@ -109,7 +112,7 @@ export default function Expenses() {
                 <span className="text-sm font-medium text-muted-foreground">Total Expenses</span>
                 <TrendingDown className="w-4 h-4 text-orange-500" />
               </div>
-              <h2 className="text-3xl font-display font-bold text-orange-900">${totalExpenses.toFixed(2)}</h2>
+              <h2 className="text-3xl font-display font-bold text-orange-900">{symbol}{totalExpenses.toFixed(2)}</h2>
               <p className="text-xs text-muted-foreground mt-2">All time spending</p>
             </CardContent>
           </Card>

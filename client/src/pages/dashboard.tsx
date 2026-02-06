@@ -2,6 +2,7 @@ import { useStats } from "@/hooks/use-stats";
 import { useOrders } from "@/hooks/use-orders";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/use-currency";
 import { 
   ArrowUpRight, 
   ShoppingBag, 
@@ -21,6 +22,8 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
 
   // Sort orders by id desc to get recent ones, take top 5
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 5) || [];
@@ -49,7 +52,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard 
           title={t('total_revenue')} 
-          value={`$${stats?.totalRevenue.toFixed(2) || "0.00"}`} 
+          value={`${symbol}${stats?.totalRevenue.toFixed(2) || "0.00"}`} 
           icon={DollarSign} 
           trend="+12% from last month"
           className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-card"
@@ -103,7 +106,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-4">
                       <StatusBadge status={order.status} />
-                      <span className="font-mono text-sm font-medium w-20 text-right">${Number(order.totalAmount).toFixed(2)}</span>
+                      <span className="font-mono text-sm font-medium w-20 text-right">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
                       <Link href={`/orders/${order.id}`}>
                         <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
                           <ChevronRight className="w-4 h-4" />
