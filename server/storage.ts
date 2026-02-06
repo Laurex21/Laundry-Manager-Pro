@@ -146,7 +146,12 @@ export class DatabaseStorage implements IStorage {
 
       // 3. Update Order Total
       const [updatedOrder] = await tx.update(orders)
-        .set({ totalAmount: totalAmount.toString() })
+        .set({ 
+          totalAmount: insertOrder.totalAmount,
+          entryDate: insertOrder.entryDate,
+          pickupDate: insertOrder.pickupDate,
+          discount: insertOrder.discount
+        })
         .where(eq(orders.id, order.id))
         .returning();
 

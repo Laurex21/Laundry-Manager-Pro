@@ -114,7 +114,26 @@ export async function registerRoutes(
     try {
       const input = api.orders.create.input.parse(req.body);
       const { items, ...orderData } = input;
-      const order = await storage.createOrder(orderData, items);
+      
+      // Calculate total amount from items and discount
+      let totalAmount = 0;
+      const itemsWithPrices = await Promise.all(items.map(async (item) => {
+        const service = await storage.getService(item.serviceId);
+        if (!service) throw new Error(`Service ${item.serviceId} not found`);
+        totalAmount += Number(service.price) * item.quantity;
+        return { ...item, priceAtOrder: service.price };
+      }));
+
+      const discount = Number(orderData.discount || 0);
+      totalAmount = Math.max(0, totalAmount - discount);
+
+      const order = await storage.createOrder({
+        ...orderData,
+        totalAmount: totalAmount.toString(),
+        entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
+        pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
+        discount: discount.toString(),
+      }, items);
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) {
