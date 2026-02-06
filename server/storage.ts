@@ -125,17 +125,11 @@ export class DatabaseStorage implements IStorage {
       // 1. Create Order
       const [order] = await tx.insert(orders).values(insertOrder).returning();
 
-      let totalAmount = 0;
-
-      // 2. Create Items and calculate total
+      // 2. Create Items
       for (const item of items) {
         const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));
         if (!service) throw new Error(`Service ${item.serviceId} not found`);
         
-        const price = Number(service.price);
-        const itemTotal = price * item.quantity;
-        totalAmount += itemTotal;
-
         await tx.insert(orderItems).values({
           orderId: order.id,
           serviceId: item.serviceId,
@@ -144,18 +138,7 @@ export class DatabaseStorage implements IStorage {
         });
       }
 
-      // 3. Update Order Total
-      const [updatedOrder] = await tx.update(orders)
-        .set({ 
-          totalAmount: insertOrder.totalAmount,
-          entryDate: insertOrder.entryDate,
-          pickupDate: insertOrder.pickupDate,
-          discount: insertOrder.discount
-        })
-        .where(eq(orders.id, order.id))
-        .returning();
-
-      return updatedOrder;
+      return order;
     });
   }
 
