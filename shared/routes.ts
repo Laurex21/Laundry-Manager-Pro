@@ -30,6 +30,9 @@ export const createOrderWithItemsSchema = z.object({
   customerId: z.number(),
   status: z.string().default("pending"),
   paymentStatus: z.string().default("unpaid"),
+  entryDate: z.string().optional(),
+  pickupDate: z.string().optional(),
+  discount: z.string().optional(),
   items: z.array(z.object({
     serviceId: z.number(),
     quantity: z.number(),

@@ -36,6 +36,9 @@ export const orders = pgTable("orders", {
   status: text("status").notNull().default("pending"), // pending, processing, ready, delivered, cancelled
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentStatus: text("payment_status").notNull().default("unpaid"), // unpaid, paid, partial
+  entryDate: timestamp("entry_date").defaultNow(),
+  pickupDate: timestamp("pickup_date"),
+  discount: decimal("discount", { precision: 10, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
