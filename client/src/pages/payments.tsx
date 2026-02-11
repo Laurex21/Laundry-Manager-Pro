@@ -130,50 +130,204 @@ export default function Payments() {
     );
   }
 
-  function downloadReceipt() {
+  const [receiptLoading, setReceiptLoading] = useState(false);
+
+  async function downloadReceipt() {
     if (!successPayment) return;
+    setReceiptLoading(true);
+
+    try {
+    let orderDetails: any = null;
+    try {
+      const res = await fetch(`/api/orders/${successPayment.orderId}`, { credentials: "include" });
+      if (res.ok) orderDetails = await res.json();
+    } catch {
+      // proceed with available data
+    }
+
+    const items = orderDetails?.items || [];
+    const customer = orderDetails?.customer || {};
+    const pickupDate = orderDetails?.pickupDate
+      ? format(new Date(orderDetails.pickupDate), "MMM dd, yyyy")
+      : "N/A";
+    const entryDate = orderDetails?.entryDate
+      ? format(new Date(orderDetails.entryDate), "MMM dd, yyyy")
+      : successPayment.date;
+    const discount = Number(orderDetails?.discount || 0);
+
+    const categoryLabels: Record<string, string> = {
+      washing: "Wash & Fold",
+      dry_cleaning: "Dry Clean",
+      ironing: "Ironing",
+    };
+
+    const itemsHtml = items.map((item: any) => {
+      const svc = item.service || {};
+      const qty = item.quantity;
+      const price = Number(item.priceAtOrder);
+      const subtotal = qty * price;
+      const serviceType = categoryLabels[svc.category] || svc.category || "Service";
+      return `<tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || 'Item'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${serviceType}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${subtotal.toFixed(2)}</td>
+      </tr>`;
+    }).join("");
+
+    const subtotalAmount = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
+
+    const statusLabel = successPayment.newStatus === "paid" ? "PAID" : successPayment.newStatus === "partial" ? "PARTIAL" : "UNPAID";
+    const statusColor = successPayment.newStatus === "paid" ? "#16a34a" : successPayment.newStatus === "partial" ? "#d97706" : "#dc2626";
+    const statusBg = successPayment.newStatus === "paid" ? "#dcfce7" : successPayment.newStatus === "partial" ? "#fef3c7" : "#fee2e2";
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Payment Receipt - CleanEase</title>
+  <title>Receipt - Order #${successPayment.orderId}</title>
   <style>
+    @media print {
+      body { padding: 0; background: #fff; }
+      .no-print { display: none; }
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; padding: 40px; }
-    .receipt { max-width: 400px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; }
-    .header { background: #2563eb; color: white; padding: 24px; text-align: center; }
-    .header h1 { font-size: 22px; margin-bottom: 4px; }
-    .header p { font-size: 12px; opacity: 0.8; }
-    .body { padding: 24px; }
-    .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
-    .row:last-child { border-bottom: none; }
-    .label { color: #6b7280; }
-    .value { font-weight: 600; color: #1f2937; }
-    .total { font-size: 18px; color: #2563eb; }
-    .footer { text-align: center; padding: 16px; background: #f9fafb; font-size: 11px; color: #9ca3af; }
-    .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-top: 8px; }
-    .status-paid { background: #dcfce7; color: #16a34a; }
-    .status-partial { background: #fef3c7; color: #d97706; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
+    .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
+    .print-btn:hover { background: #1d4ed8; }
+
+    .header { background: #1e3a5f; color: #fff; padding: 28px 32px; }
+    .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .brand h1 { font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
+    .brand p { font-size: 12px; opacity: 0.8; margin-top: 4px; line-height: 1.5; }
+    .order-id-box { text-align: right; }
+    .order-id-box .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
+    .order-id-box .id { font-size: 28px; font-weight: 800; margin-top: 2px; }
+
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 32px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    .meta-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 3px; }
+    .meta-item .value { font-size: 14px; font-weight: 600; color: #1e293b; }
+
+    .items-section { padding: 24px 32px; }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 12px; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .items-table thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+    .items-table thead th:nth-child(2), .items-table thead th:nth-child(3) { text-align: center; }
+    .items-table thead th:last-child { text-align: right; }
+    .items-table tbody td { color: #334155; }
+
+    .summary { padding: 0 32px 24px; }
+    .summary-box { background: #f8fafc; border-radius: 6px; padding: 16px 20px; margin-top: 8px; }
+    .summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #475569; }
+    .summary-row.total { border-top: 2px solid #cbd5e1; margin-top: 8px; padding-top: 12px; font-size: 16px; font-weight: 700; color: #1e293b; }
+    .summary-row .discount { color: #dc2626; }
+
+    .payment-section { padding: 0 32px 24px; }
+    .payment-box { display: flex; justify-content: space-between; align-items: center; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 16px 20px; }
+    .payment-info { font-size: 13px; color: #334155; }
+    .payment-info strong { font-size: 15px; display: block; margin-top: 2px; }
+    .status-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
+
+    .terms { padding: 24px 32px; border-top: 1px solid #e2e8f0; background: #fafbfc; }
+    .terms h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 12px; }
+    .terms ol { padding-left: 18px; }
+    .terms li { font-size: 10.5px; color: #64748b; line-height: 1.6; margin-bottom: 8px; }
+    .terms li strong { color: #475569; }
+
+    .footer { text-align: center; padding: 20px 32px; border-top: 1px solid #e2e8f0; }
+    .footer p { font-size: 12px; color: #94a3b8; }
+    .footer .thanks { font-size: 14px; font-weight: 600; color: #1e3a5f; margin-bottom: 4px; }
   </style>
 </head>
 <body>
+  <button class="print-btn no-print" onclick="window.print()">Print Receipt</button>
   <div class="receipt">
     <div class="header">
-      <h1>CleanEase</h1>
-      <p>Laundry Management - Payment Receipt</p>
-    </div>
-    <div class="body">
-      <div class="row"><span class="label">Receipt Date</span><span class="value">${successPayment.date}</span></div>
-      <div class="row"><span class="label">Order ID</span><span class="value">#${successPayment.orderId}</span></div>
-      <div class="row"><span class="label">Customer</span><span class="value">${successPayment.customerName}</span></div>
-      <div class="row"><span class="label">Order Total</span><span class="value">${symbol}${successPayment.totalAmount}</span></div>
-      <div class="row"><span class="label">Payment Method</span><span class="value">${successPayment.method}</span></div>
-      <div class="row"><span class="label">Amount Paid</span><span class="value total">${symbol}${successPayment.amount}</span></div>
-      <div class="row" style="justify-content:center; border:none; padding-top:12px;">
-        <span class="status ${successPayment.newStatus === 'paid' ? 'status-paid' : 'status-partial'}">${successPayment.newStatus === 'paid' ? 'FULLY PAID' : 'PARTIALLY PAID'}</span>
+      <div class="header-top">
+        <div class="brand">
+          <h1>CleanEase Laundry</h1>
+          <p>123 Clean Street, Laundry District<br>Phone: +1 (555) 123-4567</p>
+        </div>
+        <div class="order-id-box">
+          <div class="label">Order No.</div>
+          <div class="id">#${successPayment.orderId}</div>
+        </div>
       </div>
     </div>
-    <div class="footer">Thank you for choosing CleanEase</div>
+
+    <div class="meta">
+      <div class="meta-item">
+        <div class="label">Customer</div>
+        <div class="value">${customer.name || successPayment.customerName}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Order Date</div>
+        <div class="value">${entryDate}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Receipt Date</div>
+        <div class="value">${format(new Date(successPayment.date), "MMM dd, yyyy")}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Expected Pickup</div>
+        <div class="value">${pickupDate}</div>
+      </div>
+    </div>
+
+    <div class="items-section">
+      <div class="section-title">Itemized Services</div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>Item Name</th>
+            <th>Qty</th>
+            <th>Service Type</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHtml || `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;">No items available</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="summary">
+      <div class="section-title">Summary</div>
+      <div class="summary-box">
+        <div class="summary-row"><span>Subtotal</span><span>${symbol}${subtotalAmount.toFixed(2)}</span></div>
+        ${discount > 0 ? `<div class="summary-row"><span>Discount</span><span class="discount">-${symbol}${discount.toFixed(2)}</span></div>` : ""}
+        <div class="summary-row total"><span>Total Amount</span><span>${symbol}${Number(successPayment.totalAmount).toFixed(2)}</span></div>
+        <div class="summary-row"><span>Amount Paid (this receipt)</span><span style="color:#16a34a;font-weight:600;">${symbol}${successPayment.amount}</span></div>
+      </div>
+    </div>
+
+    <div class="payment-section">
+      <div class="payment-box">
+        <div class="payment-info">
+          Payment Method
+          <strong>${successPayment.method}</strong>
+        </div>
+        <span class="status-badge" style="background:${statusBg};color:${statusColor};">${statusLabel}</span>
+      </div>
+    </div>
+
+    <div class="terms">
+      <h3>Laundry Terms & Conditions</h3>
+      <ol>
+        <li><strong>Liability Limit:</strong> Our liability for any lost or damaged garment shall not exceed 3 times the cleaning cost of that specific item, regardless of brand or purchase price.</li>
+        <li><strong>Pocket Policy:</strong> Customers are responsible for emptying all pockets before dropping off items. We are not liable for damage caused by items left in pockets (e.g., pens, lipstick, gum) or for the loss of valuables left inside.</li>
+        <li><strong>Unclaimed Items:</strong> Items not collected within 30 days of the &ldquo;Ready Date&rdquo; may be subject to a storage fee. Items left for more than 90 days will be donated to charity or disposed of.</li>
+        <li><strong>Pre-existing Damage:</strong> We reserve the right to refuse service for items with significant pre-existing wear, delicate fabrics, or missing care labels. We are not responsible for buttons, zippers, or sequins that fail due to normal cleaning processes.</li>
+        <li><strong>Nature of Stains:</strong> While we strive for perfection, we cannot guarantee the 100% removal of all stains. Some stains are permanent, and further treatment may risk damaging the fabric.</li>
+        <li><strong>Error Reporting:</strong> Any claims regarding missing items or damage must be made within 24 hours of pickup/delivery and must be accompanied by the original receipt.</li>
+      </ol>
+    </div>
+
+    <div class="footer">
+      <p class="thanks">Thank you for choosing CleanEase!</p>
+      <p>For inquiries, contact us at +1 (555) 123-4567</p>
+    </div>
   </div>
 </body>
 </html>`;
@@ -187,6 +341,9 @@ export default function Payments() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    } finally {
+      setReceiptLoading(false);
+    }
   }
 
   return (
@@ -212,8 +369,8 @@ export default function Payments() {
                   Status: <Badge variant="outline" className={successPayment.newStatus === 'paid' ? 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-400' : 'border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400'}>{successPayment.newStatus === 'paid' ? 'Fully Paid' : 'Partially Paid'}</Badge>
                 </p>
               </div>
-              <Button onClick={downloadReceipt} variant="outline" className="gap-2" data-testid="button-download-receipt">
-                <Download className="w-4 h-4" /> Download Receipt
+              <Button onClick={downloadReceipt} variant="outline" className="gap-2" disabled={receiptLoading} data-testid="button-download-receipt">
+                <Download className="w-4 h-4" /> {receiptLoading ? "Preparing..." : "Download Receipt"}
               </Button>
             </div>
           </CardContent>
