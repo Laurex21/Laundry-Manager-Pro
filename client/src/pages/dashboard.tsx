@@ -101,7 +101,7 @@ export default function Dashboard() {
                 {latestOrders.map((order: any) => (
                   <div key={order.id} className="group flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg transition-colors border border-transparent hover:border-border/50">
                     <div className="flex flex-col gap-1">
-                      <span className="font-medium text-foreground">Order #{order.id}</span>
+                      <span className="font-medium text-foreground">{order.customer?.name || `Order #${order.id}`}</span>
                       <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d, yyyy")}</span>
                     </div>
                     <div className="flex items-center gap-4">
