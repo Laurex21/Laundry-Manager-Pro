@@ -89,8 +89,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Orders
-  async getOrders(): Promise<Order[]> {
-    return await db.select().from(orders).orderBy(desc(orders.createdAt));
+  async getOrders(): Promise<any[]> {
+    const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    const allCustomers = await db.select().from(customers);
+    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+    return allOrders.map(order => ({
+      ...order,
+      customer: customerMap.get(order.customerId) || null,
+    }));
   }
 
   async getOrder(id: number): Promise<OrderWithDetails | undefined> {

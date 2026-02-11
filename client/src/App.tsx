@@ -13,6 +13,7 @@ import Customers from "@/pages/customers";
 import Orders from "@/pages/orders";
 import Services from "@/pages/services";
 import Expenses from "@/pages/expenses";
+import Payments from "@/pages/payments";
 import LayoutShell from "@/components/layout-shell";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -61,6 +62,9 @@ function Router() {
       </Route>
       <Route path="/expenses">
         <ProtectedRoute component={Expenses} />
+      </Route>
+      <Route path="/payments">
+        <ProtectedRoute component={Payments} />
       </Route>
 
       {/* Fallback */}

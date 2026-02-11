@@ -28,6 +28,7 @@ const resources = {
       "phone": "Phone",
       "address": "Address",
       "notes": "Notes",
+      "payments": "Payments",
       "welcome": "Welcome",
       "laundry_manager": "Laundry Manager"
     }
@@ -57,6 +58,7 @@ const resources = {
       "phone": "Téléphone",
       "address": "Adresse",
       "notes": "Notes",
+      "payments": "Paiements",
       "welcome": "Bienvenue",
       "laundry_manager": "Gestionnaire de Blanchisserie"
     }
