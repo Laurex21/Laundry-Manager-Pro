@@ -221,6 +221,7 @@ export default function Expenses() {
 
 function ExpenseForm({ onSuccess }: { onSuccess: () => void }) {
   const { mutate, isPending } = useCreateExpenditure();
+  const [customCategory, setCustomCategory] = useState(false);
   
   const form = useForm<InsertExpenditure>({
     resolver: zodResolver(insertExpenditureSchema),
@@ -235,6 +236,7 @@ function ExpenseForm({ onSuccess }: { onSuccess: () => void }) {
     mutate(data, {
       onSuccess: () => {
         form.reset();
+        setCustomCategory(false);
         onSuccess();
       }
     });
@@ -263,20 +265,51 @@ function ExpenseForm({ onSuccess }: { onSuccess: () => void }) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="Supplies">Supplies</SelectItem>
-                    <SelectItem value="Utilities">Utilities</SelectItem>
-                    <SelectItem value="Maintenance">Maintenance</SelectItem>
-                    <SelectItem value="Rent">Rent</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                {customCategory ? (
+                  <div className="flex gap-2">
+                    <FormControl>
+                      <Input placeholder="Enter category..." {...field} autoFocus />
+                    </FormControl>
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => {
+                        setCustomCategory(false);
+                        field.onChange("Supplies");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Select 
+                    onValueChange={(value) => {
+                      if (value === "custom") {
+                        setCustomCategory(true);
+                        field.onChange("");
+                      } else {
+                        field.onChange(value);
+                      }
+                    }} 
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Supplies">Supplies</SelectItem>
+                      <SelectItem value="Utilities">Utilities</SelectItem>
+                      <SelectItem value="Maintenance">Maintenance</SelectItem>
+                      <SelectItem value="Rent">Rent</SelectItem>
+                      <SelectItem value="Transportation">Transportation</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                      <SelectItem value="custom">+ Add New...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <FormMessage />
               </FormItem>
             )}
