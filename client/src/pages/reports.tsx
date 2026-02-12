@@ -10,10 +10,16 @@ import {
   ShoppingBag,
   Download,
   CalendarIcon,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Activity,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverContent,
@@ -41,6 +47,8 @@ import {
   Pie,
   Cell,
   Legend,
+  BarChart,
+  Bar,
 } from "recharts";
 
 const CHART_COLORS = [
@@ -64,6 +72,19 @@ type ReportData = {
   topCustomers: { name: string; orderCount: number; totalSpent: number }[];
 };
 
+type PerformanceData = {
+  currentMonthRevenue: number;
+  currentMonthExpenses: number;
+  currentMonthProfit: number;
+  last30Revenue: number;
+  prev30Revenue: number;
+  last30Expenses: number;
+  prev30Expenses: number;
+  last30Profit: number;
+  prev30Profit: number;
+  monthlyComparison: { month: string; income: number; expenses: number }[];
+};
+
 export default function Reports() {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
@@ -81,6 +102,42 @@ export default function Reports() {
   const { data, isLoading } = useQuery<ReportData>({
     queryKey: [`/api/reports?start=${queryParams.start}&end=${queryParams.end}`],
   });
+
+  const { data: perfData, isLoading: perfLoading } = useQuery<PerformanceData>({
+    queryKey: ["/api/reports/performance"],
+  });
+
+  const alerts = useMemo(() => {
+    if (!perfData) return [];
+    const result: { type: "warning" | "danger" | "success"; message: string }[] = [];
+
+    if (perfData.prev30Expenses > 0) {
+      const expChange = ((perfData.last30Expenses - perfData.prev30Expenses) / perfData.prev30Expenses) * 100;
+      if (expChange > 5) {
+        result.push({ type: "warning", message: t("alert_spending_increase", { percent: Math.round(expChange) }) });
+      }
+    } else if (perfData.last30Expenses > 0) {
+      result.push({ type: "warning", message: t("alert_spending_increase", { percent: 100 }) });
+    }
+
+    if (perfData.prev30Revenue > 0) {
+      const revChange = ((perfData.last30Revenue - perfData.prev30Revenue) / perfData.prev30Revenue) * 100;
+      if (revChange < -5) {
+        result.push({ type: "danger", message: t("notice_revenue_decrease", { percent: Math.abs(Math.round(revChange)) }) });
+      }
+    }
+
+    if (perfData.prev30Profit !== 0) {
+      const profitChange = perfData.prev30Profit !== 0
+        ? ((perfData.last30Profit - perfData.prev30Profit) / Math.abs(perfData.prev30Profit)) * 100
+        : 0;
+      if (profitChange > 5) {
+        result.push({ type: "success", message: t("notice_profit_growth", { percent: Math.round(profitChange) }) });
+      }
+    }
+
+    return result;
+  }, [perfData, t]);
 
   function handleDownloadReport() {
     if (!data) return;
@@ -212,6 +269,133 @@ export default function Reports() {
           />
         </div>
       )}
+
+      <Card data-testid="card-performance-monitor">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <div>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              {t("performance_monitor")}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("performance_subtitle")}</p>
+          </div>
+          {perfData && (
+            <Badge
+              variant={perfData.currentMonthProfit >= 0 ? "default" : "destructive"}
+              className="text-sm"
+              data-testid="badge-profitability-status"
+            >
+              {perfData.currentMonthProfit >= 0 ? t("status_profitable") : t("status_loss_making")}
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent>
+          {perfLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-48 rounded-md" />
+              <Skeleton className="h-64 w-full rounded-lg" />
+            </div>
+          ) : perfData ? (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">{t("current_month_profit")}</p>
+                  <p
+                    className={cn(
+                      "text-3xl font-bold font-mono",
+                      perfData.currentMonthProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                    )}
+                    data-testid="text-current-month-profit"
+                  >
+                    {perfData.currentMonthProfit >= 0 ? "+" : ""}{symbol}{perfData.currentMonthProfit.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("revenue")}: {symbol}{perfData.currentMonthRevenue.toFixed(2)} &middot; {t("expenses")}: {symbol}{perfData.currentMonthExpenses.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              {(alerts.length > 0 || (!perfLoading && perfData)) && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">{t("smart_trend_notifications")}</h4>
+                  <p className="text-xs text-muted-foreground mb-3">{t("vs_previous_30_days")}</p>
+                  <div className="space-y-2">
+                    {alerts.length === 0 ? (
+                      <Card>
+                        <CardContent className="p-3 flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-md flex items-center justify-center bg-muted flex-shrink-0">
+                            <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <p className="text-sm text-muted-foreground" data-testid="text-no-alerts">{t("no_alerts")}</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      alerts.map((alert, idx) => (
+                        <Card key={idx} data-testid={`card-alert-${idx}`}>
+                          <CardContent className="p-3 flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0",
+                              alert.type === "warning" ? "bg-amber-100 dark:bg-amber-900/30" :
+                              alert.type === "danger" ? "bg-red-100 dark:bg-red-900/30" :
+                              "bg-emerald-100 dark:bg-emerald-900/30"
+                            )}>
+                              {alert.type === "warning" ? (
+                                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                              ) : alert.type === "danger" ? (
+                                <ArrowDownRight className="w-4 h-4 text-red-600 dark:text-red-400" />
+                              ) : (
+                                <ArrowUpRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                              )}
+                            </div>
+                            <p className={cn(
+                              "text-sm",
+                              alert.type === "warning" ? "text-amber-700 dark:text-amber-300" :
+                              alert.type === "danger" ? "text-red-700 dark:text-red-300" :
+                              "text-emerald-700 dark:text-emerald-300"
+                            )} data-testid={`text-alert-${idx}`}>
+                              {alert.message}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-sm font-semibold mb-1">{t("income_vs_expenses")}</h4>
+                <p className="text-xs text-muted-foreground mb-3">{t("income_vs_expenses_subtitle")}</p>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={perfData.monthlyComparison} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
+                    <YAxis tick={{ fontSize: 12 }} className="fill-muted-foreground" tickFormatter={(v) => `${symbol}${v}`} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                      }}
+                      formatter={(value: number, name: string) => [
+                        `${symbol}${value.toFixed(2)}`,
+                        name === "income" ? t("income") : t("expenses"),
+                      ]}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: "12px" }}
+                      formatter={(value) => value === "income" ? t("income") : t("expenses")}
+                    />
+                    <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="expenses" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2" data-testid="card-daily-revenue-chart">

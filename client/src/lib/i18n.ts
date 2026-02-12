@@ -127,7 +127,21 @@ const resources = {
       "summary": "Summary",
       "bookings": "bookings",
       "revenue": "Revenue",
-      "no_data_for_period": "No data available for the selected period"
+      "no_data_for_period": "No data available for the selected period",
+      "performance_monitor": "Performance Monitor",
+      "performance_subtitle": "Automated financial health analysis",
+      "status_profitable": "STATUS: PROFITABLE",
+      "status_loss_making": "STATUS: LOSS-MAKING",
+      "current_month_profit": "Current Month Net Profit",
+      "income_vs_expenses": "Income vs. Expenses",
+      "income_vs_expenses_subtitle": "Last 6 months comparison",
+      "income": "Income",
+      "smart_trend_notifications": "Smart Trend Notifications",
+      "alert_spending_increase": "Alert: Your spending increased by {{percent}}% this month. Check your Expenditure logs.",
+      "notice_revenue_decrease": "Notice: Revenue is down {{percent}}% compared to last month.",
+      "notice_profit_growth": "Great job! Profitability has increased by {{percent}}%.",
+      "no_alerts": "No significant changes detected in the last 30 days.",
+      "vs_previous_30_days": "vs. previous 30 days"
     }
   },
   fr: {
@@ -254,7 +268,21 @@ const resources = {
       "summary": "R\u00e9sum\u00e9",
       "bookings": "r\u00e9servations",
       "revenue": "Revenu",
-      "no_data_for_period": "Aucune donn\u00e9e disponible pour la p\u00e9riode s\u00e9lectionn\u00e9e"
+      "no_data_for_period": "Aucune donn\u00e9e disponible pour la p\u00e9riode s\u00e9lectionn\u00e9e",
+      "performance_monitor": "Moniteur de performance",
+      "performance_subtitle": "Analyse automatis\u00e9e de la sant\u00e9 financi\u00e8re",
+      "status_profitable": "STATUT : RENTABLE",
+      "status_loss_making": "STATUT : D\u00c9FICITAIRE",
+      "current_month_profit": "B\u00e9n\u00e9fice net du mois en cours",
+      "income_vs_expenses": "Revenus vs. D\u00e9penses",
+      "income_vs_expenses_subtitle": "Comparaison des 6 derniers mois",
+      "income": "Revenus",
+      "smart_trend_notifications": "Notifications de tendances",
+      "alert_spending_increase": "Alerte : Vos d\u00e9penses ont augment\u00e9 de {{percent}}% ce mois-ci. V\u00e9rifiez vos registres de d\u00e9penses.",
+      "notice_revenue_decrease": "Avis : Les revenus sont en baisse de {{percent}}% par rapport au mois dernier.",
+      "notice_profit_growth": "Bravo ! La rentabilit\u00e9 a augment\u00e9 de {{percent}}%.",
+      "no_alerts": "Aucun changement significatif d\u00e9tect\u00e9 au cours des 30 derniers jours.",
+      "vs_previous_30_days": "vs. 30 jours pr\u00e9c\u00e9dents"
     }
   }
 };

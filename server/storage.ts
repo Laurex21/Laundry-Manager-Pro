@@ -51,6 +51,20 @@ export interface IStorage {
     activeCustomers: number;
   }>;
 
+  // Performance Monitor
+  getPerformanceData(): Promise<{
+    currentMonthRevenue: number;
+    currentMonthExpenses: number;
+    currentMonthProfit: number;
+    last30Revenue: number;
+    prev30Revenue: number;
+    last30Expenses: number;
+    prev30Expenses: number;
+    last30Profit: number;
+    prev30Profit: number;
+    monthlyComparison: { month: string; income: number; expenses: number }[];
+  }>;
+
   // Reports
   getReportData(startDate: Date, endDate: Date): Promise<{
     totalRevenue: number;
@@ -258,6 +272,69 @@ export class DatabaseStorage implements IStorage {
       activeCustomers: Number(customersCount?.count || 0),
     };
   }
+  // Performance Monitor
+  private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(payments)
+      .where(and(sql`${payments.date} IS NOT NULL`, sql`${payments.date} >= ${start}`, sql`${payments.date} <= ${end}`));
+    return Number(result?.total || 0);
+  }
+
+  private async sumExpensesInRange(start: Date, end: Date): Promise<number> {
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(expenditures)
+      .where(and(sql`${expenditures.date} IS NOT NULL`, sql`${expenditures.date} >= ${start}`, sql`${expenditures.date} <= ${end}`));
+    return Number(result?.total || 0);
+  }
+
+  async getPerformanceData() {
+    const now = new Date();
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const last30Start = new Date(now);
+    last30Start.setDate(last30Start.getDate() - 30);
+    const prev30Start = new Date(last30Start);
+    prev30Start.setDate(prev30Start.getDate() - 30);
+
+    const currentMonthRevenue = await this.sumPaymentsInRange(currentMonthStart, currentMonthEnd);
+    const currentMonthExpenses = await this.sumExpensesInRange(currentMonthStart, currentMonthEnd);
+    const currentMonthProfit = currentMonthRevenue - currentMonthExpenses;
+
+    const last30Revenue = await this.sumPaymentsInRange(last30Start, now);
+    const prev30Revenue = await this.sumPaymentsInRange(prev30Start, last30Start);
+    const last30Expenses = await this.sumExpensesInRange(last30Start, now);
+    const prev30Expenses = await this.sumExpensesInRange(prev30Start, last30Start);
+    const last30Profit = last30Revenue - last30Expenses;
+    const prev30Profit = prev30Revenue - prev30Expenses;
+
+    const monthlyComparison: { month: string; income: number; expenses: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      const monthLabel = mStart.toLocaleString("en-US", { month: "short", year: "2-digit" });
+      monthlyComparison.push({
+        month: monthLabel,
+        income: await this.sumPaymentsInRange(mStart, mEnd),
+        expenses: await this.sumExpensesInRange(mStart, mEnd),
+      });
+    }
+
+    return {
+      currentMonthRevenue,
+      currentMonthExpenses,
+      currentMonthProfit,
+      last30Revenue,
+      prev30Revenue,
+      last30Expenses,
+      prev30Expenses,
+      last30Profit,
+      prev30Profit,
+      monthlyComparison,
+    };
+  }
+
   // Reports
   async getReportData(startDate: Date, endDate: Date) {
     const gte = sql`${startDate}`;

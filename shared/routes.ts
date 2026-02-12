@@ -179,6 +179,26 @@ export const api = {
       },
     },
   },
+  performance: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/reports/performance',
+      responses: {
+        200: z.object({
+          currentMonthRevenue: z.number(),
+          currentMonthExpenses: z.number(),
+          currentMonthProfit: z.number(),
+          last30Revenue: z.number(),
+          prev30Revenue: z.number(),
+          last30Expenses: z.number(),
+          prev30Expenses: z.number(),
+          last30Profit: z.number(),
+          prev30Profit: z.number(),
+          monthlyComparison: z.array(z.object({ month: z.string(), income: z.number(), expenses: z.number() })),
+        }),
+      },
+    },
+  },
   reports: {
     get: {
       method: 'GET' as const,

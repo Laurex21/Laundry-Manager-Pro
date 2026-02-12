@@ -187,6 +187,12 @@ export async function registerRoutes(
     res.status(201).json(expenditure);
   });
 
+  // Performance Monitor
+  app.get(api.performance.get.path, async (req, res) => {
+    const data = await storage.getPerformanceData();
+    res.json(data);
+  });
+
   // Reports
   app.get(api.reports.get.path, async (req, res) => {
     const { start, end } = req.query;

@@ -61,6 +61,7 @@ Use `npm run db:push` to push schema changes to the database.
 4. **Layout shell pattern**: Authenticated pages wrapped in `LayoutShell` component providing sidebar navigation
 5. **Customer Detail View**: `/customers/:id` page with VIP badge, summary cards, tabbed content (Contact/Preferences/Order History), and action buttons (New Order/Edit Profile/WhatsApp/Call). Customer cards on list page are clickable and navigate to detail view.
 6. **Reports & Analytics**: `/reports` page with date range filtering, 4 metric highlight cards (revenue, expenses, net profit, orders), daily revenue line chart, service distribution donut chart, top customers table, and downloadable monthly report. Backend endpoint: `GET /api/reports?start=YYYY-MM-DD&end=YYYY-MM-DD`.
+7. **Performance Monitor**: Section within Reports page featuring profitability status badge (profitable/loss-making), current month net profit display, smart trend notifications comparing last 30 days vs previous 30 days (spending increases, revenue decreases, profit growth alerts), and 6-month Income vs Expenses bar chart. Backend endpoint: `GET /api/reports/performance`.
 
 ## External Dependencies
 
