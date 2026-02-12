@@ -146,6 +146,7 @@ export default function Payments() {
     }
 
     const items = orderDetails?.items || [];
+    const garments = orderDetails?.garmentItems || [];
     const customer = orderDetails?.customer || {};
     const pickupDate = orderDetails?.pickupDate
       ? format(new Date(orderDetails.pickupDate), "MMM dd, yyyy")
@@ -155,25 +156,24 @@ export default function Payments() {
       : successPayment.date;
     const discount = Number(orderDetails?.discount || 0);
 
-    const categoryLabels: Record<string, string> = {
-      washing: "Wash & Fold",
-      dry_cleaning: "Dry Clean",
-      ironing: "Ironing",
-    };
-
     const itemsHtml = items.map((item: any) => {
       const svc = item.service || {};
       const qty = item.quantity;
+      const unit = svc.unit === "kg" ? "Loads" : "Pieces";
       const price = Number(item.priceAtOrder);
-      const subtotal = qty * price;
-      const serviceType = categoryLabels[svc.category] || svc.category || "Service";
+      const lineTotal = qty * price;
       return `<tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || 'Item'}</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty}</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${serviceType}</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${subtotal.toFixed(2)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || 'Service'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
       </tr>`;
     }).join("");
+
+    const garmentHtml = garments.length > 0 ? garments.map((g: any) => {
+      return `<tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${g.itemName}</td>
+      </tr>`;
+    }).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">No garment items recorded</td></tr>`;
 
     const subtotalAmount = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
 
@@ -213,9 +213,13 @@ export default function Payments() {
     .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 12px; }
     .items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .items-table thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
-    .items-table thead th:nth-child(2), .items-table thead th:nth-child(3) { text-align: center; }
+    .items-table thead th:nth-child(2) { text-align: center; }
     .items-table thead th:last-child { text-align: right; }
     .items-table tbody td { color: #334155; }
+
+    .checklist-section { padding: 0 32px 24px; }
+    .checklist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .checklist-table td { color: #334155; }
 
     .summary { padding: 0 32px 24px; }
     .summary-box { background: #f8fafc; border-radius: 6px; padding: 16px 20px; margin-top: 8px; }
@@ -276,24 +280,33 @@ export default function Payments() {
     </div>
 
     <div class="items-section">
-      <div class="section-title">Itemized Services</div>
+      <div class="section-title">Service Summary</div>
       <table class="items-table">
         <thead>
           <tr>
-            <th>Item Name</th>
-            <th>Qty</th>
-            <th>Service Type</th>
-            <th>Subtotal</th>
+            <th>Service Name</th>
+            <th>Qty (Loads/Pieces)</th>
+            <th>Price</th>
           </tr>
         </thead>
         <tbody>
-          ${itemsHtml || `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;">No items available</td></tr>`}
+          ${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">No services recorded</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="checklist-section">
+      <div class="section-title">Garment Checklist</div>
+      <p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">For inventory verification only &mdash; not billed separately.</p>
+      <table class="checklist-table">
+        <tbody>
+          ${garmentHtml}
         </tbody>
       </table>
     </div>
 
     <div class="summary">
-      <div class="section-title">Summary</div>
+      <div class="section-title">Totals &amp; Payment</div>
       <div class="summary-box">
         <div class="summary-row"><span>Subtotal</span><span>${symbol}${subtotalAmount.toFixed(2)}</span></div>
         ${discount > 0 ? `<div class="summary-row"><span>Discount</span><span class="discount">-${symbol}${discount.toFixed(2)}</span></div>` : ""}
