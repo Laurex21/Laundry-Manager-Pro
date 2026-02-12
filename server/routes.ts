@@ -105,6 +105,12 @@ export async function registerRoutes(
     res.json(updated);
   });
 
+  app.delete(api.services.delete.path, async (req, res) => {
+    const deleted = await storage.deleteService(Number(req.params.id));
+    if (!deleted) return res.status(404).json({ message: "Service not found" });
+    res.json({ success: true });
+  });
+
   // Orders
   app.get(api.orders.list.path, async (req, res) => {
     const orders = await storage.getOrders();

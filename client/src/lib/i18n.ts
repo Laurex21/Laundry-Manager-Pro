@@ -99,7 +99,14 @@ const resources = {
       "save_service": "Save Service",
       "per": "per",
       "min": "Min",
-      "express": "Express"
+      "express": "Express",
+      "edit": "Edit",
+      "delete": "Delete",
+      "edit_service": "Edit Service",
+      "update_service": "Update Service",
+      "delete_service_title": "Delete Service",
+      "delete_service_confirm": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+      "deleting": "Deleting..."
     }
   },
   fr: {
@@ -198,7 +205,14 @@ const resources = {
       "save_service": "Enregistrer le service",
       "per": "par",
       "min": "Min",
-      "express": "Express"
+      "express": "Express",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "edit_service": "Modifier le service",
+      "update_service": "Mettre \u00e0 jour le service",
+      "delete_service_title": "Supprimer le service",
+      "delete_service_confirm": "\u00cates-vous s\u00fbr de vouloir supprimer \"{{name}}\" ? Cette action est irr\u00e9versible.",
+      "deleting": "Suppression..."
     }
   }
 };

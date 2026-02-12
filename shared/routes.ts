@@ -103,6 +103,14 @@ export const api = {
         200: z.custom<typeof services.$inferSelect>(),
       },
     },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/services/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
   },
   orders: {
     list: {
