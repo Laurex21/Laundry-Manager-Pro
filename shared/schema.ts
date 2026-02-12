@@ -59,6 +59,13 @@ export const payments = pgTable("payments", {
   date: timestamp("date").defaultNow(),
 });
 
+export const garmentItems = pgTable("garment_items", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  itemName: text("item_name").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+});
+
 export const expenditures = pgTable("expenditures", {
   id: serial("id").primaryKey(),
   category: text("category").notNull(), // utilities, supplies, maintenance, rent, other
@@ -80,6 +87,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   items: many(orderItems),
   payments: many(payments),
+  garmentItems: many(garmentItems),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -100,6 +108,13 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
+export const garmentItemsRelations = relations(garmentItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [garmentItems.orderId],
+    references: [orders.id],
+  }),
+}));
+
 
 // === ZOD SCHEMAS ===
 
@@ -108,6 +123,7 @@ export const insertServiceSchema = createInsertSchema(services).omit({ id: true 
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, updatedAt: true, totalAmount: true });
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, date: true });
+export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true });
 export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true, date: true });
 
 // === TYPES ===
@@ -127,9 +143,12 @@ export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 
+export type GarmentItem = typeof garmentItems.$inferSelect;
+export type InsertGarmentItem = z.infer<typeof insertGarmentItemSchema>;
+
 export type Expenditure = typeof expenditures.$inferSelect;
 export type InsertExpenditure = z.infer<typeof insertExpenditureSchema>;
 
 // Complex types for UI
 export type OrderWithCustomer = Order & { customer: Customer };
-export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[] };
+export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[] };

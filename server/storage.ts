@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { 
-  customers, services, orders, orderItems, payments, expenditures,
+  customers, services, orders, orderItems, payments, expenditures, garmentItems,
   type Customer, type InsertCustomer,
   type Service, type InsertService,
   type Order, type InsertOrder,
   type OrderItem, type InsertOrderItem,
   type Payment, type InsertPayment,
+  type GarmentItem, type InsertGarmentItem,
   type Expenditure, type InsertExpenditure,
   type OrderWithDetails
 } from "@shared/schema";
@@ -25,9 +26,9 @@ export interface IStorage {
   updateService(id: number, service: Partial<InsertService>): Promise<Service | undefined>;
 
   // Orders
-  getOrders(): Promise<Order[]>; // Simplified list
+  getOrders(): Promise<Order[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[]): Promise<Order>;
+  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string): Promise<Order | undefined>;
   
   // Payments
@@ -117,21 +118,21 @@ export class DatabaseStorage implements IStorage {
     .where(eq(orderItems.orderId, id));
 
     const orderPayments = await db.select().from(payments).where(eq(payments.orderId, id));
+    const orderGarments = await db.select().from(garmentItems).where(eq(garmentItems.orderId, id));
 
     return {
       ...order,
       customer,
       items,
-      payments: orderPayments
+      payments: orderPayments,
+      garmentItems: orderGarments,
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[]): Promise<Order> {
+  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
     return await db.transaction(async (tx) => {
-      // 1. Create Order
       const [order] = await tx.insert(orders).values(insertOrder).returning();
 
-      // 2. Create Items
       for (const item of items) {
         const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));
         if (!service) throw new Error(`Service ${item.serviceId} not found`);
@@ -140,8 +141,18 @@ export class DatabaseStorage implements IStorage {
           orderId: order.id,
           serviceId: item.serviceId,
           quantity: item.quantity,
-          priceAtOrder: service.price, // Store as string/decimal from DB
+          priceAtOrder: service.price,
         });
+      }
+
+      if (garments && garments.length > 0) {
+        for (const garment of garments) {
+          await tx.insert(garmentItems).values({
+            orderId: order.id,
+            itemName: garment.itemName,
+            quantity: garment.quantity,
+          });
+        }
       }
 
       return order;

@@ -113,7 +113,7 @@ export async function registerRoutes(
   app.post(api.orders.create.path, async (req, res) => {
     try {
       const input = api.orders.create.input.parse(req.body);
-      const { items, ...orderData } = input;
+      const { items, garmentItems: garments, ...orderData } = input;
       
       // Calculate total amount from items and discount
       let totalAmount = 0;
@@ -133,7 +133,7 @@ export async function registerRoutes(
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
         discount: discount.toString(),
-      }, items);
+      }, items, garments);
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) {
