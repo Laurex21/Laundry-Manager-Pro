@@ -36,7 +36,7 @@ Preferred communication style: Simple, everyday language.
 - **`routes.ts`**: API route definitions with Zod response schemas, used by both client hooks and server routes for type safety
 
 ### Database Schema (PostgreSQL via Drizzle)
-- **customers**: id, name, phone, email, address, notes, createdAt
+- **customers**: id, name, phone, email, address, notes, starchLevel, detergentType, createdAt
 - **services**: id, name, description, unit (kg/piece), price (decimal), category (washing/dry_cleaning/ironing), imageUrl, active
 - **orders**: id, customerId (FK→customers), status (pending/processing/ready/delivered/cancelled), totalAmount (decimal), paymentStatus (unpaid/paid/partial), createdAt, updatedAt
 - **order_items**: id, orderId (FK→orders), serviceId (FK→services), quantity, priceAtOrder (decimal)
@@ -59,6 +59,7 @@ Use `npm run db:push` to push schema changes to the database.
 2. **Database seeding**: Automatic seeding on first run when services table is empty (in `server/routes.ts`)
 3. **Custom hooks per entity**: Each domain entity (customers, orders, services, expenditures, stats) has its own React Query hook file in `client/src/hooks/`
 4. **Layout shell pattern**: Authenticated pages wrapped in `LayoutShell` component providing sidebar navigation
+5. **Customer Detail View**: `/customers/:id` page with VIP badge, summary cards, tabbed content (Contact/Preferences/Order History), and action buttons (New Order/Edit Profile/WhatsApp/Call). Customer cards on list page are clickable and navigate to detail view.
 
 ## External Dependencies
 

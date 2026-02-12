@@ -79,6 +79,13 @@ export async function registerRoutes(
     res.json(updated);
   });
 
+  app.get("/api/customers/:id/orders", async (req, res) => {
+    const customer = await storage.getCustomer(Number(req.params.id));
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const customerOrders = await storage.getCustomerOrders(Number(req.params.id));
+    res.json(customerOrders);
+  });
+
   // Services
   app.get(api.services.list.path, async (req, res) => {
     const services = await storage.getServices();

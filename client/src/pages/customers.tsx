@@ -4,13 +4,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCustomerSchema, type InsertCustomer } from "@shared/schema";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
 import { 
   Plus, 
   Search, 
   Phone, 
   Mail, 
   MapPin, 
-  MoreVertical 
+  ChevronRight 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ export default function Customers() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const [, navigate] = useLocation();
 
   const filteredCustomers = customers?.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -83,9 +85,14 @@ export default function Customers() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCustomers?.map((customer) => (
-            <Card key={customer.id} className="group hover:shadow-md transition-all duration-300 border-border/50">
+            <Card
+              key={customer.id}
+              className="group cursor-pointer hover-elevate transition-all duration-300 border-border/50"
+              onClick={() => navigate(`/customers/${customer.id}`)}
+              data-testid={`card-customer-${customer.id}`}
+            >
               <CardContent className="p-6">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-12 w-12 border-2 border-muted bg-muted">
                       <AvatarFallback className="font-bold text-primary text-lg">
@@ -97,9 +104,7 @@ export default function Customers() {
                       <p className="text-xs text-muted-foreground mt-1">ID: #{customer.id}</p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
                 </div>
                 
                 <div className="mt-6 space-y-2 text-sm">

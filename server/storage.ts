@@ -35,6 +35,9 @@ export interface IStorage {
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPaymentsByOrder(orderId: number): Promise<Payment[]>;
 
+  // Customer Orders
+  getCustomerOrders(customerId: number): Promise<any[]>;
+
   // Expenditures
   getExpenditures(): Promise<Expenditure[]>;
   createExpenditure(expenditure: InsertExpenditure): Promise<Expenditure>;
@@ -192,6 +195,21 @@ export class DatabaseStorage implements IStorage {
 
   async getPaymentsByOrder(orderId: number): Promise<Payment[]> {
     return await db.select().from(payments).where(eq(payments.orderId, orderId)).orderBy(desc(payments.date));
+  }
+
+  async getCustomerOrders(customerId: number): Promise<any[]> {
+    const customerOrders = await db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.createdAt));
+    const result = [];
+    for (const order of customerOrders) {
+      const orderPayments = await db.select().from(payments).where(eq(payments.orderId, order.id));
+      const totalPaid = orderPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      result.push({
+        ...order,
+        totalPaid,
+        balance: Math.max(0, Number(order.totalAmount) - totalPaid),
+      });
+    }
+    return result;
   }
 
   // Expenditures

@@ -16,6 +16,8 @@ export const customers = pgTable("customers", {
   email: text("email"),
   address: text("address").notNull(),
   notes: text("notes"),
+  starchLevel: text("starch_level"),
+  detergentType: text("detergent_type"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
 import Customers from "@/pages/customers";
+import CustomerDetail from "@/pages/customer-detail";
 import Orders from "@/pages/orders";
 import Services from "@/pages/services";
 import Expenses from "@/pages/expenses";
@@ -49,6 +50,9 @@ function Router() {
       </Route>
       <Route path="/customers">
         <ProtectedRoute component={Customers} />
+      </Route>
+      <Route path="/customers/:id">
+        <ProtectedRoute component={CustomerDetail} />
       </Route>
       <Route path="/orders">
         <ProtectedRoute component={Orders} />
