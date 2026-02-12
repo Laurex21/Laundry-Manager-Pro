@@ -30,6 +30,11 @@ export const services = pgTable("services", {
   category: text("category").notNull(), // "washing", "dry_cleaning", "ironing"
   imageUrl: text("image_url"),
   active: boolean("active").default(true),
+  minimumCharge: decimal("minimum_charge", { precision: 10, scale: 2 }),
+  estimatedDuration: integer("estimated_duration"),
+  durationUnit: text("duration_unit"), // "hours", "days"
+  expressAvailable: boolean("express_available").default(false),
+  expressSurcharge: decimal("express_surcharge", { precision: 5, scale: 2 }),
 });
 
 export const orders = pgTable("orders", {

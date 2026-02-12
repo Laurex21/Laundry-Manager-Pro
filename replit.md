@@ -37,7 +37,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Database Schema (PostgreSQL via Drizzle)
 - **customers**: id, name, phone, email, address, notes, starchLevel, detergentType, createdAt
-- **services**: id, name, description, unit (kg/piece), price (decimal), category (washing/dry_cleaning/ironing), imageUrl, active
+- **services**: id, name, description, unit (kg/piece), price (decimal), category, imageUrl, active, minimumCharge (decimal), estimatedDuration (int), durationUnit (hours/days), expressAvailable (bool), expressSurcharge (decimal %)
 - **orders**: id, customerId (FK→customers), status (pending/processing/ready/delivered/cancelled), totalAmount (decimal), paymentStatus (unpaid/paid/partial), createdAt, updatedAt
 - **order_items**: id, orderId (FK→orders), serviceId (FK→services), quantity, priceAtOrder (decimal)
 - **payments**: Payment records linked to orders
