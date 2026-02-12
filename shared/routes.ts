@@ -179,6 +179,23 @@ export const api = {
       },
     },
   },
+  reports: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/reports',
+      responses: {
+        200: z.object({
+          totalRevenue: z.number(),
+          totalExpenses: z.number(),
+          netProfit: z.number(),
+          totalOrders: z.number(),
+          dailyRevenue: z.array(z.object({ date: z.string(), revenue: z.number() })),
+          serviceDistribution: z.array(z.object({ name: z.string(), count: z.number() })),
+          topCustomers: z.array(z.object({ name: z.string(), orderCount: z.number(), totalSpent: z.number() })),
+        }),
+      },
+    },
+  },
   stats: {
     get: {
       method: 'GET' as const,

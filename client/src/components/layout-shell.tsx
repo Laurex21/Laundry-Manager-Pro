@@ -14,7 +14,8 @@ import {
   DollarSign,
   Languages,
   Coins,
-  CreditCard
+  CreditCard,
+  BarChart3
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { icon: Shirt, labelKey: "services", href: "/services" },
   { icon: DollarSign, labelKey: "expenses", href: "/expenses" },
   { icon: CreditCard, labelKey: "payments", href: "/payments" },
+  { icon: BarChart3, labelKey: "reports", href: "/reports" },
 ];
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {

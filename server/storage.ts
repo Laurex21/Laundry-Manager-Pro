@@ -50,6 +50,17 @@ export interface IStorage {
     pendingOrders: number;
     activeCustomers: number;
   }>;
+
+  // Reports
+  getReportData(startDate: Date, endDate: Date): Promise<{
+    totalRevenue: number;
+    totalExpenses: number;
+    netProfit: number;
+    totalOrders: number;
+    dailyRevenue: { date: string; revenue: number }[];
+    serviceDistribution: { name: string; count: number }[];
+    topCustomers: { name: string; orderCount: number; totalSpent: number }[];
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -246,6 +257,76 @@ export class DatabaseStorage implements IStorage {
       pendingOrders: Number(pendingCount?.count || 0),
       activeCustomers: Number(customersCount?.count || 0),
     };
+  }
+  // Reports
+  async getReportData(startDate: Date, endDate: Date) {
+    const gte = sql`${startDate}`;
+    const lte = sql`${endDate}`;
+
+    const filteredOrders = await db.select().from(orders)
+      .where(and(sql`${orders.createdAt} >= ${gte}`, sql`${orders.createdAt} <= ${lte}`));
+
+    const totalOrders = filteredOrders.length;
+
+    const filteredPayments = await db.select().from(payments)
+      .where(and(sql`${payments.date} >= ${gte}`, sql`${payments.date} <= ${lte}`));
+    const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const filteredExpenses = await db.select().from(expenditures)
+      .where(and(sql`${expenditures.date} >= ${gte}`, sql`${expenditures.date} <= ${lte}`));
+    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
+    const netProfit = totalRevenue - totalExpenses;
+
+    const dailyRevenueMap = new Map<string, number>();
+    for (const p of filteredPayments) {
+      const day = p.date ? new Date(p.date).toISOString().split('T')[0] : 'unknown';
+      dailyRevenueMap.set(day, (dailyRevenueMap.get(day) || 0) + Number(p.amount));
+    }
+    const dailyRevenue = Array.from(dailyRevenueMap.entries())
+      .map(([date, revenue]) => ({ date, revenue }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const orderIds = filteredOrders.map(o => o.id);
+    let serviceDistribution: { name: string; count: number }[] = [];
+    if (orderIds.length > 0) {
+      const items = await db.select({
+        serviceName: services.name,
+        quantity: orderItems.quantity,
+      }).from(orderItems)
+        .innerJoin(services, eq(orderItems.serviceId, services.id))
+        .where(sql`${orderItems.orderId} IN (${sql.join(orderIds.map(id => sql`${id}`), sql`, `)})`);
+
+      const serviceMap = new Map<string, number>();
+      for (const item of items) {
+        serviceMap.set(item.serviceName, (serviceMap.get(item.serviceName) || 0) + item.quantity);
+      }
+      serviceDistribution = Array.from(serviceMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+    }
+
+    const customerOrderMap = new Map<number, { orderCount: number; totalSpent: number }>();
+    for (const order of filteredOrders) {
+      const existing = customerOrderMap.get(order.customerId) || { orderCount: 0, totalSpent: 0 };
+      existing.orderCount++;
+      existing.totalSpent += Number(order.totalAmount);
+      customerOrderMap.set(order.customerId, existing);
+    }
+
+    const allCustomers = await db.select().from(customers);
+    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+
+    const topCustomers = Array.from(customerOrderMap.entries())
+      .map(([customerId, data]) => ({
+        name: customerMap.get(customerId)?.name || 'Unknown',
+        orderCount: data.orderCount,
+        totalSpent: data.totalSpent,
+      }))
+      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .slice(0, 10);
+
+    return { totalRevenue, totalExpenses, netProfit, totalOrders, dailyRevenue, serviceDistribution, topCustomers };
   }
 }
 

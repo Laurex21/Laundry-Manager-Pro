@@ -60,6 +60,7 @@ Use `npm run db:push` to push schema changes to the database.
 3. **Custom hooks per entity**: Each domain entity (customers, orders, services, expenditures, stats) has its own React Query hook file in `client/src/hooks/`
 4. **Layout shell pattern**: Authenticated pages wrapped in `LayoutShell` component providing sidebar navigation
 5. **Customer Detail View**: `/customers/:id` page with VIP badge, summary cards, tabbed content (Contact/Preferences/Order History), and action buttons (New Order/Edit Profile/WhatsApp/Call). Customer cards on list page are clickable and navigate to detail view.
+6. **Reports & Analytics**: `/reports` page with date range filtering, 4 metric highlight cards (revenue, expenses, net profit, orders), daily revenue line chart, service distribution donut chart, top customers table, and downloadable monthly report. Backend endpoint: `GET /api/reports?start=YYYY-MM-DD&end=YYYY-MM-DD`.
 
 ## External Dependencies
 
