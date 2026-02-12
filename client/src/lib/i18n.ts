@@ -30,7 +30,14 @@ const resources = {
       "notes": "Notes",
       "payments": "Payments",
       "welcome": "Welcome",
-      "laundry_manager": "Laundry Manager"
+      "laundry_manager": "Laundry Manager",
+      "order_services": "Order Services",
+      "garment_inventory": "Garment Inventory",
+      "garment_inventory_hint": "Track individual garment items for this order (not billed separately)",
+      "add_garment": "Add Garment",
+      "item_name": "Item Name",
+      "qty": "Qty",
+      "garment_placeholder": "e.g. Shirt, Trousers, Dress"
     }
   },
   fr: {
@@ -60,7 +67,14 @@ const resources = {
       "notes": "Notes",
       "payments": "Paiements",
       "welcome": "Bienvenue",
-      "laundry_manager": "Gestionnaire de Blanchisserie"
+      "laundry_manager": "Gestionnaire de Blanchisserie",
+      "order_services": "Services de commande",
+      "garment_inventory": "Inventaire des vêtements",
+      "garment_inventory_hint": "Suivre les articles vestimentaires pour cette commande (non facturés séparément)",
+      "add_garment": "Ajouter un vêtement",
+      "item_name": "Nom de l'article",
+      "qty": "Qté",
+      "garment_placeholder": "ex. Chemise, Pantalon, Robe"
     }
   }
 };

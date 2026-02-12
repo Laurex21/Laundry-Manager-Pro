@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useOrders, useCreateOrder } from "@/hooks/use-orders";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useServices } from "@/hooks/use-services";
@@ -17,7 +17,8 @@ import {
   Trash2,
   ChevronRight,
   UserPlus,
-  Check
+  Check,
+  Shirt
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,6 +176,7 @@ export default function Orders() {
 }
 
 function OrderForm({ onSuccess }: { onSuccess: () => void }) {
+  const { t } = useTranslation();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { data: customers } = useCustomers();
@@ -192,7 +194,8 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
       paymentStatus: "unpaid",
       entryDate: format(new Date(), "yyyy-MM-dd"),
       discount: "0",
-      items: [{ serviceId: 0, quantity: 1 }]
+      items: [{ serviceId: 0, quantity: 1 }],
+      garmentItems: [],
     }
   });
 
@@ -206,6 +209,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     name: "items"
   });
 
+  const { fields: garmentFields, append: appendGarment, remove: removeGarment } = useFieldArray({
+    control: form.control,
+    name: "garmentItems"
+  });
+
   const watchedItems = useWatch({
     control: form.control,
     name: "items"
@@ -215,6 +223,19 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     control: form.control,
     name: "discount"
   });
+
+  const hasKgService = useMemo(() => {
+    return (watchedItems || []).some(item => {
+      const service = services?.find(s => s.id === item.serviceId);
+      return service?.unit === "kg";
+    });
+  }, [watchedItems, services]);
+
+  useEffect(() => {
+    if (!hasKgService && garmentFields.length > 0) {
+      form.setValue("garmentItems", []);
+    }
+  }, [hasKgService]);
 
   const subtotal = useMemo(() => {
     return (watchedItems || []).reduce((acc, item) => {
@@ -246,7 +267,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
       items: data.items.map(item => ({
         serviceId: Number(item.serviceId),
         quantity: Number(item.quantity)
-      }))
+      })),
+      garmentItems: hasKgService ? (data.garmentItems || []).filter(g => g.itemName.trim() !== "").map(g => ({
+        itemName: g.itemName.trim(),
+        quantity: Number(g.quantity),
+      })) : [],
     };
     
     createOrder(formattedData, {
@@ -406,9 +431,9 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-muted-foreground">Order Items</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">{t('order_services', 'Order Services')}</h3>
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ serviceId: 0, quantity: 1 })}>
-                  <Plus className="w-3 h-3 mr-1" /> Add Item
+                  <Plus className="w-3 h-3 mr-1" /> {t('add_service', 'Add Service')}
                 </Button>
               </div>
               
@@ -479,6 +504,67 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                 );
               })}
             </div>
+
+            {hasKgService && (
+              <div className="space-y-4" data-testid="garment-inventory-section">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shirt className="w-4 h-4 text-muted-foreground" />
+                    <h3 className="text-sm font-medium text-muted-foreground">{t('garment_inventory', 'Garment Inventory')}</h3>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1 })}>
+                    <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
+                
+                {garmentFields.map((field, index) => (
+                  <div key={field.id} className="flex gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
+                    <FormField
+                      control={form.control}
+                      name={`garmentItems.${index}.itemName`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormLabel className="text-xs">{t('item_name', 'Item Name')}</FormLabel>
+                          <FormControl>
+                            <Input placeholder={t('garment_placeholder', 'e.g. Shirt, Trousers, Dress')} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`garmentItems.${index}.quantity`}
+                      render={({ field }) => (
+                        <FormItem className="w-20">
+                          <FormLabel className="text-xs">{t('qty', 'Qty')}</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min="1" 
+                              {...field} 
+                              onChange={e => field.onChange(Number(e.target.value))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => removeGarment(index)}
+                      data-testid={`button-remove-garment-${index}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="border-t pt-4 space-y-4">
               <div className="flex justify-between items-center text-sm">
