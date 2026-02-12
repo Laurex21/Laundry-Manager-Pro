@@ -6,28 +6,27 @@ import {
   LayoutDashboard, 
   ShoppingBag, 
   Users, 
-  Settings, 
   Menu, 
-  X, 
   LogOut,
   Shirt,
   DollarSign,
-  Languages,
-  Coins,
+  Globe,
+  Banknote,
   CreditCard,
-  BarChart3
+  BarChart3,
+  Check
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 
@@ -41,16 +40,107 @@ const NAV_ITEMS = [
   { icon: BarChart3, labelKey: "reports", href: "/reports" },
 ];
 
+const LANGUAGES = [
+  { code: "en", label: "English", short: "EN" },
+  { code: "fr", label: "Fran\u00e7ais", short: "FR" },
+];
+
+const CURRENCIES: { code: Currency; label: string; symbol: string }[] = [
+  { code: "USD", label: "US Dollar", symbol: "$" },
+  { code: "NGN", label: "Nigerian Naira", symbol: "\u20a6" },
+  { code: "XOF", label: "CFA Franc", symbol: "CFA" },
+  { code: "EUR", label: "Euro", symbol: "\u20ac" },
+];
+
+function RegionalSettings() {
+  const { t, i18n } = useTranslation();
+  const { currency, setCurrency } = useCurrency();
+
+  const currentLang = LANGUAGES.find((l) => l.code === i18n.language) || LANGUAGES[0];
+  const currentCurrency = CURRENCIES.find((c) => c.code === currency) || CURRENCIES[0];
+
+  return (
+    <div className="flex items-center gap-1" data-testid="regional-settings">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground"
+            data-testid="button-language-toggle"
+          >
+            <Globe className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-xs font-medium">{currentLang.short}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+            {t("language")}
+          </DropdownMenuLabel>
+          {LANGUAGES.map((lang) => (
+            <DropdownMenuItem
+              key={lang.code}
+              onClick={() => i18n.changeLanguage(lang.code)}
+              className={cn(
+                "flex items-center justify-between gap-2",
+                i18n.language === lang.code && "text-primary font-semibold"
+              )}
+              data-testid={`menu-item-lang-${lang.code}`}
+            >
+              <span>{lang.label}</span>
+              {i18n.language === lang.code && (
+                <Check className="w-4 h-4 text-primary" />
+              )}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Separator orientation="vertical" className="h-5 mx-0.5" />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-muted-foreground"
+            data-testid="button-currency-toggle"
+          >
+            <Banknote className="w-4 h-4" strokeWidth={1.5} />
+            <span className="text-xs font-medium">{currentCurrency.code}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+            {t("currency_label")}
+          </DropdownMenuLabel>
+          {CURRENCIES.map((cur) => (
+            <DropdownMenuItem
+              key={cur.code}
+              onClick={() => setCurrency(cur.code)}
+              className={cn(
+                "flex items-center justify-between gap-2",
+                currency === cur.code && "text-primary font-semibold"
+              )}
+              data-testid={`menu-item-currency-${cur.code}`}
+            >
+              <span>{cur.symbol} {cur.label}</span>
+              {currency === cur.code && (
+                <Check className="w-4 h-4 text-primary" />
+              )}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { t, i18n } = useTranslation();
-  const { currency, setCurrency } = useCurrency();
-
-  const toggleLanguage = (lang: string) => {
-    i18n.changeLanguage(lang);
-  };
+  const { t } = useTranslation();
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
@@ -89,38 +179,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </nav>
 
       <div className="p-4 border-t border-sidebar-border mt-auto space-y-2">
-        <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="flex-1 justify-start text-muted-foreground h-8 px-2">
-                <Languages className="w-4 h-4 mr-2" />
-                {i18n.language.toUpperCase()}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-40">
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Language</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => toggleLanguage('en')}>English</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => toggleLanguage('fr')}>Français</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="flex-1 justify-start text-muted-foreground h-8 px-2">
-                <Coins className="w-4 h-4 mr-2" />
-                {currency}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-40">
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Currency</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setCurrency('USD')}>USD ($)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCurrency('NGN')}>NAIRA (₦)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCurrency('XOF')}>FCFA (CFA)</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCurrency('EUR')}>EURO (€)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
         <div className="flex items-center gap-3 px-2 mb-2 pt-2">
           <Avatar className="w-9 h-9 border border-border">
             <AvatarImage src={user?.profileImageUrl || undefined} />
@@ -133,8 +191,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </div>
         <Button 
           variant="outline" 
-          className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 hover:border-destructive/20 h-9" 
+          className="w-full justify-start text-muted-foreground" 
           onClick={() => logout()}
+          data-testid="button-sign-out"
         >
           <LogOut className="w-4 h-4 mr-2" />
           {t('sign_out')}
@@ -145,28 +204,31 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-muted/20 flex">
-      {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-64 bg-card border-r border-border fixed inset-y-0 z-30">
         <NavContent />
       </aside>
 
-      {/* Mobile Sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="p-0 w-72">
           <NavContent />
         </SheetContent>
       </Sheet>
 
-      {/* Main Content */}
       <main className="flex-1 lg:ml-64 min-h-screen flex flex-col">
-        {/* Mobile Header */}
-        <header className="lg:hidden h-16 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-20 shadow-sm">
+        <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-20" data-testid="top-navbar">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setMobileOpen(true)}
+              data-testid="button-mobile-menu"
+            >
               <Menu className="w-5 h-5" />
             </Button>
-            <span className="font-display font-bold text-lg">CleanEase</span>
+            <span className="font-display font-bold text-lg lg:hidden">CleanEase</span>
           </div>
+          <RegionalSettings />
         </header>
 
         <div className="p-4 md:p-8 max-w-7xl mx-auto w-full flex-1">
