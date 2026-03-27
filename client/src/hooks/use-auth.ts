@@ -27,7 +27,7 @@ export function useAuth() {
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 
   const logoutMutation = useMutation({
@@ -37,11 +37,28 @@ export function useAuth() {
     },
   });
 
+  const planSlug: string = (user as any)?.subscription?.plan?.slug ?? (user as any)?.planSlug ?? "starter";
+
+  const hasFeature = (feature: string): boolean => {
+    const featureMap: Record<string, string[]> = {
+      analytics:   ["pro", "business", "enterprise"],
+      waste:       ["business", "enterprise"],
+      performance: ["business", "enterprise"],
+      machines:    ["pro", "business", "enterprise"],
+      employees:   ["pro", "business", "enterprise"],
+      reports:     ["pro", "business", "enterprise"],
+      api:         ["enterprise"],
+    };
+    return featureMap[feature]?.includes(planSlug) ?? false;
+  };
+
   return {
     user,
     isLoading,
     isAuthenticated: !!user,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+    planSlug,
+    hasFeature,
   };
 }

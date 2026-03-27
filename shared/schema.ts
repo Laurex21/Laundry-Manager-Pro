@@ -1,9 +1,8 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Import auth models
 export * from "./models/auth";
 import { users } from "./models/auth";
 
@@ -25,14 +24,14 @@ export const services = pgTable("services", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  unit: text("unit").notNull(), // e.g., "kg", "piece"
+  unit: text("unit").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  category: text("category").notNull(), // "washing", "dry_cleaning", "ironing"
+  category: text("category").notNull(),
   imageUrl: text("image_url"),
   active: boolean("active").default(true),
   minimumCharge: decimal("minimum_charge", { precision: 10, scale: 2 }),
   estimatedDuration: integer("estimated_duration"),
-  durationUnit: text("duration_unit"), // "hours", "days"
+  durationUnit: text("duration_unit"),
   expressAvailable: boolean("express_available").default(false),
   expressSurcharge: decimal("express_surcharge", { precision: 5, scale: 2 }),
 });
@@ -40,9 +39,9 @@ export const services = pgTable("services", {
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull().references(() => customers.id),
-  status: text("status").notNull().default("pending"), // pending, processing, ready, delivered, cancelled
+  status: text("status").notNull().default("pending"),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
-  paymentStatus: text("payment_status").notNull().default("unpaid"), // unpaid, paid, partial
+  paymentStatus: text("payment_status").notNull().default("unpaid"),
   entryDate: timestamp("entry_date").defaultNow(),
   pickupDate: timestamp("pickup_date"),
   discount: decimal("discount", { precision: 10, scale: 2 }).default("0"),
@@ -62,7 +61,7 @@ export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => orders.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  method: text("method").notNull(), // cash, card, online
+  method: text("method").notNull(),
   date: timestamp("date").defaultNow(),
 });
 
@@ -75,10 +74,71 @@ export const garmentItems = pgTable("garment_items", {
 
 export const expenditures = pgTable("expenditures", {
   id: serial("id").primaryKey(),
-  category: text("category").notNull(), // utilities, supplies, maintenance, rent, other
+  category: text("category").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description").notNull(),
   date: timestamp("date").defaultNow(),
+});
+
+export const machines = pgTable("machines", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull().default("washer"),
+  capacityKg: decimal("capacity_kg", { precision: 8, scale: 2 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  cycleCount: integer("cycle_count").notNull().default(0),
+  totalKgProcessed: decimal("total_kg_processed", { precision: 10, scale: 2 }).notNull().default("0"),
+  utilizationRate: decimal("utilization_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const employees = pgTable("employees", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  role: varchar("role", { length: 100 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  email: varchar("email", { length: 255 }),
+  salary: decimal("salary", { precision: 10, scale: 2 }),
+  kgProcessed: decimal("kg_processed", { precision: 10, scale: 2 }).notNull().default("0"),
+  ordersHandled: integer("orders_handled").notNull().default(0),
+  productivityScore: decimal("productivity_score", { precision: 5, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const plans = pgTable("plans", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  slug: varchar("slug", { length: 50 }).notNull().unique(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  maxOrders: integer("max_orders"),
+  maxUsers: integer("max_users"),
+  features: jsonb("features").notNull().default([]),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  planId: integer("plan_id").notNull().references(() => plans.id),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  startDate: timestamp("start_date").defaultNow(),
+  endDate: timestamp("end_date"),
+  ordersUsed: integer("orders_used").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const subscriptionPayments = pgTable("subscription_payments", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  planId: integer("plan_id").notNull().references(() => plans.id),
+  subscriptionId: integer("subscription_id").references(() => subscriptions.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  method: varchar("method", { length: 50 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("completed"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // === RELATIONS ===
@@ -122,6 +182,16 @@ export const garmentItemsRelations = relations(garmentItems, ({ one }) => ({
   }),
 }));
 
+export const plansRelations = relations(plans, ({ many }) => ({
+  subscriptions: many(subscriptions),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  plan: one(plans, {
+    fields: [subscriptions.planId],
+    references: [plans.id],
+  }),
+}));
 
 // === ZOD SCHEMAS ===
 
@@ -131,7 +201,11 @@ export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, cre
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, date: true });
 export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true });
-export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true, date: true });
+export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true });
+export const insertMachineSchema = createInsertSchema(machines).omit({ id: true, createdAt: true, cycleCount: true, totalKgProcessed: true, utilizationRate: true });
+export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true, productivityScore: true });
+export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, ordersUsed: true });
 
 // === TYPES ===
 
@@ -156,6 +230,20 @@ export type InsertGarmentItem = z.infer<typeof insertGarmentItemSchema>;
 export type Expenditure = typeof expenditures.$inferSelect;
 export type InsertExpenditure = z.infer<typeof insertExpenditureSchema>;
 
-// Complex types for UI
+export type Machine = typeof machines.$inferSelect;
+export type InsertMachine = z.infer<typeof insertMachineSchema>;
+
+export type Employee = typeof employees.$inferSelect;
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+
+export type Plan = typeof plans.$inferSelect;
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+
+export type SubscriptionPayment = typeof subscriptionPayments.$inferSelect;
+
 export type OrderWithCustomer = Order & { customer: Customer };
 export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[] };
+export type SubscriptionWithPlan = Subscription & { plan: Plan };

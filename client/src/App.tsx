@@ -16,6 +16,10 @@ import Services from "@/pages/services";
 import Expenses from "@/pages/expenses";
 import Payments from "@/pages/payments";
 import Reports from "@/pages/reports";
+import Machines from "@/pages/machines";
+import Employees from "@/pages/employees";
+import Analytics from "@/pages/analytics";
+import Subscriptions from "@/pages/subscriptions";
 import LayoutShell from "@/components/layout-shell";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -45,7 +49,6 @@ function Router() {
     <Switch>
       <Route path="/auth" component={AuthPage} />
       
-      {/* Protected Routes */}
       <Route path="/">
         <ProtectedRoute component={Dashboard} />
       </Route>
@@ -59,7 +62,6 @@ function Router() {
         <ProtectedRoute component={Orders} />
       </Route>
       <Route path="/orders/:id">
-        {/* Placeholder for order detail if needed, or route back to orders for now */}
         <ProtectedRoute component={Orders} />
       </Route>
       <Route path="/services">
@@ -74,8 +76,19 @@ function Router() {
       <Route path="/reports">
         <ProtectedRoute component={Reports} />
       </Route>
+      <Route path="/machines">
+        <ProtectedRoute component={Machines} />
+      </Route>
+      <Route path="/employees">
+        <ProtectedRoute component={Employees} />
+      </Route>
+      <Route path="/analytics">
+        <ProtectedRoute component={Analytics} />
+      </Route>
+      <Route path="/subscriptions">
+        <ProtectedRoute component={Subscriptions} />
+      </Route>
 
-      {/* Fallback */}
       <Route component={NotFound} />
     </Switch>
   );

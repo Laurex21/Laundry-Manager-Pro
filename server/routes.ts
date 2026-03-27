@@ -9,43 +9,22 @@ async function seedDatabase() {
   const servicesList = await storage.getServices();
   if (servicesList.length === 0) {
     console.log("Seeding database...");
-    
-    // Seed Services
     const s1 = await storage.createService({ name: "Wash & Fold", unit: "kg", price: "15.00", category: "washing", description: "Regular wash and fold service", imageUrl: "", active: true });
     const s2 = await storage.createService({ name: "Dry Cleaning (Suit)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Professional dry cleaning for suits", imageUrl: "", active: true });
     const s3 = await storage.createService({ name: "Ironing (Shirt)", unit: "piece", price: "25.00", category: "ironing", description: "Steam ironing", imageUrl: "", active: true });
-    
-    // Seed Customers
     const c1 = await storage.createCustomer({ name: "John Doe", phone: "555-0101", email: "john@example.com", address: "123 Main St", notes: "Allergic to strong detergents" });
     const c2 = await storage.createCustomer({ name: "Jane Smith", phone: "555-0102", email: "jane@example.com", address: "456 Oak Ave", notes: "" });
-
-    // Seed Orders
-    await storage.createOrder(
-      { customerId: c1.id, status: "pending", paymentStatus: "unpaid" },
-      [{ serviceId: s1.id, quantity: 5 }]
-    );
-    
-    await storage.createOrder(
-      { customerId: c2.id, status: "ready", paymentStatus: "paid" },
-      [{ serviceId: s2.id, quantity: 2 }, { serviceId: s3.id, quantity: 3 }]
-    );
-
+    await storage.createOrder({ customerId: c1.id, status: "pending", paymentStatus: "unpaid" }, [{ serviceId: s1.id, quantity: 5 }]);
+    await storage.createOrder({ customerId: c2.id, status: "ready", paymentStatus: "paid" }, [{ serviceId: s2.id, quantity: 2 }, { serviceId: s3.id, quantity: 3 }]);
     console.log("Database seeded!");
   }
+  await storage.seedPlans();
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  // Auth Setup
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
-
-  // Seed DB
   seedDatabase().catch(console.error);
-
-  // === API ROUTES ===
 
   // Customers
   app.get(api.customers.list.path, async (req, res) => {
@@ -65,9 +44,7 @@ export async function registerRoutes(
       const customer = await storage.createCustomer(input);
       res.status(201).json(customer);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
       throw err;
     }
   });
@@ -127,8 +104,6 @@ export async function registerRoutes(
     try {
       const input = api.orders.create.input.parse(req.body);
       const { items, garmentItems: garments, ...orderData } = input;
-      
-      // Calculate total amount from items and discount
       let totalAmount = 0;
       const itemsWithPrices = await Promise.all(items.map(async (item) => {
         const service = await storage.getService(item.serviceId);
@@ -136,10 +111,8 @@ export async function registerRoutes(
         totalAmount += Number(service.price) * item.quantity;
         return { ...item, priceAtOrder: service.price };
       }));
-
       const discount = Number(orderData.discount || 0);
       totalAmount = Math.max(0, totalAmount - discount);
-
       const order = await storage.createOrder({
         ...orderData,
         totalAmount: totalAmount.toString(),
@@ -149,9 +122,7 @@ export async function registerRoutes(
       }, items, garments);
       res.status(201).json(order);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
-      }
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
       throw err;
     }
   });
@@ -187,6 +158,17 @@ export async function registerRoutes(
     res.status(201).json(expenditure);
   });
 
+  app.patch("/api/expenditures/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateExpenditure(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ message: "Expenditure not found" });
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      throw err;
+    }
+  });
+
   // Performance Monitor
   app.get(api.performance.get.path, async (req, res) => {
     const data = await storage.getPerformanceData();
@@ -198,11 +180,7 @@ export async function registerRoutes(
     const { start, end } = req.query;
     const startDate = start ? new Date(start as string) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const endDate = end ? new Date(end as string) : new Date();
-
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
-    }
-
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
     endDate.setHours(23, 59, 59, 999);
     const data = await storage.getReportData(startDate, endDate);
     res.json(data);
@@ -212,6 +190,119 @@ export async function registerRoutes(
   app.get(api.stats.get.path, async (req, res) => {
     const stats = await storage.getStats();
     res.json(stats);
+  });
+
+  // Machines
+  app.get("/api/machines", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const machines = await storage.getMachines((req.user as any).id);
+    res.json(machines);
+  });
+
+  app.post("/api/machines", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const machine = await storage.createMachine({ ...req.body, userId: (req.user as any).id });
+      res.status(201).json(machine);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid machine data" });
+    }
+  });
+
+  app.patch("/api/machines/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const updated = await storage.updateMachine(Number(req.params.id), req.body);
+    if (!updated) return res.status(404).json({ message: "Machine not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/machines/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const deleted = await storage.deleteMachine(Number(req.params.id));
+    if (!deleted) return res.status(404).json({ message: "Machine not found" });
+    res.json({ success: true });
+  });
+
+  // Employees
+  app.get("/api/employees", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const employees = await storage.getEmployees((req.user as any).id);
+    res.json(employees);
+  });
+
+  app.post("/api/employees", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const employee = await storage.createEmployee({ ...req.body, userId: (req.user as any).id });
+      res.status(201).json(employee);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid employee data" });
+    }
+  });
+
+  app.patch("/api/employees/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const updated = await storage.updateEmployee(Number(req.params.id), req.body);
+    if (!updated) return res.status(404).json({ message: "Employee not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/employees/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const deleted = await storage.deleteEmployee(Number(req.params.id));
+    if (!deleted) return res.status(404).json({ message: "Employee not found" });
+    res.json({ success: true });
+  });
+
+  // Plans
+  app.get("/api/plans", async (req, res) => {
+    const plans = await storage.getPlans();
+    res.json(plans);
+  });
+
+  // Subscriptions
+  app.get("/api/subscriptions/current", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const sub = await storage.getUserSubscription((req.user as any).id);
+    res.json(sub);
+  });
+
+  app.post("/api/subscriptions/pay", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const { planId, method } = req.body;
+    if (!planId || !method) return res.status(400).json({ message: "planId and method are required" });
+    try {
+      const sub = await storage.createSubscription((req.user as any).id, planId, method);
+      res.status(201).json(sub);
+    } catch (err) {
+      res.status(400).json({ message: "Failed to create subscription" });
+    }
+  });
+
+  // Analytics Dashboard
+  app.get("/api/analytics/dashboard", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const data = await storage.getDashboardData();
+    res.json(data);
+  });
+
+  app.get("/api/analytics/kpis", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const period = (req.query.period as string) || "month";
+    const data = await storage.getAnalyticsKpis(period);
+    res.json(data);
+  });
+
+  app.get("/api/analytics/waste", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const alerts = await storage.getWasteAlerts();
+    res.json(alerts);
+  });
+
+  app.get("/api/analytics/performance-score", async (req, res) => {
+    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    const score = await storage.getPerformanceScore();
+    res.json(score);
   });
 
   return httpServer;

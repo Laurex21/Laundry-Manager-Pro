@@ -2,7 +2,7 @@
 
 ## Overview
 
-CleanEase is a full-stack laundry business management application. It allows laundry shop operators to manage customers, services (wash & fold, dry cleaning, ironing), orders with line items, payments, expenditures, and view dashboard statistics. The app features Replit Auth for authentication, internationalization (English/French), and a clean blue-themed UI designed around the laundry business domain.
+CleanEase is a full-stack laundry business management application. It allows laundry shop operators to manage customers, services (wash & fold, dry cleaning, ironing), orders with line items, payments, expenditures, machines, employees, and view dashboard statistics with analytics. The app features Replit Auth for authentication, internationalization (English/French), multi-currency support (USD, Naira, FCFA, Euro), subscription-based plan gating, and a clean blue-themed UI designed around the laundry business domain.
 
 ## User Preferences
 
@@ -31,7 +31,7 @@ Preferred communication style: Simple, everyday language.
 - **Production Build**: Vite builds client to `dist/public`, esbuild bundles server to `dist/index.cjs`
 
 ### Shared Code (`shared/` directory)
-- **`schema.ts`**: Drizzle table definitions for customers, services, orders, order_items, payments, expenditures. Also re-exports auth models.
+- **`schema.ts`**: Drizzle table definitions for customers, services, orders, order_items, payments, expenditures, machines, employees, plans, subscriptions, subscriptionPayments. Also re-exports auth models.
 - **`models/auth.ts`**: Sessions and users tables required by Replit Auth (do not modify or drop these)
 - **`routes.ts`**: API route definitions with Zod response schemas, used by both client hooks and server routes for type safety
 
@@ -41,7 +41,12 @@ Preferred communication style: Simple, everyday language.
 - **orders**: id, customerId (FK→customers), status (pending/processing/ready/delivered/cancelled), totalAmount (decimal), paymentStatus (unpaid/paid/partial), createdAt, updatedAt
 - **order_items**: id, orderId (FK→orders), serviceId (FK→services), quantity, priceAtOrder (decimal)
 - **payments**: Payment records linked to orders
-- **expenditures**: Business expense tracking with amount, category, description
+- **expenditures**: Business expense tracking with amount, category, description, date
+- **machines**: id, userId (varchar), name, type (washer/dryer/press/other), capacityKg, status (active/maintenance/inactive), utilizationRate, cycleCount, totalKgProcessed, createdAt
+- **employees**: id, userId (varchar), name, role, phone, email, salary, kgProcessed, ordersHandled, active, createdAt
+- **plans**: id, name, slug, price, maxOrders, maxUsers, features (jsonb array), active, createdAt
+- **subscriptions**: id, userId (varchar), planId (FK→plans), status (active/cancelled/expired), startDate, endDate, ordersUsed, createdAt
+- **subscription_payments**: id, subscriptionId (FK→subscriptions), amount, method, status, paidAt
 - **users**: Replit Auth user records (id, email, firstName, lastName, profileImageUrl)
 - **sessions**: Express session store for Replit Auth
 
@@ -52,16 +57,30 @@ Use `npm run db:push` to push schema changes to the database.
 - Sessions stored in PostgreSQL via `connect-pg-simple`
 - Protected routes on frontend redirect unauthenticated users to auth page
 - Auth routes: `/api/login`, `/api/logout`, `/api/auth/user`
+- `/api/auth/user` returns user data plus `planSlug` from active subscription
 - **Important**: Do not modify or drop the `users` and `sessions` tables — they are required for Replit Auth
+
+### Subscription & Plan Gating
+- 4 plans seeded on startup: Starter, Pro, Business, Enterprise
+- `useAuth()` hook exposes `planSlug` and `hasFeature(feature)` for frontend gating
+- Feature map: analytics/machines/employees/reports require Pro+; waste/performance require Business+; api requires Enterprise
+- `<UpgradePrompt>` component shown when user lacks required plan
+- Subscription payment via `POST /api/subscriptions/pay` with simulate mode for demo
 
 ### Key Design Decisions
 1. **Shared schemas**: Zod + Drizzle schemas in `shared/` provide end-to-end type safety between client and server
-2. **Database seeding**: Automatic seeding on first run when services table is empty (in `server/routes.ts`)
+2. **Database seeding**: Automatic seeding on first run when services table is empty (in `server/routes.ts`). Plans seeded via `seedPlans()`.
 3. **Custom hooks per entity**: Each domain entity (customers, orders, services, expenditures, stats) has its own React Query hook file in `client/src/hooks/`
-4. **Layout shell pattern**: Authenticated pages wrapped in `LayoutShell` component providing sidebar navigation
+4. **Layout shell pattern**: Authenticated pages wrapped in `LayoutShell` component providing sidebar navigation with 11 nav items
 5. **Customer Detail View**: `/customers/:id` page with VIP badge, summary cards, tabbed content (Contact/Preferences/Order History), and action buttons (New Order/Edit Profile/WhatsApp/Call). Customer cards on list page are clickable and navigate to detail view.
 6. **Reports & Analytics**: `/reports` page with date range filtering, 4 metric highlight cards (revenue, expenses, net profit, orders), daily revenue line chart, service distribution donut chart, top customers table, and downloadable monthly report. Backend endpoint: `GET /api/reports?start=YYYY-MM-DD&end=YYYY-MM-DD`.
 7. **Performance Monitor**: Section within Reports page featuring profitability status badge (profitable/loss-making), current month net profit display, smart trend notifications comparing last 30 days vs previous 30 days (spending increases, revenue decreases, profit growth alerts), and 6-month Income vs Expenses bar chart. Backend endpoint: `GET /api/reports/performance`.
+8. **Dashboard (upgraded)**: Alerts banner, daily target progress bar, AreaChart (30-day revenue), PieChart (orders by status), BarChart (kg processed). Backend: `GET /api/analytics/dashboard`.
+9. **Expenses (upgraded)**: Type breakdown grid, filter pills by category, edit button per row, date filter dropdown. Backend: `PATCH /api/expenditures/:id`.
+10. **Machines page**: Card grid with CRUD, utilization bars, capacity display. Backend: CRUD at `/api/machines`.
+11. **Employees page**: List cards with CRUD, avatar circles, salary/kg/orders stats. Backend: CRUD at `/api/employees`.
+12. **Analytics page**: KPI grid with period selector, break-even bar, waste detection alerts (Business+), performance score with grades (Business+). Backend: `/api/analytics/kpis`, `/api/analytics/waste`, `/api/analytics/performance-score`.
+13. **Subscriptions page**: 4 plan cards with features, payment dialog with simulate mode. Backend: `/api/plans`, `/api/subscriptions/current`, `/api/subscriptions/pay`.
 
 ## External Dependencies
 
@@ -80,6 +99,6 @@ Use `npm run db:push` to push schema changes to the database.
 - **react-hook-form** + **@hookform/resolvers**: Form handling with Zod validation
 - **wouter**: Client-side routing
 - **i18next** + **react-i18next** + **i18next-browser-languagedetector**: Internationalization
-- **recharts**: Dashboard charts
+- **recharts**: Dashboard charts (AreaChart, PieChart, BarChart)
 - **date-fns**: Date formatting
 - **shadcn/ui** components (Radix UI + Tailwind CSS)
