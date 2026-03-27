@@ -9,7 +9,7 @@ import {
   services,
   orders,
   payments,
-  expenditures
+  expenditures,
 } from './schema';
 
 export const errorSchemas = {

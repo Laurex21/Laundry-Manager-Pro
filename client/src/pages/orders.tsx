@@ -10,6 +10,7 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
+import { generateDepositReceipt } from "@/lib/receipt";
 import { 
   Plus, 
   Search, 
@@ -18,7 +19,8 @@ import {
   ChevronRight,
   UserPlus,
   Check,
-  Shirt
+  Shirt,
+  AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,7 +151,14 @@ export default function Orders() {
                       {format(new Date(order.createdAt), "MMM d, yyyy")}
                     </td>
                     <td className="px-6 py-4">
-                      <StatusBadge status={order.status} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={order.status} />
+                        {order.hasReturnedItems && (
+                          <span className="text-orange-500" title="Has returned garments">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={order.paymentStatus} />
@@ -275,7 +284,14 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     };
     
     createOrder(formattedData, {
-      onSuccess: () => {
+      onSuccess: async (newOrder: any) => {
+        try {
+          const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
+          if (res.ok) {
+            const orderDetails = await res.json();
+            generateDepositReceipt(orderDetails, symbol);
+          }
+        } catch {}
         form.reset();
         onSuccess();
       }

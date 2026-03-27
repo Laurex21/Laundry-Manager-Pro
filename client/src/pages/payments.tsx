@@ -3,6 +3,7 @@ import { useOrders } from "@/hooks/use-orders";
 import { usePaymentsByOrder, useCreatePayment } from "@/hooks/use-payments";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
+import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-methods";
 import {
   CreditCard,
   CheckCircle2,
@@ -50,6 +51,7 @@ export default function Payments() {
   const [orderSearchOpen, setOrderSearchOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [reference, setReference] = useState("");
   const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
@@ -111,7 +113,7 @@ export default function Payments() {
     const newStatus = newTotalPaid >= totalAmount ? "paid" : "partial";
 
     createPayment(
-      { orderId: selectedOrderId, amount: amount, method },
+      { orderId: selectedOrderId, amount: amount, method, reference: reference || undefined },
       {
         onSuccess: () => {
           setSuccessPayment({
@@ -124,6 +126,7 @@ export default function Payments() {
             newStatus,
           });
           setAmount("");
+          setReference("");
           setSelectedOrderId(null);
         },
       }
@@ -491,20 +494,19 @@ export default function Payments() {
 
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Payment Method</label>
-                      <Select value={method} onValueChange={setMethod}>
+                      <Select value={method} onValueChange={(v) => { setMethod(v); setReference(""); }}>
                         <SelectTrigger data-testid="select-payment-method">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Cash">
-                            <span className="flex items-center gap-2"><Banknote className="w-4 h-4" /> Cash</span>
-                          </SelectItem>
-                          <SelectItem value="Bank Transfer">
-                            <span className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Bank Transfer</span>
-                          </SelectItem>
-                          <SelectItem value="Mobile Money">
-                            <span className="flex items-center gap-2"><Smartphone className="w-4 h-4" /> Mobile Money</span>
-                          </SelectItem>
+                        <SelectContent className="max-h-[300px]">
+                          {PAYMENT_REGIONS.map(region => (
+                            <div key={region}>
+                              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{region}</div>
+                              {PAYMENT_METHODS.filter(m => m.region === region).map(m => (
+                                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                              ))}
+                            </div>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -519,6 +521,19 @@ export default function Payments() {
                       />
                     </div>
                   </div>
+
+                  {getMethodDef(method).requiresReference && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Transaction Reference</label>
+                      <Input
+                        placeholder="e.g. transaction ID, receipt number..."
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                        data-testid="input-reference"
+                      />
+                      <p className="text-xs text-muted-foreground">Enter the reference number from the {getMethodDef(method).label} transaction</p>
+                    </div>
+                  )}
 
                   <Button
                     type="submit"
@@ -574,6 +589,7 @@ export default function Payments() {
                       <div className="flex items-center gap-2">
                         <Banknote className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-muted-foreground">{p.method}</span>
+                        {p.reference && <span className="text-[10px] text-muted-foreground/70">Ref: {p.reference}</span>}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-mono font-medium text-green-600 dark:text-green-400">{symbol}{Number(p.amount).toFixed(2)}</span>

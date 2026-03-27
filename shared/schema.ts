@@ -6,8 +6,6 @@ import { z } from "zod";
 export * from "./models/auth";
 import { users } from "./models/auth";
 
-// === TABLE DEFINITIONS ===
-
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -39,7 +37,7 @@ export const services = pgTable("services", {
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull().references(() => customers.id),
-  status: text("status").notNull().default("pending"),
+  status: text("status").notNull().default("received"),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentStatus: text("payment_status").notNull().default("unpaid"),
   entryDate: timestamp("entry_date").defaultNow(),
@@ -57,11 +55,21 @@ export const orderItems = pgTable("order_items", {
   priceAtOrder: decimal("price_at_order", { precision: 10, scale: 2 }).notNull(),
 });
 
+export const orderStatusHistory = pgTable("order_status_history", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  status: text("status").notNull(),
+  changedAt: timestamp("changed_at").defaultNow(),
+  changedBy: varchar("changed_by"),
+  notes: text("notes"),
+});
+
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => orders.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  method: text("method").notNull(),
+  method: varchar("method", { length: 50 }).notNull(),
+  reference: varchar("reference", { length: 255 }),
   date: timestamp("date").defaultNow(),
 });
 
@@ -70,6 +78,11 @@ export const garmentItems = pgTable("garment_items", {
   orderId: integer("order_id").notNull().references(() => orders.id),
   itemName: text("item_name").notNull(),
   quantity: integer("quantity").notNull().default(1),
+  returnedForTreatment: boolean("returned_for_treatment").default(false),
+  returnStage: text("return_stage"),
+  returnNotes: text("return_notes"),
+  returnedAt: timestamp("returned_at"),
+  resolvedAt: timestamp("resolved_at"),
 });
 
 export const expenditures = pgTable("expenditures", {
@@ -141,8 +154,6 @@ export const subscriptionPayments = pgTable("subscription_payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// === RELATIONS ===
-
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
 }));
@@ -155,6 +166,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   items: many(orderItems),
   payments: many(payments),
   garmentItems: many(garmentItems),
+  statusHistory: many(orderStatusHistory),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -182,6 +194,13 @@ export const garmentItemsRelations = relations(garmentItems, ({ one }) => ({
   }),
 }));
 
+export const orderStatusHistoryRelations = relations(orderStatusHistory, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderStatusHistory.orderId],
+    references: [orders.id],
+  }),
+}));
+
 export const plansRelations = relations(plans, ({ many }) => ({
   subscriptions: many(subscriptions),
 }));
@@ -193,21 +212,18 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   }),
 }));
 
-// === ZOD SCHEMAS ===
-
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, updatedAt: true, totalAmount: true });
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, date: true });
-export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true });
+export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true, returnedForTreatment: true, returnStage: true, returnNotes: true, returnedAt: true, resolvedAt: true });
 export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true });
 export const insertMachineSchema = createInsertSchema(machines).omit({ id: true, createdAt: true, cycleCount: true, totalKgProcessed: true, utilizationRate: true });
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true, productivityScore: true });
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, ordersUsed: true });
-
-// === TYPES ===
+export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).omit({ id: true, changedAt: true });
 
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
@@ -244,6 +260,8 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 
 export type SubscriptionPayment = typeof subscriptionPayments.$inferSelect;
 
+export type OrderStatusHistoryEntry = typeof orderStatusHistory.$inferSelect;
+
 export type OrderWithCustomer = Order & { customer: Customer };
-export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[] };
+export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[] };
 export type SubscriptionWithPlan = Subscription & { plan: Plan };

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { Check, Crown, Sparkles, CreditCard, Info } from "lucide-react";
+import { PAYMENT_METHODS, PAYMENT_REGIONS } from "@/lib/payment-methods";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -140,11 +141,16 @@ function PaymentDialog({ plan, onClose }: { plan: Plan | null; onClose: () => vo
             <label className="text-sm font-medium mb-2 block">{t("payment_method")}</label>
             <Select value={method} onValueChange={setMethod}>
               <SelectTrigger data-testid="select-payment-method"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[300px]">
                 <SelectItem value="simulate">Simulate Payment (Demo)</SelectItem>
-                <SelectItem value="mobile_money">Mobile Money (Orange/MTN)</SelectItem>
-                <SelectItem value="card">Credit/Debit Card</SelectItem>
-                <SelectItem value="cash">Cash</SelectItem>
+                {PAYMENT_REGIONS.map(region => (
+                  <div key={region}>
+                    <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{region}</div>
+                    {PAYMENT_METHODS.filter(m => m.region === region).map(m => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </div>
+                ))}
               </SelectContent>
             </Select>
           </div>

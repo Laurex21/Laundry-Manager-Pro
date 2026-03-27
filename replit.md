@@ -2,7 +2,7 @@
 
 ## Overview
 
-CleanEase is a full-stack laundry business management application. It allows laundry shop operators to manage customers, services (wash & fold, dry cleaning, ironing), orders with line items, payments, expenditures, machines, employees, and view dashboard statistics with analytics. The app features Replit Auth for authentication, internationalization (English/French), multi-currency support (USD, Naira, FCFA, Euro), subscription-based plan gating, and a clean blue-themed UI designed around the laundry business domain.
+CleanEase is a full-stack laundry business management application. It allows laundry shop operators to manage customers, services (wash & fold, dry cleaning, ironing), orders with line items, payments, expenditures, machines, employees, and view dashboard statistics with analytics. The app features email/password authentication, internationalization (English/French), multi-currency support (USD, Naira, FCFA, Euro), subscription-based plan gating, Pan-African payment methods (17 options including mobile money), a 7-stage order pipeline with garment return tracking, and a clean blue-themed UI designed around the laundry business domain.
 
 ## User Preferences
 
@@ -53,12 +53,37 @@ Preferred communication style: Simple, everyday language.
 Use `npm run db:push` to push schema changes to the database.
 
 ### Authentication
-- Replit Auth via OpenID Connect, handled in `server/replit_integrations/auth/`
+- Email/password authentication with bcryptjs password hashing
 - Sessions stored in PostgreSQL via `connect-pg-simple`
 - Protected routes on frontend redirect unauthenticated users to auth page
-- Auth routes: `/api/login`, `/api/logout`, `/api/auth/user`
+- Auth routes: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/user`
 - `/api/auth/user` returns user data plus `planSlug` from active subscription
-- **Important**: Do not modify or drop the `users` and `sessions` tables — they are required for Replit Auth
+- Users table includes: id (varchar UUID), email, passwordHash, firstName, lastName, phone, businessName, role
+- **Important**: Do not modify or drop the `users` and `sessions` tables
+
+### Order Pipeline (7 stages)
+- Stages: received → washing → stain_treatment → drying → ironing → ready → delivered
+- `orderStatusHistory` table tracks all status transitions with timestamps
+- Status changes recorded via `PATCH /api/orders/:id` with `changedBy` user ID
+- Order detail page (`/orders/:id`) shows visual pipeline stepper
+
+### Garment Return System
+- `garmentItems` table has `returnedForTreatment`, `returnStage`, `returnNotes`, `resolvedAt` fields
+- `PATCH /api/garment-items/:id/return` flags a garment for re-treatment
+- `PATCH /api/garment-items/:id/resolve` marks return as resolved
+- Dashboard alerts show orders with unresolved garment returns
+- Order list shows warning icon for orders with returned items
+
+### Deposit Receipt
+- Auto-downloads HTML receipt on order creation
+- Available from order detail page via Download Receipt button
+- Shows pipeline tracker, service summary, garment checklist, payment records, T&Cs
+
+### Pan-African Payment Methods
+- 17 payment methods grouped by region: Universal, Central/West/East/Southern Africa, Nigeria, Pan-African, International
+- Methods include MTN Mobile Money, Orange Money, M-Pesa, Wave, OPay, Flutterwave, Paystack, etc.
+- Reference field for transaction IDs (conditionally shown based on method)
+- Defined in `client/src/lib/payment-methods.ts`
 
 ### Subscription & Plan Gating
 - 4 plans seeded on startup: Starter, Pro, Business, Enterprise

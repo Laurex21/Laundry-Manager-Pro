@@ -12,6 +12,7 @@ import AuthPage from "@/pages/auth-page";
 import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
 import Orders from "@/pages/orders";
+import OrderDetail from "@/pages/order-detail";
 import Services from "@/pages/services";
 import Expenses from "@/pages/expenses";
 import Payments from "@/pages/payments";
@@ -62,7 +63,7 @@ function Router() {
         <ProtectedRoute component={Orders} />
       </Route>
       <Route path="/orders/:id">
-        <ProtectedRoute component={Orders} />
+        <ProtectedRoute component={OrderDetail} />
       </Route>
       <Route path="/services">
         <ProtectedRoute component={Services} />

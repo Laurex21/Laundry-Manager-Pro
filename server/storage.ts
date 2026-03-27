@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { 
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
-  machines, employees, plans, subscriptions, subscriptionPayments,
+  machines, employees, plans, subscriptions, subscriptionPayments, orderStatusHistory,
   type Customer, type InsertCustomer,
   type Service, type InsertService,
   type Order, type InsertOrder,
@@ -13,7 +13,7 @@ import {
   type Employee, type InsertEmployee,
   type Plan,
   type Subscription, type SubscriptionWithPlan,
-  type OrderWithDetails
+  type OrderWithDetails, type OrderStatusHistoryEntry
 } from "@shared/schema";
 import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 
@@ -29,15 +29,19 @@ export interface IStorage {
   updateService(id: number, service: Partial<InsertService>): Promise<Service | undefined>;
   deleteService(id: number): Promise<boolean>;
 
-  getOrders(): Promise<Order[]>;
+  getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
   createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order>;
-  updateOrderStatus(id: number, status: string, paymentStatus?: string): Promise<Order | undefined>;
+  updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
+  getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPaymentsByOrder(orderId: number): Promise<Payment[]>;
 
   getCustomerOrders(customerId: number): Promise<any[]>;
+
+  markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined>;
+  resolveGarmentReturn(id: number): Promise<GarmentItem | undefined>;
 
   getExpenditures(): Promise<Expenditure[]>;
   createExpenditure(expenditure: InsertExpenditure): Promise<Expenditure>;
@@ -130,10 +134,22 @@ export class DatabaseStorage implements IStorage {
     const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
     const allCustomers = await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
-    return allOrders.map(order => ({
-      ...order,
-      customer: customerMap.get(order.customerId) || null,
-    }));
+    const allGarments = await db.select().from(garmentItems);
+    const garmentsByOrder = new Map<number, typeof allGarments>();
+    for (const g of allGarments) {
+      const list = garmentsByOrder.get(g.orderId) || [];
+      list.push(g);
+      garmentsByOrder.set(g.orderId, list);
+    }
+    return allOrders.map(order => {
+      const orderGarments = garmentsByOrder.get(order.id) || [];
+      const hasReturnedItems = orderGarments.some(g => g.returnedForTreatment && !g.resolvedAt);
+      return {
+        ...order,
+        customer: customerMap.get(order.customerId) || null,
+        hasReturnedItems,
+      };
+    });
   }
 
   async getOrder(id: number): Promise<OrderWithDetails | undefined> {
@@ -155,13 +171,20 @@ export class DatabaseStorage implements IStorage {
 
     const orderPayments = await db.select().from(payments).where(eq(payments.orderId, id));
     const orderGarments = await db.select().from(garmentItems).where(eq(garmentItems.orderId, id));
+    const history = await db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, id)).orderBy(orderStatusHistory.changedAt);
 
-    return { ...order, customer, items, payments: orderPayments, garmentItems: orderGarments };
+    return { ...order, customer, items, payments: orderPayments, garmentItems: orderGarments, statusHistory: history };
   }
 
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
+
+      await tx.insert(orderStatusHistory).values({
+        orderId: order.id,
+        status: order.status,
+        notes: "Order created",
+      });
 
       for (const item of items) {
         const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));
@@ -181,10 +204,40 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateOrderStatus(id: number, status: string, paymentStatus?: string): Promise<Order | undefined> {
+  async updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined> {
     const updates: any = { status, updatedAt: new Date() };
     if (paymentStatus) updates.paymentStatus = paymentStatus;
     const [updated] = await db.update(orders).set(updates).where(eq(orders.id, id)).returning();
+    if (updated) {
+      await db.insert(orderStatusHistory).values({
+        orderId: id,
+        status,
+        changedBy: changedBy || null,
+      });
+    }
+    return updated;
+  }
+
+  async getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]> {
+    return await db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, orderId)).orderBy(orderStatusHistory.changedAt);
+  }
+
+  async markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined> {
+    const [updated] = await db.update(garmentItems).set({
+      returnedForTreatment: true,
+      returnStage,
+      returnNotes: returnNotes || null,
+      returnedAt: new Date(),
+      resolvedAt: null,
+    }).where(eq(garmentItems.id, id)).returning();
+    return updated;
+  }
+
+  async resolveGarmentReturn(id: number): Promise<GarmentItem | undefined> {
+    const [updated] = await db.update(garmentItems).set({
+      returnedForTreatment: false,
+      resolvedAt: new Date(),
+    }).where(eq(garmentItems.id, id)).returning();
     return updated;
   }
 
@@ -234,7 +287,7 @@ export class DatabaseStorage implements IStorage {
     const [ordersCount] = await db.select({ count: sql<number>`count(*)` }).from(orders);
     const [revenueResult] = await db.select({ total: sql<string>`sum(amount)` }).from(payments);
     const totalRevenue = Number(revenueResult?.total || 0);
-    const [pendingCount] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "pending"));
+    const [pendingCount] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "received"));
     const [customersCount] = await db.select({ count: sql<number>`count(*)` }).from(customers);
     return {
       totalOrders: Number(ordersCount?.count || 0),
@@ -336,7 +389,6 @@ export class DatabaseStorage implements IStorage {
     return { totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses, totalOrders, dailyRevenue, serviceDistribution, topCustomers };
   }
 
-  // Machines
   async getMachines(userId: string): Promise<Machine[]> {
     return await db.select().from(machines).where(eq(machines.userId, userId)).orderBy(desc(machines.createdAt));
   }
@@ -356,7 +408,6 @@ export class DatabaseStorage implements IStorage {
     return !!deleted;
   }
 
-  // Employees
   async getEmployees(userId: string): Promise<Employee[]> {
     return await db.select().from(employees).where(eq(employees.userId, userId)).orderBy(desc(employees.createdAt));
   }
@@ -376,7 +427,6 @@ export class DatabaseStorage implements IStorage {
     return !!deleted;
   }
 
-  // Plans
   async getPlans(): Promise<Plan[]> {
     return await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.price);
   }
@@ -398,7 +448,6 @@ export class DatabaseStorage implements IStorage {
     ]);
   }
 
-  // Subscriptions
   async getUserSubscription(userId: string): Promise<SubscriptionWithPlan | null> {
     const subs = await db.select().from(subscriptions).where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active"))).orderBy(desc(subscriptions.createdAt)).limit(1);
     if (subs.length === 0) return null;
@@ -419,7 +468,6 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  // Dashboard
   async getDashboardData() {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -445,8 +493,8 @@ export class DatabaseStorage implements IStorage {
     const statusCounts = await db.select({ status: orders.status, count: sql<number>`count(*)` }).from(orders).groupBy(orders.status);
     const ordersByStatus: any = { received: 0, washing: 0, ready: 0, delivered: 0 };
     for (const s of statusCounts) {
-      if (s.status === "pending") ordersByStatus.received = Number(s.count);
-      else if (s.status === "processing") ordersByStatus.washing = Number(s.count);
+      if (s.status === "received" || s.status === "pending") ordersByStatus.received = (ordersByStatus.received || 0) + Number(s.count);
+      else if (s.status === "washing" || s.status === "processing") ordersByStatus.washing = (ordersByStatus.washing || 0) + Number(s.count);
       else if (s.status === "ready") ordersByStatus.ready = Number(s.count);
       else if (s.status === "delivered") ordersByStatus.delivered = Number(s.count);
     }
@@ -466,10 +514,15 @@ export class DatabaseStorage implements IStorage {
     const profitPerKg = monthRevenue > 0 ? profit / Math.max(monthOrders, 1) : 0;
 
     const alerts: { type: string; message: string; detail?: string }[] = [];
-    const pendingResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "pending"));
+    const pendingResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "received"));
     const pendingCount = Number(pendingResult[0]?.count || 0);
     if (pendingCount > 10) alerts.push({ type: "warning", message: `You have ${pendingCount} pending orders`, detail: "Consider processing them soon" });
     if (monthExpenses > monthRevenue && monthRevenue > 0) alerts.push({ type: "danger", message: "Expenses exceed revenue this month", detail: "Review your expenditure logs" });
+
+    const returnedGarments = await db.select({ count: sql<number>`count(*)` }).from(garmentItems)
+      .where(and(eq(garmentItems.returnedForTreatment, true), sql`${garmentItems.resolvedAt} IS NULL`));
+    const returnedCount = Number(returnedGarments[0]?.count || 0);
+    if (returnedCount > 0) alerts.push({ type: "warning", message: `${returnedCount} garment(s) returned for treatment`, detail: "Check orders with returned items" });
 
     return {
       todayKg: 0, todayOrders, todayRevenue, monthKg: 0, monthOrders, monthRevenue, monthExpenses,
@@ -478,7 +531,6 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // Analytics
   async getAnalyticsKpis(period: string) {
     const now = new Date();
     let start: Date;
