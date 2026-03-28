@@ -4,6 +4,28 @@ import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
 import bcrypt from "bcryptjs";
 
+async function buildUserResponse(userId: string) {
+  const user = await authStorage.getUser(userId);
+  if (!user) return null;
+  const sub = await storage.getUserSubscription(userId);
+  const planSlug = sub?.plan?.slug ?? "starter";
+  let currentSite = null;
+  let allSites: any[] = [];
+  if (user.currentSiteId) {
+    currentSite = await storage.getSite(user.currentSiteId);
+  }
+  if (user.role === "owner" && user.organisationId) {
+    allSites = await storage.getSites(user.organisationId);
+  }
+  return { ...user, planSlug, passwordHash: undefined, currentSite, allSites };
+}
+
+async function ensureUserOrganisation(userId: string) {
+  const user = await authStorage.getUser(userId);
+  if (!user || user.organisationId) return;
+  await storage.migrateToMultiSite();
+}
+
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/register", async (req, res) => {
     try {
@@ -32,9 +54,11 @@ export function registerAuthRoutes(app: Express): void {
       });
 
       (req.session as any).userId = user.id;
-      const sub = await storage.getUserSubscription(user.id);
-      const planSlug = sub?.plan?.slug ?? "starter";
-      res.status(201).json({ ...user, planSlug, passwordHash: undefined });
+
+      await ensureUserOrganisation(user.id);
+
+      const response = await buildUserResponse(user.id);
+      res.status(201).json(response);
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ message: "Registration failed" });
@@ -59,9 +83,11 @@ export function registerAuthRoutes(app: Express): void {
       }
 
       (req.session as any).userId = user.id;
-      const sub = await storage.getUserSubscription(user.id);
-      const planSlug = sub?.plan?.slug ?? "starter";
-      res.json({ ...user, planSlug, passwordHash: undefined });
+
+      await ensureUserOrganisation(user.id);
+
+      const response = await buildUserResponse(user.id);
+      res.json(response);
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
@@ -71,13 +97,11 @@ export function registerAuthRoutes(app: Express): void {
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;
-      const user = await authStorage.getUser(userId);
-      if (!user) {
+      const response = await buildUserResponse(userId);
+      if (!response) {
         return res.status(404).json({ message: "User not found" });
       }
-      const sub = await storage.getUserSubscription(userId);
-      const planSlug = sub?.plan?.slug ?? "starter";
-      res.json({ ...user, planSlug, passwordHash: undefined });
+      res.json(response);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });

@@ -2,6 +2,7 @@ import { db } from "./db";
 import { 
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
   machines, employees, plans, subscriptions, subscriptionPayments, orderStatusHistory,
+  businessSettings, organisations, sites, siteMembers, siteInvitations,
   type Customer, type InsertCustomer,
   type Service, type InsertService,
   type Order, type InsertOrder,
@@ -13,9 +14,12 @@ import {
   type Employee, type InsertEmployee,
   type Plan,
   type Subscription, type SubscriptionWithPlan,
-  type OrderWithDetails, type OrderStatusHistoryEntry
+  type OrderWithDetails, type OrderStatusHistoryEntry,
+  type BusinessSettings, type InsertBusinessSettings,
+  type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
-import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
+import { users } from "@shared/models/auth";
+import { eq, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -80,10 +84,33 @@ export interface IStorage {
   getUserSubscription(userId: string): Promise<SubscriptionWithPlan | null>;
   createSubscription(userId: string, planId: number, method: string): Promise<Subscription>;
 
-  getDashboardData(): Promise<any>;
+  getDashboardData(siteId?: number | null, allSites?: boolean): Promise<any>;
   getAnalyticsKpis(period: string): Promise<any>;
   getWasteAlerts(): Promise<any[]>;
   getPerformanceScore(): Promise<any>;
+
+  getSettings(userId: string): Promise<BusinessSettings>;
+  upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings>;
+
+  getOrganisationByOwner(ownerId: string): Promise<Organisation | null>;
+  createOrganisationWithSite(ownerId: string, orgName: string, siteName: string): Promise<{ organisation: Organisation; site: Site }>;
+  getSites(organisationId: number): Promise<(Site & { memberCount: number })[]>;
+  getSite(siteId: number): Promise<Site | null>;
+  createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site>;
+  updateSite(id: number, data: Partial<InsertSite>): Promise<Site | undefined>;
+  deleteSite(id: number): Promise<boolean>;
+  getSiteMembers(siteId: number): Promise<(SiteMember & { name: string; email: string | null; phone: string | null })[]>;
+  addSiteMember(siteId: number, userId: string, role: string): Promise<SiteMember>;
+  removeSiteMember(siteId: number, userId: string): Promise<boolean>;
+  updateSiteMemberRole(siteId: number, userId: string, role: string): Promise<SiteMember | undefined>;
+  createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }): Promise<SiteInvitation>;
+  getInvitationByToken(token: string): Promise<(SiteInvitation & { siteName: string; organisationName: string; inviterName: string }) | null>;
+  acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null>;
+  getPendingInvitations(organisationId: number): Promise<(SiteInvitation & { siteName: string })[]>;
+  revokeInvitation(id: number): Promise<boolean>;
+  switchSite(userId: string, siteId: number | null): Promise<void>;
+  migrateToMultiSite(): Promise<void>;
+  getUserSiteRole(userId: string, siteId: number): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -468,12 +495,11 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getDashboardData() {
+  async getDashboardData(siteId?: number | null, allSites?: boolean) {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const todayRevenue = await this.sumPaymentsInRange(todayStart, todayEnd);
     const todayOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
@@ -524,10 +550,26 @@ export class DatabaseStorage implements IStorage {
     const returnedCount = Number(returnedGarments[0]?.count || 0);
     if (returnedCount > 0) alerts.push({ type: "warning", message: `${returnedCount} garment(s) returned for treatment`, detail: "Check orders with returned items" });
 
+    // Build site overview for All Sites mode
+    let sitesOverview: { id: number; name: string; city?: string | null; memberCount: number; isActive: boolean }[] = [];
+    if (allSites) {
+      const allSiteRows = await db.select().from(sites).where(eq(sites.isActive, true));
+      const memberCounts = await db.select({ siteId: siteMembers.siteId, count: sql<number>`count(*)` })
+        .from(siteMembers).groupBy(siteMembers.siteId);
+      const countMap: Record<number, number> = {};
+      for (const mc of memberCounts) countMap[mc.siteId] = Number(mc.count);
+      sitesOverview = allSiteRows.map(s => ({
+        id: s.id, name: s.name, city: s.city, memberCount: countMap[s.id] ?? 0, isActive: s.isActive ?? true,
+      }));
+    }
+
     return {
       todayKg: 0, todayOrders, todayRevenue, monthKg: 0, monthOrders, monthRevenue, monthExpenses,
       profit, costPerKg, profitPerKg, dailyTarget, targetAchievement,
       ordersByStatus, revenueByDay, kgByDay, alerts,
+      isAllSites: allSites ?? false,
+      siteCount: sitesOverview.length,
+      sitesOverview,
     };
   }
 
@@ -612,6 +654,195 @@ export class DatabaseStorage implements IStorage {
     if (total >= 90) grade = "A"; else if (total >= 80) grade = "B"; else if (total >= 70) grade = "C"; else if (total >= 60) grade = "D";
 
     return { total, machineUsage: Math.round(machineUsage), costEfficiency: Math.round(costEfficiency), productivity: Math.round(productivity), wasteLevel: Math.round(wasteLevel), grade };
+  }
+
+  // ─── Business Settings (Prompt A) ───────────────────────────────────────────
+
+  async getSettings(userId: string): Promise<BusinessSettings> {
+    const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
+    if (existing) return existing;
+    const [userRow] = await db.select().from(users).where(eq(users.id, userId));
+    const [created] = await db.insert(businessSettings).values({
+      userId,
+      businessName: userRow?.businessName || "My Laundry",
+    }).returning();
+    return created;
+  }
+
+  async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings> {
+    const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
+    if (existing) {
+      const [updated] = await db.update(businessSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(businessSettings.userId, userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(businessSettings).values({ userId, ...data }).returning();
+    return created;
+  }
+
+  // ─── Multi-Site (Prompt B) ───────────────────────────────────────────────────
+
+  async getOrganisationByOwner(ownerId: string): Promise<Organisation | null> {
+    const [org] = await db.select().from(organisations).where(eq(organisations.ownerId, ownerId));
+    return org || null;
+  }
+
+  async createOrganisationWithSite(ownerId: string, orgName: string, siteName: string): Promise<{ organisation: Organisation; site: Site }> {
+    return await db.transaction(async (tx) => {
+      const [org] = await tx.insert(organisations).values({ name: orgName, ownerId }).returning();
+      const [site] = await tx.insert(sites).values({ organisationId: org.id, name: siteName }).returning();
+      await tx.insert(siteMembers).values({ siteId: site.id, userId: ownerId, role: "owner" });
+      await tx.update(users).set({ organisationId: org.id, currentSiteId: site.id }).where(eq(users.id, ownerId));
+      return { organisation: org, site };
+    });
+  }
+
+  async getSites(organisationId: number): Promise<(Site & { memberCount: number })[]> {
+    const allSites = await db.select().from(sites)
+      .where(and(eq(sites.organisationId, organisationId), eq(sites.isActive, true)))
+      .orderBy(sites.name);
+    const result = [];
+    for (const site of allSites) {
+      const [cnt] = await db.select({ count: sql<number>`count(*)` }).from(siteMembers).where(eq(siteMembers.siteId, site.id));
+      result.push({ ...site, memberCount: Number(cnt?.count || 0) });
+    }
+    return result;
+  }
+
+  async getSite(siteId: number): Promise<Site | null> {
+    const [site] = await db.select().from(sites).where(eq(sites.id, siteId));
+    return site || null;
+  }
+
+  async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
+    const [site] = await db.insert(sites).values({ organisationId, ...data }).returning();
+    return site;
+  }
+
+  async updateSite(id: number, data: Partial<InsertSite>): Promise<Site | undefined> {
+    const [updated] = await db.update(sites).set(data).where(eq(sites.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSite(id: number): Promise<boolean> {
+    const [updated] = await db.update(sites).set({ isActive: false }).where(eq(sites.id, id)).returning();
+    return !!updated;
+  }
+
+  async getSiteMembers(siteId: number): Promise<(SiteMember & { name: string; email: string | null; phone: string | null })[]> {
+    const members = await db.select().from(siteMembers).where(eq(siteMembers.siteId, siteId));
+    const result = [];
+    for (const m of members) {
+      const [u] = await db.select().from(users).where(eq(users.id, m.userId));
+      result.push({ ...m, name: `${u?.firstName || ''} ${u?.lastName || ''}`.trim() || m.userId, email: u?.email || null, phone: u?.phone || null });
+    }
+    return result;
+  }
+
+  async addSiteMember(siteId: number, userId: string, role: string): Promise<SiteMember> {
+    const [existing] = await db.select().from(siteMembers).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId)));
+    if (existing) {
+      const [updated] = await db.update(siteMembers).set({ role }).where(eq(siteMembers.id, existing.id)).returning();
+      return updated;
+    }
+    const [member] = await db.insert(siteMembers).values({ siteId, userId, role }).returning();
+    return member;
+  }
+
+  async removeSiteMember(siteId: number, userId: string): Promise<boolean> {
+    const [deleted] = await db.delete(siteMembers).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId))).returning();
+    return !!deleted;
+  }
+
+  async updateSiteMemberRole(siteId: number, userId: string, role: string): Promise<SiteMember | undefined> {
+    const [updated] = await db.update(siteMembers).set({ role }).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId))).returning();
+    return updated;
+  }
+
+  async createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }): Promise<SiteInvitation> {
+    const crypto = await import("crypto");
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    const [inv] = await db.insert(siteInvitations).values({ ...data, token, status: "pending", expiresAt }).returning();
+    return inv;
+  }
+
+  async getInvitationByToken(token: string): Promise<(SiteInvitation & { siteName: string; organisationName: string; inviterName: string }) | null> {
+    const [inv] = await db.select().from(siteInvitations).where(eq(siteInvitations.token, token));
+    if (!inv) return null;
+    const [site] = await db.select().from(sites).where(eq(sites.id, inv.siteId));
+    const [org] = await db.select().from(organisations).where(eq(organisations.id, inv.organisationId));
+    const [inviter] = await db.select().from(users).where(eq(users.id, inv.invitedBy));
+    return {
+      ...inv,
+      siteName: site?.name || "Unknown Site",
+      organisationName: org?.name || "Unknown Organisation",
+      inviterName: `${inviter?.firstName || ''} ${inviter?.lastName || ''}`.trim() || "Someone",
+    };
+  }
+
+  async acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null> {
+    const [inv] = await db.select().from(siteInvitations).where(eq(siteInvitations.token, token));
+    if (!inv || inv.status !== "pending" || inv.expiresAt < new Date()) return null;
+    return await db.transaction(async (tx) => {
+      const existing = await tx.select().from(siteMembers).where(and(eq(siteMembers.siteId, inv.siteId), eq(siteMembers.userId, userId)));
+      if (existing.length === 0) {
+        await tx.insert(siteMembers).values({ siteId: inv.siteId, userId, role: inv.role });
+      }
+      const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
+      await tx.update(users).set({ currentSiteId: inv.siteId, organisationId: site?.organisationId }).where(eq(users.id, userId));
+      const [updated] = await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id)).returning();
+      return updated;
+    });
+  }
+
+  async getPendingInvitations(organisationId: number): Promise<(SiteInvitation & { siteName: string })[]> {
+    const invs = await db.select().from(siteInvitations)
+      .where(and(eq(siteInvitations.organisationId, organisationId), eq(siteInvitations.status, "pending")))
+      .orderBy(desc(siteInvitations.createdAt));
+    const result = [];
+    for (const inv of invs) {
+      const [site] = await db.select().from(sites).where(eq(sites.id, inv.siteId));
+      result.push({ ...inv, siteName: site?.name || "Unknown" });
+    }
+    return result;
+  }
+
+  async revokeInvitation(id: number): Promise<boolean> {
+    const [updated] = await db.update(siteInvitations).set({ status: "expired" }).where(eq(siteInvitations.id, id)).returning();
+    return !!updated;
+  }
+
+  async switchSite(userId: string, siteId: number | null): Promise<void> {
+    await db.update(users).set({ currentSiteId: siteId }).where(eq(users.id, userId));
+  }
+
+  async getUserSiteRole(userId: string, siteId: number): Promise<string | null> {
+    const [member] = await db.select().from(siteMembers).where(and(eq(siteMembers.userId, userId), eq(siteMembers.siteId, siteId)));
+    return member?.role || null;
+  }
+
+  async migrateToMultiSite(): Promise<void> {
+    const allUsers = await db.select().from(users);
+    for (const user of allUsers) {
+      if (user.organisationId) continue;
+      try {
+        const orgName = user.businessName || `${user.firstName || 'My'} Business`;
+        const siteName = user.businessName || "Main Site";
+        const [org] = await db.insert(organisations).values({ name: orgName, ownerId: user.id }).returning();
+        const [site] = await db.insert(sites).values({ organisationId: org.id, name: siteName }).returning();
+        const existing = await db.select().from(siteMembers).where(and(eq(siteMembers.siteId, site.id), eq(siteMembers.userId, user.id)));
+        if (existing.length === 0) {
+          await db.insert(siteMembers).values({ siteId: site.id, userId: user.id, role: "owner" });
+        }
+        await db.update(users).set({ organisationId: org.id, currentSiteId: site.id }).where(eq(users.id, user.id));
+      } catch (err) {
+        console.error(`migrateToMultiSite: error for user ${user.id}:`, err);
+      }
+    }
   }
 }
 

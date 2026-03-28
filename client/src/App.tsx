@@ -4,7 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldOff } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -21,10 +22,26 @@ import Machines from "@/pages/machines";
 import Employees from "@/pages/employees";
 import Analytics from "@/pages/analytics";
 import Subscriptions from "@/pages/subscriptions";
+import SettingsPage from "@/pages/settings";
+import AcceptInvitation from "@/pages/accept-invitation";
 import LayoutShell from "@/components/layout-shell";
 
-function ProtectedRoute({ component: Component, ...rest }: any) {
-  const { user, isLoading } = useAuth();
+function AccessDenied() {
+  return (
+    <div className="flex items-center justify-center min-h-64">
+      <Card className="max-w-sm w-full">
+        <CardContent className="p-8 text-center">
+          <ShieldOff className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <h2 className="font-semibold mb-2">Access Denied</h2>
+          <p className="text-sm text-muted-foreground">You don't have permission to view this page.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ProtectedRoute({ component: Component, page }: { component: React.ComponentType; page?: string }) {
+  const { user, isLoading, canAccess } = useAuth();
 
   if (isLoading) {
     return (
@@ -38,9 +55,11 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
     return <AuthPage />;
   }
 
+  const hasAccess = !page || canAccess(page);
+
   return (
     <LayoutShell>
-      <Component />
+      {hasAccess ? <Component /> : <AccessDenied />}
     </LayoutShell>
   );
 }
@@ -49,45 +68,49 @@ function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
-      
+      <Route path="/join/:token" component={AcceptInvitation} />
+
       <Route path="/">
-        <ProtectedRoute component={Dashboard} />
+        <ProtectedRoute component={Dashboard} page="dashboard" />
       </Route>
       <Route path="/customers">
-        <ProtectedRoute component={Customers} />
+        <ProtectedRoute component={Customers} page="customers" />
       </Route>
       <Route path="/customers/:id">
-        <ProtectedRoute component={CustomerDetail} />
+        <ProtectedRoute component={CustomerDetail} page="customers" />
       </Route>
       <Route path="/orders">
-        <ProtectedRoute component={Orders} />
+        <ProtectedRoute component={Orders} page="orders" />
       </Route>
       <Route path="/orders/:id">
-        <ProtectedRoute component={OrderDetail} />
+        <ProtectedRoute component={OrderDetail} page="orders" />
       </Route>
       <Route path="/services">
-        <ProtectedRoute component={Services} />
+        <ProtectedRoute component={Services} page="services" />
       </Route>
       <Route path="/expenses">
-        <ProtectedRoute component={Expenses} />
+        <ProtectedRoute component={Expenses} page="expenses" />
       </Route>
       <Route path="/payments">
-        <ProtectedRoute component={Payments} />
+        <ProtectedRoute component={Payments} page="payments" />
       </Route>
       <Route path="/reports">
-        <ProtectedRoute component={Reports} />
+        <ProtectedRoute component={Reports} page="reports" />
       </Route>
       <Route path="/machines">
-        <ProtectedRoute component={Machines} />
+        <ProtectedRoute component={Machines} page="machines" />
       </Route>
       <Route path="/employees">
-        <ProtectedRoute component={Employees} />
+        <ProtectedRoute component={Employees} page="employees" />
       </Route>
       <Route path="/analytics">
-        <ProtectedRoute component={Analytics} />
+        <ProtectedRoute component={Analytics} page="analytics" />
       </Route>
       <Route path="/subscriptions">
-        <ProtectedRoute component={Subscriptions} />
+        <ProtectedRoute component={Subscriptions} page="subscriptions" />
+      </Route>
+      <Route path="/settings">
+        <ProtectedRoute component={SettingsPage} page="settings" />
       </Route>
 
       <Route component={NotFound} />

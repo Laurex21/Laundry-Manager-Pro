@@ -283,7 +283,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/analytics/dashboard", isAuthenticated, async (req, res) => {
-    const data = await storage.getDashboardData();
+    const userId = (req.session as any).userId as string;
+    const sessionSiteId = (req.session as any).currentSiteId;
+    // If session has no currentSiteId, look it up from the user record
+    let siteId: number | null | undefined = sessionSiteId;
+    if (sessionSiteId === undefined) {
+      const { db } = await import("./db");
+      const { users } = await import("@shared/models/auth");
+      const { eq } = await import("drizzle-orm");
+      const userRow = await db.select({ currentSiteId: users.currentSiteId }).from(users).where(eq(users.id, userId)).limit(1);
+      siteId = userRow[0]?.currentSiteId ?? null;
+    }
+    const allSites = siteId === null || siteId === undefined;
+    const data = await storage.getDashboardData(allSites ? null : (siteId as number), allSites);
     res.json(data);
   });
 
@@ -301,6 +313,183 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/analytics/performance-score", isAuthenticated, async (req, res) => {
     const score = await storage.getPerformanceScore();
     res.json(score);
+  });
+
+  // ─── Business Settings (Prompt A) ───────────────────────────────────────────
+
+  app.get("/api/settings", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const settings = await storage.getSettings(userId);
+      res.json(settings);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
+  app.put("/api/settings", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const settings = await storage.upsertSettings(userId, req.body);
+      res.json(settings);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save settings" });
+    }
+  });
+
+  // ─── Multi-Site Routes (Prompt B) ────────────────────────────────────────────
+
+  app.get("/api/sites", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const org = await storage.getOrganisationByOwner(userId);
+      if (!org) return res.json([]);
+      const siteList = await storage.getSites(org.id);
+      res.json(siteList);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch sites" });
+    }
+  });
+
+  app.post("/api/sites", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      let org = await storage.getOrganisationByOwner(userId);
+      if (!org) {
+        const { organisation } = await storage.createOrganisationWithSite(userId, req.body.name, req.body.name);
+        org = organisation;
+        return res.status(201).json(org);
+      }
+      const site = await storage.createSite(org.id, req.body);
+      res.status(201).json(site);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create site" });
+    }
+  });
+
+  app.put("/api/sites/:id", isAuthenticated, async (req, res) => {
+    try {
+      const updated = await storage.updateSite(Number(req.params.id), req.body);
+      if (!updated) return res.status(404).json({ message: "Site not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update site" });
+    }
+  });
+
+  app.delete("/api/sites/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const org = await storage.getOrganisationByOwner(userId);
+      if (org) {
+        const siteList = await storage.getSites(org.id);
+        if (siteList.length <= 1) return res.status(400).json({ message: "Cannot delete your only site" });
+      }
+      const deleted = await storage.deleteSite(Number(req.params.id));
+      if (!deleted) return res.status(404).json({ message: "Site not found" });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete site" });
+    }
+  });
+
+  app.get("/api/sites/:id/members", isAuthenticated, async (req, res) => {
+    try {
+      const members = await storage.getSiteMembers(Number(req.params.id));
+      res.json(members);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch members" });
+    }
+  });
+
+  app.patch("/api/sites/:id/members/:userId/role", isAuthenticated, async (req, res) => {
+    try {
+      const updated = await storage.updateSiteMemberRole(Number(req.params.id), req.params.userId, req.body.role);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update role" });
+    }
+  });
+
+  app.delete("/api/sites/:id/members/:userId", isAuthenticated, async (req, res) => {
+    try {
+      await storage.removeSiteMember(Number(req.params.id), req.params.userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to remove member" });
+    }
+  });
+
+  // Invitations
+  app.post("/api/invitations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const org = await storage.getOrganisationByOwner(userId);
+      if (!org) return res.status(400).json({ message: "No organisation found" });
+      const { siteId, identifier, role } = req.body;
+      if (!siteId || !identifier || !role) return res.status(400).json({ message: "siteId, identifier and role are required" });
+      const inv = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role });
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      res.status(201).json({ ...inv, invitationLink: `${baseUrl}/join/${inv.token}` });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to create invitation" });
+    }
+  });
+
+  app.get("/api/invitations/pending", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const org = await storage.getOrganisationByOwner(userId);
+      if (!org) return res.json([]);
+      const invitations = await storage.getPendingInvitations(org.id);
+      res.json(invitations);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch invitations" });
+    }
+  });
+
+  app.delete("/api/invitations/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.revokeInvitation(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to revoke invitation" });
+    }
+  });
+
+  app.get("/api/invitations/join/:token", async (req, res) => {
+    try {
+      const inv = await storage.getInvitationByToken(req.params.token);
+      if (!inv) return res.status(404).json({ message: "Invitation not found or expired" });
+      res.json(inv);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch invitation" });
+    }
+  });
+
+  app.post("/api/invitations/accept/:token", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const result = await storage.acceptInvitation(req.params.token, userId);
+      if (!result) return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
+      res.json({ success: true, invitation: result });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to accept invitation" });
+    }
+  });
+
+  // Switch site
+  app.post("/api/auth/switch-site", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { siteId } = req.body;
+      const resolvedSiteId = siteId != null ? Number(siteId) : null;
+      await storage.switchSite(userId, resolvedSiteId);
+      (req.session as any).currentSiteId = resolvedSiteId;
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to switch site" });
+    }
   });
 
   return httpServer;

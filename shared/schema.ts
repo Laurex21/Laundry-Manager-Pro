@@ -15,6 +15,7 @@ export const customers = pgTable("customers", {
   notes: text("notes"),
   starchLevel: text("starch_level"),
   detergentType: text("detergent_type"),
+  siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -43,6 +44,7 @@ export const orders = pgTable("orders", {
   entryDate: timestamp("entry_date").defaultNow(),
   pickupDate: timestamp("pickup_date"),
   discount: decimal("discount", { precision: 10, scale: 2 }).default("0"),
+  siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -91,6 +93,7 @@ export const expenditures = pgTable("expenditures", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description").notNull(),
   date: timestamp("date").defaultNow(),
+  siteId: integer("site_id"),
 });
 
 export const machines = pgTable("machines", {
@@ -103,6 +106,7 @@ export const machines = pgTable("machines", {
   cycleCount: integer("cycle_count").notNull().default(0),
   totalKgProcessed: decimal("total_kg_processed", { precision: 10, scale: 2 }).notNull().default("0"),
   utilizationRate: decimal("utilization_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -117,6 +121,7 @@ export const employees = pgTable("employees", {
   kgProcessed: decimal("kg_processed", { precision: 10, scale: 2 }).notNull().default("0"),
   ordersHandled: integer("orders_handled").notNull().default(0),
   productivityScore: decimal("productivity_score", { precision: 5, scale: 2 }).notNull().default("0"),
+  siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -154,6 +159,73 @@ export const subscriptionPayments = pgTable("subscription_payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Business Settings (Prompt A)
+export const businessSettings = pgTable("business_settings", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
+  businessName: varchar("business_name", { length: 255 }).notNull().default("My Laundry"),
+  tagline: varchar("tagline", { length: 255 }).default(""),
+  logoBase64: text("logo_base64"),
+  address: varchar("address", { length: 500 }).default(""),
+  city: varchar("city", { length: 100 }).default(""),
+  country: varchar("country", { length: 100 }).default(""),
+  phone: varchar("phone", { length: 50 }).default(""),
+  phone2: varchar("phone2", { length: 50 }).default(""),
+  email: varchar("email", { length: 255 }).default(""),
+  website: varchar("website", { length: 255 }).default(""),
+  receiptHeaderColor: varchar("receipt_header_color", { length: 7 }).notNull().default("#1e3a5f"),
+  receiptLanguage: varchar("receipt_language", { length: 5 }).notNull().default("en"),
+  showLogo: boolean("show_logo").notNull().default(true),
+  showPickupDate: boolean("show_pickup_date").notNull().default(true),
+  showGarmentList: boolean("show_garment_list").notNull().default(true),
+  showPaymentHistory: boolean("show_payment_history").notNull().default(true),
+  showTerms: boolean("show_terms").notNull().default(true),
+  termsOfService: text("terms_of_service"),
+  receiptFooterNote: varchar("receipt_footer_note", { length: 500 }).default(""),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Multi-site tables (Prompt B)
+export const organisations = pgTable("organisations", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  ownerId: varchar("owner_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const sites = pgTable("sites", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  address: varchar("address", { length: 500 }).default(""),
+  city: varchar("city", { length: 100 }).default(""),
+  phone: varchar("phone", { length: 50 }).default(""),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const siteMembers = pgTable("site_members", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const siteInvitations = pgTable("site_invitations", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  invitedBy: varchar("invited_by").notNull(),
+  identifier: varchar("identifier", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Relations
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
 }));
@@ -212,6 +284,20 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   }),
 }));
 
+export const organisationsRelations = relations(organisations, ({ many }) => ({
+  sites: many(sites),
+}));
+
+export const sitesRelations = relations(sites, ({ one, many }) => ({
+  organisation: one(organisations, {
+    fields: [sites.organisationId],
+    references: [organisations.id],
+  }),
+  members: many(siteMembers),
+  invitations: many(siteInvitations),
+}));
+
+// Insert schemas
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, updatedAt: true, totalAmount: true });
@@ -224,7 +310,12 @@ export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: tru
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, ordersUsed: true });
 export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).omit({ id: true, changedAt: true });
+export const insertBusinessSettingsSchema = createInsertSchema(businessSettings).omit({ id: true, updatedAt: true });
+export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, createdAt: true });
+export const insertSiteMemberSchema = createInsertSchema(siteMembers).omit({ id: true, createdAt: true });
+export const insertSiteInvitationSchema = createInsertSchema(siteInvitations).omit({ id: true, createdAt: true });
 
+// Types
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 
@@ -261,6 +352,15 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type SubscriptionPayment = typeof subscriptionPayments.$inferSelect;
 
 export type OrderStatusHistoryEntry = typeof orderStatusHistory.$inferSelect;
+
+export type BusinessSettings = typeof businessSettings.$inferSelect;
+export type InsertBusinessSettings = z.infer<typeof insertBusinessSettingsSchema>;
+
+export type Organisation = typeof organisations.$inferSelect;
+export type Site = typeof sites.$inferSelect;
+export type SiteMember = typeof siteMembers.$inferSelect;
+export type SiteInvitation = typeof siteInvitations.$inferSelect;
+export type InsertSite = z.infer<typeof insertSiteSchema>;
 
 export type OrderWithCustomer = Order & { customer: Customer };
 export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[] };

@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
-import { 
+import { useAuth } from "@/hooks/use-auth";
+import {
   ArrowUpRight, ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
-  AlertCircle, AlertTriangle, Info, Target
+  AlertCircle, AlertTriangle, Info, Target, Building2, MapPin, UserCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
@@ -26,7 +28,12 @@ export default function Dashboard() {
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
+  const { currentSite, allSites, isOwner, userRole } = useAuth();
   const symbol = getSymbol();
+
+  const isAllSitesMode = isOwner && currentSite === null;
+  const sitesOverview: any[] = dashData?.sitesOverview ?? [];
+  const siteCount = dashData?.siteCount ?? allSites.length;
 
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 5) || [];
 
@@ -58,6 +65,32 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {isAllSitesMode ? (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/15" data-testid="banner-all-sites">
+          <div className="bg-primary/10 p-2 rounded-lg">
+            <Building2 className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-foreground">{t('all_sites_view')}</p>
+            <p className="text-sm text-muted-foreground">
+              {t('all_sites_subtitle', { count: siteCount })}
+            </p>
+          </div>
+          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hidden sm:flex">
+            {t('consolidated_data')}
+          </Badge>
+        </div>
+      ) : currentSite ? (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-border/50" data-testid="banner-current-site">
+          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            {t('viewing_site', { name: currentSite.name })}
+            {currentSite.city && <span className="ml-1 opacity-70">· {currentSite.city}</span>}
+          </p>
+          <Badge variant="outline" className="ml-auto capitalize text-xs">{userRole}</Badge>
+        </div>
+      ) : null}
 
       {alerts.length > 0 && (
         <div className="space-y-2" data-testid="dashboard-alerts">
@@ -120,6 +153,49 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {isAllSitesMode && sitesOverview.length > 0 && (
+        <Card className="shadow-md border-border/50" data-testid="card-sites-overview">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" />
+                {t('sites_overview')}
+              </CardTitle>
+              <Link href="/settings">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary text-xs">
+                  Manage Sites <ChevronRight className="w-3 h-3 ml-1" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {sitesOverview.map((site: any) => (
+                <div key={site.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors" data-testid={`card-site-${site.id}`}>
+                  <div className="bg-primary/10 p-2 rounded-lg flex-shrink-0">
+                    <Building2 className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground truncate">{site.name}</p>
+                    {site.city && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3" /> {site.city}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <UserCheck className="w-3 h-3" /> {t('site_members', { count: site.memberCount })}
+                    </p>
+                  </div>
+                  <Badge variant={site.isActive ? "default" : "secondary"} className="text-xs flex-shrink-0">
+                    {site.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -242,6 +318,13 @@ export default function Dashboard() {
                   <DollarSign className="w-4 h-4 mr-2" /> Log Expense
                 </Button>
               </Link>
+              {isOwner && (
+                <Link href="/settings">
+                  <Button variant="outline" className="w-full justify-start bg-background hover:bg-white hover:text-primary hover:border-primary/30 transition-all" data-testid="button-manage-sites">
+                    <Building2 className="w-4 h-4 mr-2" /> Manage Sites
+                  </Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         </div>

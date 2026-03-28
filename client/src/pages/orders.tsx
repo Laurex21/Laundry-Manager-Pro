@@ -11,6 +11,8 @@ import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { generateDepositReceipt } from "@/lib/receipt";
+import { useQuery as useSettingsQuery } from "@tanstack/react-query";
+import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { 
   Plus, 
   Search, 
@@ -73,6 +75,7 @@ export default function Orders() {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
 
   const filteredOrders = orders?.filter((o: any) => 
     o.id.toString().includes(search) || 
@@ -289,7 +292,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
             const orderDetails = await res.json();
-            generateDepositReceipt(orderDetails, symbol);
+            generateDepositReceipt(orderDetails, symbol, settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS);
           }
         } catch {}
         form.reset();

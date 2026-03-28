@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 
 export const sessions = pgTable(
   "sessions",
@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   passwordHash: varchar("password_hash"),
   businessName: varchar("business_name"),
   role: varchar("role").default("owner"),
+  organisationId: integer("organisation_id"),
+  currentSiteId: integer("current_site_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
