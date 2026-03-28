@@ -2,6 +2,9 @@ import type { Express } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
+import { db } from "../../db";
+import { organisations, siteMembers } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 async function buildUserResponse(userId: string) {
@@ -9,15 +12,36 @@ async function buildUserResponse(userId: string) {
   if (!user) return null;
   const sub = await storage.getUserSubscription(userId);
   const planSlug = sub?.plan?.slug ?? "starter";
+
+  // Determine effective role: check if user is the org owner or a site member
+  let effectiveRole = user.role ?? "owner";
+  if (user.organisationId) {
+    const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId));
+    if (org && org.ownerId !== userId) {
+      // User is not the org owner — find their highest-priority site member role
+      const memberships = await db.select().from(siteMembers).where(eq(siteMembers.userId, userId));
+      if (memberships.length > 0) {
+        // Priority: manager > operator (owners are handled above)
+        if (memberships.some(m => m.role === "manager")) effectiveRole = "manager";
+        else effectiveRole = "operator";
+        // Use role from current site if available
+        if (user.currentSiteId) {
+          const currentMembership = memberships.find(m => m.siteId === user.currentSiteId);
+          if (currentMembership) effectiveRole = currentMembership.role;
+        }
+      }
+    }
+  }
+
   let currentSite = null;
   let allSites: any[] = [];
   if (user.currentSiteId) {
     currentSite = await storage.getSite(user.currentSiteId);
   }
-  if (user.role === "owner" && user.organisationId) {
+  if (effectiveRole === "owner" && user.organisationId) {
     allSites = await storage.getSites(user.organisationId);
   }
-  return { ...user, planSlug, passwordHash: undefined, currentSite, allSites };
+  return { ...user, role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites };
 }
 
 async function ensureUserOrganisation(userId: string) {
@@ -69,17 +93,22 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const { email, password } = req.body;
       if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+        return res.status(400).json({ message: "Email or phone number and password are required" });
       }
 
-      const user = await authStorage.getUserByEmail(email);
+      // Try email first, then phone number if it looks like a phone
+      let user = await authStorage.getUserByEmail(email);
+      if (!user) {
+        user = await authStorage.getUserByPhone(email);
+      }
+
       if (!user || !user.passwordHash) {
-        return res.status(401).json({ message: "Invalid email or password" });
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
-        return res.status(401).json({ message: "Invalid email or password" });
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       (req.session as any).userId = user.id;

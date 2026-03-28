@@ -173,10 +173,10 @@ export default function AuthPage() {
             )}
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Email</label>
+              <label className="text-sm font-medium">{tab === "login" ? "Email or Phone Number" : "Email"}</label>
               <Input
-                type="email"
-                placeholder="you@example.com"
+                type={tab === "login" ? "text" : "email"}
+                placeholder={tab === "login" ? "you@example.com or +237 6XX XXX XXX" : "you@example.com"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
