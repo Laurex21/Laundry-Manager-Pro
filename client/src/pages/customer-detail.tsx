@@ -439,6 +439,7 @@ function EditCustomerForm({ customer, onSuccess }: { customer: Customer; onSucce
       email: customer.email || "",
       address: customer.address,
       notes: customer.notes || "",
+      defaultDiscountPct: customer.defaultDiscountPct ?? "0",
     },
   });
 
@@ -515,6 +516,19 @@ function EditCustomerForm({ customer, onSuccess }: { customer: Customer; onSucce
               <FormLabel>{t("notes")}</FormLabel>
               <FormControl>
                 <Input {...field} value={field.value || ""} data-testid="input-edit-notes" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="defaultDiscountPct"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t("default_discount_pct")}</FormLabel>
+              <FormControl>
+                <Input type="number" step="0.5" min="0" max="100" placeholder="0" {...field} value={field.value?.toString() || "0"} data-testid="input-edit-discount" />
               </FormControl>
               <FormMessage />
             </FormItem>

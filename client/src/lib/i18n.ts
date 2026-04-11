@@ -252,7 +252,23 @@ const resources = {
       "role_operator": "Operator",
       "accept_invitation": "Accept Invitation",
       "decline": "Decline",
-      "join_team": "Accept Invitation & Join Team"
+      "join_team": "Accept Invitation & Join Team",
+      "today_orders": "Orders Today",
+      "today_revenue": "Revenue Today",
+      "ready_for_pickup": "Ready for Pickup",
+      "week_orders": "Orders This Week",
+      "week_revenue": "Revenue This Week",
+      "production_delays": "Production Delays",
+      "delays_overdue": "overdue",
+      "request_cancellation": "Request Cancellation",
+      "cancellation_requested": "Cancellation Requested",
+      "approve_cancellation": "Approve Cancellation",
+      "reject_cancellation": "Reject Cancellation",
+      "mark_as_delivered": "Mark as Delivered",
+      "delivered_at": "Delivered On",
+      "default_discount_pct": "Default Discount (%)",
+      "cancellation_reason": "Reason",
+      "cancellation_request_sent": "Your cancellation request has been submitted for review."
     }
   },
   fr: {
@@ -504,7 +520,23 @@ const resources = {
       "role_operator": "Opérateur",
       "accept_invitation": "Accepter l'invitation",
       "decline": "Refuser",
-      "join_team": "Accepter et rejoindre l'équipe"
+      "join_team": "Accepter et rejoindre l'équipe",
+      "today_orders": "Commandes Aujourd'hui",
+      "today_revenue": "Chiffre du Jour",
+      "ready_for_pickup": "Prêt à Récupérer",
+      "week_orders": "Commandes Cette Semaine",
+      "week_revenue": "Chiffre de la Semaine",
+      "production_delays": "Retards de Production",
+      "delays_overdue": "en retard",
+      "request_cancellation": "Demander l'Annulation",
+      "cancellation_requested": "Annulation Demandée",
+      "approve_cancellation": "Approuver l'Annulation",
+      "reject_cancellation": "Refuser l'Annulation",
+      "mark_as_delivered": "Marquer comme Livré",
+      "delivered_at": "Livré le",
+      "default_discount_pct": "Remise par Défaut (%)",
+      "cancellation_reason": "Motif",
+      "cancellation_request_sent": "Votre demande d'annulation a été soumise pour examen."
     }
   }
 };

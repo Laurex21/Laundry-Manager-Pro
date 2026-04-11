@@ -4,9 +4,11 @@ import { useOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock, Droplets, Wind, Shirt, Sparkles, Package, Truck,
-  AlertTriangle, RotateCcw, Download
+  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,10 +18,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt } from "@/lib/receipt";
+import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 
 const PIPELINE_STAGES = [
   { key: "received", label: "Received", icon: Package, color: "text-yellow-600" },
@@ -45,10 +52,20 @@ export default function OrderDetail() {
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { toast } = useToast();
+  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
+  const { isOwner, userRole } = useAuth();
+  const isManager = userRole === "manager" || isOwner;
 
   const [returnGarmentId, setReturnGarmentId] = useState<number | null>(null);
   const [returnStage, setReturnStage] = useState("washing");
   const [returnNotes, setReturnNotes] = useState("");
+
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectionNote, setRejectionNote] = useState("");
+  const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
+  const [deliverDate, setDeliverDate] = useState(new Date().toISOString().split('T')[0]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20 text-muted-foreground">Loading order...</div>;
@@ -112,7 +129,67 @@ export default function OrderDetail() {
   }
 
   function handleDownloadReceipt() {
-    generateDepositReceipt(order, symbol);
+    const mergedSettings = settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS;
+    generateDepositReceipt(order, symbol, mergedSettings);
+  }
+
+  async function handleRequestCancellation() {
+    if (!cancelReason.trim()) return;
+    try {
+      const res = await fetch(`/api/orders/${orderId}/request-cancellation`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancelReason }), credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: t("cancellation_requested"), description: t("cancellation_request_sent") });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        setCancelDialogOpen(false); setCancelReason("");
+      }
+    } catch { toast({ title: "Error", variant: "destructive" }); }
+  }
+
+  async function handleApproveCancellation() {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/approve-cancellation`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: t("approve_cancellation"), description: "Order has been cancelled." });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      }
+    } catch { toast({ title: "Error", variant: "destructive" }); }
+  }
+
+  async function handleRejectCancellation() {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/reject-cancellation`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: rejectionNote }), credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: t("reject_cancellation"), description: "Cancellation request has been rejected." });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        setRejectDialogOpen(false); setRejectionNote("");
+      }
+    } catch { toast({ title: "Error", variant: "destructive" }); }
+  }
+
+  async function handleMarkDelivered() {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/deliver`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveredAt: deliverDate }), credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: t("mark_as_delivered"), description: `Order marked as delivered on ${deliverDate}` });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        setDeliverDialogOpen(false);
+      }
+    } catch { toast({ title: "Error", variant: "destructive" }); }
   }
 
   return (
@@ -137,6 +214,31 @@ export default function OrderDetail() {
           <StatusBadge status={order.paymentStatus} />
         </div>
       </div>
+
+      {order.status === "cancellation_requested" && (
+        <Card className="border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10" data-testid="cancellation-requested-alert">
+          <CardContent className="p-4 flex items-center gap-3">
+            <XCircle className="w-5 h-5 text-red-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-800 dark:text-red-300">{t("cancellation_requested")}</p>
+              {order.cancellationReason && <p className="text-sm text-red-700 dark:text-red-400">{t("cancellation_reason")}: {order.cancellationReason}</p>}
+            </div>
+            {isManager && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="destructive" onClick={handleApproveCancellation}>Approve</Button>
+                <Button size="sm" variant="outline" onClick={() => setRejectDialogOpen(true)}>Reject</Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {order.status === "delivered" && order.deliveredAt && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/10 border border-green-200 dark:border-green-900 text-green-800 dark:text-green-400 text-sm">
+          <CalendarCheck className="w-4 h-4 flex-shrink-0" />
+          <span>{t("delivered_at")}: <strong>{format(new Date(order.deliveredAt), "MMM d, yyyy")}</strong></span>
+        </div>
+      )}
 
       {hasReturnedItems && (
         <Card className="border-orange-300 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/10" data-testid="returned-items-alert">
@@ -193,27 +295,46 @@ export default function OrderDetail() {
               );
             })}
           </div>
-          <div className="flex gap-2 mt-4 pt-4 border-t">
-            {currentStageIndex < PIPELINE_STAGES.length - 1 && (
-              <Button
-                size="sm"
-                onClick={handleAdvanceStatus}
-                disabled={isUpdating}
-                data-testid="button-advance-status"
-              >
-                Advance to {PIPELINE_STAGES[currentStageIndex + 1]?.label}
-              </Button>
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+            {order.status === "cancellation_requested" && isManager ? (
+              <>
+                <Button size="sm" variant="destructive" onClick={handleApproveCancellation} disabled={isUpdating} data-testid="button-approve-cancellation">
+                  <XCircle className="w-4 h-4 mr-1" /> {t("approve_cancellation")}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setRejectDialogOpen(true)} data-testid="button-reject-cancellation">
+                  {t("reject_cancellation")}
+                </Button>
+              </>
+            ) : order.status === "ready" ? (
+              <>
+                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} data-testid="button-mark-delivered">
+                  <CalendarCheck className="w-4 h-4 mr-1" /> {t("mark_as_delivered")}
+                </Button>
+              </>
+            ) : order.status !== "delivered" && order.status !== "cancelled" && order.status !== "cancellation_requested" ? (
+              <>
+                {currentStageIndex < PIPELINE_STAGES.length - 1 && (
+                  <Button size="sm" onClick={handleAdvanceStatus} disabled={isUpdating} data-testid="button-advance-status">
+                    Advance to {PIPELINE_STAGES[currentStageIndex + 1]?.label}
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setCancelDialogOpen(true)} data-testid="button-request-cancellation">
+                  <XCircle className="w-4 h-4 mr-1" /> {t("request_cancellation")}
+                </Button>
+              </>
+            ) : null}
+            {order.status !== "delivered" && order.status !== "cancelled" && (
+              <Select onValueChange={handleSetStatus}>
+                <SelectTrigger className="w-[170px] h-9" data-testid="select-set-status">
+                  <SelectValue placeholder="Jump to stage..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PIPELINE_STAGES.map(s => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
-            <Select onValueChange={handleSetStatus}>
-              <SelectTrigger className="w-[180px] h-9" data-testid="select-set-status">
-                <SelectValue placeholder="Jump to stage..." />
-              </SelectTrigger>
-              <SelectContent>
-                {PIPELINE_STAGES.map(s => (
-                  <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -366,6 +487,72 @@ export default function OrderDetail() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{t("request_cancellation")}</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">Please provide a reason for cancellation. A manager will review your request.</p>
+            <Textarea
+              placeholder="Reason for cancellation..."
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              rows={3}
+              data-testid="textarea-cancel-reason"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleRequestCancellation} disabled={!cancelReason.trim()} data-testid="button-submit-cancellation">
+                Submit Request
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{t("reject_cancellation")}</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">Optionally provide a note explaining why the cancellation was rejected.</p>
+            <Textarea
+              placeholder="Rejection note (optional)..."
+              value={rejectionNote}
+              onChange={e => setRejectionNote(e.target.value)}
+              rows={3}
+              data-testid="textarea-rejection-note"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleRejectCancellation} data-testid="button-submit-rejection">Reject Cancellation</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deliverDialogOpen} onOpenChange={setDeliverDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{t("mark_as_delivered")}</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">Select the delivery date for this order.</p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("delivered_at")}</label>
+              <Input
+                type="date"
+                value={deliverDate}
+                onChange={e => setDeliverDate(e.target.value)}
+                data-testid="input-deliver-date"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleMarkDelivered} data-testid="button-confirm-deliver">
+                <CalendarCheck className="w-4 h-4 mr-1" /> Confirm Delivery
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

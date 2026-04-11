@@ -6,8 +6,9 @@ import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  ArrowUpRight, ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
-  AlertCircle, AlertTriangle, Info, Target, Building2, MapPin, UserCheck
+  ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
+  AlertCircle, AlertTriangle, Info, Building2, MapPin, UserCheck,
+  TrendingUp, CalendarDays, Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
-import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid
-} from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 const STATUS_COLORS = ["#3b82f6", "#f97316", "#10b981", "#8b5cf6"];
 
@@ -34,14 +32,12 @@ export default function Dashboard() {
   const isAllSitesMode = isOwner && currentSite === null;
   const sitesOverview: any[] = dashData?.sitesOverview ?? [];
   const siteCount = dashData?.siteCount ?? allSites.length;
-
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 5) || [];
+  const readyForPickup: any[] = dashData?.readyForPickup ?? [];
 
   if (statsLoading) return <DashboardSkeleton />;
 
   const alerts = dashData?.alerts || [];
-  const targetPct = dashData?.targetAchievement || 0;
-  const targetColor = targetPct >= 100 ? "bg-green-500" : targetPct >= 60 ? "bg-yellow-500" : "bg-red-500";
 
   const orderStatusData = dashData?.ordersByStatus ? [
     { name: "Received", value: dashData.ordersByStatus.received },
@@ -50,12 +46,14 @@ export default function Dashboard() {
     { name: "Delivered", value: dashData.ordersByStatus.delivered },
   ].filter(d => d.value > 0) : [];
 
+  const monthProfit = (dashData?.monthRevenue || 0) - (dashData?.monthExpenses || 0);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground" data-testid="text-dashboard-title">{t('dashboard')}</h1>
-          <p className="text-muted-foreground mt-1">{t('welcome')}! Here's what's happening today.</p>
+          <p className="text-muted-foreground mt-1">{t('welcome')}! Here's what's happening.</p>
         </div>
         <div className="flex gap-3">
           <Link href="/orders">
@@ -73,13 +71,9 @@ export default function Dashboard() {
           </div>
           <div className="flex-1">
             <p className="font-semibold text-foreground">{t('all_sites_view')}</p>
-            <p className="text-sm text-muted-foreground">
-              {t('all_sites_subtitle', { count: siteCount })}
-            </p>
+            <p className="text-sm text-muted-foreground">{t('all_sites_subtitle', { count: siteCount })}</p>
           </div>
-          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hidden sm:flex">
-            {t('consolidated_data')}
-          </Badge>
+          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hidden sm:flex">{t('consolidated_data')}</Badge>
         </div>
       ) : currentSite ? (
         <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-border/50" data-testid="banner-current-site">
@@ -115,53 +109,46 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title={t('total_revenue')} value={`${symbol}${stats?.totalRevenue.toFixed(2) || "0.00"}`} icon={DollarSign} trend="+12% from last month"
-          className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-card" />
-        <StatsCard title={t('total_orders')} value={stats?.totalOrders || 0} icon={ShoppingBag} trend="+5 new today" />
-        <StatsCard title={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} trend="Requires attention"
-          className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-card" />
-        <StatsCard title={t('active_customers')} value={stats?.activeCustomers || 0} icon={Users} trend="+3 this week" />
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <CalendarDays className="w-3.5 h-3.5" /> Today
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="blue" data-testid="card-today-orders" />
+          <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
+          <MetricCard label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="orange" data-testid="card-pending-orders" />
+          <MetricCard label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="indigo" data-testid="card-ready-count" />
+        </div>
       </div>
 
-      {dashData && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Card className="shadow-sm" data-testid="card-daily-target">
-            <CardContent className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">{t("daily_target")}</span>
-                <Target className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div className={`h-full ${targetColor} rounded-full transition-all`} style={{ width: `${Math.min(100, targetPct)}%` }} />
-              </div>
-              <p className="text-sm text-muted-foreground">{targetPct.toFixed(0)}% — {dashData.todayOrders} / {dashData.dailyTarget} orders</p>
-            </CardContent>
-          </Card>
-          <Card className="shadow-sm" data-testid="card-cost-per-kg">
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">{t("cost_per_kg")}</p>
-              <p className="text-2xl font-bold font-display mt-1">{symbol}{(dashData.costPerKg || 0).toFixed(2)}</p>
-            </CardContent>
-          </Card>
-          <Card className="shadow-sm" data-testid="card-profit-per-kg">
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">{t("profit_per_kg")}</p>
-              <p className={`text-2xl font-bold font-display mt-1 ${dashData.profitPerKg >= 0 ? "text-green-600" : "text-red-600"}`}>
-                {symbol}{(dashData.profitPerKg || 0).toFixed(2)}
-              </p>
-            </CardContent>
-          </Card>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <TrendingUp className="w-3.5 h-3.5" /> This Week
         </div>
-      )}
+        <div className="grid grid-cols-2 gap-4">
+          <MetricCard label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="blue" data-testid="card-week-orders" />
+          <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <CalendarDays className="w-3.5 h-3.5" /> This Month
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="blue" data-testid="card-month-orders" />
+          <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
+          <MetricCard label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
+          <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
+        </div>
+      </div>
 
       {isAllSitesMode && sitesOverview.length > 0 && (
         <Card className="shadow-md border-border/50" data-testid="card-sites-overview">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-primary" />
-                {t('sites_overview')}
+                <Building2 className="w-5 h-5 text-primary" />{t('sites_overview')}
               </CardTitle>
               <Link href="/settings">
                 <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary text-xs">
@@ -174,93 +161,16 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {sitesOverview.map((site: any) => (
                 <div key={site.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors" data-testid={`card-site-${site.id}`}>
-                  <div className="bg-primary/10 p-2 rounded-lg flex-shrink-0">
-                    <Building2 className="w-4 h-4 text-primary" />
-                  </div>
+                  <div className="bg-primary/10 p-2 rounded-lg flex-shrink-0"><Building2 className="w-4 h-4 text-primary" /></div>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground truncate">{site.name}</p>
-                    {site.city && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3" /> {site.city}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <UserCheck className="w-3 h-3" /> {t('site_members', { count: site.memberCount })}
-                    </p>
+                    {site.city && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" /> {site.city}</p>}
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><UserCheck className="w-3 h-3" /> {t('site_members', { count: site.memberCount })}</p>
                   </div>
-                  <Badge variant={site.isActive ? "default" : "secondary"} className="text-xs flex-shrink-0">
-                    {site.isActive ? "Active" : "Inactive"}
-                  </Badge>
+                  <Badge variant={site.isActive ? "default" : "secondary"} className="text-xs flex-shrink-0">{site.isActive ? "Active" : "Inactive"}</Badge>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Card className="lg:col-span-2 shadow-md border-border/50" data-testid="card-revenue-chart">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-bold">{t("revenue")} (30 days)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            {dashData?.revenueByDay?.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dashData.revenueByDay}>
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number) => [`${symbol}${v.toFixed(2)}`, t("revenue")]} />
-                  <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#revenueGradient)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No revenue data</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-md border-border/50" data-testid="card-orders-status-chart">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-bold">Orders by Status</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            {orderStatusData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={orderStatusData} cx="50%" cy="45%" innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value">
-                    {orderStatusData.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip />
-                  <Legend verticalAlign="bottom" />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No order data</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {dashData?.kgByDay && (
-        <Card className="shadow-md border-border/50" data-testid="card-kg-chart">
-          <CardHeader className="pb-2"><CardTitle className="text-lg font-bold">kg Processed (30 days)</CardTitle></CardHeader>
-          <CardContent className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dashData.kgByDay}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       )}
@@ -305,8 +215,29 @@ export default function Dashboard() {
         </Card>
 
         <div className="space-y-6">
+          <Card className="shadow-md border-border/50" data-testid="card-orders-status-chart">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-bold">Orders by Status</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[220px]">
+              {orderStatusData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={orderStatusData} cx="50%" cy="45%" innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value">
+                      {orderStatusData.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                    <Legend verticalAlign="bottom" iconSize={10} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">No order data</div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="shadow-md bg-primary/5 border-primary/10">
-            <CardHeader><CardTitle className="text-lg font-bold text-primary">Quick Actions</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base font-bold text-primary">Quick Actions</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Link href="/customers">
                 <Button variant="outline" className="w-full justify-start bg-background hover:bg-white hover:text-primary hover:border-primary/30 transition-all" data-testid="button-add-customer">
@@ -329,24 +260,59 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      {readyForPickup.length > 0 && (
+        <Card className="shadow-md border-border/50" data-testid="card-ready-for-pickup">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <Package className="w-5 h-5 text-indigo-500" /> {t('ready_for_pickup')}
+              <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">{readyForPickup.length}</Badge>
+            </CardTitle>
+            <Link href="/orders">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary text-xs">
+                View All <ChevronRight className="w-3 h-3 ml-1" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {readyForPickup.slice(0, 5).map((order: any) => (
+                <div key={order.id} className="flex items-center justify-between p-3 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/20 rounded-lg" data-testid={`row-ready-${order.id}`}>
+                  <div>
+                    <p className="font-medium">{order.customer?.name || `Order #${order.id}`}</p>
+                    <p className="text-xs text-muted-foreground">#{order.id} · {symbol}{Number(order.totalAmount).toFixed(2)}</p>
+                  </div>
+                  <Link href={`/orders/${order.id}`}>
+                    <Button variant="outline" size="sm" className="h-7 text-xs">View</Button>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-function StatsCard({ title, value, icon: Icon, trend, className }: any) {
+function MetricCard({ label, value, icon: Icon, color, ...props }: any) {
+  const colorMap: Record<string, string> = {
+    blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
+    green: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400",
+    orange: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400",
+    red: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
+    indigo: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400",
+  };
   return (
-    <Card className={`shadow-sm hover:shadow-md transition-all duration-300 border-border/50 ${className}`}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between space-y-0 pb-2">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className="bg-primary/10 p-2 rounded-lg text-primary"><Icon className="h-4 w-4" /></div>
+    <Card className="shadow-sm border-border/50 hover:shadow-md transition-all duration-300" {...props}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <div className={`p-1.5 rounded-lg ${colorMap[color] || colorMap.blue}`}>
+            <Icon className="w-4 h-4" />
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-bold font-display tracking-tight">{value}</h2>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <ArrowUpRight className="h-3 w-3 text-green-500" /><span className="text-green-600 font-medium">{trend}</span>
-          </p>
-        </div>
+        <p className="text-2xl font-bold font-display">{value}</p>
       </CardContent>
     </Card>
   );
@@ -356,8 +322,8 @@ function DashboardSkeleton() {
   return (
     <div className="space-y-8 p-8">
       <div className="flex justify-between"><div className="space-y-2"><Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-64" /></div><Skeleton className="h-10 w-32" /></div>
-      <div className="grid grid-cols-4 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
-      <div className="grid grid-cols-3 gap-8"><Skeleton className="col-span-2 h-96 rounded-xl" /><Skeleton className="h-96 rounded-xl" /></div>
+      <div className="grid grid-cols-4 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
+      <div className="grid grid-cols-3 gap-8"><Skeleton className="col-span-2 h-64 rounded-xl" /><Skeleton className="h-64 rounded-xl" /></div>
     </div>
   );
 }

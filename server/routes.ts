@@ -26,7 +26,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerAuthRoutes(app);
   seedDatabase().catch(console.error);
 
-  const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled"];
+  const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
 
   app.get(api.customers.list.path, isAuthenticated, async (req, res) => {
     const customers = await storage.getCustomers();
@@ -88,6 +88,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ success: true });
   });
 
+  app.get("/api/orders/pending-cancellations", isAuthenticated, async (req, res) => {
+    const pending = await storage.getPendingCancellations();
+    res.json(pending);
+  });
+
   app.get(api.orders.list.path, isAuthenticated, async (req, res) => {
     const orders = await storage.getOrders();
     res.json(orders);
@@ -103,22 +108,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const input = api.orders.create.input.parse(req.body);
       const { items, garmentItems: garments, ...orderData } = input;
-      let totalAmount = 0;
+      let subtotal = 0;
       const itemsWithPrices = await Promise.all(items.map(async (item) => {
         const service = await storage.getService(item.serviceId);
         if (!service) throw new Error(`Service ${item.serviceId} not found`);
-        totalAmount += Number(service.price) * item.quantity;
+        subtotal += Number(service.price) * item.quantity;
         return { ...item, priceAtOrder: service.price };
       }));
-      const discount = Number(orderData.discount || 0);
-      totalAmount = Math.max(0, totalAmount - discount);
+      const discountPct = Number(orderData.discountPct || 0);
+      const discountFixed = Number(orderData.discount || 0);
+      const discountAmount = discountPct > 0 ? (subtotal * discountPct / 100) : discountFixed;
+      const totalAmount = Math.max(0, subtotal - discountAmount);
       const order = await storage.createOrder({
         ...orderData,
         status: "received",
         totalAmount: totalAmount.toString(),
+        originalPrice: subtotal.toString(),
+        discountAmount: discountAmount.toString(),
+        discountPct: discountPct > 0 ? discountPct.toString() : "0",
+        discount: discountAmount.toString(),
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
-        discount: discount.toString(),
       }, items, garments);
       res.status(201).json(order);
     } catch (err) {
@@ -153,6 +163,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/garment-items/:id/resolve", isAuthenticated, async (req, res) => {
     const updated = await storage.resolveGarmentReturn(Number(req.params.id));
     if (!updated) return res.status(404).json({ message: "Garment item not found" });
+    res.json(updated);
+  });
+
+  app.post("/api/orders/:id/request-cancellation", isAuthenticated, async (req, res) => {
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ message: "reason is required" });
+    const userId = (req.session as any)?.userId || "unknown";
+    const updated = await storage.requestCancellation(Number(req.params.id), reason, userId);
+    if (!updated) return res.status(404).json({ message: "Order not found" });
+    res.json(updated);
+  });
+
+  app.post("/api/orders/:id/approve-cancellation", isAuthenticated, async (req, res) => {
+    const userId = (req.session as any)?.userId || "unknown";
+    const updated = await storage.approveCancellation(Number(req.params.id), userId);
+    if (!updated) return res.status(404).json({ message: "Order not found" });
+    res.json(updated);
+  });
+
+  app.post("/api/orders/:id/reject-cancellation", isAuthenticated, async (req, res) => {
+    const { note } = req.body;
+    const userId = (req.session as any)?.userId || "unknown";
+    const updated = await storage.rejectCancellation(Number(req.params.id), userId, note || "");
+    if (!updated) return res.status(404).json({ message: "Order not found" });
+    res.json(updated);
+  });
+
+  app.patch("/api/orders/:id/deliver", isAuthenticated, async (req, res) => {
+    const { deliveredAt } = req.body;
+    const date = deliveredAt ? new Date(deliveredAt) : new Date();
+    const updated = await storage.markDelivered(Number(req.params.id), date);
+    if (!updated) return res.status(404).json({ message: "Order not found" });
     res.json(updated);
   });
 
@@ -313,6 +355,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/analytics/performance-score", isAuthenticated, async (req, res) => {
     const score = await storage.getPerformanceScore();
     res.json(score);
+  });
+
+  app.get("/api/analytics/production-delays", isAuthenticated, async (req, res) => {
+    const delays = await storage.getProductionDelays();
+    res.json(delays);
   });
 
   // ─── Business Settings (Prompt A) ───────────────────────────────────────────

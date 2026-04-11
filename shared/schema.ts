@@ -15,6 +15,7 @@ export const customers = pgTable("customers", {
   notes: text("notes"),
   starchLevel: text("starch_level"),
   detergentType: text("detergent_type"),
+  defaultDiscountPct: decimal("default_discount_pct", { precision: 5, scale: 2 }).default("0"),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -33,6 +34,7 @@ export const services = pgTable("services", {
   durationUnit: text("duration_unit"),
   expressAvailable: boolean("express_available").default(false),
   expressSurcharge: decimal("express_surcharge", { precision: 5, scale: 2 }),
+  turnaroundDays: decimal("turnaround_days", { precision: 4, scale: 1 }).default("1"),
 });
 
 export const orders = pgTable("orders", {
@@ -43,7 +45,17 @@ export const orders = pgTable("orders", {
   paymentStatus: text("payment_status").notNull().default("unpaid"),
   entryDate: timestamp("entry_date").defaultNow(),
   pickupDate: timestamp("pickup_date"),
+  deliveredAt: timestamp("delivered_at"),
   discount: decimal("discount", { precision: 10, scale: 2 }).default("0"),
+  discountPct: decimal("discount_pct", { precision: 5, scale: 2 }).default("0"),
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0"),
+  originalPrice: decimal("original_price", { precision: 10, scale: 2 }),
+  cancellationReason: text("cancellation_reason"),
+  cancellationRequestedBy: varchar("cancellation_requested_by"),
+  cancellationRequestedAt: timestamp("cancellation_requested_at"),
+  cancellationReviewedBy: varchar("cancellation_reviewed_by"),
+  cancellationReviewedAt: timestamp("cancellation_reviewed_at"),
+  cancellationRejectionNote: text("cancellation_rejection_note"),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -236,6 +236,24 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     name: "discount"
   });
 
+  const watchedCustomerId = useWatch({
+    control: form.control,
+    name: "customerId"
+  });
+
+  const selectedCustomer = customers?.find((c: any) => c.id === Number(watchedCustomerId));
+  const customerDiscountPct = Number(selectedCustomer?.defaultDiscountPct || 0);
+
+  useEffect(() => {
+    if (!watchedCustomerId || !customers) return;
+    const customer = customers.find((c: any) => c.id === Number(watchedCustomerId));
+    if (!customer || !Number(customer.defaultDiscountPct)) return;
+    const pct = Number(customer.defaultDiscountPct);
+    if (subtotal > 0 && pct > 0) {
+      form.setValue("discount", ((subtotal * pct) / 100).toFixed(2));
+    }
+  }, [watchedCustomerId, customers, subtotal]);
+
   const hasKgService = useMemo(() => {
     return (watchedItems || []).some(item => {
       const service = services?.find(s => s.id === item.serviceId);
@@ -596,9 +614,14 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   name="discount"
                   render={({ field }) => (
                     <FormItem className="w-full">
-                      <FormLabel className="text-xs text-muted-foreground">Discount ({symbol})</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Discount ({symbol})
+                        {customerDiscountPct > 0 && (
+                          <span className="ml-1 text-primary font-medium">({customerDiscountPct}% applied)</span>
+                        )}
+                      </FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" className="h-8 text-right font-mono" {...field} />
+                        <Input type="number" step="0.01" className="h-8 text-right font-mono" {...field} data-testid="input-discount" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

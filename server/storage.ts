@@ -84,6 +84,13 @@ export interface IStorage {
   getUserSubscription(userId: string): Promise<SubscriptionWithPlan | null>;
   createSubscription(userId: string, planId: number, method: string): Promise<Subscription>;
 
+  requestCancellation(id: number, reason: string, requestedBy: string): Promise<Order | undefined>;
+  approveCancellation(id: number, reviewedBy: string): Promise<Order | undefined>;
+  rejectCancellation(id: number, reviewedBy: string, note: string): Promise<Order | undefined>;
+  getPendingCancellations(): Promise<any[]>;
+  markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined>;
+  getProductionDelays(): Promise<any[]>;
+
   getDashboardData(siteId?: number | null, allSites?: boolean): Promise<any>;
   getAnalyticsKpis(period: string): Promise<any>;
   getWasteAlerts(): Promise<any[]>;
@@ -247,6 +254,92 @@ export class DatabaseStorage implements IStorage {
 
   async getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]> {
     return await db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, orderId)).orderBy(orderStatusHistory.changedAt);
+  }
+
+  async requestCancellation(id: number, reason: string, requestedBy: string): Promise<Order | undefined> {
+    const [updated] = await db.update(orders).set({
+      status: "cancellation_requested",
+      cancellationReason: reason,
+      cancellationRequestedBy: requestedBy,
+      cancellationRequestedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(orders.id, id)).returning();
+    if (updated) {
+      await db.insert(orderStatusHistory).values({ orderId: id, status: "cancellation_requested", changedBy: requestedBy, notes: `Cancellation requested: ${reason}` });
+    }
+    return updated;
+  }
+
+  async approveCancellation(id: number, reviewedBy: string): Promise<Order | undefined> {
+    const [updated] = await db.update(orders).set({
+      status: "cancelled",
+      cancellationReviewedBy: reviewedBy,
+      cancellationReviewedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(orders.id, id)).returning();
+    if (updated) {
+      await db.insert(orderStatusHistory).values({ orderId: id, status: "cancelled", changedBy: reviewedBy, notes: "Cancellation approved" });
+    }
+    return updated;
+  }
+
+  async rejectCancellation(id: number, reviewedBy: string, note: string): Promise<Order | undefined> {
+    const [updated] = await db.update(orders).set({
+      status: "received",
+      cancellationReviewedBy: reviewedBy,
+      cancellationReviewedAt: new Date(),
+      cancellationRejectionNote: note,
+      updatedAt: new Date(),
+    }).where(eq(orders.id, id)).returning();
+    if (updated) {
+      await db.insert(orderStatusHistory).values({ orderId: id, status: "received", changedBy: reviewedBy, notes: `Cancellation rejected: ${note}` });
+    }
+    return updated;
+  }
+
+  async getPendingCancellations(): Promise<any[]> {
+    const pendingOrders = await db.select().from(orders).where(eq(orders.status, "cancellation_requested")).orderBy(desc(orders.updatedAt));
+    const allCustomers = await db.select().from(customers);
+    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+    return pendingOrders.map(o => ({ ...o, customer: customerMap.get(o.customerId) || null }));
+  }
+
+  async markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined> {
+    const [updated] = await db.update(orders).set({
+      status: "delivered",
+      deliveredAt,
+      updatedAt: new Date(),
+    }).where(eq(orders.id, id)).returning();
+    if (updated) {
+      await db.insert(orderStatusHistory).values({ orderId: id, status: "delivered", notes: `Delivered on ${deliveredAt.toISOString().split('T')[0]}` });
+    }
+    return updated;
+  }
+
+  async getProductionDelays(): Promise<any[]> {
+    const activeStatuses = ["received", "washing", "stain_treatment", "drying", "ironing"];
+    const activeOrders = await db.select().from(orders).where(sql`${orders.status} = ANY(${sql`ARRAY[${sql.join(activeStatuses.map(s => sql`${s}`), sql`, `)}]`})`);
+    const allCustomers = await db.select().from(customers);
+    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+    const now = new Date();
+    const delays: any[] = [];
+    for (const order of activeOrders) {
+      const entryDate = order.entryDate ? new Date(order.entryDate) : new Date(order.createdAt!);
+      const daysSinceEntry = Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+      const expectedPickup = order.pickupDate ? new Date(order.pickupDate) : null;
+      const isOverdue = expectedPickup ? now > expectedPickup : daysSinceEntry > 3;
+      const daysOverdue = expectedPickup ? Math.max(0, Math.floor((now.getTime() - expectedPickup.getTime()) / (1000 * 60 * 60 * 24))) : Math.max(0, daysSinceEntry - 3);
+      if (isOverdue) {
+        delays.push({
+          ...order,
+          customer: customerMap.get(order.customerId) || null,
+          daysSinceEntry,
+          daysOverdue,
+          expectedPickup,
+        });
+      }
+    }
+    return delays.sort((a, b) => b.daysOverdue - a.daysOverdue);
   }
 
   async markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined> {
@@ -501,10 +594,17 @@ export class DatabaseStorage implements IStorage {
     const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0);
+
     const todayRevenue = await this.sumPaymentsInRange(todayStart, todayEnd);
     const todayOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(sql`${orders.createdAt} >= ${todayStart}`, sql`${orders.createdAt} <= ${todayEnd}`));
     const todayOrders = Number(todayOrdersResult[0]?.count || 0);
+
+    const weekRevenue = await this.sumPaymentsInRange(weekStart, now);
+    const weekOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
+      .where(and(sql`${orders.createdAt} >= ${weekStart}`, sql`${orders.createdAt} <= ${now}`));
+    const weekOrders = Number(weekOrdersResult[0]?.count || 0);
 
     const monthRevenue = await this.sumPaymentsInRange(monthStart, now);
     const monthExpenses = await this.sumExpensesInRange(monthStart, now);
@@ -563,10 +663,18 @@ export class DatabaseStorage implements IStorage {
       }));
     }
 
+    const readyOrders = await db.select().from(orders).where(eq(orders.status, "ready")).orderBy(desc(orders.updatedAt));
+    const readyCustomers = await db.select().from(customers);
+    const readyCustMap = new Map(readyCustomers.map(c => [c.id, c]));
+    const readyForPickup = readyOrders.map(o => ({ ...o, customer: readyCustMap.get(o.customerId) || null }));
+
     return {
-      todayKg: 0, todayOrders, todayRevenue, monthKg: 0, monthOrders, monthRevenue, monthExpenses,
+      todayKg: 0, todayOrders, todayRevenue,
+      weekOrders, weekRevenue,
+      monthKg: 0, monthOrders, monthRevenue, monthExpenses,
       profit, costPerKg, profitPerKg, dailyTarget, targetAchievement,
       ordersByStatus, revenueByDay, kgByDay, alerts,
+      readyForPickup,
       isAllSites: allSites ?? false,
       siteCount: sitesOverview.length,
       sitesOverview,

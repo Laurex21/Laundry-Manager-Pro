@@ -105,6 +105,7 @@ function AnalyticsContent() {
 
       <WasteSection />
       <PerformanceScoreSection />
+      <ProductionDelaysSection />
     </div>
   );
 }
@@ -186,6 +187,42 @@ function PerformanceScoreSection() {
   }
 
   return <PerformanceScore />;
+}
+
+function ProductionDelaysSection() {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data: delays } = useQuery<any[]>({ queryKey: ["/api/analytics/production-delays"] });
+
+  if (!delays || delays.length === 0) return null;
+
+  return (
+    <Card className="shadow-sm" data-testid="card-production-delays">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {t("production_delays")}
+          <Badge variant="destructive">{delays.length}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {delays.map((order: any) => (
+            <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900">
+              <div>
+                <p className="font-medium text-sm">Order #{order.id} — {order.customer?.name || "Unknown"}</p>
+                <p className="text-xs text-muted-foreground capitalize">{t("status")}: {order.status.replace(/_/g, " ")}</p>
+              </div>
+              <div className="text-right">
+                <Badge variant="destructive" className="text-xs">{order.daysOverdue}d {t("delays_overdue")}</Badge>
+                <p className="text-xs text-muted-foreground mt-1">{symbol}{Number(order.totalAmount).toFixed(2)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function PerformanceScore() {

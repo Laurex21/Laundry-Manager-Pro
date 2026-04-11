@@ -237,8 +237,9 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
       amount: expense ? expense.amount : "0",
       category: expense ? expense.category : "Supplies",
       description: expense ? expense.description : "",
+      date: expense?.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     },
-    values: expense ? { amount: expense.amount, category: expense.category, description: expense.description } : undefined,
+    values: expense ? { amount: expense.amount, category: expense.category, description: expense.description, date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : undefined } : undefined,
   });
 
   const editMutation = useMutation({
@@ -250,11 +251,12 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
     },
   });
 
-  function onSubmit(data: InsertExpenditure) {
+  function onSubmit(data: any) {
+    const payload = { ...data, date: data.date ? new Date(data.date).toISOString() : undefined };
     if (isEdit) {
-      editMutation.mutate(data);
+      editMutation.mutate(payload);
     } else {
-      createMutate(data, {
+      createMutate(payload, {
         onSuccess: () => {
           form.reset();
           setCustomCategory(false);
@@ -311,6 +313,13 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
           <FormItem>
             <FormLabel>Description</FormLabel>
             <FormControl><Textarea placeholder="Details about this expense..." className="resize-none" {...field} data-testid="input-expense-description" /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name={"date" as any} render={({ field }) => (
+          <FormItem>
+            <FormLabel>Date</FormLabel>
+            <FormControl><Input type="date" {...field} value={field.value || ""} data-testid="input-expense-date" /></FormControl>
             <FormMessage />
           </FormItem>
         )} />
