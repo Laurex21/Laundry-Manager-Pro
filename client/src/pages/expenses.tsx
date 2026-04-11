@@ -3,6 +3,7 @@ import { useExpenditures, useCreateExpenditure } from "@/hooks/use-expenditures"
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertExpenditureSchema, type InsertExpenditure, type Expenditure } from "@shared/schema";
+import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -225,14 +226,19 @@ export default function Expenses() {
   );
 }
 
+const expenseFormSchema = insertExpenditureSchema.extend({
+  date: z.string().optional(),
+});
+type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
+
 function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: Expenditure | null }) {
   const { mutate: createMutate, isPending: createPending } = useCreateExpenditure();
   const queryClient = useQueryClient();
   const [customCategory, setCustomCategory] = useState(false);
   const isEdit = !!expense;
   
-  const form = useForm<InsertExpenditure & { date?: string }>({
-    resolver: zodResolver(insertExpenditureSchema),
+  const form = useForm<ExpenseFormValues>({
+    resolver: zodResolver(expenseFormSchema),
     defaultValues: {
       amount: expense ? expense.amount : "0",
       category: expense ? expense.category : "Supplies",
