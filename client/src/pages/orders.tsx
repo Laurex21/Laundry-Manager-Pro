@@ -244,16 +244,6 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const selectedCustomer = customers?.find((c: any) => c.id === Number(watchedCustomerId));
   const customerDiscountPct = Number(selectedCustomer?.defaultDiscountPct || 0);
 
-  useEffect(() => {
-    if (!watchedCustomerId || !customers) return;
-    const customer = customers.find((c: any) => c.id === Number(watchedCustomerId));
-    if (!customer || !Number(customer.defaultDiscountPct)) return;
-    const pct = Number(customer.defaultDiscountPct);
-    if (subtotal > 0 && pct > 0) {
-      form.setValue("discount", ((subtotal * pct) / 100).toFixed(2));
-    }
-  }, [watchedCustomerId, customers, subtotal]);
-
   const hasKgService = useMemo(() => {
     return (watchedItems || []).some(item => {
       const service = services?.find(s => s.id === item.serviceId);
@@ -274,6 +264,16 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
       return acc + (Number(service.price) * (item.quantity || 0));
     }, 0);
   }, [watchedItems, services]);
+
+  useEffect(() => {
+    if (!watchedCustomerId || !customers) return;
+    const customer = customers.find((c: any) => c.id === Number(watchedCustomerId));
+    if (!customer || !Number(customer.defaultDiscountPct)) return;
+    const pct = Number(customer.defaultDiscountPct);
+    if (subtotal > 0 && pct > 0) {
+      form.setValue("discount", ((subtotal * pct) / 100).toFixed(2));
+    }
+  }, [watchedCustomerId, customers, subtotal]);
 
   const total = useMemo(() => {
     const discountVal = Number(watchedDiscount) || 0;
