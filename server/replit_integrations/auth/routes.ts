@@ -82,6 +82,11 @@ export function registerAuthRoutes(app: Express): void {
       await ensureUserOrganisation(user.id);
 
       const response = await buildUserResponse(user.id);
+
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+
       res.status(201).json(response);
     } catch (error) {
       console.error("Registration error:", error);
@@ -116,6 +121,11 @@ export function registerAuthRoutes(app: Express): void {
       await ensureUserOrganisation(user.id);
 
       const response = await buildUserResponse(user.id);
+
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+
       res.json(response);
     } catch (error) {
       console.error("Login error:", error);

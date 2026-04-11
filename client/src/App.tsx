@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, ShieldOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { useEffect } from "react";
 
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -42,6 +43,13 @@ function AccessDenied() {
 
 function ProtectedRoute({ component: Component, page }: { component: React.ComponentType; page?: string }) {
   const { user, isLoading, canAccess } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      setLocation("/auth");
+    }
+  }, [isLoading, user, setLocation]);
 
   if (isLoading) {
     return (
@@ -52,7 +60,11 @@ function ProtectedRoute({ component: Component, page }: { component: React.Compo
   }
 
   if (!user) {
-    return <AuthPage />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   const hasAccess = !page || canAccess(page);

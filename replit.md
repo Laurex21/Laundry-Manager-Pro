@@ -55,10 +55,11 @@ Use `npm run db:push` to push schema changes to the database.
 ### Authentication
 - Email/password authentication with bcryptjs password hashing
 - Sessions stored in PostgreSQL via `connect-pg-simple`
-- Protected routes on frontend redirect unauthenticated users to auth page
+- Protected routes on frontend redirect unauthenticated users to `/auth` page via `useEffect` + `setLocation` (not inline embedding)
 - Auth routes: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/user`
 - `/api/auth/user` returns user data plus `planSlug` from active subscription
 - Users table includes: id (varchar UUID), email, passwordHash, firstName, lastName, phone, businessName, role
+- **Session save**: Both register and login routes explicitly call `req.session.save()` before sending the response to prevent race conditions for new users
 - **Important**: Do not modify or drop the `users` and `sessions` tables
 
 ### Order Pipeline (7 stages)
