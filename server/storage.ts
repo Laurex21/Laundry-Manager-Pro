@@ -91,6 +91,12 @@ export interface IStorage {
   markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined>;
   getProductionDelays(): Promise<any[]>;
 
+  getOrdersBySite(siteId: number | null): Promise<any[]>;
+  getCustomersBySite(siteId: number | null): Promise<Customer[]>;
+  getExpendituresBySite(siteId: number | null): Promise<Expenditure[]>;
+  getStatsBySite(siteId: number | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
+  backfillNullSiteIds(): Promise<void>;
+
   getDashboardData(siteId?: number | null, allSites?: boolean): Promise<any>;
   getAnalyticsKpis(period: string): Promise<any>;
   getWasteAlerts(): Promise<any[]>;
@@ -417,6 +423,117 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getOrdersBySite(siteId: number | null): Promise<any[]> {
+    const allOrders = siteId !== null
+      ? await db.select().from(orders).where(eq(orders.siteId, siteId)).orderBy(desc(orders.createdAt))
+      : await db.select().from(orders).orderBy(desc(orders.createdAt));
+    const allCustomers = await db.select().from(customers);
+    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+    const allGarments = await db.select().from(garmentItems);
+    const garmentsByOrder = new Map<number, typeof allGarments>();
+    for (const g of allGarments) {
+      const list = garmentsByOrder.get(g.orderId) || [];
+      list.push(g);
+      garmentsByOrder.set(g.orderId, list);
+    }
+    return allOrders.map(order => {
+      const orderGarments = garmentsByOrder.get(order.id) || [];
+      const hasReturnedItems = orderGarments.some(g => g.returnedForTreatment && !g.resolvedAt);
+      return { ...order, customer: customerMap.get(order.customerId) || null, hasReturnedItems };
+    });
+  }
+
+  async getCustomersBySite(siteId: number | null): Promise<Customer[]> {
+    if (siteId !== null) {
+      return await db.select().from(customers).where(eq(customers.siteId, siteId)).orderBy(desc(customers.createdAt));
+    }
+    return await db.select().from(customers).orderBy(desc(customers.createdAt));
+  }
+
+  async getExpendituresBySite(siteId: number | null): Promise<Expenditure[]> {
+    if (siteId !== null) {
+      return await db.select().from(expenditures).where(eq(expenditures.siteId, siteId)).orderBy(desc(expenditures.date));
+    }
+    return await db.select().from(expenditures).orderBy(desc(expenditures.date));
+  }
+
+  async getStatsBySite(siteId: number | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }> {
+    const siteFilter = siteId !== null;
+    const [ordersCount] = siteFilter
+      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.siteId, siteId!))
+      : await db.select({ count: sql<number>`count(*)` }).from(orders);
+    const siteOrderIds = siteFilter
+      ? (await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId!))).map(o => o.id)
+      : null;
+    let totalRevenue = 0;
+    if (!siteFilter) {
+      const [revenueResult] = await db.select({ total: sql<string>`sum(amount)` }).from(payments);
+      totalRevenue = Number(revenueResult?.total || 0);
+    } else if (siteOrderIds && siteOrderIds.length > 0) {
+      const [revenueResult] = await db.select({ total: sql<string>`sum(amount)` }).from(payments)
+        .where(sql`${payments.orderId} IN (${sql.join(siteOrderIds.map(id => sql`${id}`), sql`, `)})`);
+      totalRevenue = Number(revenueResult?.total || 0);
+    }
+    const [pendingCount] = siteFilter
+      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(eq(orders.siteId, siteId!), eq(orders.status, "received")))
+      : await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "received"));
+    const [customersCount] = siteFilter
+      ? await db.select({ count: sql<number>`count(*)` }).from(customers).where(eq(customers.siteId, siteId!))
+      : await db.select({ count: sql<number>`count(*)` }).from(customers);
+    return {
+      totalOrders: Number(ordersCount?.count || 0),
+      totalRevenue,
+      pendingOrders: Number(pendingCount?.count || 0),
+      activeCustomers: Number(customersCount?.count || 0),
+    };
+  }
+
+  async backfillNullSiteIds(): Promise<void> {
+    // Use the earliest registered user's site as the legacy site for all pre-tenancy data
+    const [legacyUser] = await db.select({ currentSiteId: users.currentSiteId })
+      .from(users)
+      .where(sql`${users.currentSiteId} IS NOT NULL`)
+      .orderBy(users.createdAt)
+      .limit(1);
+    if (!legacyUser?.currentSiteId) return;
+    const targetSiteId = legacyUser.currentSiteId;
+
+    // Collect all siteIds currently used by any user (these are "valid" sites)
+    const activeUserSites = new Set(
+      (await db.select({ id: users.currentSiteId }).from(users).where(sql`${users.currentSiteId} IS NOT NULL`))
+        .map(u => u.id as number)
+    );
+
+    // Move null-siteId records to the legacy site
+    await db.update(orders).set({ siteId: targetSiteId }).where(isNull(orders.siteId));
+    await db.update(customers).set({ siteId: targetSiteId }).where(isNull(customers.siteId));
+    await db.update(expenditures).set({ siteId: targetSiteId }).where(isNull(expenditures.siteId));
+
+    // Move records at orphaned sites (site not in any user's currentSiteId) to the legacy site
+    const orderSites = await db.selectDistinct({ siteId: orders.siteId }).from(orders).where(sql`${orders.siteId} IS NOT NULL`);
+    for (const { siteId } of orderSites) {
+      if (siteId !== null && !activeUserSites.has(siteId)) {
+        await db.update(orders).set({ siteId: targetSiteId }).where(eq(orders.siteId, siteId));
+        console.log(`[backfill] Moved orphaned orders from site ${siteId} → site ${targetSiteId}`);
+      }
+    }
+    const customerSites = await db.selectDistinct({ siteId: customers.siteId }).from(customers).where(sql`${customers.siteId} IS NOT NULL`);
+    for (const { siteId } of customerSites) {
+      if (siteId !== null && !activeUserSites.has(siteId)) {
+        await db.update(customers).set({ siteId: targetSiteId }).where(eq(customers.siteId, siteId));
+        console.log(`[backfill] Moved orphaned customers from site ${siteId} → site ${targetSiteId}`);
+      }
+    }
+    const expSites = await db.selectDistinct({ siteId: expenditures.siteId }).from(expenditures).where(sql`${expenditures.siteId} IS NOT NULL`);
+    for (const { siteId } of expSites) {
+      if (siteId !== null && !activeUserSites.has(siteId)) {
+        await db.update(expenditures).set({ siteId: targetSiteId }).where(eq(expenditures.siteId, siteId));
+        console.log(`[backfill] Moved orphaned expenditures from site ${siteId} → site ${targetSiteId}`);
+      }
+    }
+    console.log(`[backfill] Backfill complete. Legacy site: ${targetSiteId}, active sites: ${[...activeUserSites].join(', ')}`);
+  }
+
   private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {
     const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
       .from(payments)
@@ -428,6 +545,34 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
       .from(expenditures)
       .where(and(sql`${expenditures.date} IS NOT NULL`, sql`${expenditures.date} >= ${start}`, sql`${expenditures.date} <= ${end}`));
+    return Number(result?.total || 0);
+  }
+
+  private async sumPaymentsInRangeBySite(start: Date, end: Date, siteId: number | null): Promise<number> {
+    if (siteId === null) return this.sumPaymentsInRange(start, end);
+    const siteOrderIds = (await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId))).map(o => o.id);
+    if (siteOrderIds.length === 0) return 0;
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(payments)
+      .where(and(
+        sql`${payments.date} IS NOT NULL`,
+        sql`${payments.date} >= ${start}`,
+        sql`${payments.date} <= ${end}`,
+        sql`${payments.orderId} IN (${sql.join(siteOrderIds.map(id => sql`${id}`), sql`, `)})`
+      ));
+    return Number(result?.total || 0);
+  }
+
+  private async sumExpensesInRangeBySite(start: Date, end: Date, siteId: number | null): Promise<number> {
+    if (siteId === null) return this.sumExpensesInRange(start, end);
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(expenditures)
+      .where(and(
+        sql`${expenditures.date} IS NOT NULL`,
+        sql`${expenditures.date} >= ${start}`,
+        sql`${expenditures.date} <= ${end}`,
+        eq(expenditures.siteId, siteId)
+      ));
     return Number(result?.total || 0);
   }
 
@@ -596,27 +741,31 @@ export class DatabaseStorage implements IStorage {
 
     const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0);
 
-    const todayRevenue = await this.sumPaymentsInRange(todayStart, todayEnd);
+    const siteFilter = siteId !== null && siteId !== undefined && !allSites;
+    const siteWhere = siteFilter ? eq(orders.siteId, siteId as number) : sql`1=1`;
+    const expSiteWhere = siteFilter ? eq(expenditures.siteId, siteId as number) : sql`1=1`;
+
+    const todayRevenue = await this.sumPaymentsInRangeBySite(todayStart, todayEnd, siteFilter ? siteId as number : null);
     const todayOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(sql`${orders.createdAt} >= ${todayStart}`, sql`${orders.createdAt} <= ${todayEnd}`));
+      .where(and(siteWhere, sql`${orders.createdAt} >= ${todayStart}`, sql`${orders.createdAt} <= ${todayEnd}`));
     const todayOrders = Number(todayOrdersResult[0]?.count || 0);
 
-    const weekRevenue = await this.sumPaymentsInRange(weekStart, now);
+    const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, now, siteFilter ? siteId as number : null);
     const weekOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(sql`${orders.createdAt} >= ${weekStart}`, sql`${orders.createdAt} <= ${now}`));
+      .where(and(siteWhere, sql`${orders.createdAt} >= ${weekStart}`, sql`${orders.createdAt} <= ${now}`));
     const weekOrders = Number(weekOrdersResult[0]?.count || 0);
 
-    const monthRevenue = await this.sumPaymentsInRange(monthStart, now);
-    const monthExpenses = await this.sumExpensesInRange(monthStart, now);
+    const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
+    const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
     const monthOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(sql`${orders.createdAt} >= ${monthStart}`, sql`${orders.createdAt} <= ${now}`));
+      .where(and(siteWhere, sql`${orders.createdAt} >= ${monthStart}`, sql`${orders.createdAt} <= ${now}`));
     const monthOrders = Number(monthOrdersResult[0]?.count || 0);
 
     const profit = monthRevenue - monthExpenses;
     const dailyTarget = 50;
     const targetAchievement = dailyTarget > 0 ? Math.min(100, (todayOrders / dailyTarget) * 100) : 0;
 
-    const statusCounts = await db.select({ status: orders.status, count: sql<number>`count(*)` }).from(orders).groupBy(orders.status);
+    const statusCounts = await db.select({ status: orders.status, count: sql<number>`count(*)` }).from(orders).where(siteWhere).groupBy(orders.status);
     const ordersByStatus: any = { received: 0, washing: 0, ready: 0, delivered: 0 };
     for (const s of statusCounts) {
       if (s.status === "received" || s.status === "pending") ordersByStatus.received = (ordersByStatus.received || 0) + Number(s.count);
@@ -631,7 +780,7 @@ export class DatabaseStorage implements IStorage {
       const dayStart = new Date(now); dayStart.setDate(dayStart.getDate() - i); dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(dayStart); dayEnd.setHours(23, 59, 59, 999);
       const dateStr = dayStart.toISOString().split('T')[0];
-      const rev = await this.sumPaymentsInRange(dayStart, dayEnd);
+      const rev = await this.sumPaymentsInRangeBySite(dayStart, dayEnd, siteFilter ? siteId as number : null);
       revenueByDay.push({ date: dateStr, value: rev });
       kgByDay.push({ date: dateStr, value: 0 });
     }
@@ -640,7 +789,7 @@ export class DatabaseStorage implements IStorage {
     const profitPerKg = monthRevenue > 0 ? profit / Math.max(monthOrders, 1) : 0;
 
     const alerts: { type: string; message: string; detail?: string }[] = [];
-    const pendingResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "received"));
+    const pendingResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(siteWhere, eq(orders.status, "received")));
     const pendingCount = Number(pendingResult[0]?.count || 0);
     if (pendingCount > 10) alerts.push({ type: "warning", message: `You have ${pendingCount} pending orders`, detail: "Consider processing them soon" });
     if (monthExpenses > monthRevenue && monthRevenue > 0) alerts.push({ type: "danger", message: "Expenses exceed revenue this month", detail: "Review your expenditure logs" });
@@ -663,8 +812,10 @@ export class DatabaseStorage implements IStorage {
       }));
     }
 
-    const readyOrders = await db.select().from(orders).where(eq(orders.status, "ready")).orderBy(desc(orders.updatedAt));
-    const readyCustomers = await db.select().from(customers);
+    const readyOrders = await db.select().from(orders).where(and(siteWhere, eq(orders.status, "ready"))).orderBy(desc(orders.updatedAt));
+    const readyCustomers = siteFilter
+      ? await db.select().from(customers).where(eq(customers.siteId, siteId as number))
+      : await db.select().from(customers);
     const readyCustMap = new Map(readyCustomers.map(c => [c.id, c]));
     const readyForPickup = readyOrders.map(o => ({ ...o, customer: readyCustMap.get(o.customerId) || null }));
 

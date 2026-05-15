@@ -53,7 +53,7 @@ export function useAuth() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries();
     },
   });
 

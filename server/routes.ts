@@ -25,11 +25,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await setupAuth(app);
   registerAuthRoutes(app);
   seedDatabase().catch(console.error);
+  storage.backfillNullSiteIds().catch(console.error);
 
   const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
 
-  app.get(api.customers.list.path, isAuthenticated, async (req, res) => {
-    const customers = await storage.getCustomers();
+  app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
+    const customers = await storage.getCustomersBySite(req.siteId);
     res.json(customers);
   });
 
@@ -39,10 +40,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(customer);
   });
 
-  app.post(api.customers.create.path, isAuthenticated, async (req, res) => {
+  app.post(api.customers.create.path, isAuthenticated, async (req: any, res) => {
     try {
       const input = api.customers.create.input.parse(req.body);
-      const customer = await storage.createCustomer(input);
+      const customer = await storage.createCustomer({ ...input, siteId: req.siteId });
       res.status(201).json(customer);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -93,8 +94,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(pending);
   });
 
-  app.get(api.orders.list.path, isAuthenticated, async (req, res) => {
-    const orders = await storage.getOrders();
+  app.get(api.orders.list.path, isAuthenticated, async (req: any, res) => {
+    const orders = await storage.getOrdersBySite(req.siteId);
     res.json(orders);
   });
 
@@ -129,6 +130,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         discount: discountAmount.toString(),
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
+        siteId: (req as any).siteId,
       }, items, garments);
       res.status(201).json(order);
     } catch (err) {
@@ -209,14 +211,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(payments);
   });
 
-  app.get(api.expenditures.list.path, isAuthenticated, async (req, res) => {
-    const expenditures = await storage.getExpenditures();
+  app.get(api.expenditures.list.path, isAuthenticated, async (req: any, res) => {
+    const expenditures = await storage.getExpendituresBySite(req.siteId);
     res.json(expenditures);
   });
 
-  app.post(api.expenditures.create.path, isAuthenticated, async (req, res) => {
+  app.post(api.expenditures.create.path, isAuthenticated, async (req: any, res) => {
     const input = api.expenditures.create.input.parse(req.body);
-    const expenditure = await storage.createExpenditure(input);
+    const expenditure = await storage.createExpenditure({ ...input, siteId: req.siteId });
     res.status(201).json(expenditure);
   });
 
@@ -246,8 +248,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
-  app.get(api.stats.get.path, isAuthenticated, async (req, res) => {
-    const stats = await storage.getStats();
+  app.get(api.stats.get.path, isAuthenticated, async (req: any, res) => {
+    const stats = await storage.getStatsBySite(req.siteId);
     res.json(stats);
   });
 

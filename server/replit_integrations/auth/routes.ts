@@ -83,6 +83,8 @@ export function registerAuthRoutes(app: Express): void {
 
       const response = await buildUserResponse(user.id);
 
+      (req.session as any).currentSiteId = (response as any)?.currentSiteId ?? null;
+
       await new Promise<void>((resolve, reject) =>
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
@@ -121,6 +123,8 @@ export function registerAuthRoutes(app: Express): void {
       await ensureUserOrganisation(user.id);
 
       const response = await buildUserResponse(user.id);
+
+      (req.session as any).currentSiteId = (response as any)?.currentSiteId ?? null;
 
       await new Promise<void>((resolve, reject) =>
         req.session.save((err) => (err ? reject(err) : resolve()))

@@ -29,9 +29,24 @@ export async function setupAuth(app: Express) {
   app.use(getSession());
 }
 
-export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  if (req.session && (req.session as any).userId) {
-    return next();
+export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
+  if (!req.session || !(req.session as any).userId) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
-  return res.status(401).json({ message: "Unauthorized" });
+  req.userId = (req.session as any).userId;
+
+  if ((req.session as any).currentSiteId === undefined) {
+    try {
+      const { db } = await import("../../db");
+      const { users } = await import("@shared/models/auth");
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db.select({ currentSiteId: users.currentSiteId }).from(users).where(eq(users.id, req.userId)).limit(1);
+      const siteId = row?.currentSiteId ?? null;
+      (req.session as any).currentSiteId = siteId;
+      req.session.save(() => {});
+    } catch (_) {}
+  }
+
+  req.siteId = (req.session as any).currentSiteId ?? null;
+  return next();
 };
