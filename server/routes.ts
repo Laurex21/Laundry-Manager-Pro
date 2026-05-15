@@ -28,10 +28,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
 
-  app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
-    const customers = req.siteId
-      ? await storage.getCustomersBySite(req.siteId)
-      : await storage.getCustomers();
+  app.get(api.customers.list.path, isAuthenticated, async (req, res) => {
+    const customers = await storage.getCustomers();
     res.json(customers);
   });
 
@@ -41,10 +39,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(customer);
   });
 
-  app.post(api.customers.create.path, isAuthenticated, async (req: any, res) => {
+  app.post(api.customers.create.path, isAuthenticated, async (req, res) => {
     try {
       const input = api.customers.create.input.parse(req.body);
-      const customer = await storage.createCustomer({ ...input, siteId: req.siteId ?? null });
+      const customer = await storage.createCustomer(input);
       res.status(201).json(customer);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -95,10 +93,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(pending);
   });
 
-  app.get(api.orders.list.path, isAuthenticated, async (req: any, res) => {
-    const orders = req.siteId
-      ? await storage.getOrdersBySite(req.siteId)
-      : await storage.getOrders();
+  app.get(api.orders.list.path, isAuthenticated, async (req, res) => {
+    const orders = await storage.getOrders();
     res.json(orders);
   });
 
@@ -108,7 +104,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(order);
   });
 
-  app.post(api.orders.create.path, isAuthenticated, async (req: any, res) => {
+  app.post(api.orders.create.path, isAuthenticated, async (req, res) => {
     try {
       const input = api.orders.create.input.parse(req.body);
       const { items, garmentItems: garments, ...orderData } = input;
@@ -133,7 +129,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         discount: discountAmount.toString(),
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
-        siteId: req.siteId ?? null,
       }, items, garments);
       res.status(201).json(order);
     } catch (err) {
@@ -214,16 +209,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(payments);
   });
 
-  app.get(api.expenditures.list.path, isAuthenticated, async (req: any, res) => {
-    const expenditures = req.siteId
-      ? await storage.getExpendituresBySite(req.siteId)
-      : await storage.getExpenditures();
+  app.get(api.expenditures.list.path, isAuthenticated, async (req, res) => {
+    const expenditures = await storage.getExpenditures();
     res.json(expenditures);
   });
 
-  app.post(api.expenditures.create.path, isAuthenticated, async (req: any, res) => {
+  app.post(api.expenditures.create.path, isAuthenticated, async (req, res) => {
     const input = api.expenditures.create.input.parse(req.body);
-    const expenditure = await storage.createExpenditure({ ...input, siteId: req.siteId ?? null });
+    const expenditure = await storage.createExpenditure(input);
     res.status(201).json(expenditure);
   });
 
@@ -258,16 +251,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(stats);
   });
 
-  app.get("/api/machines", isAuthenticated, async (req: any, res) => {
-    const machines = req.siteId
-      ? await storage.getMachinesBySite(req.siteId)
-      : await storage.getMachines((req.session as any).userId);
+  app.get("/api/machines", isAuthenticated, async (req, res) => {
+    const machines = await storage.getMachines((req.session as any).userId);
     res.json(machines);
   });
 
-  app.post("/api/machines", isAuthenticated, async (req: any, res) => {
+  app.post("/api/machines", isAuthenticated, async (req, res) => {
     try {
-      const machine = await storage.createMachine({ ...req.body, userId: (req.session as any).userId, siteId: req.siteId ?? null });
+      const machine = await storage.createMachine({ ...req.body, userId: (req.session as any).userId });
       res.status(201).json(machine);
     } catch (err) {
       res.status(400).json({ message: "Invalid machine data" });
@@ -286,16 +277,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ success: true });
   });
 
-  app.get("/api/employees", isAuthenticated, async (req: any, res) => {
-    const employees = req.siteId
-      ? await storage.getEmployeesBySite(req.siteId)
-      : await storage.getEmployees((req.session as any).userId);
+  app.get("/api/employees", isAuthenticated, async (req, res) => {
+    const employees = await storage.getEmployees((req.session as any).userId);
     res.json(employees);
   });
 
-  app.post("/api/employees", isAuthenticated, async (req: any, res) => {
+  app.post("/api/employees", isAuthenticated, async (req, res) => {
     try {
-      const employee = await storage.createEmployee({ ...req.body, userId: (req.session as any).userId, siteId: req.siteId ?? null });
+      const employee = await storage.createEmployee({ ...req.body, userId: (req.session as any).userId });
       res.status(201).json(employee);
     } catch (err) {
       res.status(400).json({ message: "Invalid employee data" });
@@ -335,25 +324,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/analytics/dashboard", isAuthenticated, async (req: any, res) => {
-    // Prefer X-Site-Id from header (already resolved by isAuthenticated as req.siteId)
-    let siteId: number | null = req.siteId ?? null;
-
-    // If no header, fall back to session's currentSiteId then DB lookup
-    if (siteId === null) {
-      const sessionSiteId = (req.session as any).currentSiteId;
-      if (sessionSiteId !== undefined) {
-        siteId = sessionSiteId;
-      } else {
-        const { db: dbConn } = await import("./db");
-        const { users: usersTable } = await import("@shared/models/auth");
-        const { eq: eqFn } = await import("drizzle-orm");
-        const userId = (req.session as any).userId as string;
-        const userRow = await dbConn.select({ currentSiteId: usersTable.currentSiteId }).from(usersTable).where(eqFn(usersTable.id, userId)).limit(1);
-        siteId = userRow[0]?.currentSiteId ?? null;
-      }
+  app.get("/api/analytics/dashboard", isAuthenticated, async (req, res) => {
+    const userId = (req.session as any).userId as string;
+    const sessionSiteId = (req.session as any).currentSiteId;
+    // If session has no currentSiteId, look it up from the user record
+    let siteId: number | null | undefined = sessionSiteId;
+    if (sessionSiteId === undefined) {
+      const { db } = await import("./db");
+      const { users } = await import("@shared/models/auth");
+      const { eq } = await import("drizzle-orm");
+      const userRow = await db.select({ currentSiteId: users.currentSiteId }).from(users).where(eq(users.id, userId)).limit(1);
+      siteId = userRow[0]?.currentSiteId ?? null;
     }
-
     const allSites = siteId === null || siteId === undefined;
     const data = await storage.getDashboardData(allSites ? null : (siteId as number), allSites);
     res.json(data);

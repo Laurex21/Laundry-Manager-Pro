@@ -1,28 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
 import type { User } from "@shared/models/auth";
-import { SITE_ID_KEY } from "@/lib/queryClient";
-
-function applyUserSiteContext(user: any) {
-  if (!user) {
-    localStorage.removeItem(SITE_ID_KEY);
-    return;
-  }
-
-  const currentSite = user.currentSite;
-  const siteMemberships: any[] = user.siteMemberships ?? [];
-
-  if (currentSite?.id) {
-    localStorage.setItem(SITE_ID_KEY, String(currentSite.id));
-  } else if (siteMemberships.length > 0) {
-    const firstSite = siteMemberships[0]?.site;
-    if (firstSite?.id) {
-      localStorage.setItem(SITE_ID_KEY, String(firstSite.id));
-    }
-  } else {
-    localStorage.removeItem(SITE_ID_KEY);
-  }
-}
 
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
@@ -49,24 +26,16 @@ async function logoutFn(): Promise<void> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useQuery<(User & { planSlug?: string; currentSite?: any; allSites?: any[]; siteMemberships?: any[]; organisationRole?: string }) | null>({
+  const { data: user, isLoading } = useQuery<(User & { planSlug?: string; currentSite?: any; allSites?: any[] }) | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
 
-  // Keep localStorage in sync with the active site whenever user data changes
-  useEffect(() => {
-    if (user !== undefined) {
-      applyUserSiteContext(user);
-    }
-  }, [user]);
-
   const logoutMutation = useMutation({
     mutationFn: logoutFn,
     onSuccess: () => {
-      localStorage.removeItem(SITE_ID_KEY);
       queryClient.setQueryData(["/api/auth/user"], null);
       window.location.href = "/auth";
     },
@@ -83,14 +52,8 @@ export function useAuth() {
       if (!res.ok) throw new Error("Failed to switch site");
       return res.json();
     },
-    onSuccess: (_, siteId) => {
-      if (siteId) {
-        localStorage.setItem(SITE_ID_KEY, String(siteId));
-      } else {
-        localStorage.removeItem(SITE_ID_KEY);
-      }
-      // Invalidate all cached data so next fetches use the new site header
-      queryClient.invalidateQueries();
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
   });
 
@@ -98,7 +61,6 @@ export function useAuth() {
   const userRole: string = (user as any)?.role ?? "owner";
   const currentSite = (user as any)?.currentSite ?? null;
   const allSites: any[] = (user as any)?.allSites ?? [];
-  const siteMemberships: any[] = (user as any)?.siteMemberships ?? [];
   const isOwner = userRole === "owner";
 
   const hasFeature = (feature: string): boolean => {
@@ -136,7 +98,6 @@ export function useAuth() {
     userRole,
     currentSite,
     allSites,
-    siteMemberships,
     isOwner,
     switchSite: switchSiteMutation.mutate,
     isSwitchingSite: switchSiteMutation.isPending,
