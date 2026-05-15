@@ -19,7 +19,7 @@ import {
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
-import { eq, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, isNull, or } from "drizzle-orm";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -118,6 +118,12 @@ export interface IStorage {
   switchSite(userId: string, siteId: number | null): Promise<void>;
   migrateToMultiSite(): Promise<void>;
   getUserSiteRole(userId: string, siteId: number): Promise<string | null>;
+
+  getOrdersBySite(siteId: number): Promise<any[]>;
+  getCustomersBySite(siteId: number): Promise<Customer[]>;
+  getExpendituresBySite(siteId: number): Promise<Expenditure[]>;
+  getMachinesBySite(siteId: number): Promise<Machine[]>;
+  getEmployeesBySite(siteId: number): Promise<Employee[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -931,6 +937,50 @@ export class DatabaseStorage implements IStorage {
   async getUserSiteRole(userId: string, siteId: number): Promise<string | null> {
     const [member] = await db.select().from(siteMembers).where(and(eq(siteMembers.userId, userId), eq(siteMembers.siteId, siteId)));
     return member?.role || null;
+  }
+
+  async getOrdersBySite(siteId: number): Promise<any[]> {
+    const siteOrders = await db.select().from(orders)
+      .where(or(eq(orders.siteId, siteId), isNull(orders.siteId)))
+      .orderBy(desc(orders.createdAt));
+    const allCustomers = await db.select().from(customers);
+    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+    const allGarments = await db.select().from(garmentItems);
+    const garmentsByOrder = new Map<number, typeof allGarments>();
+    for (const g of allGarments) {
+      const list = garmentsByOrder.get(g.orderId) || [];
+      list.push(g);
+      garmentsByOrder.set(g.orderId, list);
+    }
+    return siteOrders.map(order => {
+      const orderGarments = garmentsByOrder.get(order.id) || [];
+      const hasReturnedItems = orderGarments.some(g => g.returnedForTreatment && !g.resolvedAt);
+      return { ...order, customer: customerMap.get(order.customerId) || null, hasReturnedItems };
+    });
+  }
+
+  async getCustomersBySite(siteId: number): Promise<Customer[]> {
+    return await db.select().from(customers)
+      .where(or(eq(customers.siteId, siteId), isNull(customers.siteId)))
+      .orderBy(desc(customers.createdAt));
+  }
+
+  async getExpendituresBySite(siteId: number): Promise<Expenditure[]> {
+    return await db.select().from(expenditures)
+      .where(or(eq(expenditures.siteId, siteId), isNull(expenditures.siteId)))
+      .orderBy(desc(expenditures.date));
+  }
+
+  async getMachinesBySite(siteId: number): Promise<Machine[]> {
+    return await db.select().from(machines)
+      .where(or(eq(machines.siteId, siteId), isNull(machines.siteId)))
+      .orderBy(desc(machines.createdAt));
+  }
+
+  async getEmployeesBySite(siteId: number): Promise<Employee[]> {
+    return await db.select().from(employees)
+      .where(or(eq(employees.siteId, siteId), isNull(employees.siteId)))
+      .orderBy(desc(employees.createdAt));
   }
 
   async migrateToMultiSite(): Promise<void> {

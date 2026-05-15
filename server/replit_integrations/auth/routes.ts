@@ -4,6 +4,7 @@ import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
 import { db } from "../../db";
 import { organisations, siteMembers } from "@shared/schema";
+import { users } from "@shared/models/auth";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
@@ -13,41 +14,86 @@ async function buildUserResponse(userId: string) {
   const sub = await storage.getUserSubscription(userId);
   const planSlug = sub?.plan?.slug ?? "starter";
 
-  // Determine effective role: check if user is the org owner or a site member
-  let effectiveRole = user.role ?? "owner";
+  let organisationRole = "owner";
+  let siteMemberships: any[] = [];
+  let allSites: any[] = [];
+  let currentSite = null;
+  let effectiveRole = "owner";
+
   if (user.organisationId) {
     const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId));
-    if (org && org.ownerId !== userId) {
-      // User is not the org owner — find their highest-priority site member role
+
+    if (org && org.ownerId === userId) {
+      // User is the organisation owner
+      organisationRole = "owner";
+      effectiveRole = "owner";
+      allSites = await storage.getSites(user.organisationId);
+      if (user.currentSiteId) {
+        currentSite = await storage.getSite(user.currentSiteId);
+      }
+    } else {
+      // User is a site member (manager or operator)
       const memberships = await db.select().from(siteMembers).where(eq(siteMembers.userId, userId));
-      if (memberships.length > 0) {
-        // Priority: manager > operator (owners are handled above)
-        if (memberships.some(m => m.role === "manager")) effectiveRole = "manager";
-        else effectiveRole = "operator";
-        // Use role from current site if available
-        if (user.currentSiteId) {
-          const currentMembership = memberships.find(m => m.siteId === user.currentSiteId);
-          if (currentMembership) effectiveRole = currentMembership.role;
+
+      siteMemberships = await Promise.all(
+        memberships.map(async (m) => {
+          const site = await storage.getSite(m.siteId);
+          return { ...m, site };
+        })
+      );
+
+      // Determine effectiveRole and currentSite
+      if (user.currentSiteId) {
+        const currentMembership = memberships.find((m) => m.siteId === user.currentSiteId);
+        if (currentMembership) {
+          effectiveRole = currentMembership.role;
+          organisationRole = currentMembership.role;
+          currentSite = await storage.getSite(user.currentSiteId);
         }
       }
+
+      if (!currentSite && memberships.length > 0) {
+        const firstMembership = memberships[0];
+        effectiveRole = firstMembership.role;
+        organisationRole = firstMembership.role;
+        currentSite = await storage.getSite(firstMembership.siteId);
+      }
     }
+  } else {
+    effectiveRole = user.role ?? "owner";
   }
 
-  let currentSite = null;
-  let allSites: any[] = [];
-  if (user.currentSiteId) {
-    currentSite = await storage.getSite(user.currentSiteId);
-  }
-  if (effectiveRole === "owner" && user.organisationId) {
-    allSites = await storage.getSites(user.organisationId);
-  }
-  return { ...user, role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites };
+  return {
+    ...user,
+    role: effectiveRole,
+    planSlug,
+    passwordHash: undefined,
+    currentSite,
+    allSites,
+    siteMemberships,
+    organisationRole,
+  };
 }
 
 async function ensureUserOrganisation(userId: string) {
   const user = await authStorage.getUser(userId);
   if (!user || user.organisationId) return;
   await storage.migrateToMultiSite();
+}
+
+async function autoAssignMemberSite(userId: string, sessionRef: any) {
+  const user = await authStorage.getUser(userId);
+  if (!user || !user.organisationId || user.currentSiteId) return;
+
+  const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId));
+  if (!org || org.ownerId === userId) return;
+
+  const memberships = await db.select().from(siteMembers).where(eq(siteMembers.userId, userId));
+  if (memberships.length === 0) return;
+
+  const firstSiteId = memberships[0].siteId;
+  await db.update(users).set({ currentSiteId: firstSiteId }).where(eq(users.id, userId));
+  sessionRef.currentSiteId = firstSiteId;
 }
 
 export function registerAuthRoutes(app: Express): void {
@@ -80,6 +126,7 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
+      await autoAssignMemberSite(user.id, req.session);
 
       const response = await buildUserResponse(user.id);
 
@@ -101,7 +148,6 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: "Email or phone number and password are required" });
       }
 
-      // Try email first, then phone number if it looks like a phone
       let user = await authStorage.getUserByEmail(email);
       if (!user) {
         user = await authStorage.getUserByPhone(email);
@@ -119,6 +165,7 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
+      await autoAssignMemberSite(user.id, req.session);
 
       const response = await buildUserResponse(user.id);
 

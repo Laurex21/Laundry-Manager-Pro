@@ -2,12 +2,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { type InsertExpenditure } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { getSiteHeaders } from "@/lib/queryClient";
 
 export function useExpenditures() {
   return useQuery({
     queryKey: [api.expenditures.list.path],
     queryFn: async () => {
-      const res = await fetch(api.expenditures.list.path, { credentials: "include" });
+      const res = await fetch(api.expenditures.list.path, {
+        credentials: "include",
+        headers: getSiteHeaders(),
+      });
       if (!res.ok) throw new Error("Failed to fetch expenditures");
       return api.expenditures.list.responses[200].parse(await res.json());
     },
@@ -22,7 +26,7 @@ export function useCreateExpenditure() {
     mutationFn: async (data: InsertExpenditure) => {
       const res = await fetch(api.expenditures.create.path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getSiteHeaders() },
         body: JSON.stringify(data),
         credentials: "include",
       });
