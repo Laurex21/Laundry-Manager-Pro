@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { api, errorSchemas, createOrderWithItemsSchema } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { registerCalculatorRoutes } from "./lib/calculator-routes";
 
 async function seedDatabase() {
   const servicesList = await storage.getServices();
@@ -24,6 +25,7 @@ async function seedDatabase() {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerCalculatorRoutes(app);
   seedDatabase().catch(console.error);
   storage.backfillNullSiteIds().catch(console.error);
 

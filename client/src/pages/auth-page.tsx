@@ -84,7 +84,7 @@ export default function AuthPage() {
             The all-in-one platform to manage orders, customers, and operations efficiently. Spend less time on paper, more time on growth.
           </p>
 
-          <div className="space-y-4">
+          <div className="space-y-4 mb-8">
             {["Track orders in real-time", "Manage customer profiles", "Automated billing & receipts"].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-blue-300" />
@@ -92,6 +92,14 @@ export default function AuthPage() {
               </div>
             ))}
           </div>
+
+          <a href="/calculateur" className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-3 transition-all group" data-testid="link-calculator">
+            <span className="text-xl">📊</span>
+            <div>
+              <p className="text-sm font-semibold">Calculateur de démarrage gratuit</p>
+              <p className="text-xs text-blue-200">Estimez votre budget pressing en 2 min →</p>
+            </div>
+          </a>
         </div>
 
         <div className="relative z-10 text-sm text-blue-200 mt-10">

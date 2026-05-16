@@ -11,6 +11,8 @@ import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
+import CalculatorPage from "@/pages/calculator";
+import PublicReportPage from "@/pages/report-public";
 import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
 import Orders from "@/pages/orders";
@@ -76,9 +78,18 @@ function ProtectedRoute({ component: Component, page }: { component: React.Compo
   );
 }
 
+function CalculatorRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => { setLocation("/calculateur"); }, []);
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
+      <Route path="/calculateur" component={CalculatorPage} />
+      <Route path="/calculator" component={CalculatorRedirect} />
+      <Route path="/rapport/:leadId" component={PublicReportPage} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/join/:token" component={AcceptInvitation} />
 

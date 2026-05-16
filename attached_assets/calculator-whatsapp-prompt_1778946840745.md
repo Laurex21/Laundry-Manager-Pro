@@ -1,0 +1,876 @@
+# PressFlow — Calculateur de Démarrage de Pressing
+## Agent Implementation Prompt — Version Afrique (WhatsApp-First)
+
+---
+
+## CONTEXT
+
+Add a new public page at `/calculateur` (redirect `/calculator` → `/calculateur`).
+
+This is a **laundry business startup cost calculator** for entrepreneurs in francophone
+Africa and Europe. Fully public — no login required.
+
+**Business objective:** Collect phone/WhatsApp contacts (primary) and emails (secondary)
+as leads for PressFlow SaaS trials and a laundry training program.
+
+**Critical design principle:** In Sub-Saharan Africa, WhatsApp is the primary
+communication channel. Email is often ignored. The capture form MUST adapt its
+required fields based on the user's country:
+- Sub-Saharan Africa: WhatsApp number required, email optional
+- Maghreb (Morocco, Tunisia, Algeria): WhatsApp or email — user chooses
+- Europe (France, Belgium, Switzerland): email required, WhatsApp optional
+
+**Stack:** React + TypeScript, Wouter, shadcn/ui, Tailwind CSS, i18next (EN/FR),
+Express backend, PostgreSQL, Anthropic Claude API with web search.
+
+Install required packages if not already present:
+```bash
+npm install @anthropic-ai/sdk twilio
+```
+
+Environment variables needed (add to .env):
+```env
+ANTHROPIC_API_KEY=sk-ant-...
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxx       # optional — app works without it
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxx         # optional
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886  # optional
+BUSINESS_WHATSAPP_NUMBER=237699000000        # your business number, no +, no spaces
+APP_URL=https://your-app.replit.app          # for generating shareable report URLs
+```
+
+If Twilio variables are not set, the app falls back gracefully to a
+**click-to-chat WhatsApp link** — no crash, no error shown to user.
+
+---
+
+## PART 1 — DATABASE SCHEMA
+
+Add to Drizzle schema (`server/db/schema.ts` or `shared/schema.ts`):
+
+```ts
+export const calculatorLeads = pgTable("calculator_leads", {
+  id: serial("id").primaryKey(),
+
+  // Contact — at least ONE of whatsapp/phone/email is required (enforced in app layer)
+  whatsapp:    varchar("whatsapp", { length: 50 }),   // PRIMARY for Africa
+  phone:       varchar("phone", { length: 50 }),       // SMS-only fallback
+  email:       varchar("email", { length: 255 }),      // PRIMARY for Europe
+  firstName:   varchar("first_name", { length: 100 }),
+  contactZone: varchar("contact_zone", { length: 20 }), // "africa"|"maghreb"|"europe"
+
+  // Business form inputs
+  country:          varchar("country", { length: 100 }).notNull(),
+  city:             varchar("city", { length: 100 }).notNull(),
+  pressingType:     varchar("pressing_type", { length: 50 }).notNull(),
+  dailyCapacity:    varchar("daily_capacity", { length: 50 }).notNull(),
+  hasLocalAlready:  varchar("has_local", { length: 20 }),
+  localSurface:     integer("local_surface"),
+  reliableWater:    varchar("reliable_water", { length: 20 }),
+  reliablePower:    varchar("reliable_power", { length: 20 }),
+  plannedEmployees: integer("planned_employees"),
+  availableCapital: varchar("available_capital", { length: 50 }),
+  businessGoal:     varchar("business_goal", { length: 50 }),
+
+  // Calculated estimates
+  estimatedMinBudget: integer("estimated_min_budget"),
+  estimatedMaxBudget: integer("estimated_max_budget"),
+  currency:           varchar("currency", { length: 10 }).default("FCFA"),
+
+  // AI report
+  aiReportJson:        text("ai_report_json"),
+  aiReportGeneratedAt: timestamp("ai_report_generated_at"),
+  reportUrl:           varchar("report_url", { length: 500 }),
+
+  // Delivery tracking
+  whatsappSent:   boolean("whatsapp_sent").default(false),
+  whatsappSentAt: timestamp("whatsapp_sent_at"),
+  emailSent:      boolean("email_sent").default(false),
+
+  // Lead tracking
+  source:               varchar("source", { length: 100 }).default("calculator"),
+  utmSource:            varchar("utm_source", { length: 100 }),
+  utmMedium:            varchar("utm_medium", { length: 100 }),
+  utmCampaign:          varchar("utm_campaign", { length: 100 }),
+  convertedToTrial:     boolean("converted_to_trial").default(false),
+  convertedToTraining:  boolean("converted_to_training").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+```
+
+Run `npm run db:push` after adding the schema.
+
+---
+
+## PART 2 — SERVER UTILITIES
+
+### `server/lib/calculator-zones.ts`
+
+```ts
+export type ContactZone = "africa" | "maghreb" | "europe";
+
+export const COUNTRY_ZONES: Record<string, ContactZone> = {
+  cameroun: "africa", senegal: "africa", cote_divoire: "africa",
+  mali: "africa", burkina_faso: "africa", guinee: "africa",
+  rdc: "africa", gabon: "africa", congo: "africa",
+  togo: "africa", benin: "africa", niger: "africa",
+  tchad: "africa", centrafrique: "africa",
+  maroc: "maghreb", tunisie: "maghreb", algerie: "maghreb",
+  france: "europe", belgique: "europe", suisse: "europe",
+};
+
+export function getContactZone(countryKey: string): ContactZone {
+  return COUNTRY_ZONES[countryKey] ?? "africa";
+}
+
+export const COUNTRY_META: Record<string, {
+  label: string; currency: string; cityPlaceholder: string; dialCode: string;
+}> = {
+  cameroun:     { label: "Cameroun",         currency: "FCFA", cityPlaceholder: "ex: Douala, Yaoundé, Bafoussam...",          dialCode: "+237" },
+  senegal:      { label: "Sénégal",           currency: "FCFA", cityPlaceholder: "ex: Dakar, Thiès, Saint-Louis...",           dialCode: "+221" },
+  cote_divoire: { label: "Côte d'Ivoire",     currency: "FCFA", cityPlaceholder: "ex: Abidjan, Bouaké, Yamoussoukro...",       dialCode: "+225" },
+  mali:         { label: "Mali",              currency: "FCFA", cityPlaceholder: "ex: Bamako, Sikasso, Ségou...",              dialCode: "+223" },
+  burkina_faso: { label: "Burkina Faso",      currency: "FCFA", cityPlaceholder: "ex: Ouagadougou, Bobo-Dioulasso...",         dialCode: "+226" },
+  guinee:       { label: "Guinée",            currency: "GNF",  cityPlaceholder: "ex: Conakry, Kankan, Labé...",               dialCode: "+224" },
+  rdc:          { label: "RD Congo",          currency: "USD",  cityPlaceholder: "ex: Kinshasa, Lubumbashi, Goma...",          dialCode: "+243" },
+  gabon:        { label: "Gabon",             currency: "FCFA", cityPlaceholder: "ex: Libreville, Port-Gentil...",             dialCode: "+241" },
+  congo:        { label: "Congo-Brazzaville", currency: "FCFA", cityPlaceholder: "ex: Brazzaville, Pointe-Noire...",           dialCode: "+242" },
+  togo:         { label: "Togo",              currency: "FCFA", cityPlaceholder: "ex: Lomé, Kpalimé, Sokodé...",               dialCode: "+228" },
+  benin:        { label: "Bénin",             currency: "FCFA", cityPlaceholder: "ex: Cotonou, Porto-Novo, Parakou...",         dialCode: "+229" },
+  maroc:        { label: "Maroc",             currency: "MAD",  cityPlaceholder: "ex: Casablanca, Rabat, Marrakech...",        dialCode: "+212" },
+  tunisie:      { label: "Tunisie",           currency: "TND",  cityPlaceholder: "ex: Tunis, Sfax, Sousse...",                 dialCode: "+216" },
+  algerie:      { label: "Algérie",           currency: "DZD",  cityPlaceholder: "ex: Alger, Oran, Constantine...",            dialCode: "+213" },
+  france:       { label: "France",            currency: "EUR",  cityPlaceholder: "ex: Paris, Lyon, Marseille, Bordeaux...",    dialCode: "+33"  },
+  belgique:     { label: "Belgique",          currency: "EUR",  cityPlaceholder: "ex: Bruxelles, Liège, Anvers...",            dialCode: "+32"  },
+  suisse:       { label: "Suisse",            currency: "CHF",  cityPlaceholder: "ex: Genève, Lausanne, Zurich...",            dialCode: "+41"  },
+};
+```
+
+### `server/lib/whatsapp-service.ts`
+
+```ts
+import twilio from "twilio";
+
+const hasTwilio = !!(
+  process.env.TWILIO_ACCOUNT_SID &&
+  process.env.TWILIO_AUTH_TOKEN &&
+  process.env.TWILIO_WHATSAPP_FROM
+);
+
+const client = hasTwilio
+  ? twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!)
+  : null;
+
+export async function sendReportViaWhatsApp(params: {
+  toWhatsApp: string;
+  firstName: string;
+  city: string;
+  countryLabel: string;
+  minBudget: number;
+  maxBudget: number;
+  currency: string;
+  reportUrl: string;
+}): Promise<boolean> {
+  if (!client) return false;
+  const { toWhatsApp, firstName, city, countryLabel, minBudget, maxBudget, currency, reportUrl } = params;
+  const fmt = (n: number) => n.toLocaleString("fr-FR");
+  const body =
+    `Bonjour ${firstName} 👋\n\n` +
+    `Votre rapport de démarrage pressing est prêt !\n\n` +
+    `📍 *${city}, ${countryLabel}*\n` +
+    `💰 *Budget estimé : ${fmt(minBudget)} — ${fmt(maxBudget)} ${currency}*\n\n` +
+    `Votre rapport inclut :\n` +
+    `✅ Coûts détaillés par poste\n` +
+    `✅ Analyse de rentabilité et seuil\n` +
+    `✅ Démarches administratives\n` +
+    `✅ Recommandations personnalisées\n\n` +
+    `👉 Rapport complet :\n${reportUrl}\n\n` +
+    `_PressFlow · Logiciel de gestion de pressing_`;
+  try {
+    await client.messages.create({
+      from: process.env.TWILIO_WHATSAPP_FROM!,
+      to: `whatsapp:${toWhatsApp}`,
+      body,
+    });
+    return true;
+  } catch (err: any) {
+    console.error("WhatsApp send error:", err.message);
+    return false;
+  }
+}
+
+// Click-to-chat fallback — no Twilio needed
+export function getClickToChatUrl(firstName: string, city: string, countryLabel: string): string {
+  const businessNumber = process.env.BUSINESS_WHATSAPP_NUMBER ?? "237699000000";
+  const text = encodeURIComponent(
+    `Bonjour, je m'appelle ${firstName}. Je viens de générer mon rapport pressing pour ${city}, ${countryLabel} sur PressFlow. Pouvez-vous me l'envoyer ?`
+  );
+  return `https://wa.me/${businessNumber}?text=${text}`;
+}
+```
+
+---
+
+## PART 3 — BACKEND ROUTES
+
+Add all routes to the Express server. No authentication required.
+
+### POST `/api/calculator/quick-estimate`
+
+Instant estimate from 3 inputs using built-in reference data. No AI call.
+Returns result in under 500ms.
+
+```ts
+// Reference data constant (define at top of the route file):
+const REFERENCE = {
+  currencies: { cameroun:"FCFA", senegal:"FCFA", cote_divoire:"FCFA", mali:"FCFA",
+    burkina_faso:"FCFA", guinee:"GNF", rdc:"USD", gabon:"FCFA", congo:"FCFA",
+    togo:"FCFA", benin:"FCFA", maroc:"MAD", tunisie:"TND", algerie:"DZD",
+    france:"EUR", belgique:"EUR", suisse:"CHF" },
+
+  // Base equipment cost in FCFA (divide for EUR/MAD etc.)
+  baseEquipment: {
+    less_50:  { washers:1, dryers:1, min: 1_500_000, max: 4_000_000 },
+    "50_150": { washers:2, dryers:2, min: 4_000_000, max: 10_000_000 },
+    more_150: { washers:3, dryers:3, min: 10_000_000, max: 25_000_000 },
+  },
+
+  typeMultiplier: { quartier:0.7, semi_pro:1.0, industriel:1.8 },
+
+  // Monthly costs in FCFA by country key (or default)
+  monthly: {
+    cameroun:    { rent:[150_000,400_000], water:[30_000,80_000], electricity:[40_000,120_000], salaryPerEmp:[70_000,120_000] },
+    senegal:     { rent:[200_000,500_000], water:[35_000,90_000], electricity:[45_000,130_000], salaryPerEmp:[80_000,130_000] },
+    cote_divoire:{ rent:[250_000,600_000], water:[40_000,100_000], electricity:[50_000,140_000], salaryPerEmp:[90_000,150_000] },
+    france:      { rent:[800,2000],        water:[80,200],         electricity:[150,400],        salaryPerEmp:[1_800,2_200] },
+    belgique:    { rent:[900,2200],        water:[90,220],         electricity:[180,450],        salaryPerEmp:[1_900,2_400] },
+    maroc:       { rent:[3_000,8_000],     water:[500,1_500],      electricity:[800,2_500],      salaryPerEmp:[3_000,5_000] },
+    default:     { rent:[150_000,500_000], water:[30_000,100_000], electricity:[40_000,150_000], salaryPerEmp:[70_000,150_000] },
+  },
+
+  // Conversion to FCFA for uniform calculation base
+  toFcfa: { EUR:655, MAD:65, TND:200, GNF:0.075, USD:600, CHF:720, DZD:4.4, FCFA:1 },
+};
+
+app.post("/api/calculator/quick-estimate", async (req, res) => {
+  const { country, city, pressingType, dailyCapacity } = req.body;
+  if (!country || !pressingType || !dailyCapacity) {
+    return res.status(400).json({ message: "Paramètres manquants" });
+  }
+
+  const currency   = REFERENCE.currencies[country] ?? "FCFA";
+  const multiplier = REFERENCE.typeMultiplier[pressingType] ?? 1;
+  const equip      = REFERENCE.baseEquipment[dailyCapacity];
+  const monthly    = REFERENCE.monthly[country] ?? REFERENCE.monthly.default;
+  const toFcfa     = REFERENCE.toFcfa[currency] ?? 1;
+
+  // Calculate in FCFA then convert
+  const equipMin = Math.round((equip.min * multiplier) / toFcfa);
+  const equipMax = Math.round((equip.max * multiplier) / toFcfa);
+  const setupMin = Math.round(equipMin * 0.25);
+  const setupMax = Math.round(equipMax * 0.30);
+  const workMin  = Math.round(equipMin * 0.15);
+  const workMax  = Math.round(equipMax * 0.20);
+  const adminMin = Math.round(50_000 / toFcfa);
+  const adminMax = Math.round(300_000 / toFcfa);
+
+  const defaultEmployees = { less_50:1, "50_150":2, more_150:4 }[dailyCapacity] ?? 2;
+  const monthlyMin = monthly.rent[0] + monthly.water[0] + monthly.electricity[0] + monthly.salaryPerEmp[0] * defaultEmployees;
+  const monthlyMax = monthly.rent[1] + monthly.water[1] + monthly.electricity[1] + monthly.salaryPerEmp[1] * defaultEmployees;
+
+  // Break-even: assume avg price 800 FCFA/kg converted
+  const avgPricePerKg  = Math.round(800 / toFcfa);
+  const breakEvenKgMin = Math.round(monthlyMin / (avgPricePerKg * 0.4));
+  const breakEvenKgMax = Math.round(monthlyMax / (avgPricePerKg * 0.3));
+  const roiMin = Math.round((equipMin + setupMin) / Math.max(1, (monthlyMax * 0.25)));
+  const roiMax = Math.round((equipMax + setupMax) / Math.max(1, (monthlyMin * 0.15)));
+
+  res.json({
+    contactZone: getContactZone(country),
+    currency,
+    dialCode: COUNTRY_META[country]?.dialCode ?? "+237",
+    minBudget: equipMin + setupMin + workMin + adminMin,
+    maxBudget: equipMax + setupMax + workMax + adminMax,
+    breakdownSummary: {
+      equipment:      { min: equipMin, max: equipMax },
+      setup:          { min: setupMin, max: setupMax },
+      workingCapital: { min: workMin,  max: workMax  },
+      administrative: { min: adminMin, max: adminMax },
+    },
+    monthlyCharges: { min: monthlyMin, max: monthlyMax },
+    breakEvenKgPerMonth: { min: breakEvenKgMin, max: breakEvenKgMax },
+    estimatedRoiMonths:  { min: Math.max(6,roiMin), max: Math.min(60,roiMax) },
+  });
+});
+```
+
+### POST `/api/calculator/ai-report`
+
+```ts
+app.post("/api/calculator/ai-report", async (req, res) => {
+  const body = req.body;
+
+  // Validation
+  if (!body.whatsapp && !body.phone && !body.email) {
+    return res.status(400).json({ message: "Un contact (WhatsApp, téléphone ou email) est requis" });
+  }
+  if (!body.firstName || !body.country || !body.city) {
+    return res.status(400).json({ message: "Prénom, pays et ville sont requis" });
+  }
+
+  // Rate limiting: 3 reports per contact per 24h
+  const identifier = body.whatsapp || body.email;
+  if (identifier) {
+    const recent = await db.select({ id: calculatorLeads.id })
+      .from(calculatorLeads)
+      .where(
+        and(
+          or(
+            body.whatsapp ? eq(calculatorLeads.whatsapp, body.whatsapp) : sql`1=0`,
+            body.email    ? eq(calculatorLeads.email,    body.email)    : sql`1=0`,
+          ),
+          gte(calculatorLeads.createdAt, new Date(Date.now() - 86_400_000))
+        )
+      );
+    if (recent.length >= 3) {
+      return res.status(429).json({ message: "Maximum 3 rapports par jour. Réessayez demain." });
+    }
+  }
+
+  const contactZone = getContactZone(body.country);
+
+  // Save lead before AI call (so we have the ID for the report URL)
+  const [lead] = await db.insert(calculatorLeads).values({
+    whatsapp:        body.whatsapp || null,
+    phone:           body.phone    || null,
+    email:           body.email    || null,
+    firstName:       body.firstName,
+    contactZone,
+    country:         body.country,
+    city:            body.city,
+    pressingType:    body.pressingType,
+    dailyCapacity:   body.dailyCapacity,
+    hasLocalAlready: body.hasLocalAlready,
+    localSurface:    body.localSurface,
+    reliableWater:   body.reliableWater,
+    reliablePower:   body.reliablePower,
+    plannedEmployees:body.plannedEmployees,
+    availableCapital:body.availableCapital,
+    businessGoal:    body.businessGoal,
+    utmSource:       body.utmSource,
+    utmMedium:       body.utmMedium,
+    utmCampaign:     body.utmCampaign,
+  }).returning();
+
+  const reportUrl = `${process.env.APP_URL ?? "https://pressflow.app"}/rapport/${lead.id}`;
+  const countryLabel = COUNTRY_META[body.country]?.label ?? body.country;
+
+  // Generate AI report
+  const report = await generateAiReport(body);
+
+  // Update lead with report
+  await db.update(calculatorLeads).set({
+    estimatedMinBudget:  report.totalBudget.min,
+    estimatedMaxBudget:  report.totalBudget.max,
+    currency:            report.totalBudget.currency,
+    aiReportJson:        JSON.stringify(report),
+    aiReportGeneratedAt: new Date(),
+    reportUrl,
+  }).where(eq(calculatorLeads.id, lead.id));
+
+  // Deliver via WhatsApp
+  let whatsappSent = false;
+  let clickToChatUrl: string | null = null;
+
+  if (body.whatsapp) {
+    whatsappSent = await sendReportViaWhatsApp({
+      toWhatsApp:   body.whatsapp,
+      firstName:    body.firstName,
+      city:         body.city,
+      countryLabel,
+      minBudget:    report.totalBudget.min,
+      maxBudget:    report.totalBudget.max,
+      currency:     report.totalBudget.currency,
+      reportUrl,
+    });
+
+    if (!whatsappSent) {
+      // Twilio not configured or failed — give click-to-chat link
+      clickToChatUrl = getClickToChatUrl(body.firstName, body.city, countryLabel);
+    }
+
+    await db.update(calculatorLeads).set({
+      whatsappSent,
+      whatsappSentAt: whatsappSent ? new Date() : null,
+    }).where(eq(calculatorLeads.id, lead.id));
+  }
+
+  res.json({ leadId: lead.id, reportUrl, report, whatsappSent, clickToChatUrl });
+});
+```
+
+### `generateAiReport` function (in same file)
+
+```ts
+async function generateAiReport(data: any) {
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const countryLabel = COUNTRY_META[data.country]?.label ?? data.country;
+
+  const prompt = `Tu es un expert-conseil senior spécialisé dans la création de pressings/blanchisseries professionnelles en Afrique francophone et Europe francophone, avec 15 ans d'expérience.
+
+Un entrepreneur veut ouvrir un pressing :
+- Localisation : ${data.city}, ${countryLabel}
+- Type : ${{ quartier:"Pressing de quartier (petite clientèle locale)", semi_pro:"Semi-professionnel (50-150 kg/jour)", industriel:"Industriel (+150 kg/jour, hôtels/hôpitaux)" }[data.pressingType]}
+- Capacité : ${{ less_50:"Moins de 50 kg/jour", "50_150":"50 à 150 kg/jour", more_150:"Plus de 150 kg/jour" }[data.dailyCapacity]}
+- Local : ${{ yes:"Disponible", no:"À trouver", searching:"En négociation" }[data.hasLocalAlready] ?? "Non précisé"}
+${data.localSurface ? `- Surface : ${data.localSurface} m²` : ""}
+- Eau fiable : ${{ yes:"Oui", sometimes:"Parfois", no:"Non" }[data.reliableWater] ?? "Non précisé"}
+- Électricité stable : ${{ yes:"Oui", sometimes:"Coupures fréquentes", no:"Instable" }[data.reliablePower] ?? "Non précisé"}
+- Employés prévus : ${data.plannedEmployees ?? "Non précisé"}
+- Capital disponible : ${data.availableCapital ?? "Non précisé"}
+- Objectif : ${{ primary:"Activité principale", secondary:"Activité complémentaire" }[data.businessGoal] ?? "Non précisé"}
+
+MISSION : Recherche sur internet les données actuelles pour ${data.city}, ${countryLabel} et génère une estimation DÉTAILLÉE et RÉALISTE.
+
+Recherche spécifiquement :
+1. Prix actuels machines à laver professionnelles (10-20 kg) disponibles dans ce pays
+2. Prix sécheuses professionnelles disponibles dans ce pays  
+3. Coût moyen loyer commercial 50-100 m² dans cette ville
+4. Tarifs électricité commerciale/industrielle dans ce pays
+5. Coût et disponibilité générateur (si électricité instable)
+6. Démarches et coûts légaux pour créer une entreprise dans ce pays
+7. Prix pratiqués par les pressings existants dans cette ville (si trouvable)
+
+Réponds UNIQUEMENT en JSON valide, aucun texte avant ou après :
+{
+  "summary": "résumé 2-3 phrases",
+  "totalBudget": { "min": number, "max": number, "currency": "FCFA" },
+  "breakdown": {
+    "equipment": {
+      "total": { "min": number, "max": number },
+      "items": [{ "name": string, "quantity": number, "unitCost": { "min": number, "max": number }, "notes": string }]
+    },
+    "setup": {
+      "total": { "min": number, "max": number },
+      "items": [{ "name": string, "cost": { "min": number, "max": number }, "notes": string }]
+    },
+    "workingCapital": { "min": number, "max": number, "description": string },
+    "administrative": {
+      "total": { "min": number, "max": number },
+      "items": [{ "name": string, "cost": { "min": number, "max": number }, "notes": string }]
+    }
+  },
+  "monthlyCharges": {
+    "total": { "min": number, "max": number },
+    "items": [{ "category": string, "min": number, "max": number }]
+  },
+  "profitability": {
+    "breakEvenKgPerMonth": number,
+    "breakEvenRevenuePerMonth": { "min": number, "max": number },
+    "estimatedRoiMonths": { "min": number, "max": number },
+    "estimatedMonthlyRevenue": { "min": number, "max": number },
+    "estimatedMonthlyProfit": { "min": number, "max": number },
+    "estimatedMarginPct": { "min": number, "max": number }
+  },
+  "localInsights": {
+    "averageRentSource": string,
+    "electricityRate": string,
+    "waterAvailability": string,
+    "administrativeRequirements": [string],
+    "marketContext": string
+  },
+  "risks": [string],
+  "recommendations": [string],
+  "nextSteps": [string],
+  "sources": [string],
+  "generatedAt": "${new Date().toISOString()}",
+  "disclaimer": "Ces estimations sont basées sur des données collectées automatiquement et des moyennes sectorielles. Elles ne remplacent pas une étude de marché professionnelle."
+}`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    tools: [{ type: "web_search_20250305" as any, name: "web_search" }],
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content
+    .filter(b => b.type === "text")
+    .map(b => (b as any).text)
+    .join("");
+
+  const clean = text.replace(/```json\n?|```\n?/g, "").trim();
+  return JSON.parse(clean);
+}
+```
+
+### GET `/api/calculator/report/:leadId` (public)
+
+```ts
+app.get("/api/calculator/report/:leadId", async (req, res) => {
+  const [lead] = await db.select().from(calculatorLeads)
+    .where(eq(calculatorLeads.id, parseInt(req.params.leadId)));
+  if (!lead?.aiReportJson) return res.status(404).json({ message: "Rapport introuvable" });
+  res.json({
+    leadId: lead.id, firstName: lead.firstName,
+    country: lead.country, city: lead.city, pressingType: lead.pressingType,
+    report: JSON.parse(lead.aiReportJson), createdAt: lead.createdAt,
+  });
+});
+```
+
+---
+
+## PART 4 — FRONTEND: CALCULATOR PAGE
+
+Create `client/src/pages/calculator.tsx`.
+
+4 steps: `"quick"` → `"details"` → `"capture"` → `"report"`
+
+### Step 3 — Zone-adaptive contact capture form
+
+The capture form renders differently based on `contactZone` (returned by quick-estimate).
+
+**Africa zone (WhatsApp required):**
+
+```tsx
+// Show WhatsApp delivery badge prominently:
+<div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20
+  border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 mb-5">
+  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+    {/* WhatsApp SVG */}
+    <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  </div>
+  <div>
+    <p className="text-sm font-semibold text-green-800 dark:text-green-400">
+      Rapport envoyé sur WhatsApp en 2 minutes
+    </p>
+    <p className="text-xs text-green-700 dark:text-green-500">
+      Recevez votre rapport directement dans vos messages WhatsApp
+    </p>
+  </div>
+</div>
+
+{/* WhatsApp number — PRIMARY (required) */}
+<div>
+  <Label>
+    Numéro WhatsApp *
+    <span className="ml-2 text-xs text-muted-foreground font-normal">
+      Votre rapport sera envoyé ici
+    </span>
+  </Label>
+  <div className="flex gap-2 mt-1">
+    <div className="flex items-center px-3 bg-muted border border-border
+      rounded-lg text-sm font-medium text-muted-foreground flex-shrink-0">
+      {dialCode}
+    </div>
+    <Input
+      type="tel"
+      value={whatsappLocal}
+      onChange={e => {
+        setWhatsappLocal(e.target.value);
+        setForm(f => ({ ...f, whatsapp: dialCode + e.target.value.replace(/\s/g, "") }));
+      }}
+      placeholder="6XX XXX XXX"
+      className="flex-1"
+    />
+  </div>
+  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+    Ce numéro doit être actif sur WhatsApp
+  </p>
+</div>
+
+{/* Email — OPTIONAL for Africa */}
+<div>
+  <Label className="flex items-center gap-2">
+    Email
+    <span className="text-xs font-normal bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+      optionnel
+    </span>
+  </Label>
+  <Input
+    type="email"
+    value={form.email}
+    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+    placeholder="votre@email.com"
+    className="mt-1"
+  />
+</div>
+
+<p className="text-xs text-muted-foreground text-center">
+  🔒 Numéro protégé. Jamais partagé. Répondez STOP pour vous désinscrire.
+</p>
+```
+
+**Maghreb zone (WhatsApp or Email — user picks):**
+
+```tsx
+// Toggle button between WhatsApp and Email
+<div>
+  <Label>Comment recevoir votre rapport ?</Label>
+  <div className="grid grid-cols-2 gap-3 mt-2">
+    {[
+      { value: "whatsapp", icon: "💬", label: "WhatsApp" },
+      { value: "email",    icon: "📧", label: "Email" },
+    ].map(opt => (
+      <button key={opt.value} type="button"
+        onClick={() => setPreferredChannel(opt.value)}
+        className={cn(
+          "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+          preferredChannel === opt.value
+            ? opt.value === "whatsapp"
+              ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+              : "border-primary bg-primary/5"
+            : "border-border hover:border-muted-foreground"
+        )}
+      >
+        <span className="text-2xl">{opt.icon}</span>
+        <span className="text-sm font-semibold">{opt.label}</span>
+      </button>
+    ))}
+  </div>
+</div>
+
+{/* Primary field (required) */}
+{preferredChannel === "whatsapp" ? (
+  <div>
+    <Label>Numéro WhatsApp *</Label>
+    <div className="flex gap-2 mt-1">
+      <div className="flex items-center px-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground">{dialCode}</div>
+      <Input type="tel" value={whatsappLocal} onChange={...} placeholder="6XX XXX XXX" className="flex-1" />
+    </div>
+  </div>
+) : (
+  <div>
+    <Label>Email *</Label>
+    <Input type="email" value={form.email} onChange={...} className="mt-1" />
+  </div>
+)}
+
+{/* Secondary field (optional) */}
+<div>
+  <Label className="flex items-center gap-2">
+    {preferredChannel === "whatsapp" ? "Email" : "WhatsApp"}
+    <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">optionnel</span>
+  </Label>
+  {/* Render the other field */}
+</div>
+```
+
+**Europe zone (Email required, WhatsApp optional):**
+
+```tsx
+<div>
+  <Label>Email *</Label>
+  <Input type="email" value={form.email} onChange={...} className="mt-1" required />
+  <p className="text-xs text-muted-foreground mt-1">Votre rapport sera envoyé à cette adresse</p>
+</div>
+
+<div>
+  <Label className="flex items-center gap-2">
+    WhatsApp
+    <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">optionnel</span>
+  </Label>
+  <p className="text-xs text-muted-foreground mb-1">
+    Recevez aussi des conseils personnalisés par WhatsApp
+  </p>
+  <div className="flex gap-2">
+    <div className="flex items-center px-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground">{dialCode}</div>
+    <Input type="tel" value={whatsappLocal} onChange={...} placeholder="6XX XXX" className="flex-1" />
+  </div>
+</div>
+
+<p className="text-xs text-muted-foreground text-center">
+  🔒 Données protégées conformément au RGPD. Désinscription en 1 clic.
+</p>
+```
+
+### Step 4 — Report display with WhatsApp delivery status
+
+```tsx
+{/* WhatsApp sent confirmation */}
+{result.whatsappSent && (
+  <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20
+    border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 mb-6">
+    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+    <div>
+      <p className="text-sm font-semibold text-green-800 dark:text-green-400">
+        Rapport envoyé sur WhatsApp ✓
+      </p>
+      <p className="text-xs text-green-700 dark:text-green-500">
+        Vérifiez vos messages. Vous recevrez des conseils personnalisés dans les prochains jours.
+      </p>
+    </div>
+  </div>
+)}
+
+{/* Click-to-chat fallback */}
+{result.clickToChatUrl && (
+  <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-900/20
+    border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 mb-6">
+    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+      {/* WhatsApp SVG icon */}
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-semibold">Recevoir ce rapport sur WhatsApp</p>
+      <p className="text-xs text-muted-foreground">
+        Cliquez pour nous contacter et recevoir votre rapport
+      </p>
+    </div>
+    <a href={result.clickToChatUrl} target="_blank" rel="noopener noreferrer">
+      <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white flex-shrink-0">
+        Ouvrir WhatsApp
+      </Button>
+    </a>
+  </div>
+)}
+
+{/* Shareable report link */}
+<div className="flex items-center gap-2 bg-muted/50 rounded-xl px-4 py-3 mb-6">
+  <Link2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+  <span className="text-xs text-muted-foreground flex-1 truncate">{result.reportUrl}</span>
+  <Button size="sm" variant="outline" onClick={() => {
+    navigator.clipboard.writeText(result.reportUrl);
+    // show toast: "Lien copié !"
+  }}>
+    Copier le lien
+  </Button>
+</div>
+```
+
+### Loading state messages
+
+```ts
+// Cycle through these while AI generates (one every ~3s):
+const loadingMessages = [
+  `Recherche des prix équipements à ${city}...`,
+  `Analyse des loyers commerciaux dans cette zone...`,
+  `Vérification des tarifs eau et électricité...`,
+  `Calcul des démarches administratives pour ${countryLabel}...`,
+  `Analyse du marché pressing local...`,
+  `Calcul de votre seuil de rentabilité...`,
+  `Rédaction de vos recommandations...`,
+  `Finalisation de votre rapport...`,
+];
+```
+
+---
+
+## PART 5 — PUBLIC REPORT PAGE
+
+Create `client/src/pages/report-public.tsx` at route `/rapport/:leadId`.
+
+This is the page that opens when someone clicks the WhatsApp link.
+No login required.
+
+```tsx
+export default function PublicReportPage() {
+  const { leadId } = useParams();
+  // Fetch from /api/calculator/report/:leadId
+  // Render full report with same components as Step 4
+  // Add simple top nav: PressFlow logo + "Essai gratuit 14 jours" button
+  // Add double CTA at bottom (trial + formation)
+  // Add print button
+}
+```
+
+---
+
+## PART 6 — ROUTING
+
+```tsx
+// In App.tsx — all public routes:
+<Route path="/calculateur" component={CalculatorPage} />
+<Route path="/calculator" component={CalculatorRedirect} />  // redirects to /calculateur
+<Route path="/rapport/:leadId" component={PublicReportPage} />
+```
+
+---
+
+## PART 7 — LANDING PAGE INTEGRATION
+
+### In the landing page navbar:
+```tsx
+<a href="/calculateur" className="font-medium text-sm">
+  📊 Calculateur de démarrage
+</a>
+```
+
+### Dedicated section on the homepage:
+```tsx
+<section className="bg-gradient-to-br from-slate-900 to-slate-800 py-20 px-4">
+  <div className="max-w-4xl mx-auto text-center">
+    <span className="bg-primary/20 text-primary text-sm px-4 py-1.5 rounded-full">
+      Outil gratuit · Résultat par WhatsApp en 2 minutes
+    </span>
+    <h2 className="text-3xl font-bold text-white mt-4 mb-4">
+      Combien coûte l'ouverture d'un pressing dans votre pays ?
+    </h2>
+    <p className="text-slate-400 text-lg mb-8 max-w-2xl mx-auto">
+      Notre calculateur IA analyse les données actuelles de votre marché local
+      et vous envoie une estimation réaliste directement sur WhatsApp.
+    </p>
+    <a href="/calculateur">
+      <Button size="lg" className="px-10 text-base">
+        Calculer mon budget de démarrage →
+      </Button>
+    </a>
+    <p className="text-slate-500 text-sm mt-4">
+      Disponible pour 15 pays · Résultat envoyé par WhatsApp gratuitement
+    </p>
+  </div>
+</section>
+```
+
+---
+
+## VERIFICATION CHECKLIST
+
+**Zone detection:**
+- [ ] Selecting Cameroun → contactZone = "africa" returned by quick-estimate API
+- [ ] Selecting Maroc → contactZone = "maghreb"
+- [ ] Selecting France → contactZone = "europe"
+
+**Africa zone capture (Cameroun, Sénégal, etc.):**
+- [ ] WhatsApp green delivery badge shown prominently
+- [ ] WhatsApp field is labeled as required with dial code pre-filled
+- [ ] Email field labeled as "optionnel"
+- [ ] Generate button disabled if firstName or whatsapp is empty
+- [ ] Privacy note says "STOP" not "RGPD"
+
+**Maghreb zone capture (Maroc, Tunisie, Algérie):**
+- [ ] Two-button toggle shows WhatsApp and Email options
+- [ ] Selecting WhatsApp makes phone field required
+- [ ] Selecting Email makes email field required
+- [ ] The other field shows as optional
+
+**Europe zone capture (France, Belgique, Suisse):**
+- [ ] Email shown as required PRIMARY field
+- [ ] WhatsApp shown as optional secondary field
+- [ ] RGPD notice shown (not STOP)
+
+**WhatsApp delivery:**
+- [ ] If Twilio configured: WhatsApp message sent automatically
+- [ ] WhatsApp message contains report link + budget summary
+- [ ] If Twilio NOT configured: click-to-chat button shown with green WhatsApp button
+- [ ] `whatsapp_sent` boolean updated correctly in DB
+- [ ] No crash or error shown to user when Twilio not configured
+
+**Public report page:**
+- [ ] `/rapport/:leadId` loads without authentication
+- [ ] Full report renders correctly on mobile (WhatsApp opens links in browser)
+- [ ] Top nav shows PressFlow logo + trial CTA
+- [ ] Double CTA at bottom (trial + formation)
+- [ ] Report link copyable from report page
+
+**General:**
+- [ ] `calculator_leads` table exists in DB with all columns
+- [ ] Rate limiting: 3 reports per contact per 24h enforced
+- [ ] Quick estimate returns instantly (<500ms)
+- [ ] AI report generation completes in 15-45 seconds
+- [ ] Loading messages cycle through during AI generation
+- [ ] All text in French by default
+- [ ] No TypeScript errors

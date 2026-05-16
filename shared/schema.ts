@@ -377,3 +377,41 @@ export type InsertSite = z.infer<typeof insertSiteSchema>;
 export type OrderWithCustomer = Order & { customer: Customer };
 export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[] };
 export type SubscriptionWithPlan = Subscription & { plan: Plan };
+
+export const calculatorLeads = pgTable("calculator_leads", {
+  id: serial("id").primaryKey(),
+  whatsapp:    varchar("whatsapp", { length: 50 }),
+  phone:       varchar("phone", { length: 50 }),
+  email:       varchar("email", { length: 255 }),
+  firstName:   varchar("first_name", { length: 100 }),
+  contactZone: varchar("contact_zone", { length: 20 }),
+  country:          varchar("country", { length: 100 }).notNull(),
+  city:             varchar("city", { length: 100 }).notNull(),
+  pressingType:     varchar("pressing_type", { length: 50 }).notNull(),
+  dailyCapacity:    varchar("daily_capacity", { length: 50 }).notNull(),
+  hasLocalAlready:  varchar("has_local", { length: 20 }),
+  localSurface:     integer("local_surface"),
+  reliableWater:    varchar("reliable_water", { length: 20 }),
+  reliablePower:    varchar("reliable_power", { length: 20 }),
+  plannedEmployees: integer("planned_employees"),
+  availableCapital: varchar("available_capital", { length: 50 }),
+  businessGoal:     varchar("business_goal", { length: 50 }),
+  estimatedMinBudget: integer("estimated_min_budget"),
+  estimatedMaxBudget: integer("estimated_max_budget"),
+  currency:           varchar("currency", { length: 10 }).default("FCFA"),
+  aiReportJson:        text("ai_report_json"),
+  aiReportGeneratedAt: timestamp("ai_report_generated_at"),
+  reportUrl:           varchar("report_url", { length: 500 }),
+  whatsappSent:   boolean("whatsapp_sent").default(false),
+  whatsappSentAt: timestamp("whatsapp_sent_at"),
+  emailSent:      boolean("email_sent").default(false),
+  source:               varchar("source", { length: 100 }).default("calculator"),
+  utmSource:            varchar("utm_source", { length: 100 }),
+  utmMedium:            varchar("utm_medium", { length: 100 }),
+  utmCampaign:          varchar("utm_campaign", { length: 100 }),
+  convertedToTrial:     boolean("converted_to_trial").default(false),
+  convertedToTraining:  boolean("converted_to_training").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type CalculatorLead = typeof calculatorLeads.$inferSelect;
