@@ -105,7 +105,10 @@ export default function CalculatorPage() {
   ];
 
   const quickMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/calculator/quick-estimate", data),
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/calculator/quick-estimate", data);
+      return res.json();
+    },
     onSuccess: (data: any) => {
       setQuickResult(data);
       setStep("details");
@@ -114,7 +117,10 @@ export default function CalculatorPage() {
   });
 
   const aiMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/calculator/ai-report", data),
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/calculator/ai-report", data);
+      return res.json();
+    },
     onSuccess: (data: any) => {
       setAiResult(data);
       setStep("report");
