@@ -172,6 +172,11 @@ export function registerCalculatorRoutes(app: Express) {
 
   // ── PAGE 4: Generate AI report ──
   app.post("/api/calculator/generate-report/:leadId", async (req, res) => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({
+        message: "La génération de rapport n'est pas encore configurée. Veuillez contacter l'administrateur.",
+      });
+    }
     try {
       const leadId = parseInt(req.params.leadId);
 
