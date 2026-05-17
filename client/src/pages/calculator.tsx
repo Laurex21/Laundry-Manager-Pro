@@ -1,176 +1,791 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Link2, ArrowLeft, ArrowRight, Loader2, Calculator, TrendingUp, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Loader2, Calculator, Download, Link2, ChevronDown, MessageCircle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useLocation } from "wouter";
 
-type ContactZone = "africa" | "maghreb" | "europe";
+// ─── Country data ───────────────────────────────────────────────────────────
+interface CountryMeta { label: string; currency: string; cityPlaceholder: string; dialCode: string; dialCodeNumeric: string; }
 
-const COUNTRIES = [
-  { value: "cameroun",     label: "Cameroun",         zone: "africa" as ContactZone,   dialCode: "+237" },
-  { value: "senegal",      label: "Sénégal",           zone: "africa" as ContactZone,   dialCode: "+221" },
-  { value: "cote_divoire", label: "Côte d'Ivoire",     zone: "africa" as ContactZone,   dialCode: "+225" },
-  { value: "mali",         label: "Mali",              zone: "africa" as ContactZone,   dialCode: "+223" },
-  { value: "burkina_faso", label: "Burkina Faso",      zone: "africa" as ContactZone,   dialCode: "+226" },
-  { value: "guinee",       label: "Guinée",            zone: "africa" as ContactZone,   dialCode: "+224" },
-  { value: "rdc",          label: "RD Congo",          zone: "africa" as ContactZone,   dialCode: "+243" },
-  { value: "gabon",        label: "Gabon",             zone: "africa" as ContactZone,   dialCode: "+241" },
-  { value: "congo",        label: "Congo-Brazzaville", zone: "africa" as ContactZone,   dialCode: "+242" },
-  { value: "togo",         label: "Togo",              zone: "africa" as ContactZone,   dialCode: "+228" },
-  { value: "benin",        label: "Bénin",             zone: "africa" as ContactZone,   dialCode: "+229" },
-  { value: "maroc",        label: "Maroc",             zone: "maghreb" as ContactZone,  dialCode: "+212" },
-  { value: "tunisie",      label: "Tunisie",           zone: "maghreb" as ContactZone,  dialCode: "+216" },
-  { value: "algerie",      label: "Algérie",           zone: "maghreb" as ContactZone,  dialCode: "+213" },
-  { value: "france",       label: "France",            zone: "europe" as ContactZone,   dialCode: "+33"  },
-  { value: "belgique",     label: "Belgique",          zone: "europe" as ContactZone,   dialCode: "+32"  },
-  { value: "suisse",       label: "Suisse",            zone: "europe" as ContactZone,   dialCode: "+41"  },
-];
-
-const CITY_PLACEHOLDERS: Record<string, string> = {
-  cameroun: "ex: Douala, Yaoundé, Bafoussam...", senegal: "ex: Dakar, Thiès, Saint-Louis...",
-  cote_divoire: "ex: Abidjan, Bouaké, Yamoussoukro...", mali: "ex: Bamako, Sikasso, Ségou...",
-  burkina_faso: "ex: Ouagadougou, Bobo-Dioulasso...", guinee: "ex: Conakry, Kankan, Labé...",
-  rdc: "ex: Kinshasa, Lubumbashi, Goma...", gabon: "ex: Libreville, Port-Gentil...",
-  congo: "ex: Brazzaville, Pointe-Noire...", togo: "ex: Lomé, Kpalimé, Sokodé...",
-  benin: "ex: Cotonou, Porto-Novo, Parakou...", maroc: "ex: Casablanca, Rabat, Marrakech...",
-  tunisie: "ex: Tunis, Sfax, Sousse...", algerie: "ex: Alger, Oran, Constantine...",
-  france: "ex: Paris, Lyon, Marseille, Bordeaux...", belgique: "ex: Bruxelles, Liège, Anvers...",
-  suisse: "ex: Genève, Lausanne, Zurich...",
+const COUNTRY_META: Record<string, CountryMeta> = {
+  cameroun:     { label: "Cameroun",         currency: "FCFA", dialCode: "+237", dialCodeNumeric: "237", cityPlaceholder: "ex: Douala, Yaoundé, Bafoussam..." },
+  senegal:      { label: "Sénégal",           currency: "FCFA", dialCode: "+221", dialCodeNumeric: "221", cityPlaceholder: "ex: Dakar, Thiès, Saint-Louis..." },
+  cote_divoire: { label: "Côte d'Ivoire",     currency: "FCFA", dialCode: "+225", dialCodeNumeric: "225", cityPlaceholder: "ex: Abidjan, Bouaké, Yamoussoukro..." },
+  mali:         { label: "Mali",              currency: "FCFA", dialCode: "+223", dialCodeNumeric: "223", cityPlaceholder: "ex: Bamako, Sikasso, Ségou..." },
+  burkina_faso: { label: "Burkina Faso",      currency: "FCFA", dialCode: "+226", dialCodeNumeric: "226", cityPlaceholder: "ex: Ouagadougou, Bobo-Dioulasso..." },
+  guinee:       { label: "Guinée",            currency: "GNF",  dialCode: "+224", dialCodeNumeric: "224", cityPlaceholder: "ex: Conakry, Kankan, Labé..." },
+  rdc:          { label: "RD Congo",          currency: "USD",  dialCode: "+243", dialCodeNumeric: "243", cityPlaceholder: "ex: Kinshasa, Lubumbashi, Goma..." },
+  gabon:        { label: "Gabon",             currency: "FCFA", dialCode: "+241", dialCodeNumeric: "241", cityPlaceholder: "ex: Libreville, Port-Gentil..." },
+  congo:        { label: "Congo-Brazzaville", currency: "FCFA", dialCode: "+242", dialCodeNumeric: "242", cityPlaceholder: "ex: Brazzaville, Pointe-Noire..." },
+  togo:         { label: "Togo",              currency: "FCFA", dialCode: "+228", dialCodeNumeric: "228", cityPlaceholder: "ex: Lomé, Kpalimé, Sokodé..." },
+  benin:        { label: "Bénin",             currency: "FCFA", dialCode: "+229", dialCodeNumeric: "229", cityPlaceholder: "ex: Cotonou, Porto-Novo, Parakou..." },
+  tchad:        { label: "Tchad",             currency: "FCFA", dialCode: "+235", dialCodeNumeric: "235", cityPlaceholder: "ex: N'Djamena, Moundou..." },
+  centrafrique: { label: "Centrafrique",      currency: "FCFA", dialCode: "+236", dialCodeNumeric: "236", cityPlaceholder: "ex: Bangui..." },
+  niger:        { label: "Niger",             currency: "FCFA", dialCode: "+227", dialCodeNumeric: "227", cityPlaceholder: "ex: Niamey, Zinder..." },
+  maroc:        { label: "Maroc",             currency: "MAD",  dialCode: "+212", dialCodeNumeric: "212", cityPlaceholder: "ex: Casablanca, Rabat, Marrakech..." },
+  tunisie:      { label: "Tunisie",           currency: "TND",  dialCode: "+216", dialCodeNumeric: "216", cityPlaceholder: "ex: Tunis, Sfax, Sousse..." },
+  algerie:      { label: "Algérie",           currency: "DZD",  dialCode: "+213", dialCodeNumeric: "213", cityPlaceholder: "ex: Alger, Oran, Constantine..." },
+  france:       { label: "France",            currency: "EUR",  dialCode: "+33",  dialCodeNumeric: "33",  cityPlaceholder: "ex: Paris, Lyon, Marseille, Bordeaux..." },
+  belgique:     { label: "Belgique",          currency: "EUR",  dialCode: "+32",  dialCodeNumeric: "32",  cityPlaceholder: "ex: Bruxelles, Liège, Anvers..." },
+  suisse:       { label: "Suisse",            currency: "CHF",  dialCode: "+41",  dialCodeNumeric: "41",  cityPlaceholder: "ex: Genève, Lausanne, Zurich..." },
 };
 
-const WA_SVG = (
-  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-  </svg>
+const COUNTRY_GROUPS = [
+  { label: "Afrique Centrale",   keys: ["cameroun","gabon","congo","rdc","tchad","centrafrique"] },
+  { label: "Afrique de l'Ouest", keys: ["senegal","cote_divoire","mali","burkina_faso","guinee","togo","benin","niger"] },
+  { label: "Afrique du Nord",    keys: ["maroc","tunisie","algerie"] },
+  { label: "Europe",             keys: ["france","belgique","suisse"] },
+];
+
+const WA_PATH = "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z";
+const WaIcon = ({ className = "w-4 h-4 fill-white" }) => (
+  <svg viewBox="0 0 24 24" className={className}><path d={WA_PATH} /></svg>
 );
 
-function fmt(n: number, currency: string) {
-  if (!n && n !== 0) return "—";
-  return n.toLocaleString("fr-FR") + " " + currency;
+const SESSION_KEY = "pressflow_calc";
+
+type Step = 1 | 2 | 3 | 4;
+
+interface FormState {
+  firstName: string; lastName: string;
+  country: string; city: string;
+  phoneLocal: string; phone: string;
+  whatsappOptIn: boolean; email: string;
+  referralSource: string;
+  pressingType: string; dailyCapacity: string;
 }
 
-function BudgetBar({ label, min, max, currency, color }: { label: string; min: number; max: number; currency: string; color: string }) {
+const EMPTY_FORM: FormState = {
+  firstName: "", lastName: "", country: "", city: "",
+  phoneLocal: "", phone: "", whatsappOptIn: true, email: "",
+  referralSource: "", pressingType: "", dailyCapacity: "",
+};
+
+// ─── Progress Bar ───────────────────────────────────────────────────────────
+function ProgressBar({ step }: { step: Step }) {
+  const labels = ["Vos coordonnées", "Type", "Capacité", "Résultat"];
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-28 text-xs text-muted-foreground shrink-0">{label}</div>
-      <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: "100%" }} />
+    <div className="w-full max-w-lg mx-auto mb-8 print:hidden">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-muted-foreground">Étape {step} sur 4</span>
+        <span className="text-xs text-muted-foreground">{Math.round((step / 4) * 100)}%</span>
       </div>
-      <div className="text-xs font-medium text-right shrink-0 w-36">
-        {fmt(min, currency)} – {fmt(max, currency)}
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className="h-full bg-primary rounded-full transition-all duration-500"
+          style={{ width: `${(step / 4) * 100}%` }} />
+      </div>
+      <div className="flex justify-between mt-2">
+        {labels.map((label, i) => (
+          <span key={i} className={cn("text-[10px] font-medium",
+            i + 1 <= step ? "text-primary" : "text-muted-foreground/50")}>
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-export default function CalculatorPage() {
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
-  const [step, setStep] = useState<"quick" | "details" | "capture" | "report">("quick");
+// ─── Page 1: Contact form ────────────────────────────────────────────────────
+function Page1({ form, setForm, onSubmit, isLoading }: {
+  form: FormState; setForm: (fn: (f: FormState) => FormState) => void;
+  onSubmit: () => void; isLoading: boolean;
+}) {
+  const meta = COUNTRY_META[form.country];
+  const dialCode = meta?.dialCode ?? "+237";
+  const canSubmit = !!(form.firstName && form.lastName && form.country && form.city && form.phone);
 
-  const [form, setForm] = useState({
-    country: "", city: "", pressingType: "", dailyCapacity: "",
-    hasLocalAlready: "", localSurface: "", reliableWater: "", reliablePower: "",
-    plannedEmployees: "", availableCapital: "", businessGoal: "",
-    firstName: "", whatsapp: "", phone: "", email: "",
-  });
+  return (
+    <div className="w-full max-w-lg mx-auto space-y-5">
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-bold">Parlez-nous de vous</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Pour personnaliser votre estimation selon votre marché local
+        </p>
+      </div>
 
-  const [quickResult, setQuickResult] = useState<any>(null);
-  const [aiResult, setAiResult] = useState<any>(null);
-  const [whatsappLocal, setWhatsappLocal] = useState("");
-  const [preferredChannel, setPreferredChannel] = useState<"whatsapp" | "email">("whatsapp");
-  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
-  const [copiedLink, setCopiedLink] = useState(false);
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Prénom *</Label>
+          <Input value={form.firstName} autoFocus
+            onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
+            placeholder="Jean" className="mt-1" data-testid="input-firstname" />
+        </div>
+        <div>
+          <Label>Nom *</Label>
+          <Input value={form.lastName}
+            onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))}
+            placeholder="Dupont" className="mt-1" data-testid="input-lastname" />
+        </div>
+      </div>
 
-  const contactZone: ContactZone = quickResult?.contactZone ?? (COUNTRIES.find(c => c.value === form.country)?.zone ?? "africa");
-  const dialCode = quickResult?.dialCode ?? (COUNTRIES.find(c => c.value === form.country)?.dialCode ?? "+237");
-  const currency = quickResult?.currency ?? "FCFA";
-  const countryLabel = COUNTRIES.find(c => c.value === form.country)?.label ?? form.country;
+      <div>
+        <Label>Pays *</Label>
+        <Select value={form.country}
+          onValueChange={v => setForm(f => ({ ...f, country: v, phoneLocal: "", phone: "", city: "" }))}>
+          <SelectTrigger className="mt-1" data-testid="select-country">
+            <SelectValue placeholder="Sélectionnez votre pays" />
+          </SelectTrigger>
+          <SelectContent>
+            {COUNTRY_GROUPS.map(g => (
+              <SelectGroup key={g.label}>
+                <SelectLabel>{g.label}</SelectLabel>
+                {g.keys.map(key => COUNTRY_META[key] && (
+                  <SelectItem key={key} value={key}>{COUNTRY_META[key].label}</SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-  const loadingMessages = [
-    `Recherche des prix équipements à ${form.city || "votre ville"}...`,
-    `Analyse des loyers commerciaux dans cette zone...`,
-    `Vérification des tarifs eau et électricité...`,
-    `Calcul des démarches administratives pour ${countryLabel}...`,
-    `Analyse du marché pressing local...`,
-    `Calcul de votre seuil de rentabilité...`,
-    `Rédaction de vos recommandations...`,
-    `Finalisation de votre rapport...`,
+      <div>
+        <Label>Ville *</Label>
+        <Input value={form.city} disabled={!form.country}
+          onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+          placeholder={meta?.cityPlaceholder ?? "Votre ville..."}
+          className="mt-1" data-testid="input-city" />
+      </div>
+
+      <div>
+        <Label>
+          Numéro de téléphone *
+          <span className="ml-2 text-xs text-muted-foreground font-normal">Pour recevoir votre rapport</span>
+        </Label>
+        <div className="flex gap-2 mt-1">
+          <div className="flex items-center justify-center px-3 min-w-[64px] bg-muted border border-border rounded-lg text-sm font-semibold text-muted-foreground flex-shrink-0">
+            {dialCode}
+          </div>
+          <Input type="tel" value={form.phoneLocal} disabled={!form.country}
+            onChange={e => {
+              const local = e.target.value.replace(/\D/g, "");
+              setForm(f => ({
+                ...f, phoneLocal: local,
+                phone: (meta?.dialCodeNumeric ?? "") + local,
+                ...(f.whatsappOptIn ? { whatsapp: (meta?.dialCodeNumeric ?? "") + local } : {}),
+              }));
+            }}
+            placeholder="6XX XXX XXX" className="flex-1" data-testid="input-phone" />
+        </div>
+
+        {/* WhatsApp opt-in */}
+        <label className="flex items-center gap-2.5 mt-3 cursor-pointer select-none">
+          <div
+            data-testid="checkbox-whatsapp"
+            onClick={() => setForm(f => ({ ...f, whatsappOptIn: !f.whatsappOptIn }))}
+            className={cn("w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0",
+              form.whatsappOptIn ? "bg-green-500 border-green-500" : "border-muted-foreground bg-background")}>
+            {form.whatsappOptIn && (
+              <svg viewBox="0 0 12 12" className="w-3 h-3">
+                <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" />
+              </svg>
+            )}
+          </div>
+          <span className="text-sm">Ce numéro est mon WhatsApp — envoyer mon rapport ici</span>
+          <WaIcon className="w-4 h-4 fill-green-500 flex-shrink-0" />
+        </label>
+      </div>
+
+      <div>
+        <Label className="flex items-center gap-2">
+          Comment avez-vous entendu parler de nous ?
+          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">optionnel</span>
+        </Label>
+        <Select value={form.referralSource}
+          onValueChange={v => setForm(f => ({ ...f, referralSource: v }))}>
+          <SelectTrigger className="mt-1" data-testid="select-referral">
+            <SelectValue placeholder="Sélectionner..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="whatsapp_social">WhatsApp / Réseaux sociaux</SelectItem>
+            <SelectItem value="referral">Recommandation d'un ami</SelectItem>
+            <SelectItem value="google">Google</SelectItem>
+            <SelectItem value="other">Autre</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        🔒 Vos données sont protégées et ne seront jamais partagées. Répondez STOP pour vous désinscrire.
+      </p>
+
+      <Button size="lg" className="w-full" disabled={!canSubmit || isLoading}
+        onClick={onSubmit} data-testid="button-submit-page1">
+        {isLoading
+          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enregistrement...</>
+          : "Continuer →"}
+      </Button>
+    </div>
+  );
+}
+
+// ─── Page 2: Pressing type ───────────────────────────────────────────────────
+function Page2({ form, onSelect }: {
+  form: FormState; onSelect: (v: string) => void;
+}) {
+  const options = [
+    { value: "quartier",   emoji: "🏠", title: "Pressing de quartier",   description: "Clientèle locale et résidentielle",      machines: "1 à 2 machines",    budgetHint: "2M – 6M FCFA",   examples: "Particuliers, familles du quartier" },
+    { value: "semi_pro",   emoji: "🏢", title: "Semi-professionnel",       description: "Entreprises et particuliers, volume moyen", machines: "2 à 4 machines",  budgetHint: "6M – 20M FCFA",  examples: "PME, restaurants, boutiques" },
+    { value: "industriel", emoji: "🏭", title: "Industriel",               description: "Gros volumes, clients institutionnels",    machines: "4 machines et plus", budgetHint: "20M – 60M FCFA", examples: "Hôtels, hôpitaux, blanchisseries" },
   ];
+  return (
+    <div className="w-full max-w-lg mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold">Votre type de pressing</h2>
+        <p className="text-muted-foreground text-sm mt-1">Sélectionnez le format qui correspond à votre projet</p>
+      </div>
+      <div className="space-y-3">
+        {options.map(opt => (
+          <button key={opt.value} type="button" onClick={() => onSelect(opt.value)}
+            data-testid={`card-type-${opt.value}`}
+            className={cn("w-full text-left p-5 rounded-2xl border-2 transition-all duration-150",
+              "hover:border-primary hover:shadow-md hover:shadow-primary/10 active:scale-[0.99]",
+              form.pressingType === opt.value
+                ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
+                : "border-border bg-card")}>
+            <div className="flex items-start gap-4">
+              <span className="text-3xl flex-shrink-0">{opt.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-bold text-base">{opt.title}</p>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-lg flex-shrink-0">
+                    {opt.budgetHint}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">{opt.description}</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{opt.machines}</span>
+                  <span className="text-xs text-muted-foreground">{opt.examples}</span>
+                </div>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <p className="text-center text-xs text-muted-foreground mt-4">Appuyez sur une option pour continuer automatiquement</p>
+    </div>
+  );
+}
 
-  const quickMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/calculator/quick-estimate", data);
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      setQuickResult(data);
-      setStep("details");
-    },
-    onError: () => toast({ title: "Erreur", description: "Impossible de calculer l'estimation", variant: "destructive" }),
-  });
+// ─── Page 3: Daily capacity ──────────────────────────────────────────────────
+function Page3({ form, onSelect }: {
+  form: FormState; onSelect: (v: string) => void;
+}) {
+  const pressingType = form.pressingType;
+  const options = [
+    { value: "less_50",  emoji: "🌱", title: "Moins de 50 kg / jour", description: "Idéal pour démarrer et tester le marché",  detail: "Environ 6 à 10 clients par jour" },
+    { value: "50_150",   emoji: "📈", title: "50 à 150 kg / jour",    description: "Activité soutenue, clientèle mixte",         detail: "Environ 10 à 30 clients par jour" },
+    { value: "more_150", emoji: "🏆", title: "Plus de 150 kg / jour", description: "Volume industriel, contrats entreprises",    detail: "Hôtels, hôpitaux, blanchisseries en gros" },
+  ];
+  const showInconsistencyWarning =
+    (pressingType === "quartier" && form.dailyCapacity === "more_150") ||
+    (pressingType === "industriel" && form.dailyCapacity === "less_50");
 
-  const aiMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/calculator/ai-report", data);
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      setAiResult(data);
-      setStep("report");
-    },
-    onError: (err: any) => toast({ title: "Erreur", description: err.message ?? "Erreur lors de la génération du rapport", variant: "destructive" }),
-  });
+  return (
+    <div className="w-full max-w-lg mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold">Capacité journalière cible</h2>
+        <p className="text-muted-foreground text-sm mt-1">Combien de kg souhaitez-vous traiter par jour ?</p>
+      </div>
+      <div className="bg-muted/50 border border-border rounded-xl px-4 py-3 mb-5">
+        <p className="text-xs text-muted-foreground">
+          💡 <strong>Comment estimer ?</strong> Une famille produit environ 5 à 8 kg de linge par semaine.
+          Un pressing de quartier traite en moyenne 20 à 40 kg/jour au démarrage.
+          Un hôtel de 50 chambres génère environ 80 à 120 kg/jour.
+        </p>
+      </div>
+      <div className="space-y-3">
+        {options.map(opt => (
+          <button key={opt.value} type="button" onClick={() => onSelect(opt.value)}
+            data-testid={`card-capacity-${opt.value}`}
+            className={cn("w-full text-left p-5 rounded-2xl border-2 transition-all duration-150",
+              "hover:border-primary hover:shadow-md hover:shadow-primary/10 active:scale-[0.99]",
+              form.dailyCapacity === opt.value
+                ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
+                : "border-border bg-card")}>
+            <div className="flex items-start gap-4">
+              <span className="text-3xl flex-shrink-0">{opt.emoji}</span>
+              <div>
+                <p className="font-bold text-base">{opt.title}</p>
+                <p className="text-sm text-muted-foreground mt-1">{opt.description}</p>
+                <p className="text-xs text-muted-foreground mt-1">{opt.detail}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      {showInconsistencyWarning && (
+        <div className="mt-4 flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
+          <span className="text-amber-500 flex-shrink-0 mt-0.5">ℹ️</span>
+          <p className="text-xs text-amber-800 dark:text-amber-400">
+            Cette capacité est inhabituelle pour un {pressingType === "quartier" ? "pressing de quartier" : "pressing industriel"}.
+            Vous pouvez continuer ou revenir modifier votre type.
+          </p>
+        </div>
+      )}
+      <p className="text-center text-xs text-muted-foreground mt-4">Appuyez sur une option pour lancer le calcul</p>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    if (!aiMutation.isPending) return;
-    const iv = setInterval(() => setLoadingMsgIdx(i => (i + 1) % loadingMessages.length), 3000);
-    return () => clearInterval(iv);
-  }, [aiMutation.isPending]);
+// ─── Page 4 loading state ────────────────────────────────────────────────────
+function LoadingState({ city, countryLabel, currentMsg }: { city: string; countryLabel: string; currentMsg: number }) {
+  const messages = [
+    `Recherche des prix d'équipements à ${city}...`,
+    "Analyse des loyers commerciaux disponibles...",
+    "Vérification des tarifs eau et électricité...",
+    `Calcul des démarches administratives pour ${countryLabel}...`,
+    "Analyse du marché pressing local...",
+    "Calcul de votre seuil de rentabilité...",
+    "Rédaction de vos recommandations...",
+    "Finalisation de votre rapport...",
+  ];
+  return (
+    <div className="w-full max-w-lg mx-auto text-center">
+      <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+      <h3 className="text-xl font-bold mb-2">L'IA analyse votre marché...</h3>
+      <p className="text-sm text-muted-foreground mb-8">Recherche des données actuelles pour {city}</p>
+      <div className="space-y-2 text-left max-w-sm mx-auto">
+        {messages.map((msg, i) => (
+          <div key={i} className={cn("flex items-center gap-3 text-sm transition-all duration-300",
+            i < currentMsg ? "text-green-600 dark:text-green-400" : "",
+            i === currentMsg ? "text-foreground font-medium" : "",
+            i > currentMsg ? "text-muted-foreground/40" : "")}>
+            {i < currentMsg
+              ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+              : i === currentMsg
+                ? <Loader2 className="w-4 h-4 animate-spin text-primary flex-shrink-0" />
+                : <div className="w-4 h-4 rounded-full border border-muted-foreground/30 flex-shrink-0" />}
+            <span>{msg}</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground mt-6">Cela peut prendre 20 à 40 secondes...</p>
+    </div>
+  );
+}
 
-  function handleQuickSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.country || !form.city || !form.pressingType || !form.dailyCapacity) {
-      toast({ title: "Champs manquants", description: "Veuillez remplir tous les champs", variant: "destructive" });
-      return;
-    }
-    quickMutation.mutate({ country: form.country, city: form.city, pressingType: form.pressingType, dailyCapacity: form.dailyCapacity });
-  }
+// ─── Detail sub-components ───────────────────────────────────────────────────
+function DetailSection({ title, icon, data, currency }: { title: string; icon: string; data: any; currency: string }) {
+  const fmt = (n: number) => n?.toLocaleString("fr-FR") ?? "—";
+  if (!data?.total) return null;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-semibold text-sm">{icon} {title}</p>
+        <p className="text-sm font-bold text-primary">{fmt(data.total.min)} — {fmt(data.total.max)} {currency}</p>
+      </div>
+      <div className="space-y-2 pl-2">
+        {data.items?.map((item: any, i: number) => (
+          <div key={i} className="flex items-start justify-between gap-3 py-1.5 border-b border-border/50 last:border-0">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm">{item.quantity > 1 ? `${item.name} ×${item.quantity}` : item.name}</p>
+              {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
+            </div>
+            <p className="text-sm font-medium flex-shrink-0 text-right">
+              {fmt(item.unitCost?.min ?? item.cost?.min)}<br />
+              <span className="text-xs text-muted-foreground">— {fmt(item.unitCost?.max ?? item.cost?.max)} {currency}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  function handleCaptureSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const hasContact = form.whatsapp || form.phone || form.email;
-    if (!hasContact || !form.firstName) {
-      toast({ title: "Champs manquants", description: "Prénom et un contact sont requis", variant: "destructive" });
-      return;
-    }
-    aiMutation.mutate({
-      ...form,
-      localSurface: form.localSurface ? parseInt(form.localSurface) : undefined,
-      plannedEmployees: form.plannedEmployees ? parseInt(form.plannedEmployees) : undefined,
-    });
-  }
+function MonthlyChargesSection({ data, currency }: { data: any; currency: string }) {
+  const fmt = (n: number) => n?.toLocaleString("fr-FR") ?? "—";
+  if (!data?.total) return null;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-semibold text-sm">📅 Charges mensuelles</p>
+        <p className="text-sm font-bold text-primary">{fmt(data.total.min)} — {fmt(data.total.max)} {currency}</p>
+      </div>
+      <div className="space-y-1 pl-2">
+        {data.items?.map((item: any, i: number) => (
+          <div key={i} className="flex justify-between text-sm py-1 border-b border-border/50 last:border-0">
+            <span className="text-muted-foreground">{item.category}</span>
+            <span>{fmt(item.min)} — {fmt(item.max)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfitabilitySection({ data, currency }: { data: any; currency: string }) {
+  const fmt = (n: number) => n?.toLocaleString("fr-FR") ?? "—";
+  if (!data) return null;
+  const items = [
+    { label: "Seuil de rentabilité",   value: `${data.breakEvenKgPerMonth} kg/mois` },
+    { label: "Retour investissement",   value: `${data.estimatedRoiMonths?.min} — ${data.estimatedRoiMonths?.max} mois` },
+    { label: "CA mensuel potentiel",    value: `${fmt(data.estimatedMonthlyRevenue?.min)} — ${fmt(data.estimatedMonthlyRevenue?.max)} ${currency}`, highlight: "green" },
+    { label: "Bénéfice mensuel estimé", value: `${fmt(data.estimatedMonthlyProfit?.min)} — ${fmt(data.estimatedMonthlyProfit?.max)} ${currency}`, highlight: "green" },
+    { label: "Marge nette estimée",     value: `${data.estimatedMarginPct?.min} — ${data.estimatedMarginPct?.max}%`, highlight: "blue" },
+  ];
+  return (
+    <div>
+      <p className="font-semibold text-sm mb-3">📊 Analyse de rentabilité</p>
+      <div className="grid grid-cols-2 gap-3">
+        {items.map((item, i) => (
+          <div key={i} className={cn("rounded-lg p-3",
+            item.highlight === "green" ? "bg-green-50 dark:bg-green-900/20" :
+            item.highlight === "blue"  ? "bg-blue-50 dark:bg-blue-900/20" : "bg-muted/50")}>
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+            <p className={cn("text-sm font-bold mt-1",
+              item.highlight === "green" ? "text-green-700 dark:text-green-400" :
+              item.highlight === "blue"  ? "text-blue-700 dark:text-blue-400" : "")}>
+              {item.value}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LocalInsightsSection({ data, city, countryLabel }: { data: any; city: string; countryLabel: string }) {
+  if (!data) return null;
+  return (
+    <div>
+      <p className="font-semibold text-sm mb-3">📍 Contexte local — {city}, {countryLabel}</p>
+      {data.marketContext && <p className="text-sm text-muted-foreground mb-3">{data.marketContext}</p>}
+      {data.rentContext && (
+        <div className="mb-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Loyers</p>
+          <p className="text-sm">{data.rentContext}</p>
+        </div>
+      )}
+      {data.electricityContext && (
+        <div className="mb-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Électricité</p>
+          <p className="text-sm">{data.electricityContext}</p>
+        </div>
+      )}
+      {data.administrativeSteps?.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Démarches administratives</p>
+          <ul className="space-y-1">
+            {data.administrativeSteps.map((s: string, i: number) => (
+              <li key={i} className="text-sm flex gap-2"><span className="text-primary">✓</span>{s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Page 4 result ───────────────────────────────────────────────────────────
+function ResultPage({ report, form, result, leadId }: {
+  report: any; form: FormState; result: any; leadId: number;
+}) {
+  const [showDetail, setShowDetail] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const meta = COUNTRY_META[form.country];
+  const countryLabel = meta?.label ?? form.country;
+  const currency = report?.totalBudget?.currency ?? meta?.currency ?? "FCFA";
+  const fmt = (n: number) => n?.toLocaleString("fr-FR") ?? "—";
+  const typeLabels: Record<string, string> = {
+    quartier: "pressing de quartier", semi_pro: "pressing semi-professionnel", industriel: "pressing industriel",
+  };
 
   function copyLink() {
-    if (aiResult?.reportUrl) {
-      navigator.clipboard.writeText(aiResult.reportUrl);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
+    if (result?.reportUrl) {
+      navigator.clipboard.writeText(result.reportUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
-  const stepNum = { quick: 1, details: 2, capture: 3, report: 4 }[step];
+  return (
+    <div className="w-full max-w-2xl mx-auto space-y-6">
+      {/* WhatsApp sent confirmation */}
+      {result?.whatsappSent && (
+        <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
+          <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-green-800 dark:text-green-400">Rapport envoyé sur WhatsApp ✓</p>
+            <p className="text-xs text-green-700 dark:text-green-500">Vérifiez vos messages. Vous recevrez des conseils dans les prochains jours.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Click-to-chat fallback */}
+      {result?.clickToChatUrl && (
+        <div className="flex items-center gap-3 bg-muted/50 border border-border rounded-xl px-4 py-3">
+          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+            <WaIcon />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">Recevoir ce rapport sur WhatsApp</p>
+            <p className="text-xs text-muted-foreground">Cliquez pour nous envoyer un message</p>
+          </div>
+          <a href={result.clickToChatUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white" data-testid="button-wa-chat">Ouvrir</Button>
+          </a>
+        </div>
+      )}
+
+      {/* Hero card */}
+      <div className="bg-gradient-to-br from-primary to-primary/80 text-white rounded-2xl p-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-white/5 rounded-2xl" />
+        <div className="relative">
+          <p className="text-white/80 text-sm mb-1">Bonjour {form.firstName} 👋</p>
+          <h2 className="text-xl font-bold mb-1">Votre estimation pour un {typeLabels[form.pressingType] ?? form.pressingType}</h2>
+          <p className="text-white/70 text-sm mb-5">📍 {form.city}, {countryLabel}</p>
+          <p className="text-xs font-medium text-white/70 uppercase tracking-wide mb-1">Budget de démarrage estimé</p>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-4xl font-black">{fmt(report?.totalBudget?.min)}</span>
+            <span className="text-2xl text-white/60">—</span>
+            <span className="text-4xl font-black">{fmt(report?.totalBudget?.max)}</span>
+            <span className="text-xl text-white/70">{currency}</span>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            {report?.breakdown?.equipment?.total && (
+              <div className="bg-white/20 rounded-lg px-3 py-1.5 text-sm">
+                📦 Équipements : {fmt(report.breakdown.equipment.total.min)} — {fmt(report.breakdown.equipment.total.max)} {currency}
+              </div>
+            )}
+            {report?.profitability?.estimatedRoiMonths && (
+              <div className="bg-white/20 rounded-lg px-3 py-1.5 text-sm">
+                📅 Retour invest. : {report.profitability.estimatedRoiMonths.min} — {report.profitability.estimatedRoiMonths.max} mois
+              </div>
+            )}
+            {report?.profitability?.estimatedMarginPct && (
+              <div className="bg-white/20 rounded-lg px-3 py-1.5 text-sm">
+                📊 Marge estimée : {report.profitability.estimatedMarginPct.min} — {report.profitability.estimatedMarginPct.max}%
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* CTAs */}
+      <div className="grid sm:grid-cols-2 gap-3 print:hidden">
+        <Button variant="outline" size="lg" className="h-14 gap-3 text-base"
+          onClick={() => window.print()} data-testid="button-print">
+          <Download className="w-5 h-5" />
+          <div className="text-left">
+            <div className="font-semibold text-sm">Télécharger le rapport</div>
+            <div className="text-xs text-muted-foreground">Format PDF</div>
+          </div>
+        </Button>
+        <a href={result?.expertUrl ?? "#"} target="_blank" rel="noopener noreferrer"
+          onClick={() => fetch(`/api/calculator/track-expert-contact/${leadId}`, { method: "POST" }).catch(() => {})}>
+          <Button size="lg" className="w-full h-14 gap-3 text-base bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/25"
+            data-testid="button-expert">
+            <WaIcon className="w-5 h-5 fill-white flex-shrink-0" />
+            <div className="text-left">
+              <div className="font-semibold text-sm">Parler à un expert</div>
+              <div className="text-xs text-white/80">Réponse WhatsApp rapide</div>
+            </div>
+          </Button>
+        </a>
+      </div>
+
+      {/* Trust signals */}
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground print:hidden">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="w-4 h-4 text-green-500" />
+          <span>Réponse généralement en moins de 2 heures</span>
+        </div>
+        <div className="hidden sm:block w-px h-4 bg-border" />
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-primary" />
+          <span>+5 ans d'expérience · Plus de 20 entrepreneurs accompagnés</span>
+        </div>
+      </div>
+
+      {/* Detail accordion */}
+      <div className="border border-border rounded-xl overflow-hidden">
+        <button type="button" onClick={() => setShowDetail(!showDetail)}
+          className="w-full flex items-center justify-between px-5 py-4 hover:bg-muted/30 transition-colors"
+          data-testid="button-toggle-detail">
+          <span className="font-semibold text-sm">Voir le détail complet de l'estimation</span>
+          <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", showDetail && "rotate-180")} />
+        </button>
+        {showDetail && (
+          <div className="px-5 pb-5 space-y-5 border-t border-border">
+            <DetailSection title="Équipements" icon="⚙️" data={report?.breakdown?.equipment} currency={currency} />
+            <DetailSection title="Aménagement & Installation" icon="🔨" data={report?.breakdown?.setup} currency={currency} />
+            <DetailSection title="Démarches administratives" icon="📋" data={report?.breakdown?.administrative} currency={currency} />
+            <MonthlyChargesSection data={report?.monthlyCharges} currency={currency} />
+            <ProfitabilitySection data={report?.profitability} currency={currency} />
+            <LocalInsightsSection data={report?.localInsights} city={form.city} countryLabel={countryLabel} />
+            {report?.risks?.length > 0 && (
+              <div>
+                <p className="font-semibold text-sm mb-2">⚠️ Points de vigilance</p>
+                <ul className="space-y-1">
+                  {report.risks.map((r: string, i: number) => (
+                    <li key={i} className="text-sm text-muted-foreground flex gap-2"><span className="flex-shrink-0">•</span><span>{r}</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {report?.recommendations?.length > 0 && (
+              <div>
+                <p className="font-semibold text-sm mb-2">✅ Recommandations</p>
+                <ul className="space-y-1">
+                  {report.recommendations.map((r: string, i: number) => (
+                    <li key={i} className="text-sm text-muted-foreground flex gap-2"><span className="flex-shrink-0">•</span><span>{r}</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* PressFlow trial CTA */}
+      <div className="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950 border border-border rounded-2xl p-6 print:hidden">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20">
+            <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-white stroke-2">
+              <path d="M2 12 C5 9, 8 15, 12 12 C16 9, 19 15, 22 12" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-base mb-1">Prêt à ouvrir votre pressing ?</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              PressFlow vous aide à gérer chaque commande, chaque paiement et votre rentabilité — conçu pour les pressings africains.
+            </p>
+            <div className="bg-white dark:bg-slate-800 border border-border rounded-xl px-4 py-3 mb-3">
+              <p className="text-sm font-semibold text-primary">
+                🎁 30 jours gratuits <span className="text-muted-foreground font-normal">OU</span> vos 50 premières commandes
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">selon ce qui dure le plus longtemps</p>
+              <div className="flex items-center gap-3 mt-2">
+                <span className="flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Sans carte bancaire
+                </span>
+                <span className="flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Sans engagement
+                </span>
+              </div>
+            </div>
+            <Button asChild>
+              <a href="/auth" data-testid="button-trial">Démarrer mon essai gratuit →</a>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Shareable link + disclaimer */}
+      <div className="space-y-3 print:hidden">
+        {result?.reportUrl && (
+          <div className="flex items-center gap-2 bg-muted/40 rounded-xl px-4 py-3">
+            <Link2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <span className="text-xs text-muted-foreground flex-1 truncate">{result.reportUrl}</span>
+            <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
+              {copied ? "Copié !" : "Copier"}
+            </Button>
+          </div>
+        )}
+        {report?.disclaimer && (
+          <p className="text-xs text-muted-foreground text-center leading-relaxed">{report.disclaimer}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main calculator component ───────────────────────────────────────────────
+export default function CalculatorPage() {
+  const { toast } = useToast();
+
+  const saved = typeof window !== "undefined" ? sessionStorage.getItem(SESSION_KEY) : null;
+  const initial = saved ? (() => { try { return JSON.parse(saved); } catch { return null; } })() : null;
+
+  const [step, setStep]         = useState<Step>(initial?.step ?? 1);
+  const [leadId, setLeadId]     = useState<number | null>(initial?.leadId ?? null);
+  const [form, setForm]         = useState<FormState>({ ...EMPTY_FORM, ...initial?.form });
+  const [result, setResult]     = useState<any>(initial?.result ?? null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentLoadingMsg, setCurrentLoadingMsg] = useState(0);
+
+  const meta = COUNTRY_META[form.country];
+
+  useEffect(() => {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ step, leadId, form, result }));
+  }, [step, leadId, form, result]);
+
+  useEffect(() => {
+    if (step !== 4 || result) return;
+    const iv = setInterval(() => setCurrentLoadingMsg(i => (i + 1) % 8), 3500);
+    return () => clearInterval(iv);
+  }, [step, result]);
+
+  // Page 1 submit → save lead
+  async function handlePage1Submit() {
+    setIsLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/calculator/save-lead", {
+        firstName: form.firstName, lastName: form.lastName,
+        phone: form.phone, whatsappOptIn: form.whatsappOptIn,
+        email: form.email || null, country: form.country, city: form.city,
+        referralSource: form.referralSource || null,
+      });
+      const data = await res.json();
+      setLeadId(data.leadId);
+      setStep(2);
+    } catch (err: any) {
+      toast({ title: "Erreur", description: err.message ?? "Erreur réseau", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Page 2 select → update lead & auto-advance
+  async function handlePage2Select(pressingType: string) {
+    setForm(f => ({ ...f, pressingType }));
+    if (leadId) {
+      apiRequest("PATCH", `/api/calculator/update-lead/${leadId}`, { pressingType, completedPage: 2 }).catch(() => {});
+    }
+    setStep(3);
+  }
+
+  // Page 3 select → update lead & trigger AI generation
+  async function handlePage3Select(dailyCapacity: string) {
+    setForm(f => ({ ...f, dailyCapacity }));
+    if (leadId) {
+      try {
+        await apiRequest("PATCH", `/api/calculator/update-lead/${leadId}`, { dailyCapacity, completedPage: 3 });
+      } catch {}
+    }
+    setStep(4);
+    setCurrentLoadingMsg(0);
+    if (!leadId) {
+      toast({ title: "Erreur", description: "Session perdue. Veuillez recommencer.", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await apiRequest("POST", `/api/calculator/generate-report/${leadId}`, {});
+      const data = await res.json();
+      setResult(data);
+    } catch (err: any) {
+      toast({ title: "Erreur", description: err.message ?? "Erreur lors de la génération", variant: "destructive" });
+      setStep(3);
+    }
+  }
+
+  function handleBack() {
+    if (step === 2) setStep(1);
+    else if (step === 3) setStep(2);
+    else if (step === 4 && !result) setStep(3);
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
       {/* Nav */}
-      <nav className="bg-white dark:bg-slate-900 border-b border-border px-4 py-3 flex items-center justify-between">
+      <nav className="bg-white dark:bg-slate-900 border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <a href="/" className="flex items-center gap-2">
           <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
             <Calculator className="w-4 h-4 text-white" />
@@ -182,689 +797,55 @@ export default function CalculatorPage() {
         </a>
       </nav>
 
+      {/* Print header (hidden on screen) */}
+      <div className="hidden print:block px-8 py-6 border-b">
+        <h1 className="text-2xl font-bold">Rapport PressFlow — Calculateur de démarrage pressing</h1>
+        <p className="text-sm text-muted-foreground mt-1">{form.city} · Généré le {new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</p>
+      </div>
+
       <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Header */}
-        {step !== "report" && (
-          <div className="text-center mb-8">
+        {/* Header (steps 1-3 only) */}
+        {step <= 3 && (
+          <div className="text-center mb-6 print:hidden">
             <span className="inline-block bg-primary/10 text-primary text-sm px-4 py-1.5 rounded-full font-medium mb-3">
               Outil gratuit · Résultat par WhatsApp en 2 minutes
             </span>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Calculateur de démarrage pressing
-            </h1>
-            <p className="text-muted-foreground">
-              Combien coûte l'ouverture d'un pressing dans votre pays ?
-            </p>
+            <h1 className="text-3xl font-bold mb-1">Calculateur de démarrage pressing</h1>
+            <p className="text-muted-foreground">Combien coûte l'ouverture d'un pressing dans votre pays ?</p>
           </div>
         )}
 
-        {/* Step indicator */}
-        {step !== "report" && (
-          <div className="flex items-center justify-center gap-2 mb-8">
-            {[1, 2, 3].map(n => (
-              <div key={n} className="flex items-center gap-2">
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors",
-                  stepNum >= n ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-                )}>
-                  {stepNum > n ? <CheckCircle2 className="w-4 h-4" /> : n}
-                </div>
-                {n < 3 && <div className={cn("w-12 h-0.5 transition-colors", stepNum > n ? "bg-primary" : "bg-muted")} />}
-              </div>
-            ))}
-          </div>
+        <ProgressBar step={step} />
+
+        {/* Back button */}
+        {step > 1 && step < 4 && (
+          <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 print:hidden">
+            ← Retour
+          </button>
+        )}
+        {step === 4 && result && (
+          <button onClick={() => { setResult(null); setStep(3); }} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 print:hidden">
+            ← Nouvelle estimation
+          </button>
         )}
 
-        {/* ── STEP 1: Quick Estimate ── */}
-        {step === "quick" && (
-          <form onSubmit={handleQuickSubmit} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-border p-6 space-y-5">
-            <h2 className="font-semibold text-lg">Votre projet en 4 questions</h2>
-
-            <div>
-              <Label>Pays *</Label>
-              <Select value={form.country} onValueChange={v => setForm(f => ({ ...f, country: v, city: "" }))}>
-                <SelectTrigger className="mt-1" data-testid="select-country">
-                  <SelectValue placeholder="Choisissez votre pays" />
-                </SelectTrigger>
-                <SelectContent>
-                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Afrique subsaharienne</div>
-                  {COUNTRIES.filter(c => c.zone === "africa").map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1">Maghreb</div>
-                  {COUNTRIES.filter(c => c.zone === "maghreb").map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1">Europe</div>
-                  {COUNTRIES.filter(c => c.zone === "europe").map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Ville *</Label>
-              <Input
-                value={form.city}
-                onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                placeholder={form.country ? CITY_PLACEHOLDERS[form.country] : "ex: Douala, Dakar, Paris..."}
-                className="mt-1"
-                data-testid="input-city"
-              />
-            </div>
-
-            <div>
-              <Label>Type de pressing *</Label>
-              <Select value={form.pressingType} onValueChange={v => setForm(f => ({ ...f, pressingType: v }))}>
-                <SelectTrigger className="mt-1" data-testid="select-pressing-type">
-                  <SelectValue placeholder="Choisissez un type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="quartier">
-                    <div>
-                      <div className="font-medium">Pressing de quartier</div>
-                      <div className="text-xs text-muted-foreground">Petite clientèle locale, moins de 50 kg/jour</div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="semi_pro">
-                    <div>
-                      <div className="font-medium">Semi-professionnel</div>
-                      <div className="text-xs text-muted-foreground">50 à 150 kg/jour, clientèle établie</div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="industriel">
-                    <div>
-                      <div className="font-medium">Industriel</div>
-                      <div className="text-xs text-muted-foreground">+150 kg/jour, hôtels, hôpitaux</div>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Capacité journalière visée *</Label>
-              <Select value={form.dailyCapacity} onValueChange={v => setForm(f => ({ ...f, dailyCapacity: v }))}>
-                <SelectTrigger className="mt-1" data-testid="select-daily-capacity">
-                  <SelectValue placeholder="Choisissez une capacité" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="less_50">Moins de 50 kg/jour</SelectItem>
-                  <SelectItem value="50_150">50 à 150 kg/jour</SelectItem>
-                  <SelectItem value="more_150">Plus de 150 kg/jour</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={quickMutation.isPending} data-testid="button-quick-estimate">
-              {quickMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Calcul en cours...</> : "Voir mon estimation →"}
-            </Button>
-          </form>
+        {/* Pages */}
+        {step === 1 && (
+          <Page1 form={form} setForm={setForm} onSubmit={handlePage1Submit} isLoading={isLoading} />
         )}
-
-        {/* ── STEP 2: Details + Quick Result ── */}
-        {step === "details" && quickResult && (
-          <div className="space-y-5">
-            {/* Quick result card */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-border p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <h2 className="font-semibold text-lg">Estimation rapide</h2>
-                <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Instantanée</span>
-              </div>
-
-              <div className="text-center py-4 bg-gradient-to-br from-primary/5 to-blue-50 dark:to-slate-800 rounded-xl mb-5">
-                <p className="text-sm text-muted-foreground mb-1">Budget de démarrage estimé</p>
-                <p className="text-3xl font-bold text-primary">
-                  {fmt(quickResult.minBudget, currency)} – {fmt(quickResult.maxBudget, currency)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">Fourchette indicative · Rapport IA détaillé disponible</p>
-              </div>
-
-              <div className="space-y-2 mb-5">
-                <BudgetBar label="Équipements" min={quickResult.breakdownSummary.equipment.min} max={quickResult.breakdownSummary.equipment.max} currency={currency} color="bg-primary" />
-                <BudgetBar label="Aménagement" min={quickResult.breakdownSummary.setup.min} max={quickResult.breakdownSummary.setup.max} currency={currency} color="bg-blue-400" />
-                <BudgetBar label="Fonds roulement" min={quickResult.breakdownSummary.workingCapital.min} max={quickResult.breakdownSummary.workingCapital.max} currency={currency} color="bg-sky-400" />
-                <BudgetBar label="Administratif" min={quickResult.breakdownSummary.administrative.min} max={quickResult.breakdownSummary.administrative.max} currency={currency} color="bg-indigo-300" />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 text-center border-t border-border pt-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Charges/mois</p>
-                  <p className="text-sm font-semibold">{fmt(quickResult.monthlyCharges.min, currency)}</p>
-                  <p className="text-xs text-muted-foreground">minimum</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Seuil rentabilité</p>
-                  <p className="text-sm font-semibold">{quickResult.breakEvenKgPerMonth.min}–{quickResult.breakEvenKgPerMonth.max} kg</p>
-                  <p className="text-xs text-muted-foreground">par mois</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">ROI estimé</p>
-                  <p className="text-sm font-semibold">{quickResult.estimatedRoiMonths.min}–{quickResult.estimatedRoiMonths.max}</p>
-                  <p className="text-xs text-muted-foreground">mois</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Details form */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-border p-6 space-y-5">
-              <div>
-                <h2 className="font-semibold text-lg">Affinez votre rapport</h2>
-                <p className="text-sm text-muted-foreground">Ces informations permettent à notre IA de personnaliser votre analyse</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Avez-vous un local ?</Label>
-                  <Select value={form.hasLocalAlready} onValueChange={v => setForm(f => ({ ...f, hasLocalAlready: v }))}>
-                    <SelectTrigger className="mt-1" data-testid="select-has-local"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="yes">Oui, disponible</SelectItem>
-                      <SelectItem value="searching">En négociation</SelectItem>
-                      <SelectItem value="no">À trouver</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Surface (m²)</Label>
-                  <Input type="number" value={form.localSurface} onChange={e => setForm(f => ({ ...f, localSurface: e.target.value }))} placeholder="ex: 80" className="mt-1" data-testid="input-surface" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Eau fiable ?</Label>
-                  <Select value={form.reliableWater} onValueChange={v => setForm(f => ({ ...f, reliableWater: v }))}>
-                    <SelectTrigger className="mt-1" data-testid="select-water"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="yes">Oui, stable</SelectItem>
-                      <SelectItem value="sometimes">Parfois</SelectItem>
-                      <SelectItem value="no">Souvent coupures</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Électricité stable ?</Label>
-                  <Select value={form.reliablePower} onValueChange={v => setForm(f => ({ ...f, reliablePower: v }))}>
-                    <SelectTrigger className="mt-1" data-testid="select-power"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="yes">Oui, stable</SelectItem>
-                      <SelectItem value="sometimes">Coupures fréquentes</SelectItem>
-                      <SelectItem value="no">Très instable</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Employés prévus</Label>
-                  <Input type="number" value={form.plannedEmployees} onChange={e => setForm(f => ({ ...f, plannedEmployees: e.target.value }))} placeholder="ex: 2" className="mt-1" data-testid="input-employees" />
-                </div>
-                <div>
-                  <Label>Capital disponible</Label>
-                  <Select value={form.availableCapital} onValueChange={v => setForm(f => ({ ...f, availableCapital: v }))}>
-                    <SelectTrigger className="mt-1" data-testid="select-capital"><SelectValue placeholder="Fourchette" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="less_5m">Moins de 5M FCFA</SelectItem>
-                      <SelectItem value="5_10m">5M – 10M FCFA</SelectItem>
-                      <SelectItem value="10_20m">10M – 20M FCFA</SelectItem>
-                      <SelectItem value="more_20m">Plus de 20M FCFA</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <Label>Objectif business</Label>
-                <Select value={form.businessGoal} onValueChange={v => setForm(f => ({ ...f, businessGoal: v }))}>
-                  <SelectTrigger className="mt-1" data-testid="select-goal"><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="primary">Activité principale</SelectItem>
-                    <SelectItem value="secondary">Activité complémentaire</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex gap-3">
-                <Button type="button" variant="outline" onClick={() => setStep("quick")} className="flex-1" data-testid="button-back-quick">
-                  <ArrowLeft className="w-4 h-4 mr-2" />Retour
-                </Button>
-                <Button type="button" onClick={() => setStep("capture")} className="flex-1" data-testid="button-next-capture">
-                  Obtenir le rapport IA <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </div>
-          </div>
+        {step === 2 && (
+          <Page2 form={form} onSelect={handlePage2Select} />
         )}
-
-        {/* ── STEP 3: Contact Capture ── */}
-        {step === "capture" && (
-          <form onSubmit={handleCaptureSubmit} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-border p-6 space-y-5">
-            <div>
-              <h2 className="font-semibold text-lg">Recevez votre rapport personnalisé</h2>
-              <p className="text-sm text-muted-foreground">Notre IA va analyser les données actuelles du marché à {form.city}</p>
-            </div>
-
-            <div>
-              <Label>Votre prénom *</Label>
-              <Input
-                value={form.firstName}
-                onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
-                placeholder="ex: Kofi"
-                className="mt-1"
-                data-testid="input-firstname"
-              />
-            </div>
-
-            {/* Africa zone: WhatsApp required, email optional */}
-            {contactZone === "africa" && (
-              <>
-                <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
-                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                    {WA_SVG}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-green-800 dark:text-green-400">Rapport envoyé sur WhatsApp en 2 minutes</p>
-                    <p className="text-xs text-green-700 dark:text-green-500">Recevez votre rapport directement dans vos messages WhatsApp</p>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Numéro WhatsApp *<span className="ml-2 text-xs text-muted-foreground font-normal">Votre rapport sera envoyé ici</span></Label>
-                  <div className="flex gap-2 mt-1">
-                    <div className="flex items-center px-3 bg-muted border border-border rounded-lg text-sm font-medium text-muted-foreground flex-shrink-0">
-                      {dialCode}
-                    </div>
-                    <Input
-                      type="tel"
-                      value={whatsappLocal}
-                      onChange={e => {
-                        setWhatsappLocal(e.target.value);
-                        setForm(f => ({ ...f, whatsapp: dialCode + e.target.value.replace(/\s/g, "") }));
-                      }}
-                      placeholder="6XX XXX XXX"
-                      className="flex-1"
-                      data-testid="input-whatsapp"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                    Ce numéro doit être actif sur WhatsApp
-                  </p>
-                </div>
-
-                <div>
-                  <Label className="flex items-center gap-2">
-                    Email
-                    <span className="text-xs font-normal bg-muted text-muted-foreground px-1.5 py-0.5 rounded">optionnel</span>
-                  </Label>
-                  <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="votre@email.com" className="mt-1" data-testid="input-email" />
-                </div>
-
-                <p className="text-xs text-muted-foreground text-center">
-                  🔒 Numéro protégé. Jamais partagé. Répondez STOP pour vous désinscrire.
-                </p>
-              </>
-            )}
-
-            {/* Maghreb zone: user chooses WhatsApp or Email */}
-            {contactZone === "maghreb" && (
-              <>
-                <div>
-                  <Label>Comment recevoir votre rapport ?</Label>
-                  <div className="grid grid-cols-2 gap-3 mt-2">
-                    {([{ value: "whatsapp", icon: "💬", label: "WhatsApp" }, { value: "email", icon: "📧", label: "Email" }] as const).map(opt => (
-                      <button key={opt.value} type="button"
-                        onClick={() => setPreferredChannel(opt.value)}
-                        data-testid={`button-channel-${opt.value}`}
-                        className={cn(
-                          "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                          preferredChannel === opt.value
-                            ? opt.value === "whatsapp" ? "border-green-500 bg-green-50 dark:bg-green-900/20" : "border-primary bg-primary/5"
-                            : "border-border hover:border-muted-foreground"
-                        )}
-                      >
-                        <span className="text-2xl">{opt.icon}</span>
-                        <span className="text-sm font-semibold">{opt.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {preferredChannel === "whatsapp" ? (
-                  <div>
-                    <Label>Numéro WhatsApp *</Label>
-                    <div className="flex gap-2 mt-1">
-                      <div className="flex items-center px-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground">{dialCode}</div>
-                      <Input type="tel" value={whatsappLocal} onChange={e => { setWhatsappLocal(e.target.value); setForm(f => ({ ...f, whatsapp: dialCode + e.target.value.replace(/\s/g, ""), email: "" })); }} placeholder="6XX XXX XXX" className="flex-1" data-testid="input-whatsapp" />
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <Label>Email *</Label>
-                    <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value, whatsapp: "" }))} className="mt-1" data-testid="input-email" />
-                  </div>
-                )}
-
-                <div>
-                  <Label className="flex items-center gap-2">
-                    {preferredChannel === "whatsapp" ? "Email" : "WhatsApp"}
-                    <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">optionnel</span>
-                  </Label>
-                  {preferredChannel === "whatsapp" ? (
-                    <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1" placeholder="votre@email.com" data-testid="input-email-optional" />
-                  ) : (
-                    <div className="flex gap-2 mt-1">
-                      <div className="flex items-center px-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground">{dialCode}</div>
-                      <Input type="tel" value={whatsappLocal} onChange={e => { setWhatsappLocal(e.target.value); setForm(f => ({ ...f, whatsapp: dialCode + e.target.value.replace(/\s/g, "") })); }} placeholder="6XX XXX XXX" className="flex-1" data-testid="input-whatsapp-optional" />
-                    </div>
-                  )}
-                </div>
-
-                <p className="text-xs text-muted-foreground text-center">
-                  🔒 Données protégées. Jamais partagées. Désinscription en 1 clic.
-                </p>
-              </>
-            )}
-
-            {/* Europe zone: email required, WhatsApp optional */}
-            {contactZone === "europe" && (
-              <>
-                <div>
-                  <Label>Email *</Label>
-                  <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1" required data-testid="input-email" />
-                  <p className="text-xs text-muted-foreground mt-1">Votre rapport sera envoyé à cette adresse</p>
-                </div>
-
-                <div>
-                  <Label className="flex items-center gap-2">
-                    WhatsApp
-                    <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">optionnel</span>
-                  </Label>
-                  <p className="text-xs text-muted-foreground mb-1">Recevez aussi des conseils personnalisés par WhatsApp</p>
-                  <div className="flex gap-2">
-                    <div className="flex items-center px-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground">{dialCode}</div>
-                    <Input type="tel" value={whatsappLocal} onChange={e => { setWhatsappLocal(e.target.value); setForm(f => ({ ...f, whatsapp: dialCode + e.target.value.replace(/\s/g, "") })); }} placeholder="6XX XXX" className="flex-1" data-testid="input-whatsapp" />
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground text-center">
-                  🔒 Données protégées conformément au RGPD. Désinscription en 1 clic.
-                </p>
-              </>
-            )}
-
-            <div className="flex gap-3">
-              <Button type="button" variant="outline" onClick={() => setStep("details")} className="flex-1" data-testid="button-back-details">
-                <ArrowLeft className="w-4 h-4 mr-2" />Retour
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                disabled={aiMutation.isPending || !form.firstName || (contactZone === "africa" && !form.whatsapp) || (contactZone === "europe" && !form.email)}
-                data-testid="button-generate-report"
-              >
-                {aiMutation.isPending ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Génération...</>
-                ) : (
-                  "Générer mon rapport IA →"
-                )}
-              </Button>
-            </div>
-
-            {/* Loading overlay */}
-            {aiMutation.isPending && (
-              <div className="mt-4 p-4 bg-primary/5 rounded-xl border border-primary/20">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary flex-shrink-0" />
-                  <p className="text-sm text-primary font-medium animate-pulse">{loadingMessages[loadingMsgIdx]}</p>
-                </div>
-                <div className="mt-3 bg-muted rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: `${((loadingMsgIdx + 1) / loadingMessages.length) * 100}%`, transition: "width 3s ease" }} />
-                </div>
-              </div>
-            )}
-          </form>
+        {step === 3 && (
+          <Page3 form={form} onSelect={handlePage3Select} />
         )}
-
-        {/* ── STEP 4: Report ── */}
-        {step === "report" && aiResult && (
-          <div className="space-y-5">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold mb-1">Votre rapport est prêt 🎉</h1>
-              <p className="text-muted-foreground text-sm">{form.city}, {countryLabel}</p>
-            </div>
-
-            {/* WhatsApp sent confirmation */}
-            {aiResult.whatsappSent && (
-              <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
-                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-green-800 dark:text-green-400">Rapport envoyé sur WhatsApp ✓</p>
-                  <p className="text-xs text-green-700 dark:text-green-500">Vérifiez vos messages. Vous recevrez des conseils personnalisés dans les prochains jours.</p>
-                </div>
-              </div>
-            )}
-
-            {/* Click-to-chat fallback */}
-            {aiResult.clickToChatUrl && (
-              <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">{WA_SVG}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">Recevoir ce rapport sur WhatsApp</p>
-                  <p className="text-xs text-muted-foreground">Cliquez pour nous contacter et recevoir votre rapport</p>
-                </div>
-                <a href={aiResult.clickToChatUrl} target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white flex-shrink-0" data-testid="button-whatsapp-chat">Ouvrir WhatsApp</Button>
-                </a>
-              </div>
-            )}
-
-            {/* Shareable link */}
-            {aiResult.reportUrl && (
-              <div className="flex items-center gap-2 bg-muted/50 rounded-xl px-4 py-3">
-                <Link2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs text-muted-foreground flex-1 truncate">{aiResult.reportUrl}</span>
-                <Button size="sm" variant="outline" onClick={copyLink} data-testid="button-copy-link">
-                  {copiedLink ? "Copié !" : "Copier le lien"}
-                </Button>
-              </div>
-            )}
-
-            <ReportContent report={aiResult.report} currency={currency} />
-
-            {/* CTAs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-              <a href="/auth">
-                <Button className="w-full" size="lg" data-testid="button-cta-trial">
-                  Essai gratuit PressFlow 14 jours →
-                </Button>
-              </a>
-              <a href="https://wa.me/237699000000" target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" className="w-full border-green-500 text-green-700 hover:bg-green-50" size="lg" data-testid="button-cta-training">
-                  <div className="w-4 h-4 mr-2 flex-shrink-0 bg-green-500 rounded-full flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-3 h-3 fill-white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                  </div>
-                  Formation pressing
-                </Button>
-              </a>
-            </div>
-          </div>
+        {step === 4 && !result && (
+          <LoadingState city={form.city} countryLabel={meta?.label ?? form.country} currentMsg={currentLoadingMsg} />
+        )}
+        {step === 4 && result && (
+          <ResultPage report={result.report} form={form} result={result} leadId={leadId!} />
         )}
       </div>
-    </div>
-  );
-}
-
-export function ReportContent({ report, currency }: { report: any; currency: string }) {
-  if (!report) return null;
-  const fmtN = (n: number) => n?.toLocaleString("fr-FR") ?? "—";
-
-  return (
-    <div className="space-y-4">
-      {/* Summary */}
-      {report.summary && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-2">Résumé</h3>
-          <p className="text-sm text-muted-foreground">{report.summary}</p>
-        </div>
-      )}
-
-      {/* Budget total */}
-      {report.totalBudget && (
-        <div className="bg-gradient-to-br from-primary/5 to-blue-50 dark:to-slate-800 rounded-2xl border border-primary/20 p-5">
-          <h3 className="font-semibold mb-1">Budget total de démarrage</h3>
-          <p className="text-3xl font-bold text-primary">
-            {fmtN(report.totalBudget.min)} – {fmtN(report.totalBudget.max)} {report.totalBudget.currency}
-          </p>
-        </div>
-      )}
-
-      {/* Equipment breakdown */}
-      {report.breakdown?.equipment && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3">Équipements</h3>
-          <div className="space-y-2">
-            {report.breakdown.equipment.items?.map((item: any, i: number) => (
-              <div key={i} className="flex items-start justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
-                <div>
-                  <span className="font-medium">{item.name}</span>
-                  {item.quantity > 1 && <span className="text-muted-foreground"> ×{item.quantity}</span>}
-                  {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
-                </div>
-                <span className="text-right shrink-0 text-muted-foreground">
-                  {fmtN(item.unitCost?.min)} – {fmtN(item.unitCost?.max)}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 pt-3 border-t border-border flex justify-between font-semibold text-sm">
-            <span>Total équipements</span>
-            <span>{fmtN(report.breakdown.equipment.total?.min)} – {fmtN(report.breakdown.equipment.total?.max)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Monthly charges */}
-      {report.monthlyCharges && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3">Charges mensuelles</h3>
-          <div className="space-y-2">
-            {report.monthlyCharges.items?.map((item: any, i: number) => (
-              <div key={i} className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{item.category}</span>
-                <span>{fmtN(item.min)} – {fmtN(item.max)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 pt-3 border-t border-border flex justify-between font-semibold text-sm">
-            <span>Total mensuel</span>
-            <span>{fmtN(report.monthlyCharges.total?.min)} – {fmtN(report.monthlyCharges.total?.max)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Profitability */}
-      {report.profitability && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            Rentabilité estimée
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="text-xs text-muted-foreground">Seuil de rentabilité</p>
-              <p className="text-lg font-bold">{fmtN(report.profitability.breakEvenKgPerMonth)} kg</p>
-              <p className="text-xs text-muted-foreground">par mois</p>
-            </div>
-            <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="text-xs text-muted-foreground">ROI estimé</p>
-              <p className="text-lg font-bold">{report.profitability.estimatedRoiMonths?.min}–{report.profitability.estimatedRoiMonths?.max} mois</p>
-              <p className="text-xs text-muted-foreground">retour investissement</p>
-            </div>
-            <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="text-xs text-muted-foreground">Revenu mensuel estimé</p>
-              <p className="text-lg font-bold text-green-600">{fmtN(report.profitability.estimatedMonthlyRevenue?.min)}</p>
-              <p className="text-xs text-muted-foreground">minimum</p>
-            </div>
-            <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="text-xs text-muted-foreground">Marge estimée</p>
-              <p className="text-lg font-bold">{report.profitability.estimatedMarginPct?.min}–{report.profitability.estimatedMarginPct?.max}%</p>
-              <p className="text-xs text-muted-foreground">bénéfice net</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Local insights */}
-      {report.localInsights && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3">Contexte local</h3>
-          {report.localInsights.marketContext && (
-            <p className="text-sm text-muted-foreground mb-3">{report.localInsights.marketContext}</p>
-          )}
-          {report.localInsights.administrativeRequirements?.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Démarches administratives</p>
-              <ul className="space-y-1">
-                {report.localInsights.administrativeRequirements.map((req: string, i: number) => (
-                  <li key={i} className="text-sm flex gap-2"><span className="text-primary">✓</span>{req}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Risks */}
-      {report.risks?.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Risques à anticiper
-          </h3>
-          <ul className="space-y-2">
-            {report.risks.map((r: string, i: number) => (
-              <li key={i} className="text-sm flex gap-2 text-muted-foreground"><span className="text-amber-500 flex-shrink-0">⚠</span>{r}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Recommendations */}
-      {report.recommendations?.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3">Recommandations</h3>
-          <ul className="space-y-2">
-            {report.recommendations.map((r: string, i: number) => (
-              <li key={i} className="text-sm flex gap-2"><span className="text-primary">→</span>{r}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Next steps */}
-      {report.nextSteps?.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-border p-5">
-          <h3 className="font-semibold mb-3">Prochaines étapes</h3>
-          <ol className="space-y-2">
-            {report.nextSteps.map((s: string, i: number) => (
-              <li key={i} className="text-sm flex gap-3">
-                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                {s}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {/* Disclaimer */}
-      {report.disclaimer && (
-        <p className="text-xs text-muted-foreground text-center italic px-4">{report.disclaimer}</p>
-      )}
     </div>
   );
 }
