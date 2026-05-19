@@ -9,8 +9,13 @@ async function generateAiReport(data: {
   country: string; city: string; pressingType: string;
   dailyCapacity: string; countryLabel: string;
 }) {
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const { GoogleGenerativeAI } = await import("@google/generative-ai");
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+  const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    tools: [{ googleSearch: {} } as any],
+  });
 
   const typeLabels: Record<string, string> = {
     quartier:   "Pressing de quartier (petite clientèle locale, 1-2 machines)",
@@ -30,7 +35,7 @@ async function generateAiReport(data: {
     `- Localisation : ${data.city}, ${data.countryLabel}\n` +
     `- Type : ${typeLabels[data.pressingType] ?? data.pressingType}\n` +
     `- Capacité : ${capacityLabels[data.dailyCapacity] ?? data.dailyCapacity}\n\n` +
-    `Recherche sur internet les données actuelles pour ${data.city}, ${data.countryLabel} :\n` +
+    `Utilise Google Search pour trouver les données actuelles pour ${data.city}, ${data.countryLabel} :\n` +
     `1. Prix machines à laver professionnelles (10-20 kg) disponibles dans ce pays\n` +
     `2. Prix sécheuses professionnelles disponibles dans ce pays\n` +
     `3. Coût moyen loyer commercial 50-100m² dans cette ville\n` +
@@ -38,28 +43,30 @@ async function generateAiReport(data: {
     `5. Coût et disponibilité générateur (si pays à coupures fréquentes)\n` +
     `6. Démarches et coûts légaux pour créer une entreprise dans ce pays\n` +
     `7. Prix pratiqués par les pressings dans cette ville\n\n` +
-    `Réponds UNIQUEMENT en JSON valide sans texte avant ou après :\n` +
+    `Réponds UNIQUEMENT en JSON valide sans markdown, sans texte avant ou après. ` +
+    `Utilise la devise locale appropriée pour ${data.countryLabel}. ` +
+    `Voici le schéma JSON attendu :\n` +
     `{\n` +
     `  "summary": "résumé 2-3 phrases personnalisé pour ${data.city}",\n` +
     `  "totalBudget": { "min": number, "max": number, "currency": "FCFA" },\n` +
     `  "breakdown": {\n` +
     `    "equipment": {\n` +
     `      "total": { "min": number, "max": number },\n` +
-    `      "items": [{ "name": string, "quantity": number, "unitCost": { "min": number, "max": number }, "notes": string }]\n` +
+    `      "items": [{ "name": "string", "quantity": number, "unitCost": { "min": number, "max": number }, "notes": "string" }]\n` +
     `    },\n` +
     `    "setup": {\n` +
     `      "total": { "min": number, "max": number },\n` +
-    `      "items": [{ "name": string, "cost": { "min": number, "max": number }, "notes": string }]\n` +
+    `      "items": [{ "name": "string", "cost": { "min": number, "max": number }, "notes": "string" }]\n` +
     `    },\n` +
-    `    "workingCapital": { "min": number, "max": number, "description": string },\n` +
+    `    "workingCapital": { "min": number, "max": number, "description": "string" },\n` +
     `    "administrative": {\n` +
     `      "total": { "min": number, "max": number },\n` +
-    `      "items": [{ "name": string, "cost": { "min": number, "max": number }, "notes": string }]\n` +
+    `      "items": [{ "name": "string", "cost": { "min": number, "max": number }, "notes": "string" }]\n` +
     `    }\n` +
     `  },\n` +
     `  "monthlyCharges": {\n` +
     `    "total": { "min": number, "max": number },\n` +
-    `    "items": [{ "category": string, "min": number, "max": number }]\n` +
+    `    "items": [{ "category": "string", "min": number, "max": number }]\n` +
     `  },\n` +
     `  "profitability": {\n` +
     `    "breakEvenKgPerMonth": number,\n` +
@@ -69,36 +76,32 @@ async function generateAiReport(data: {
     `    "estimatedMarginPct": { "min": number, "max": number }\n` +
     `  },\n` +
     `  "localInsights": {\n` +
-    `    "rentContext": string,\n` +
-    `    "electricityContext": string,\n` +
-    `    "administrativeSteps": [string],\n` +
-    `    "marketContext": string\n` +
+    `    "rentContext": "string",\n` +
+    `    "electricityContext": "string",\n` +
+    `    "administrativeSteps": ["string"],\n` +
+    `    "marketContext": "string"\n` +
     `  },\n` +
-    `  "risks": [string],\n` +
-    `  "recommendations": [string],\n` +
-    `  "nextSteps": [string],\n` +
-    `  "sources": [string],\n` +
+    `  "risks": ["string"],\n` +
+    `  "recommendations": ["string"],\n` +
+    `  "nextSteps": ["string"],\n` +
+    `  "sources": ["string"],\n` +
     `  "generatedAt": "${new Date().toISOString()}",\n` +
-    `  "disclaimer": "Ces estimations sont basées sur des données collectées automatiquement et des moyennes sectorielles. Elles ne remplacent pas une étude de marché professionnelle."\n` +
+    `  "disclaimer": "Ces estimations sont basées sur des données de marché actuelles et des moyennes sectorielles. Elles ne remplacent pas une étude de marché professionnelle."\n` +
     `}`;
 
-  const response = await anthropic.messages.create({
-    model:      "claude-sonnet-4-5",
-    max_tokens: 4000,
-    tools:      [{ type: "web_search_20250305" as any, name: "web_search" }],
-    messages:   [{ role: "user", content: prompt }],
-  });
-
-  const text = response.content
-    .filter((b: any) => b.type === "text")
-    .map((b: any) => b.text)
-    .join("");
-
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
   const clean = text.replace(/```json\n?|```\n?/g, "").trim();
+
   try {
     return JSON.parse(clean);
   } catch {
-    throw new Error("Échec de la génération du rapport IA");
+    // Try to extract JSON from the response
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    throw new Error("Échec de la génération du rapport IA — format invalide");
   }
 }
 
@@ -172,7 +175,7 @@ export function registerCalculatorRoutes(app: Express) {
 
   // ── PAGE 4: Generate AI report ──
   app.post("/api/calculator/generate-report/:leadId", async (req, res) => {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.GEMINI_API_KEY) {
       return res.status(503).json({
         message: "La génération de rapport n'est pas encore configurée. Veuillez contacter l'administrateur.",
       });
