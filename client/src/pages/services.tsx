@@ -89,7 +89,7 @@ export default function Services() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">{t('services')}</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('services')}</h1>
           <p className="text-muted-foreground mt-1">{t('manage_services_subtitle')}</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>

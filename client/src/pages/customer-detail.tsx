@@ -165,20 +165,20 @@ export default function CustomerDetail() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button onClick={() => navigate("/orders")} data-testid="button-new-order">
-            <ShoppingBag className="w-4 h-4 mr-2" /> {t("new_order")}
+          <Button onClick={() => navigate("/orders")} size="sm" data-testid="button-new-order">
+            <ShoppingBag className="w-4 h-4 mr-1.5" /> {t("new_order")}
           </Button>
-          <Button variant="outline" onClick={() => setEditOpen(true)} data-testid="button-edit-profile">
-            <Pen className="w-4 h-4 mr-2" /> {t("edit_profile")}
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} data-testid="button-edit-profile">
+            <Pen className="w-4 h-4 mr-1.5" /> {t("edit_profile")}
           </Button>
           <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" data-testid="button-whatsapp">
-              <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+            <Button variant="outline" size="sm" data-testid="button-whatsapp">
+              <MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp
             </Button>
           </a>
           <a href={callLink}>
-            <Button variant="outline" data-testid="button-call">
-              <Phone className="w-4 h-4 mr-2" /> {t("call")}
+            <Button variant="outline" size="sm" data-testid="button-call">
+              <Phone className="w-4 h-4 mr-1.5" /> {t("call")}
             </Button>
           </a>
         </div>

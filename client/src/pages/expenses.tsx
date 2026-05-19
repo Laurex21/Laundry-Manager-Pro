@@ -85,7 +85,7 @@ export default function Expenses() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold" data-testid="text-expenses-title">{t('expenses')}</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-expenses-title">{t('expenses')}</h1>
           <p className="text-muted-foreground mt-1">Track business expenses and costs</p>
         </div>
         <div className="flex gap-3">
@@ -192,7 +192,7 @@ export default function Expenses() {
                 <span className="text-sm font-medium text-muted-foreground">Period Spending</span>
                 <TrendingDown className="w-4 h-4 text-orange-500" />
               </div>
-              <h2 className="text-3xl font-display font-bold text-orange-900 dark:text-orange-400">{symbol}{totalFilteredExpenses.toFixed(2)}</h2>
+              <h2 className="text-2xl sm:text-3xl font-display font-bold text-orange-900 dark:text-orange-400">{symbol}{totalFilteredExpenses.toFixed(2)}</h2>
               <p className="text-xs text-muted-foreground mt-2">Based on current filter</p>
             </CardContent>
           </Card>

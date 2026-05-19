@@ -86,7 +86,7 @@ export default function Orders() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">{t('orders')}</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('orders')}</h1>
           <p className="text-muted-foreground mt-1">Manage laundry orders and status</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -119,7 +119,8 @@ export default function Orders() {
         </Button>
       </div>
 
-      <Card className="border-border/50 shadow-sm overflow-hidden">
+      {/* Desktop table */}
+      <Card className="hidden md:block border-border/50 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
@@ -183,6 +184,45 @@ export default function Orders() {
           </table>
         </div>
       </Card>
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1,2,3].map(i => <div key={i} className="h-24 bg-muted/40 rounded-xl animate-pulse" />)}
+          </div>
+        ) : filteredOrders?.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-xl">
+            No orders found.
+          </div>
+        ) : (
+          filteredOrders?.map((order: any) => (
+            <Link key={order.id} href={`/orders/${order.id}`}>
+              <Card className="border-border/50 shadow-sm active:scale-[0.98] transition-transform cursor-pointer" data-testid={`card-order-${order.id}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-foreground truncate">{order.customer?.name || "Unknown"}</span>
+                        {order.hasReturnedItems && <AlertTriangle className="w-3.5 h-3.5 text-orange-500 shrink-0" />}
+                      </div>
+                      <p className="text-xs text-muted-foreground">#{order.id} · {format(new Date(order.createdAt), "MMM d, yyyy")}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.paymentStatus} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono font-bold text-base">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -33,7 +33,7 @@ export default function Employees() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold" data-testid="text-employees-title">{t("employees")}</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-employees-title">{t("employees")}</h1>
         </div>
         <Button onClick={() => { setEditing(null); setOpen(true); }} className="shadow-lg shadow-primary/25" data-testid="button-add-employee">
           <Plus className="w-4 h-4 mr-2" /> {t("add_employee")}

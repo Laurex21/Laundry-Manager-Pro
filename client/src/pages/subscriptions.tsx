@@ -36,7 +36,7 @@ export default function Subscriptions() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <h1 className="text-3xl font-display font-bold" data-testid="text-subscriptions-title">{t("subscription")}</h1>
+      <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-subscriptions-title">{t("subscription")}</h1>
 
       {currentSub && (
         <Card className="shadow-sm border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20" data-testid="card-current-subscription">

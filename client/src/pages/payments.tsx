@@ -193,7 +193,7 @@ export default function Payments() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold">{t('payments') || 'Payments'}</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('payments') || 'Payments'}</h1>
           <p className="text-muted-foreground mt-1">Record and manage order payments</p>
         </div>
       </div>

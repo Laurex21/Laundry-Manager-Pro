@@ -61,8 +61,8 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-background overflow-hidden">
-      <div className="relative flex flex-col justify-between p-10 lg:p-16 bg-gradient-to-br from-primary/90 to-blue-900 text-white overflow-hidden">
+    <div className="min-h-screen lg:grid lg:grid-cols-2 bg-background overflow-hidden">
+      <div className="hidden lg:flex relative flex-col justify-between p-16 bg-gradient-to-br from-primary/90 to-blue-900 text-white overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
           <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-white/10 blur-3xl"></div>
           <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] rounded-full bg-blue-400/20 blur-3xl"></div>
@@ -107,7 +107,14 @@ export default function AuthPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center p-8 bg-background">
+      <div className="flex flex-col items-center justify-center min-h-screen p-6 sm:p-8 bg-background">
+        {/* Mobile-only brand header */}
+        <div className="lg:hidden flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+            <Shirt className="w-6 h-6 text-white" />
+          </div>
+          <span className="font-display font-bold text-xl tracking-tight">CleanEase</span>
+        </div>
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
             <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">

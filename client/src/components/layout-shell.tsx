@@ -5,7 +5,7 @@ import { useCurrency, type Currency } from "@/hooks/use-currency";
 import { 
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
-  Settings, Building2, ChevronDown
+  Settings, Building2, ChevronDown, MoreHorizontal
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ const ALL_NAV_ITEMS = [
   { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
 ];
 
+const BOTTOM_NAV_PAGES = ["dashboard", "orders", "customers", "payments"];
+
 const LANGUAGES = [
   { code: "en", label: "English", short: "EN" },
   { code: "fr", label: "Français", short: "FR" },
@@ -55,9 +57,9 @@ function RegionalSettings() {
     <div className="flex items-center gap-1" data-testid="regional-settings">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" data-testid="button-language-toggle">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground px-2" data-testid="button-language-toggle">
             <Globe className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-xs font-medium">{currentLang.short}</span>
+            <span className="text-xs font-medium hidden sm:inline">{currentLang.short}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
@@ -74,9 +76,9 @@ function RegionalSettings() {
       <Separator orientation="vertical" className="h-5 mx-0.5" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" data-testid="button-currency-toggle">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground px-2" data-testid="button-currency-toggle">
             <Banknote className="w-4 h-4" strokeWidth={1.5} />
-            <span className="text-xs font-medium">{currentCurrency.code}</span>
+            <span className="text-xs font-medium hidden sm:inline">{currentCurrency.code}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -160,6 +162,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const { t } = useTranslation();
 
   const navItems = ALL_NAV_ITEMS.filter((item) => canAccess(item.page));
+  const bottomNavItems = ALL_NAV_ITEMS.filter((item) => BOTTOM_NAV_PAGES.includes(item.page) && canAccess(item.page));
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
@@ -236,20 +239,46 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </Sheet>
 
       <main className="flex-1 lg:ml-64 min-h-screen flex flex-col">
-        <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-20" data-testid="top-navbar">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} data-testid="button-mobile-menu">
+        <header className="h-14 bg-card border-b border-border flex items-center justify-between px-3 sm:px-4 sticky top-0 z-20" data-testid="top-navbar">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9" onClick={() => setMobileOpen(true)} data-testid="button-mobile-menu">
               <Menu className="w-5 h-5" />
             </Button>
-            <span className="font-display font-bold text-lg lg:hidden">CleanEase</span>
+            <span className="font-display font-bold text-base lg:hidden">CleanEase</span>
           </div>
           <RegionalSettings />
         </header>
 
-        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full flex-1">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full flex-1 pb-24 lg:pb-8">
           {children}
         </div>
       </main>
+
+      {/* Mobile bottom navigation */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border flex items-stretch" data-testid="bottom-nav">
+        {bottomNavItems.map((item) => {
+          const isActive = location === item.href;
+          return (
+            <Link key={item.href} href={item.href} className="flex-1">
+              <div className={cn(
+                "flex flex-col items-center justify-center gap-1 py-2.5 transition-colors",
+                isActive ? "text-primary" : "text-muted-foreground"
+              )} data-testid={`bottom-nav-${item.page}`}>
+                <item.icon className={cn("w-5 h-5", isActive && "stroke-[2.5]")} />
+                <span className="text-[10px] font-medium leading-none">{t(item.labelKey)}</span>
+              </div>
+            </Link>
+          );
+        })}
+        <button
+          className="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-muted-foreground transition-colors"
+          onClick={() => setMobileOpen(true)}
+          data-testid="bottom-nav-more"
+        >
+          <MoreHorizontal className="w-5 h-5" />
+          <span className="text-[10px] font-medium leading-none">More</span>
+        </button>
+      </nav>
     </div>
   );
 }

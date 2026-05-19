@@ -810,7 +810,7 @@ export default function CalculatorPage() {
             <span className="inline-block bg-primary/10 text-primary text-sm px-4 py-1.5 rounded-full font-medium mb-3">
               Outil gratuit · Résultat par WhatsApp en 2 minutes
             </span>
-            <h1 className="text-3xl font-bold mb-1">Calculateur de démarrage pressing</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1">Calculateur de démarrage pressing</h1>
             <p className="text-muted-foreground">Combien coûte l'ouverture d'un pressing dans votre pays ?</p>
           </div>
         )}

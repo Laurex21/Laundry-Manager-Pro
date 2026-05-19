@@ -52,7 +52,7 @@ export default function Dashboard() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground" data-testid="text-dashboard-title">{t('dashboard')}</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground" data-testid="text-dashboard-title">{t('dashboard')}</h1>
           <p className="text-muted-foreground mt-1">{t('welcome')}! Here's what's happening.</p>
         </div>
         <div className="flex gap-3">
@@ -320,10 +320,10 @@ function MetricCard({ label, value, icon: Icon, color, ...props }: any) {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-8 p-8">
+    <div className="space-y-8 p-4 md:p-8">
       <div className="flex justify-between"><div className="space-y-2"><Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-64" /></div><Skeleton className="h-10 w-32" /></div>
-      <div className="grid grid-cols-4 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
-      <div className="grid grid-cols-3 gap-8"><Skeleton className="col-span-2 h-64 rounded-xl" /><Skeleton className="h-64 rounded-xl" /></div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8"><Skeleton className="lg:col-span-2 h-64 rounded-xl" /><Skeleton className="h-64 rounded-xl" /></div>
     </div>
   );
 }

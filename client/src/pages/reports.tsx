@@ -188,7 +188,7 @@ export default function Reports() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold" data-testid="text-reports-title">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-reports-title">
             {t("reports_analytics")}
           </h1>
           <p className="text-muted-foreground mt-1">{t("reports_subtitle")}</p>
