@@ -286,11 +286,20 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
         <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name="amount" render={({ field }) => (
             <FormItem>
-              <FormLabel>{isEdit ? "Amount" : "Amount"}</FormLabel>
+              <FormLabel>Amount</FormLabel>
               <FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} value={field.value.toString()} data-testid="input-expense-amount" /></FormControl>
               <FormMessage />
             </FormItem>
           )} />
+          <FormField control={form.control} name="date" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Date</FormLabel>
+              <FormControl><Input type="date" {...field} data-testid="input-expense-date" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name="category" render={({ field }) => (
             <FormItem>
               <FormLabel>Category</FormLabel>
@@ -325,13 +334,6 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
           <FormItem>
             <FormLabel>Description</FormLabel>
             <FormControl><Textarea placeholder="Details about this expense..." className="resize-none" {...field} data-testid="input-expense-description" /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-        <FormField control={form.control} name="date" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Date</FormLabel>
-            <FormControl><Input type="date" {...field} data-testid="input-expense-date" /></FormControl>
             <FormMessage />
           </FormItem>
         )} />
