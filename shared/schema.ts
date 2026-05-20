@@ -16,6 +16,9 @@ export const customers = pgTable("customers", {
   starchLevel: text("starch_level"),
   detergentType: text("detergent_type"),
   defaultDiscountPct: decimal("default_discount_pct", { precision: 5, scale: 2 }).default("0"),
+  totalDeliveries: integer("total_deliveries").default(0).notNull(),
+  onTimeDeliveries: integer("on_time_deliveries").default(0).notNull(),
+  lateDeliveries: integer("late_deliveries").default(0).notNull(),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });

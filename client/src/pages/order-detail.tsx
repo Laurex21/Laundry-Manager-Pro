@@ -534,7 +534,15 @@ export default function OrderDetail() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("mark_as_delivered")}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">Select the delivery date for this order.</p>
+            <p className="text-sm text-muted-foreground">Select the actual delivery date for this order.</p>
+
+            {order.pickupDate && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                <CalendarCheck className="w-4 h-4 flex-shrink-0" />
+                <span>Expected by: <strong>{format(new Date(order.pickupDate), "MMM d, yyyy")}</strong></span>
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("delivered_at")}</label>
               <Input
@@ -544,6 +552,21 @@ export default function OrderDetail() {
                 data-testid="input-deliver-date"
               />
             </div>
+
+            {(() => {
+              if (!order.pickupDate) return null;
+              const delivered = new Date(deliverDate);
+              const pickup = new Date(order.pickupDate);
+              delivered.setHours(0, 0, 0, 0);
+              pickup.setHours(0, 0, 0, 0);
+              const isOnTime = delivered <= pickup;
+              return (
+                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${isOnTime ? "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800" : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"}`} data-testid="indicator-punctuality">
+                  {isOnTime ? "✅ On time" : "⚠️ Late delivery"}
+                </div>
+              );
+            })()}
+
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleMarkDelivered} data-testid="button-confirm-deliver">

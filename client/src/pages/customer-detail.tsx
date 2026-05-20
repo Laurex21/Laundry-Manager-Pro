@@ -21,6 +21,9 @@ import {
   ExternalLink,
   Save,
   X,
+  Truck,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,6 +232,57 @@ export default function CustomerDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delivery Punctuality Card */}
+      {customer.totalDeliveries > 0 && (
+        <Card data-testid="card-punctuality">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Truck className="w-4 h-4 text-primary" />
+              Delivery Punctuality
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold" data-testid="text-total-deliveries">{customer.totalDeliveries}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Total</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-on-time-deliveries">{customer.onTimeDeliveries}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">On Time</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-late-deliveries">{customer.lateDeliveries}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Late</p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            {(() => {
+              const pct = Math.round((customer.onTimeDeliveries / customer.totalDeliveries) * 100);
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> On-time rate</span>
+                    <span className="font-semibold text-foreground" data-testid="text-on-time-rate">{pct}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                      style={{ width: `${pct}%` }}
+                      data-testid="bar-on-time-rate"
+                    />
+                  </div>
+                  <p className={`text-xs font-medium ${pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
+                    {pct >= 80 ? "Excellent punctuality" : pct >= 50 ? "Room for improvement" : "Frequent late deliveries"}
+                  </p>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="contact" className="w-full">
         <TabsList className="w-full sm:w-auto" data-testid="tabs-list">

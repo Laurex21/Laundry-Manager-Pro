@@ -311,13 +311,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    if (!order) return undefined;
+
     const [updated] = await db.update(orders).set({
       status: "delivered",
       deliveredAt,
       updatedAt: new Date(),
     }).where(eq(orders.id, id)).returning();
+
     if (updated) {
-      await db.insert(orderStatusHistory).values({ orderId: id, status: "delivered", notes: `Delivered on ${deliveredAt.toISOString().split('T')[0]}` });
+      await db.insert(orderStatusHistory).values({
+        orderId: id,
+        status: "delivered",
+        notes: `Delivered on ${deliveredAt.toISOString().split('T')[0]}`,
+      });
+
+      const isOnTime = !order.pickupDate || deliveredAt <= new Date(order.pickupDate);
+      await db.update(customers)
+        .set({
+          totalDeliveries: sql`${customers.totalDeliveries} + 1`,
+          onTimeDeliveries: isOnTime
+            ? sql`${customers.onTimeDeliveries} + 1`
+            : customers.onTimeDeliveries,
+          lateDeliveries: !isOnTime
+            ? sql`${customers.lateDeliveries} + 1`
+            : customers.lateDeliveries,
+        })
+        .where(eq(customers.id, order.customerId));
     }
     return updated;
   }
