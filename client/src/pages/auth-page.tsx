@@ -235,8 +235,8 @@ export default function AuthPage() {
             >
               <span className="text-base">📊</span>
               <div>
-                <p className="text-xs font-semibold">Calculateur de démarrage gratuit</p>
-                <p className="text-xs text-blue-200">Estimez votre budget en 2 min →</p>
+                <p className="text-xs font-semibold">Calculateur de rentabilité gratuit</p>
+                <p className="text-xs text-blue-200">Calculez votre marge en 2 min →</p>
               </div>
             </a>
           </div>
@@ -286,8 +286,8 @@ export default function AuthPage() {
             >
               <span className="text-xl">📊</span>
               <div>
-                <p className="text-sm font-semibold">Calculateur de démarrage gratuit</p>
-                <p className="text-xs text-blue-200">Estimez votre budget pressing en 2 min →</p>
+                <p className="text-sm font-semibold">Calculateur de rentabilité gratuit</p>
+                <p className="text-xs text-blue-200">Calculez votre marge pressing en 2 min →</p>
               </div>
             </a>
           </div>
