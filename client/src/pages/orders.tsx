@@ -152,7 +152,7 @@ export default function Orders() {
                       <div className="text-xs text-muted-foreground">{order.customer?.phone}</div>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">
-                      {format(new Date(order.createdAt), "MMM d, yyyy")}
+                      {format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5">
@@ -206,7 +206,7 @@ export default function Orders() {
                         <span className="font-bold text-foreground truncate">{order.customer?.name || "Unknown"}</span>
                         {order.hasReturnedItems && <AlertTriangle className="w-3.5 h-3.5 text-orange-500 shrink-0" />}
                       </div>
-                      <p className="text-xs text-muted-foreground">#{order.id} · {format(new Date(order.createdAt), "MMM d, yyyy")}</p>
+                      <p className="text-xs text-muted-foreground">#{order.id} · {format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</p>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <StatusBadge status={order.status} />
                         <StatusBadge status={order.paymentStatus} />
