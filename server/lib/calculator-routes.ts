@@ -7,7 +7,7 @@ import { sendReportViaWhatsApp, getExpertContactUrl, getReportClickToChatUrl } f
 
 async function generateAiReport(data: {
   country: string; city: string; pressingType: string;
-  dailyCapacity: string; countryLabel: string;
+  dailyCapacity: string; countryLabel: string; profData?: any;
 }) {
   const { GoogleGenerativeAI } = await import("@google/generative-ai");
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -28,13 +28,29 @@ async function generateAiReport(data: {
     more_150: "Plus de 150 kg/jour",
   };
 
+  const profSection = data.profData?.inputs
+    ? `\nL'entrepreneur a fourni ses coûts mensuels estimés (niveau ${data.profData?.results?.confidenceScore ?? 55}% de précision) :\n` +
+      `- Eau : ${data.profData.inputs.water || 0}\n` +
+      `- Électricité : ${data.profData.inputs.electricity || 0}\n` +
+      `- Détergents : ${data.profData.inputs.detergent || 0}\n` +
+      `- Salaires : ${data.profData.inputs.salaries || 0}\n` +
+      `- Loyer : ${data.profData.inputs.rent || 0}\n` +
+      `- Autres charges : ${data.profData.inputs.other || 0}\n` +
+      `- Volume traité : ${data.profData.inputs.volumeKgMonth || 0} kg/mois\n` +
+      `- Prix de vente moyen : ${data.profData.inputs.pricePerKg || 0}/kg\n` +
+      `- Score santé calculé : ${data.profData.results?.healthScore ?? "N/A"}/100\n` +
+      `- Marge calculée : ${data.profData.results?.margin?.toFixed(1) ?? "N/A"}%\n\n` +
+      `Tiens compte de ces données pour personnaliser tes recommandations et valider la cohérence des chiffres.\n`
+    : "";
+
   const prompt =
     `Tu es un expert-conseil senior spécialisé dans la création de pressings/blanchisseries ` +
     `professionnelles en Afrique francophone et Europe francophone.\n\n` +
     `Un entrepreneur veut ouvrir :\n` +
     `- Localisation : ${data.city}, ${data.countryLabel}\n` +
     `- Type : ${typeLabels[data.pressingType] ?? data.pressingType}\n` +
-    `- Capacité : ${capacityLabels[data.dailyCapacity] ?? data.dailyCapacity}\n\n` +
+    `- Capacité : ${capacityLabels[data.dailyCapacity] ?? data.dailyCapacity}\n` +
+    profSection + `\n` +
     `Utilise Google Search pour trouver les données actuelles pour ${data.city}, ${data.countryLabel} :\n` +
     `1. Prix machines à laver professionnelles (10-20 kg) disponibles dans ce pays\n` +
     `2. Prix sécheuses professionnelles disponibles dans ce pays\n` +
@@ -110,7 +126,7 @@ export function registerCalculatorRoutes(app: Express) {
   // ── PAGE 1: Save lead immediately ──
   app.post("/api/calculator/save-lead", async (req, res) => {
     try {
-      const { firstName, lastName, phone, whatsappOptIn, email,
+      const { firstName, lastName, businessName, phone, whatsappOptIn, email,
               country, city, referralSource, utmSource, utmMedium, utmCampaign } = req.body;
 
       if (!firstName || !phone || !country || !city) {
@@ -128,6 +144,7 @@ export function registerCalculatorRoutes(app: Express) {
 
       const [lead] = await db.insert(calculatorLeads).values({
         firstName, lastName: lastName || null,
+        businessName: businessName || null,
         phone: normalizedPhone,
         whatsapp,
         whatsappOptIn: whatsappOptIn !== false,
@@ -152,17 +169,23 @@ export function registerCalculatorRoutes(app: Express) {
     }
   });
 
-  // ── PAGES 2 & 3: Update lead with business context ──
+  // ── PAGES 2-5: Update lead with business context ──
   app.patch("/api/calculator/update-lead/:leadId", async (req, res) => {
     try {
-      const { pressingType, dailyCapacity, completedPage } = req.body;
+      const { pressingType, dailyCapacity, calculationLevel, profitabilityInputs,
+              healthScore, confidenceScore, completedPage } = req.body;
       const leadId = parseInt(req.params.leadId);
 
       const updates: any = {};
-      if (pressingType)   updates.pressingType  = pressingType;
-      if (dailyCapacity)  updates.dailyCapacity = dailyCapacity;
+      if (pressingType)          updates.pressingType         = pressingType;
+      if (dailyCapacity)         updates.dailyCapacity        = dailyCapacity;
+      if (calculationLevel)      updates.calculationLevel     = calculationLevel;
+      if (profitabilityInputs)   updates.profitabilityInputs  = profitabilityInputs;
+      if (healthScore !== undefined)    updates.healthScore   = healthScore;
+      if (confidenceScore !== undefined) updates.confidenceScore = confidenceScore;
       if (completedPage === 2) updates.completedPage2 = true;
       if (completedPage === 3) updates.completedPage3 = true;
+      if (completedPage === 4) updates.completedPage4 = true;
 
       await db.update(calculatorLeads).set(updates)
         .where(eq(calculatorLeads.id, leadId));
@@ -212,12 +235,19 @@ export function registerCalculatorRoutes(app: Express) {
       const countryMeta  = COUNTRY_META[lead.country];
       const countryLabel = countryMeta?.label ?? lead.country;
 
+      // Parse profitability inputs if available
+      let profData: any = null;
+      if (lead.profitabilityInputs) {
+        try { profData = JSON.parse(lead.profitabilityInputs); } catch {}
+      }
+
       const report = await generateAiReport({
         country:       lead.country,
         city:          lead.city,
         pressingType:  lead.pressingType,
         dailyCapacity: lead.dailyCapacity,
         countryLabel,
+        profData,
       });
 
       await db.update(calculatorLeads).set({
@@ -292,13 +322,22 @@ export function registerCalculatorRoutes(app: Express) {
       if (!lead?.aiReportJson) return res.status(404).json({ message: "Rapport introuvable" });
 
       const countryLabel = COUNTRY_META[lead.country]?.label ?? lead.country;
+      let profitabilityData: any = null;
+      if (lead.profitabilityInputs) {
+        try { profitabilityData = JSON.parse(lead.profitabilityInputs); } catch {}
+      }
       res.json({
         leadId:       lead.id,
         firstName:    lead.firstName,
+        businessName: lead.businessName,
         country:      lead.country,
         countryLabel,
         city:         lead.city,
         pressingType: lead.pressingType,
+        calculationLevel: lead.calculationLevel,
+        healthScore:  lead.healthScore,
+        confidenceScore: lead.confidenceScore,
+        profitabilityData,
         report:       JSON.parse(lead.aiReportJson),
         createdAt:    lead.createdAt,
         expertUrl: lead.pressingType ? getExpertContactUrl({

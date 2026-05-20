@@ -417,6 +417,12 @@ export const calculatorLeads = pgTable("calculator_leads", {
   utmMedium:   varchar("utm_medium", { length: 100 }),
   utmCampaign: varchar("utm_campaign", { length: 100 }),
 
+  businessName:       varchar("business_name", { length: 255 }),
+  calculationLevel:   varchar("calculation_level", { length: 20 }),
+  profitabilityInputs: text("profitability_inputs"),
+  healthScore:        integer("health_score"),
+  confidenceScore:    integer("confidence_score"),
+
   completedPage1: boolean("completed_page1").default(false),
   completedPage2: boolean("completed_page2").default(false),
   completedPage3: boolean("completed_page3").default(false),
