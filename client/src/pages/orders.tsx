@@ -526,7 +526,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                       render={({ field }) => (
                         <FormItem className="flex-1">
                           <FormLabel className="text-xs">Service</FormLabel>
-                          <Select onValueChange={(val) => field.onChange(Number(val))} defaultValue={field.value?.toString()}>
+                          <Select
+                            onValueChange={(val) => field.onChange(Number(val))}
+                            value={field.value > 0 ? field.value.toString() : ""}
+                          >
                             <FormControl>
                               <SelectTrigger className="h-9">
                                 <SelectValue placeholder="Select service" />
