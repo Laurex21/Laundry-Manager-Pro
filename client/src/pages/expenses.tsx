@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { useExpenditures, useCreateExpenditure } from "@/hooks/use-expenditures";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertExpenditureSchema, type InsertExpenditure, type Expenditure } from "@shared/schema";
+import { insertExpenditureSchema, type Expenditure } from "@shared/schema";
+import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -225,20 +226,33 @@ export default function Expenses() {
   );
 }
 
+const expenseFormSchema = insertExpenditureSchema.extend({
+  date: z.string().optional(),
+});
+type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
+
 function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: Expenditure | null }) {
   const { mutate: createMutate, isPending: createPending } = useCreateExpenditure();
   const queryClient = useQueryClient();
   const [customCategory, setCustomCategory] = useState(false);
   const isEdit = !!expense;
-  
-  const form = useForm<InsertExpenditure>({
-    resolver: zodResolver(insertExpenditureSchema),
+
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
+  const form = useForm<ExpenseFormValues>({
+    resolver: zodResolver(expenseFormSchema),
     defaultValues: {
       amount: expense ? expense.amount : "0",
       category: expense ? expense.category : "Supplies",
       description: expense ? expense.description : "",
+      date: expense?.date ? format(new Date(expense.date as any), "yyyy-MM-dd") : todayStr,
     },
-    values: expense ? { amount: expense.amount, category: expense.category, description: expense.description } : undefined,
+    values: expense ? {
+      amount: expense.amount,
+      category: expense.category,
+      description: expense.description,
+      date: expense.date ? format(new Date(expense.date as any), "yyyy-MM-dd") : todayStr,
+    } : undefined,
   });
 
   const editMutation = useMutation({
@@ -250,13 +264,13 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
     },
   });
 
-  function onSubmit(data: InsertExpenditure) {
+  function onSubmit(data: ExpenseFormValues) {
     if (isEdit) {
       editMutation.mutate(data);
     } else {
-      createMutate(data, {
+      createMutate(data as any, {
         onSuccess: () => {
-          form.reset();
+          form.reset({ amount: "0", category: "Supplies", description: "", date: todayStr });
           setCustomCategory(false);
           onSuccess();
         }
@@ -311,6 +325,13 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
           <FormItem>
             <FormLabel>Description</FormLabel>
             <FormControl><Textarea placeholder="Details about this expense..." className="resize-none" {...field} data-testid="input-expense-description" /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField control={form.control} name="date" render={({ field }) => (
+          <FormItem>
+            <FormLabel>Date</FormLabel>
+            <FormControl><Input type="date" {...field} data-testid="input-expense-date" /></FormControl>
             <FormMessage />
           </FormItem>
         )} />

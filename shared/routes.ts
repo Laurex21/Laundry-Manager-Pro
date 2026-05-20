@@ -173,7 +173,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/expenditures',
-      input: insertExpenditureSchema,
+      input: insertExpenditureSchema.extend({ date: z.string().optional() }),
       responses: {
         201: z.custom<typeof expenditures.$inferSelect>(),
       },

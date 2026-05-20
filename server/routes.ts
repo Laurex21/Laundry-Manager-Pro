@@ -220,13 +220,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post(api.expenditures.create.path, isAuthenticated, async (req: any, res) => {
     const input = api.expenditures.create.input.parse(req.body);
-    const expenditure = await storage.createExpenditure({ ...input, siteId: req.siteId });
+    const expenditure = await storage.createExpenditure({
+      ...input,
+      date: input.date ? new Date(input.date) : new Date(),
+      siteId: req.siteId,
+    });
     res.status(201).json(expenditure);
   });
 
   app.patch("/api/expenditures/:id", isAuthenticated, async (req, res) => {
     try {
-      const updated = await storage.updateExpenditure(Number(req.params.id), req.body);
+      const body = { ...req.body };
+      if (body.date && typeof body.date === "string") body.date = new Date(body.date);
+      const updated = await storage.updateExpenditure(Number(req.params.id), body);
       if (!updated) return res.status(404).json({ message: "Expenditure not found" });
       res.json(updated);
     } catch (err) {
