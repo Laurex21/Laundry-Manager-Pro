@@ -194,7 +194,7 @@ const TOOLS = [
     title: "Diagnostic Professionnel de Pressing",
     description: "Identifier les axes d'amélioration opérationnelle et financière.",
     buttonLabel: "Lancer le Diagnostic",
-    href: "/calculateur",
+    href: "/diagnostic",
     testId: "link-diagnostic",
   },
   {

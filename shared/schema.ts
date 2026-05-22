@@ -426,3 +426,25 @@ export const calculatorLeads = pgTable("calculator_leads", {
 });
 
 export type CalculatorLead = typeof calculatorLeads.$inferSelect;
+
+export const diagnosticLeads = pgTable("diagnostic_leads", {
+  id: serial("id").primaryKey(),
+  fullName:     varchar("full_name",     { length: 200 }),
+  phone:        varchar("phone",         { length: 50 }),
+  email:        varchar("email",         { length: 255 }),
+  country:      varchar("country",       { length: 100 }),
+  city:         varchar("city",          { length: 100 }),
+  businessName: varchar("business_name", { length: 200 }),
+  yearCreated:  varchar("year_created",  { length: 10 }),
+  employees:    varchar("employees",     { length: 20 }),
+  activityType: varchar("activity_type", { length: 50 }),
+  objectives:   text("objectives").array(),
+  answers:      jsonb("answers"),
+  totalScore:   integer("total_score"),
+  level:        varchar("level",      { length: 100 }),
+  riskIndex:    varchar("risk_index", { length: 50 }),
+  completedAt:  timestamp("completed_at"),
+  createdAt:    timestamp("created_at").defaultNow(),
+});
+
+export type DiagnosticLead = typeof diagnosticLeads.$inferSelect;

@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import AuthPage from "@/pages/auth-page";
 import CalculatorPage from "@/pages/calculator";
+import DiagnosticPage from "@/pages/diagnostic";
 import PublicReportPage from "@/pages/report-public";
 import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
@@ -88,6 +89,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/calculateur" component={CalculatorPage} />
+      <Route path="/diagnostic" component={DiagnosticPage} />
       <Route path="/calculator" component={CalculatorRedirect} />
       <Route path="/rapport/:leadId" component={PublicReportPage} />
       <Route path="/auth" component={AuthPage} />

@@ -1,0 +1,427 @@
+# NOUVEAU PROMPT REFORMULÉ POUR REPLIT.COM
+
+IMPORTANT :
+
+La homepage de la webapp est déjà finalisée et redesignée.
+
+NE PAS modifier :
+
+* la structure globale de la homepage,
+* les autres cartes/modules,
+* le layout existant,
+* les styles déjà validés.
+
+Le travail demandé concerne UNIQUEMENT le module :
+
+# “Diagnostic Professionnel de Pressing”
+
+présent sur la homepage existante.
+
+Le design actuel contient déjà 3 cartes :
+
+1. Diagnostic Professionnel de Pressing
+2. Calculateur lancement pressing
+3. Calculateur de rentabilité
+
+Le nouveau développement doit uniquement être connecté au bouton :
+
+# “Lancer le Diagnostic”
+
+sans affecter les deux autres modules.
+
+---
+
+# OBJECTIF
+
+---
+
+Créer le flow complet du module :
+
+# “Diagnostic Professionnel de Pressing”
+
+avec :
+
+* collecte de leads,
+* évaluation interactive,
+* système de scoring,
+* résultat intelligent,
+* génération de leads,
+* CTA vers nos services,
+* CTA vers notre plateforme SaaS de gestion de blanchisserie.
+
+Le rendu doit respecter exactement le design system déjà présent sur la homepage.
+
+---
+
+# INTÉGRATION
+
+---
+
+Au clic sur :
+
+# “Lancer le Diagnostic”
+
+ouvrir :
+
+* une modal fullscreen moderne,
+  OU
+* une nouvelle route/page dédiée,
+  selon l’architecture existante.
+
+Le flow doit être totalement indépendant des autres calculateurs.
+
+---
+
+# STYLE VISUEL À RESPECTER
+
+---
+
+Le nouveau module doit reprendre exactement :
+
+* les couleurs actuelles,
+* les boutons actuels,
+* les bordures actuelles,
+* les ombres actuelles,
+* les espacements actuels,
+* la typographie actuelle,
+* le niveau de modernité actuel.
+
+Le rendu doit sembler avoir été conçu en même temps que la homepage existante.
+
+---
+
+# FLOW COMPLET DU DIAGNOSTIC
+
+---
+
+Créer un flow multi-étapes moderne et fluide.
+
+---
+
+# ÉTAPE 1 — COLLECTE DES INFORMATIONS
+
+---
+
+Titre :
+
+# “Découvrez le véritable niveau professionnel de votre pressing”
+
+Sous-titre :
+“Recevez un diagnostic détaillé basé sur les standards modernes du secteur.”
+
+Créer un formulaire moderne avec :
+
+## Informations personnelles
+
+* Nom complet
+* Téléphone WhatsApp
+* Email
+* Pays
+* Ville
+
+## Informations business
+
+* Nom du pressing
+* Année de création
+* Nombre d’employés
+
+## Type d’activité
+
+* Lavoir
+* Blanchisserie
+* Pressing
+* Je ne sais pas
+
+## Objectif principal
+
+Checkbox :
+
+* Augmenter mes revenus
+* Réduire les pertes
+* Professionnaliser mon activité
+* Former mon personnel
+* Attirer une clientèle premium
+* Ouvrir un pressing moderne
+
+IMPORTANT :
+Toutes les données doivent être sauvegardées dans Supabase/Firebase.
+
+---
+
+# ÉTAPE 2 — INTRODUCTION
+
+---
+
+Texte :
+“Ce diagnostic évalue votre niveau réel d’expertise textile, d’organisation et de professionnalisation.”
+
+Ajouter :
+
+* barre de progression,
+* animation,
+* bouton commencer.
+
+---
+
+# ÉTAPE 3 — QUESTIONNAIRE INTERACTIF
+
+---
+
+Créer une expérience premium :
+
+* 1 question par écran,
+* navigation fluide,
+* responsive mobile,
+* transitions élégantes,
+* progression visible.
+
+---
+
+# BLOCS D’ÉVALUATION
+
+---
+
+# BLOC 1 — EXPERTISE & DÉCISION
+
+Questions :
+
+1. Analysez-vous les textiles avant traitement ?
+
+* Jamais
+* Parfois
+* Toujours
+
+2. Lisez-vous les étiquettes d’entretien ?
+
+* Non
+* Occasionnellement
+* Toujours
+
+3. Le traitement dépend-il du textile ?
+
+* Non
+* Partiellement
+* Oui systématiquement
+
+4. Refusez-vous certains articles à risque ?
+
+* Jamais
+* Rarement
+* Oui selon les risques
+
+---
+
+# BLOC 2 — TRAITEMENT DES TÂCHES
+
+1. Disposez-vous d’une méthode de détachage ?
+2. Votre équipe connaît-elle les familles de taches ?
+3. Disposez-vous de protocoles écrits ?
+4. Les traitements sont-ils traçables ?
+
+---
+
+# BLOC 3 — ORGANISATION & FLUX
+
+1. Séparation linge propre/sale ?
+2. Flux organisés ?
+3. Suivi du linge ?
+4. Zones distinctes ?
+
+---
+
+# BLOC 4 — GESTION DU RISQUE
+
+1. Procédure de litige client ?
+2. Évaluation des risques ?
+3. Protection juridique ?
+4. Gestion des erreurs textiles ?
+
+---
+
+# BLOC 5 — PROFESSIONNALISATION
+
+1. Standards qualité ?
+2. Expertise technique ?
+3. Image professionnelle ?
+4. Activité organisée ?
+
+---
+
+# SCORING
+
+---
+
+Réponse faible = 1 point
+Réponse moyenne = 2 points
+Réponse professionnelle = 3 points
+
+Calcul automatique du score total.
+
+---
+
+# CLASSIFICATION
+
+---
+
+20–35 points :
+
+# Niveau Lavoir
+
+36–50 points :
+
+# Niveau Blanchisserie
+
+51–60 points :
+
+# Niveau Pressing Professionnel
+
+---
+
+# PAGE RÉSULTAT
+
+---
+
+Créer une page résultat premium contenant :
+
+* score animé,
+* jauge circulaire,
+* niveau obtenu,
+* analyse,
+* recommandations,
+* points forts,
+* points faibles.
+
+Ajouter :
+
+## Indice de risque textile
+
+* Faible
+* Moyen
+* Élevé
+* Critique
+
+## Potentiel de montée en gamme
+
+---
+
+# CTA COMMERCIAUX
+
+---
+
+Après le résultat, afficher plusieurs cartes CTA modernes.
+
+---
+
+# CTA 1 — FORMATION
+
+---
+
+Titre :
+
+# “Passez au niveau supérieur”
+
+Bouton :
+
+# “Recevoir le programme”
+
+---
+
+# CTA 2 — ACCOMPAGNEMENT
+
+---
+
+Titre :
+
+# “Besoin d’un accompagnement personnalisé ?”
+
+Bouton :
+
+# “Parler à un expert”
+
+---
+
+# CTA 3 — PRODUITS & ACCESSOIRES
+
+---
+
+Titre :
+
+# “Équipez votre pressing comme un professionnel”
+
+Bouton :
+
+# “Voir les solutions”
+
+---
+
+# CTA 4 — SaaS DE GESTION
+
+---
+
+Créer une carte premium pour notre plateforme de gestion.
+
+Titre :
+
+# “Digitalisez votre pressing”
+
+Texte :
+“Pilotez votre blanchisserie avec notre plateforme moderne de gestion et suivi.”
+
+Fonctionnalités à afficher :
+
+* suivi des commandes,
+* gestion des clients,
+* paiements,
+* statistiques,
+* rentabilité,
+* suivi du linge,
+* dashboard intelligent.
+
+Boutons :
+
+# “Essayer la plateforme”
+
+# “Demander une démo”
+
+---
+
+# PDF
+
+---
+
+Créer une génération automatique de rapport PDF.
+
+Le PDF doit contenir :
+
+* informations utilisateur,
+* score,
+* niveau,
+* recommandations,
+* branding,
+* CTA.
+
+Bouton :
+
+# “Télécharger mon rapport”
+
+---
+
+# IMPORTANT
+
+---
+
+Le code doit :
+
+* s’intégrer parfaitement à la webapp existante,
+* respecter le design actuel,
+* être modulaire,
+* scalable,
+* responsive,
+* optimisé mobile,
+* propre et professionnel.
+
+NE PAS modifier :
+
+* les calculateurs existants,
+* la homepage existante,
+* le design actuel validé.
