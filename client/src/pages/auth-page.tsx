@@ -38,14 +38,14 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
       const data = await res.json();
       if (!res.ok) {
-        toast({ title: "Error", description: data.message || "Authentication failed", variant: "destructive" });
+        toast({ title: "Erreur", description: data.message || "Échec de l'authentification", variant: "destructive" });
         return;
       }
 
       queryClient.setQueryData(["/api/auth/user"], data);
       setLocation("/");
     } catch {
-      toast({ title: "Error", description: "Network error. Please try again.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Erreur réseau. Veuillez réessayer.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -55,10 +55,10 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
     <div className="w-full max-w-md space-y-6">
       <div className="space-y-2 text-center">
         <h2 className="text-3xl font-bold font-display tracking-tight text-foreground">
-          {tab === "login" ? "Welcome Back" : "Create Account"}
+          {tab === "login" ? "Bienvenue" : "Créer un compte"}
         </h2>
         <p className="text-muted-foreground">
-          {tab === "login" ? "Sign in to access your dashboard" : "Set up your laundry business account"}
+          {tab === "login" ? "Connectez-vous pour accéder à votre tableau de bord" : "Configurez votre compte de pressing"}
         </p>
       </div>
 
@@ -68,14 +68,14 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           onClick={() => setTab("login")}
           data-testid="tab-login"
         >
-          Sign In
+          Se connecter
         </button>
         <button
           className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${tab === "register" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
           onClick={() => setTab("register")}
           data-testid="tab-register"
         >
-          Register
+          S'inscrire
         </button>
       </div>
 
@@ -84,18 +84,18 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           <>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">First Name</label>
+                <label className="text-sm font-medium">Prénom</label>
                 <Input
-                  placeholder="John"
+                  placeholder="Jean"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   data-testid="input-first-name"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Last Name</label>
+                <label className="text-sm font-medium">Nom</label>
                 <Input
-                  placeholder="Doe"
+                  placeholder="Dupont"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   data-testid="input-last-name"
@@ -103,7 +103,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Phone Number</label>
+              <label className="text-sm font-medium">Numéro de téléphone</label>
               <Input
                 type="tel"
                 placeholder="+237 6XX XXX XXX"
@@ -113,9 +113,9 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Business Name</label>
+              <label className="text-sm font-medium">Nom de l'établissement</label>
               <Input
-                placeholder="My Laundry Shop"
+                placeholder="Mon Pressing"
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 data-testid="input-business-name"
@@ -125,10 +125,10 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         )}
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">{tab === "login" ? "Email or Phone Number" : "Email"}</label>
+          <label className="text-sm font-medium">{tab === "login" ? "Email ou Numéro de téléphone" : "Email"}</label>
           <Input
             type={tab === "login" ? "text" : "email"}
-            placeholder={tab === "login" ? "you@example.com or +237 6XX XXX XXX" : "you@example.com"}
+            placeholder={tab === "login" ? "vous@exemple.com ou +237 6XX XXX XXX" : "vous@exemple.com"}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -137,7 +137,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Password</label>
+          <label className="text-sm font-medium">Mot de passe</label>
           <div className="relative">
             <Input
               type={showPassword ? "text" : "password"}
@@ -166,14 +166,14 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           disabled={submitting}
           data-testid="button-auth-submit"
         >
-          {submitting ? "Please wait..." : tab === "login" ? "Sign In" : "Create Account"}
+          {submitting ? "Veuillez patienter..." : tab === "login" ? "Se connecter" : "Créer mon compte"}
         </Button>
 
         <p className="text-xs text-muted-foreground text-center mt-3">
           {tab === "login" ? (
-            <>Don't have an account? <button type="button" className="text-primary font-medium hover:underline" onClick={() => setTab("register")}>Register</button></>
+            <>Pas encore de compte ?{" "}<button type="button" className="text-primary font-medium hover:underline" onClick={() => setTab("register")}>S'inscrire</button></>
           ) : (
-            <>Already have an account? <button type="button" className="text-primary font-medium hover:underline" onClick={() => setTab("login")}>Sign In</button></>
+            <>Déjà un compte ?{" "}<button type="button" className="text-primary font-medium hover:underline" onClick={() => setTab("login")}>Se connecter</button></>
           )}
         </p>
       </form>
@@ -181,7 +181,41 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
   );
 }
 
-const FEATURES = ["Track orders in real-time", "Manage customer profiles", "Automated billing & receipts"];
+const FEATURES = [
+  "Suivi des commandes en temps réel",
+  "Gestion des profils clients",
+  "Facturation & reçus automatisés",
+];
+
+const TOOLS = [
+  {
+    icon: "📋",
+    iconBg: "bg-blue-50",
+    title: "Diagnostic Professionnel de Pressing",
+    description: "Identifier les axes d'amélioration opérationnelle et financière.",
+    buttonLabel: "Lancer le Diagnostic",
+    href: "/calculateur",
+    testId: "link-diagnostic",
+  },
+  {
+    icon: "🚀",
+    iconBg: "bg-orange-50",
+    title: "Calculateur lancement pressing",
+    description: "Estimer vos coûts totaux de démarrage.",
+    buttonLabel: "Estimer les Coûts",
+    href: "/calculateur",
+    testId: "link-calculator",
+  },
+  {
+    icon: "💰",
+    iconBg: "bg-green-50",
+    title: "Calculateur de rentabilité",
+    description: "Projeter vos profits mensuels sur la base d'indicateurs clés.",
+    buttonLabel: "Analyser les Profits",
+    href: "/calculateur",
+    testId: "link-profitability",
+  },
+];
 
 export default function AuthPage() {
   const { user, isLoading } = useAuth();
@@ -197,109 +231,86 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ── Mobile layout (< lg) ─────────────────────────────────── */}
-      <div className="lg:hidden flex flex-col min-h-screen">
-
-        {/* Compact blue hero banner */}
-        <div className="relative bg-gradient-to-br from-primary/90 to-blue-900 text-white overflow-hidden px-6 pt-10 pb-8">
-          <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-            <div className="absolute top-[-30%] right-[-10%] w-64 h-64 rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 rounded-full bg-blue-400/20 blur-3xl" />
+      {/* ── Blue hero ──────────────────────────────────────────────── */}
+      <div className="relative bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 text-white overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-[-20%] right-[-5%] w-[500px] h-[500px] rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute bottom-[-20%] left-[-5%] w-[400px] h-[400px] rounded-full bg-blue-400/20 blur-3xl" />
+        </div>
+        <div className="relative z-10 max-w-5xl mx-auto px-6 py-10 md:py-14">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 mb-7">
+            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <Shirt className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-display font-bold text-lg tracking-tight">CleanEase</span>
           </div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Shirt className="w-5 h-5 text-white" />
+
+          {/* Headline */}
+          <h1 className="font-display font-bold text-3xl md:text-5xl leading-tight mb-3">
+            Gestion de pressing,{" "}
+            <span className="text-blue-200">simplifiée.</span>
+          </h1>
+          <p className="text-blue-100 text-base md:text-lg max-w-xl mb-6 leading-relaxed">
+            La plateforme tout-en-un pour gérer vos commandes, clients et opérations efficacement.
+          </p>
+
+          {/* Feature bullets */}
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {FEATURES.map((item, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-blue-300 flex-shrink-0" />
+                <span className="text-sm font-medium">{item}</span>
               </div>
-              <span className="font-display font-bold text-lg tracking-tight">CleanEase</span>
-            </div>
-            <h1 className="font-display font-bold text-2xl leading-snug mb-2">
-              Laundry management,{" "}
-              <span className="text-blue-200">simplified.</span>
-            </h1>
-            <p className="text-blue-100 text-sm mb-4 leading-relaxed">
-              The all-in-one platform to manage orders, customers, and operations.
-            </p>
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
-              {FEATURES.map((item, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-300 flex-shrink-0" />
-                  <span className="text-sm font-medium">{item}</span>
-                </div>
-              ))}
-            </div>
-            <a
-              href="/calculateur"
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl px-3 py-2 transition-all"
-              data-testid="link-calculator-mobile"
-            >
-              <span className="text-base">📊</span>
-              <div>
-                <p className="text-xs font-semibold">Calculateur de démarrage gratuit</p>
-                <p className="text-xs text-blue-200">Estimez votre budget en 2 min →</p>
-              </div>
-            </a>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Form area */}
-        <div className="flex-1 flex items-start justify-center px-5 py-8 bg-background">
+      {/* ── Tools section ──────────────────────────────────────────── */}
+      <div className="bg-blue-50 dark:bg-blue-950/30 px-6 py-10">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-center text-muted-foreground text-sm font-medium mb-6 tracking-wide uppercase">
+            Accédez à nos Outils de Pilotage
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            {TOOLS.map((tool) => (
+              <div
+                key={tool.testId}
+                className="bg-white dark:bg-card rounded-2xl border border-border shadow-sm p-6 flex flex-col items-center text-center gap-4"
+              >
+                <div className={`w-16 h-16 rounded-2xl ${tool.iconBg} flex items-center justify-center text-3xl`}>
+                  {tool.icon}
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground text-sm leading-snug mb-1">{tool.title}</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{tool.description}</p>
+                </div>
+                <a
+                  href={tool.href}
+                  className="w-full"
+                  data-testid={tool.testId}
+                >
+                  <Button className="w-full text-sm font-semibold shadow-md shadow-primary/20 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                    {tool.buttonLabel}
+                  </Button>
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Login form ─────────────────────────────────────────────── */}
+      <div className="px-6 py-12 bg-background">
+        <div className="max-w-md mx-auto">
           <AuthForm tab={tab} setTab={setTab} />
         </div>
       </div>
 
-      {/* ── Desktop layout (≥ lg) ─────────────────────────────────── */}
-      <div className="hidden lg:grid lg:grid-cols-2 min-h-screen">
-
-        {/* Left: full marketing panel */}
-        <div className="relative flex flex-col justify-between p-16 bg-gradient-to-br from-primary/90 to-blue-900 text-white overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-            <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-white/10 blur-3xl" />
-            <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] rounded-full bg-blue-400/20 blur-3xl" />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Shirt className="w-6 h-6 text-white" />
-              </div>
-              <span className="font-display font-bold text-xl tracking-tight">CleanEase</span>
-            </div>
-            <h1 className="font-display font-bold text-5xl lg:text-6xl leading-tight mb-6">
-              Laundry management, <br />
-              <span className="text-blue-200">simplified.</span>
-            </h1>
-            <p className="text-blue-100 text-lg max-w-md mb-8 leading-relaxed">
-              The all-in-one platform to manage orders, customers, and operations efficiently. Spend less time on paper, more time on growth.
-            </p>
-            <div className="space-y-4 mb-8">
-              {FEATURES.map((item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-blue-300" />
-                  <span className="font-medium">{item}</span>
-                </div>
-              ))}
-            </div>
-            <a
-              href="/calculateur"
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-3 transition-all"
-              data-testid="link-calculator"
-            >
-              <span className="text-xl">📊</span>
-              <div>
-                <p className="text-sm font-semibold">Calculateur de démarrage gratuit</p>
-                <p className="text-xs text-blue-200">Estimez votre budget pressing en 2 min →</p>
-              </div>
-            </a>
-          </div>
-          <div className="relative z-10 text-sm text-blue-200 mt-10">
-            © {new Date().getFullYear()} CleanEase Inc. All rights reserved.
-          </div>
-        </div>
-
-        {/* Right: form */}
-        <div className="flex items-center justify-center p-12 bg-background">
-          <AuthForm tab={tab} setTab={setTab} />
-        </div>
+      {/* Footer */}
+      <div className="text-center text-xs text-muted-foreground pb-8">
+        © {new Date().getFullYear()} CleanEase Inc. Tous droits réservés.
       </div>
 
     </div>
