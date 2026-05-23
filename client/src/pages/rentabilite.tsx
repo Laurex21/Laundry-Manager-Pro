@@ -756,8 +756,8 @@ export default function RentabilitePage() {
   const r = results;
   const confidence = mode === "expert" ? "Haute" : "Moyenne";
   const barData = [
-    { name:"Coûts", value: Math.round(r.monthlyCost), fill:"#ef4444" },
     { name:"Revenus", value: Math.round(r.monthlyRevenue), fill:"#3b82f6" },
+    { name:"Coûts", value: Math.round(r.monthlyCost), fill:"#ef4444" },
     { name:"Bénéfice", value: Math.round(Math.max(r.monthlyProfit, 0)), fill:"#10b981" },
   ];
 
