@@ -142,7 +142,7 @@ export default function Reports() {
   function handleDownloadReport() {
     if (!data) return;
     const lines: string[] = [];
-    lines.push(`CleanEase - ${t("monthly_report")}`);
+    lines.push(`XpressClean - ${t("monthly_report")}`);
     lines.push(`${t("period")}: ${format(dateFrom, "MMM d, yyyy")} - ${format(dateTo, "MMM d, yyyy")}`);
     lines.push("");
     lines.push(`--- ${t("summary")} ---`);
@@ -171,7 +171,7 @@ export default function Reports() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `CleanEase_Report_${queryParams.start}_${queryParams.end}.txt`;
+    a.download = `XpressClean_Report_${queryParams.start}_${queryParams.end}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }

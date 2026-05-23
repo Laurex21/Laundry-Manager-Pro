@@ -240,10 +240,9 @@ export default function AuthPage() {
         <div className="relative z-10 max-w-5xl mx-auto px-6 py-10 md:py-14">
           {/* Logo */}
           <div className="flex items-center gap-2.5 mb-7">
-            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Shirt className="w-5 h-5 text-white" />
+            <div className="bg-white rounded-xl px-3 py-1.5 shadow-lg">
+              <img src="/xpressclean-logo.png" alt="XpressClean" className="h-8 w-auto object-contain" />
             </div>
-            <span className="font-display font-bold text-lg tracking-tight">CleanEase</span>
           </div>
 
           {/* Headline */}
@@ -310,7 +309,7 @@ export default function AuthPage() {
 
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pb-8">
-        © {new Date().getFullYear()} CleanEase Inc. Tous droits réservés.
+        © {new Date().getFullYear()} XpressClean. Tous droits réservés.
       </div>
 
     </div>

@@ -121,10 +121,7 @@ export default function PublicReportPage() {
       {/* Nav */}
       <nav className="bg-white dark:bg-slate-900 border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <a href="/" className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
-            <Calculator className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-lg">PressFlow</span>
+          <img src="/xpressclean-logo.png" alt="XpressClean" className="h-8 w-auto object-contain" />
         </a>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="ghost" onClick={() => window.print()} data-testid="button-print">
@@ -136,7 +133,7 @@ export default function PublicReportPage() {
 
       {/* Print header */}
       <div className="hidden print:block px-8 py-6 border-b">
-        <h1 className="text-2xl font-bold">Rapport PressFlow — Calculateur de démarrage pressing</h1>
+        <h1 className="text-2xl font-bold">Rapport XpressClean — Calculateur de démarrage pressing</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {data.city}, {data.countryLabel} · Pour {data.firstName} ·{" "}
           {data.createdAt && new Date(data.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
@@ -316,7 +313,7 @@ export default function PublicReportPage() {
           <p className="text-xs text-muted-foreground text-center leading-relaxed mb-6">{report.disclaimer}</p>
         )}
 
-        {/* PressFlow CTA */}
+        {/* XpressClean CTA */}
         <div className="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-950 border border-border rounded-2xl p-6 print:hidden">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary/20">
@@ -327,7 +324,7 @@ export default function PublicReportPage() {
             <div className="flex-1">
               <h3 className="font-bold text-base mb-1">Prêt à ouvrir votre pressing ?</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                PressFlow vous aide à gérer chaque commande, chaque paiement et votre rentabilité — conçu pour les pressings africains.
+                XpressClean vous aide à gérer chaque commande, chaque paiement et votre rentabilité — conçu pour les pressings africains.
               </p>
               <div className="bg-white dark:bg-slate-800 border border-border rounded-xl px-4 py-3 mb-3">
                 <p className="text-sm font-semibold text-primary">
