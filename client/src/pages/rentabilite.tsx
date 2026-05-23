@@ -392,8 +392,8 @@ export default function RentabilitePage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Email *</label>
-                <Input type="email" placeholder="vous@exemple.com" value={lead.email} onChange={e=>setLead(l=>({...l,email:e.target.value}))} required />
+                <label className="text-sm font-medium">Email</label>
+                <Input type="email" placeholder="vous@exemple.com" value={lead.email} onChange={e=>setLead(l=>({...l,email:e.target.value}))} />
               </div>
             </div>
           </div>
