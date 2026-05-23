@@ -30,22 +30,6 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 800,
-    rollupOptions: {
-      output: {
-        manualChunks: (id) => {
-          if (!id.includes("node_modules")) return;
-          if (id.includes("recharts") || id.includes("d3-")) return "charts";
-          if (id.includes("@radix-ui")) return "radix";
-          if (id.includes("react-icons")) return "icons";
-          if (id.includes("date-fns")) return "dates";
-          if (id.includes("i18next")) return "i18n";
-          if (id.includes("react-hook-form") || id.includes("@hookform")) return "forms";
-          if (id.includes("react") || id.includes("scheduler") || id.includes("wouter")) return "react-vendor";
-          return "vendor";
-        },
-      },
-    },
   },
   server: {
     fs: {
