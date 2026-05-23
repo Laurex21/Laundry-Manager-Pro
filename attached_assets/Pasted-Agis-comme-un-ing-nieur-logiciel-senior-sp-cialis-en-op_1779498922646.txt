@@ -1,0 +1,324 @@
+Agis comme un ingénieur logiciel senior spécialisé en :
+- optimisation de performance web,
+- architecture SaaS scalable,
+- UX/UI mobile-first,
+- applications bilingues FR/EN,
+- optimisation React / Next.js,
+- expérience utilisateur en Afrique (connexions lentes, mobiles Android, faible bande passante).
+
+Ta mission est de réaliser un AUDIT TECHNIQUE COMPLET de toute notre webapp SaaS de gestion de pressing déjà développée sur Replit, puis d’optimiser intégralement l’application afin qu’elle soit :
+
+- extrêmement fluide,
+- rapide,
+- mobile-first,
+- responsive,
+- stable,
+- scalable,
+- optimisée pour connexions lentes,
+- bilingue Français / Anglais,
+- avec le Français comme langue principale par défaut.
+
+IMPORTANT :
+Tu dois analyser l’ensemble du projet existant avant toute modification.
+
+NE PAS recréer la webapp.
+NE PAS casser les fonctionnalités existantes.
+NE PAS modifier la logique métier sans nécessité.
+
+L’objectif est d’améliorer :
+- les performances,
+- la fluidité,
+- l’expérience mobile,
+- la stabilité,
+- l’internationalisation,
+- la qualité du code,
+- l’expérience utilisateur globale.
+
+====================================================
+PHASE 1 — AUDIT COMPLET DE LA WEBAPP
+====================================================
+
+Analyser entièrement :
+
+1. Frontend
+2. Backend
+3. API routes
+4. Base de données
+5. State management
+6. Chargement des pages
+7. Composants React
+8. Gestion des images
+9. Bundles JavaScript
+10. Tailwind usage
+11. Requêtes API
+12. Sécurité
+13. SEO
+14. Accessibilité
+15. Mobile responsiveness
+16. Animations
+17. Lazy loading
+18. Traductions
+19. Architecture dossier
+20. Gestion mémoire
+
+Identifier :
+- les lenteurs,
+- les composants lourds,
+- les re-render inutiles,
+- les appels API excessifs,
+- les problèmes mobile,
+- les problèmes UX,
+- les problèmes d’accessibilité,
+- les risques de crash,
+- les problèmes de traduction,
+- les problèmes responsive,
+- les mauvaises pratiques React/Next.js,
+- les éléments qui ralentissent l’application.
+
+====================================================
+PHASE 2 — OPTIMISATION PERFORMANCE
+====================================================
+
+Optimiser :
+
+====================================================
+A. PERFORMANCE FRONTEND
+====================================================
+
+- réduire les re-render React
+- utiliser memoization
+- utiliser React.memo
+- utiliser useMemo
+- utiliser useCallback
+- optimiser les states
+- optimiser les hooks
+- supprimer les renders inutiles
+- optimiser les composants lourds
+
+====================================================
+B. NEXT.JS OPTIMIZATION
+====================================================
+
+- dynamic imports
+- code splitting
+- lazy loading
+- server-side optimization
+- image optimization
+- route optimization
+- caching intelligent
+- static rendering quand possible
+
+====================================================
+C. MOBILE PERFORMANCE
+====================================================
+
+Optimiser pour :
+- Android low-end
+- connexions lentes africaines
+- faible RAM
+- petits écrans
+
+Réduire :
+- consommation mémoire
+- poids JS
+- animations lourdes
+- temps de chargement
+
+====================================================
+D. OPTIMISATION DES IMAGES
+====================================================
+
+- convertir images lourdes
+- lazy load images
+- utiliser next/image
+- compression intelligente
+- responsive images
+- webp quand possible
+
+====================================================
+E. OPTIMISATION API
+====================================================
+
+- réduire appels inutiles
+- mettre cache intelligent
+- améliorer temps réponse
+- optimiser requêtes DB
+- limiter payloads lourds
+
+====================================================
+F. BASE DE DONNÉES
+====================================================
+
+- optimiser requêtes SQL
+- ajouter index utiles
+- réduire duplication données
+- optimiser relations
+- améliorer vitesse lecture/écriture
+
+====================================================
+PHASE 3 — MOBILE FIRST UX/UI
+====================================================
+
+L’application doit devenir :
+- parfaitement mobile-friendly,
+- ultra fluide sur smartphone,
+- agréable sur petits écrans,
+- moderne,
+- intuitive.
+
+====================================================
+OPTIMISER :
+====================================================
+
+- tailles boutons
+- spacing
+- responsive layout
+- formulaires mobiles
+- navigation tactile
+- menus
+- scroll performance
+- tableaux
+- dashboards
+- charts
+- modals
+- cards
+- animations
+
+====================================================
+IMPORTANT :
+====================================================
+
+L’expérience mobile est PRIORITAIRE par rapport au desktop.
+
+Le rendu doit être excellent sur :
+- Android
+- iPhone
+- tablettes
+
+====================================================
+PHASE 4 — BILINGUE FR/EN
+====================================================
+
+Implémenter une architecture bilingue professionnelle.
+
+====================================================
+EXIGENCES :
+====================================================
+
+- Français = langue par défaut
+- Anglais = langue secondaire
+- possibilité de switch langue
+- mémorisation préférence utilisateur
+- structure scalable i18n
+
+====================================================
+TRADUCTIONS :
+====================================================
+
+Tout le système doit être traduisible :
+- boutons
+- menus
+- formulaires
+- dashboards
+- erreurs
+- notifications
+- CTA
+- pages
+- composants
+
+====================================================
+UTILISER :
+====================================================
+
+- next-intl OU react-i18next
+- architecture scalable
+- fichiers de traduction organisés
+- fallback intelligent
+
+====================================================
+PHASE 5 — UX & DESIGN IMPROVEMENTS
+====================================================
+
+Améliorer :
+- fluidité générale
+- perception de vitesse
+- transitions
+- micro-interactions
+- feedback utilisateur
+- loaders
+- skeleton loading
+- animations premium légères
+
+====================================================
+IMPORTANT :
+====================================================
+
+Les animations doivent être :
+- légères,
+- fluides,
+- non bloquantes.
+
+====================================================
+PHASE 6 — ACCESSIBILITÉ & QUALITÉ
+====================================================
+
+Améliorer :
+- accessibilité mobile
+- contraste
+- navigation clavier
+- aria labels
+- lisibilité
+- UX tactile
+
+====================================================
+PHASE 7 — SEO & STRUCTURE
+====================================================
+
+Optimiser :
+- metadata
+- Open Graph
+- vitesse SEO
+- structure HTML
+- performance Lighthouse
+- indexing
+
+====================================================
+OBJECTIFS DE PERFORMANCE
+====================================================
+
+Atteindre idéalement :
+
+- Lighthouse Performance > 90
+- Mobile Friendly Score excellent
+- Temps chargement mobile très rapide
+- Faible consommation mémoire
+- Navigation ultra fluide
+
+====================================================
+LIVRABLES ATTENDUS
+====================================================
+
+1. Audit complet des problèmes détectés
+2. Liste des optimisations effectuées
+3. Refactorisation du code si nécessaire
+4. Optimisation mobile-first
+5. Système bilingue complet FR/EN
+6. Amélioration UX/UI
+7. Optimisation API/database
+8. Réduction du temps de chargement
+9. Optimisation SEO
+10. Version finale stable et scalable
+
+====================================================
+IMPORTANT FINAL
+====================================================
+
+L’application doit donner une sensation :
+- premium,
+- rapide,
+- moderne,
+- professionnelle,
+- fluide,
+- adaptée au marché africain mobile-first.
+
+Le Français doit être la langue principale visible par défaut.
