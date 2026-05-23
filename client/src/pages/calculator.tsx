@@ -100,7 +100,7 @@ function openPDF(form: CalcForm, report: any) {
   ul{margin:4px 0;padding-left:16px}li{font-size:12px;margin-bottom:3px}
 </style></head><body>
 <div class="header">
-  <div class="logo"><img src="/xpressclean-logo.png" alt="XpressClean" style="height:36px;object-fit:contain;"/></div>
+  <div class="logo">👕 CleanEase</div>
   <div class="h1">Rapport Lancement Pressing</div>
   <div class="sub">Analyse IA personnalisée — ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}</div>
 </div>
@@ -128,8 +128,8 @@ ${report.marketAnalysis ? `<h2>Analyse de Marché</h2>
 <p style="font-size:12px;margin-top:6px">${report.marketAnalysis.opportunity??""}</p>` : ""}
 ${report.recommendations?.length ? `<h2>Recommandations</h2><ul>${report.recommendations.map((r:string)=>`<li>${r}</li>`).join("")}</ul>` : ""}
 ${report.nextSteps?.length ? `<h2>Prochaines Étapes</h2><ul>${report.nextSteps.map((s:string)=>`<li>${s}</li>`).join("")}</ul>` : ""}
-<div class="cta"><strong>Pilotez votre pressing avec XpressClean</strong><br><span style="font-size:12px;color:#1e40af">Gestion commandes · Clients · Paiements · Statistiques</span></div>
-<div class="footer"><em>${report.disclaimer??""}</em><br>© ${new Date().getFullYear()} XpressClean — Rapport confidentiel</div>
+<div class="cta"><strong>Pilotez votre pressing avec CleanEase</strong><br><span style="font-size:12px;color:#1e40af">Gestion commandes · Clients · Paiements · Statistiques</span></div>
+<div class="footer"><em>${report.disclaimer??""}</em><br>© ${new Date().getFullYear()} CleanEase — Rapport confidentiel</div>
 </body></html>`;
   const w = window.open("","_blank");
   if (w) { w.document.write(html); w.document.close(); setTimeout(()=>w.print(),400); }
@@ -845,14 +845,14 @@ export default function CalculatorPage() {
               Parlez directement à un expert qui analysera votre projet et vous guidera pas à pas.
             </p>
             <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all"
-              onClick={()=>window.open(`https://wa.me/?text=Bonjour, j'ai simulé mon budget pressing sur XpressClean pour ${form.city} et j'aimerais une consultation expert.`, "_blank")}>
+              onClick={()=>window.open(`https://wa.me/?text=Bonjour, j'ai simulé mon budget pressing sur CleanEase pour ${form.city} et j'aimerais une consultation expert.`, "_blank")}>
               <MessageCircle className="w-4 h-4 mr-2"/>Parler à un expert
             </Button>
           </div>
 
           <div className="bg-gradient-to-br from-blue-600 to-blue-900 text-white rounded-2xl p-6 shadow-lg">
             <div className="text-2xl mb-3">💻</div>
-            <h3 className="font-bold text-xl mb-2">Gérez votre pressing avec XpressClean</h3>
+            <h3 className="font-bold text-xl mb-2">Gérez votre pressing avec CleanEase</h3>
             <p className="text-blue-100 text-sm mb-5">
               Une fois ouvert, pilotez votre pressing comme un pro — commandes, clients, paiements, analyses en temps réel.
             </p>
@@ -868,7 +868,7 @@ export default function CalculatorPage() {
                 Essayer gratuitement
               </Button>
               <Button variant="outline" className="border-white/40 text-white hover:bg-white/10 w-full"
-                onClick={()=>window.open("https://wa.me/?text=Bonjour, je souhaite une démo de XpressClean pour mon pressing.", "_blank")}>
+                onClick={()=>window.open("https://wa.me/?text=Bonjour, je souhaite une démo de CleanEase pour mon pressing.", "_blank")}>
                 Demander une démo
               </Button>
             </div>

@@ -168,9 +168,11 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     <div className="flex flex-col h-full">
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <img src="/xpressclean-logo.png" alt="XpressClean" className="h-10 w-auto object-contain" />
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+            <Shirt className="w-6 h-6 text-primary-foreground" />
+          </div>
           <div>
-            <h1 className="font-display font-bold text-xl tracking-tight">XpressClean</h1>
+            <h1 className="font-display font-bold text-xl tracking-tight">CleanEase</h1>
             <p className="text-xs text-muted-foreground font-medium">{t('laundry_manager')}</p>
           </div>
         </div>
@@ -242,7 +244,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9" onClick={() => setMobileOpen(true)} data-testid="button-mobile-menu">
               <Menu className="w-5 h-5" />
             </Button>
-            <span className="font-display font-bold text-base lg:hidden">XpressClean</span>
+            <span className="font-display font-bold text-base lg:hidden">CleanEase</span>
           </div>
           <RegionalSettings />
         </header>

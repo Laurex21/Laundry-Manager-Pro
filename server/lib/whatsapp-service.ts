@@ -41,7 +41,7 @@ export async function sendReportViaWhatsApp(params: {
     `✅ Recommandations personnalisées\n\n` +
     `👉 Rapport complet ici :\n${reportUrl}\n\n` +
     `Répondez à ce message si vous souhaitez être accompagné(e) dans votre projet.\n\n` +
-    `_XpressClean · Logiciel de gestion de pressing pour l'Afrique_`;
+    `_PressFlow · Logiciel de gestion de pressing pour l'Afrique_`;
 
   try {
     await twilioClient.messages.create({
@@ -89,7 +89,7 @@ export function getReportClickToChatUrl(firstName: string, city: string, country
   const businessNumber = process.env.BUSINESS_WHATSAPP_NUMBER ?? "237699000000";
   const message = encodeURIComponent(
     `Bonjour, je m'appelle ${firstName}. ` +
-    `Je viens de calculer mon budget pressing pour ${city}, ${countryLabel} sur XpressClean. ` +
+    `Je viens de calculer mon budget pressing pour ${city}, ${countryLabel} sur PressFlow. ` +
     `Pouvez-vous m'envoyer mon rapport ?`
   );
   return `https://wa.me/${businessNumber}?text=${message}`;
