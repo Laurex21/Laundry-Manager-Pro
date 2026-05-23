@@ -212,7 +212,7 @@ const TOOLS = [
     title: "Calculateur de rentabilité",
     description: "Projeter vos profits mensuels sur la base d'indicateurs clés.",
     buttonLabel: "Analyser les Profits",
-    href: "/calculateur",
+    href: "/rentabilite",
     testId: "link-profitability",
   },
 ];

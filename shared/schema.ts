@@ -448,3 +448,18 @@ export const diagnosticLeads = pgTable("diagnostic_leads", {
 });
 
 export type DiagnosticLead = typeof diagnosticLeads.$inferSelect;
+
+export const leadsCalculateurRentabilite = pgTable("leads_calculateur_rentabilite", {
+  id: serial("id").primaryKey(),
+  name:    varchar("name",    { length: 200 }).notNull(),
+  country: varchar("country", { length: 100 }).notNull(),
+  city:    varchar("city",    { length: 100 }).notNull(),
+  phone:   varchar("phone",   { length: 50  }).notNull(),
+  email:   varchar("email",   { length: 255 }).notNull(),
+  status:          varchar("status", { length: 30 }).default("pending_calculation"),
+  calculationJson: jsonb("calculation_json"),
+  completedAt:     timestamp("completed_at"),
+  createdAt:       timestamp("created_at").defaultNow(),
+});
+
+export type LeadCalculateurRentabilite = typeof leadsCalculateurRentabilite.$inferSelect;

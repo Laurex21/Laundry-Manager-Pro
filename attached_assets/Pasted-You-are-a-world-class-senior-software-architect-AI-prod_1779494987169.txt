@@ -1,0 +1,99 @@
+You are a world-class senior software architect, AI product designer, UX designer, and full-stack engineer specialized in SaaS platforms for SMEs in emerging markets.
+
+CONTEXT & INTEGRATION GATEWAY:
+You are implementing this system inside our existing laundry management platform ("Xpress Clean"). On the landing page, there is a modular section titled "Accédez à nos Outils de Pilotage". Your task is to build the backend logic, database schema, user flow, and frontend components EXCLUSIVELY for Option 3: 'Calculateur de rentabilité' (activated by clicking the "Analyser les Profits" button). This tool must function as an independent, high-converting lead magnet before unlocking the core AI engine.
+
+Your mission is to build a highly intelligent, scalable, beginner-friendly web application module for this specific option. The application is NOT a simple calculator. It is an AI-powered Laundry Cost Intelligence System capable of helping laundries estimate, calculate, optimize, and understand their true operational costs and monthly margins even if they have little accounting knowledge or incomplete business data.
+
+---
+
+🛑 STAGE 0 — LEAD CAPTURE GATEWAY (MANDATORY FIRST STEP)
+When the user clicks "Analyser les Profits" (Calculateur de rentabilité), the application must intercept the user and display a beautifully optimized, mobile-first, one-page conversational form to collect business leads before starting the calculation. 
+
+The system cannot process any calculation until these 5 fields are filled and validated:
+1. Full Name (Nom complet)
+2. Country (Pays) -> Dropdown with international support, heavy focus on Africa/emerging markets.
+3. City/Town (Ville) -> Text input or geo-suggested based on the selected country.
+4. Phone Number (Téléphone) -> International format with country flag picker (e.g., +237 for Cameroon).
+5. Email Address (E-mail) -> Validated professional or personal email.
+
+Database Action for Stage 0: 
+Create a `leads_calculateur_rentabilite` table to store this data instantly via an API route (`/api/v1/leads/rentabilite`) with fields: `id`, `name`, `country`, `city`, `phone`, `email`, `created_at`, `status` (default: 'pending_calculation').
+
+---
+
+🎯 CORE OBJECTIVE (ONCE LEAD IS CAPTURED)
+Build a responsive multi-step module within the platform that calculates:
+- Cost per washing cycle
+- Cost per kg
+- Cost per garment
+- Operational cost breakdown
+- Recommended selling price
+- Profit margin
+- Estimated monthly business profitability
+
+The system must support BOTH:
+- Expert Mode
+- Smart Assist Mode
+
+🧠 MODE 1 — EXPERT MODE
+Advanced users can manually enter: exact kWh consumption, exact detergent dosage, exact water consumption, exact ironing consumption, exact labor times, exact operational costs. This mode prioritizes maximum precision.
+
+🤖 MODE 2 — SMART ASSIST MODE
+Designed for users with little or no accounting education. The system bypasses technical jargon and infers values behind the scenes. The user should only enter gross/basic information such as:
+- Country & City (Pre-filled from Stage 0)
+- Laundry type (Traditional, Eco, Industrial)
+- Machine size (in kg)
+- Number of loads/day
+- Monthly electricity bill (Total business or household split)
+- Monthly water bill
+- Detergent package price & weight
+- Fuel expenses (Generator/Delivery)
+- Average number of garments processed per day
+
+🌍 GEO-AWARE INTELLIGENCE
+The system must adapt calculations according to the user's location collected in Stage 0:
+- Retrieve or estimate local electricity tariffs (price/kWh) and water tariffs (price/m³).
+- Identify local currency symbol and average local detergent market prices using utility databases or configurable benchmark datasets.
+- CRITICAL: All AI-estimated values must display an “Estimated” badge, remain editable manually, and allow user override.
+
+⚡ ENERGY SOURCE INTELLIGENCE
+Support multiple power sources: Grid electricity, Generator, Solar, or Mixed system.
+- If Generator: Estimate fuel consumption and calculate energy cost from local fuel price benchmarks.
+- If Solar: Estimate amortized solar infrastructure cost.
+- If Mixed: Allow a percentage slider split between sources.
+
+🧺 SMART ESTIMATION ENGINE
+Internal modular benchmark engine:
+- 10kg machine → estimated detergent usage = 80–120g
+- 10kg machine → estimated water consumption = 80–120L
+- Adjust labor time, packaging consumption, perfume, and stain-removal chemical costs based on country and business scale.
+
+📊 COST STRUCTURE & CALCULATION LOGIC
+Calculate Direct Costs (water, electricity, detergent, labor), Indirect Costs (rent, maintenance, machine amortization, admin), and Operational Garment Costs (ironing, packaging, thermal sealing, perfume).
+Formulas:
+- Cost per gram detergent = (price detergent) / (total grams)
+- Machine amortization = machine price / total lifetime cycles
+- Cost per kg = total operational cost / total kg processed
+- Recommended selling price = cost + desired margin
+
+📈 INTELLIGENCE FEATURES & DASHBOARD
+- Confidence Score System: High/Medium/Low based on data completeness.
+- Profit Leak Detection: Visual alerts for excessive detergent usage, abnormal utility bills, or underpricing.
+- Benchmark Comparison: Compare user performance against local and country averages.
+- Dashboard: High-impact summary showing Total Operational Cost, Cost per Garment, Cost per KG, Daily/Monthly Profit Estimates, and dynamic charts (using Chart.js or Recharts).
+
+📱 ACCESSIBILITY & DESIGN DIRECTION
+- Mobile-first, progressive disclosure, step-by-step wizard layout.
+- Clean, premium UI matching the professional blue and grey color scheme of the main webapp.
+- Conversational phrasing: Instead of "Enter detergent dosage per cycle", ask "How many bags of detergent do you buy each month?".
+
+📤 EXPORT FEATURES
+Allow saving calculations to a user profile or exporting as PDF/Excel reports (with the lead information attached in the header).
+
+🚀 FINAL EXPECTATION
+Generate a production-level architectural breakdown for this isolated feature:
+1. Updated Database schema including the `leads_calculateur_rentabilite` table linked to the calculation outputs.
+2. Frontend multi-step wizard component structure in React/Next.js (Stage 0 Lead Form -> Mode Selection -> Step-by-Step Inputs -> Analytics Dashboard).
+3. Backend controller logic (Node.js/Next.js API routes) handling lead ingestion, benchmark matching, and financial calculations.
+4. Future SaaS conversion hooks (how to upsell a user to a paid plan once they see their 'Profit Leak' report).

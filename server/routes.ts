@@ -6,6 +6,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
+import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 
 async function seedDatabase() {
   const servicesList = await storage.getServices();
@@ -28,6 +29,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerAuthRoutes(app);
   registerCalculatorRoutes(app);
   registerDiagnosticRoutes(app);
+  registerRentabiliteRoutes(app);
   seedDatabase().catch(console.error);
   storage.backfillNullSiteIds().catch(console.error);
 
