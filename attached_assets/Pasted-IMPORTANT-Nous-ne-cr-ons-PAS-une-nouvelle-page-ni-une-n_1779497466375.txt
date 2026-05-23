@@ -1,0 +1,342 @@
+IMPORTANT :
+
+Nous ne créons PAS une nouvelle page, ni une nouvelle fonctionnalité indépendante.
+
+Nous devons UNIQUEMENT modifier et remplacer entièrement le contenu existant de l’option déjà présente sur la page d’accueil nommée :
+
+“Calculateur Lancement Pressing”
+
+Cette option existe déjà dans la landing page de notre SaaS de gestion de pressing.
+
+MISSION :
+Transformer l’option actuelle “Calculateur Lancement Pressing” en une expérience premium IA complète de simulation de coût de lancement de pressing.
+
+SUPPRIMER entièrement :
+- les anciennes logiques
+- les anciens calculs
+- les anciens champs
+- les anciennes estimations
+- les anciennes interfaces
+- les anciens workflows
+
+REMPLACER l’intégralité de cette option par un nouveau système intelligent alimenté par IA.
+
+====================================================
+NOUVEL OBJECTIF DE L’OPTION
+====================================================
+
+L’option “Calculateur Lancement Pressing” doit désormais permettre à un utilisateur de :
+
+- Estimer le budget nécessaire pour ouvrir un pressing dans son pays
+- Recevoir des recommandations IA personnalisées
+- Obtenir des projections financières
+- Découvrir le modèle de pressing le plus adapté à son budget
+- Recevoir un rapport professionnel
+- Être converti en lead qualifié pour :
+  - nos formations
+  - notre SaaS
+  - nos services de consulting
+
+====================================================
+IMPORTANT UX/UI
+====================================================
+
+Conserver :
+- la cohérence graphique actuelle de la landing page
+- les couleurs existantes
+- le branding actuel
+- le style général du SaaS
+
+Mais transformer cette section en expérience :
+- beaucoup plus premium
+- plus moderne
+- plus professionnelle
+- plus interactive
+- plus intelligente
+- plus orientée conversion
+
+====================================================
+NOUVELLE STRUCTURE DE L’OPTION
+====================================================
+
+Transformer l’option existante en :
+
+STEP 1 → Hero mini-section intégrée
+STEP 2 → Formulaire intelligent multi-étapes
+STEP 3 → Animation d’analyse IA
+STEP 4 → Dashboard de résultats
+STEP 5 → Déblocage du rapport complet via capture lead
+STEP 6 → Upsell formation + SaaS
+
+====================================================
+NOUVELLE HERO SECTION
+====================================================
+
+Remplacer le contenu actuel par :
+
+SOUS-TITRE :
+“Notre IA analyse les coûts locaux, les équipements, les loyers et le marché afin de générer une estimation réaliste adaptée à votre pays.”
+
+CTA :
+- “Calculer Mon Budget”
+
+Ajouter :
+- animation premium
+- cartes statistiques
+- badges de confiance
+- visuels modernes pressing
+- effet IA moderne
+
+====================================================
+NOUVEAU FORMULAIRE MULTI-ÉTAPES
+====================================================
+
+Remplacer complètement les anciens champs par :
+
+====================================================
+INFORMATIONS PERSONNELLES
+====================================================
+
+- Nom complet
+- Email (non obligatoire)
+- WhatsApp
+
+====================================================
+PROJET
+====================================================
+
+- Pays
+- Ville
+- Budget disponible
+- Niveau d’expérience
+
+====================================================
+TYPE DE PRESSING
+====================================================
+
+- Pressing standard
+- Pressing premium
+- Blanchisserie industrielle
+- Laverie automatique
+- Pressing mobile
+
+====================================================
+TAILLE DU PROJET
+====================================================
+
+- Petit
+- Moyen
+- Grand
+
+====================================================
+SERVICES
+====================================================
+
+- Lavage
+- Repassage
+- Nettoyage à sec
+- Livraison
+- Couettes
+- Tapis
+
+====================================================
+OBJECTIF
+====================================================
+
+- Revenu complémentaire
+- Activité principale
+- Expansion
+- Franchise
+
+====================================================
+MOTEUR IA
+====================================================
+
+Créer une logique IA capable de :
+
+- analyser les données utilisateur
+- analyser le pays et la ville
+- récupérer des estimations de coûts locales
+- générer des recommandations personnalisées
+- produire des projections financières
+- recommander un modèle économique
+
+IMPORTANT :
+Ne jamais halluciner de faux prix.
+
+Utiliser :
+- APIs
+- scraping web
+- marketplaces
+- bases de données
+- moyennes régionales
+
+Afficher :
+“Estimations moyennes basées sur les données disponibles.”
+
+====================================================
+CATÉGORIES D’ESTIMATION
+====================================================
+
+L’IA doit calculer :
+
+====================================================
+1. ÉQUIPEMENTS
+====================================================
+
+- machines
+- séchoirs
+- fers
+- tables
+- chaudière
+- groupe électrogène
+- mobilier
+
+====================================================
+2. IMMOBILIER
+====================================================
+
+- loyer
+- caution
+- rénovation
+- plomberie
+- installation électrique
+
+====================================================
+3. CHARGES
+====================================================
+
+- eau
+- électricité
+- salaires
+- marketing
+- transport
+- produits lessiviels
+
+====================================================
+4. ADMINISTRATIF
+====================================================
+
+- création entreprise
+- autorisations
+- taxes
+
+====================================================
+5. ANALYSE MARCHÉ
+====================================================
+
+- niveau de demande
+- concurrence
+- rentabilité estimée
+
+====================================================
+TRÈS IMPORTANT
+====================================================
+
+Le système doit générer automatiquement 3 niveaux de budget :
+
+1. PRESSING MINIMUM VIABLE
+2. PRESSING PROFESSIONNEL STANDARD
+3. PRESSING PREMIUM ÉVOLUTIF
+
+Afficher ces résultats sous forme de cartes premium modernes.
+
+====================================================
+DASHBOARD RÉSULTATS
+====================================================
+
+Créer un dashboard interactif affichant :
+
+- Budget estimé
+- Charges mensuelles
+- Revenus potentiels
+- Profit potentiel
+- Délai de rentabilité
+- Score de faisabilité
+- Niveau de risque
+- Recommandations IA
+
+Ajouter :
+- graphiques
+- charts
+- animations
+- indicateurs ROI
+
+====================================================
+CAPTURE DE LEADS
+====================================================
+
+IMPORTANT :
+Ne pas afficher le rapport complet immédiatement.
+
+Avant déblocage :
+demander :
+- email
+- WhatsApp
+- création de compte
+
+Utiliser :
+- effet blur
+- preview partielle
+- teasing premium
+
+====================================================
+PDF PROFESSIONNEL
+====================================================
+
+Générer automatiquement un PDF contenant :
+
+- estimation complète
+- budget détaillé
+- recommandations
+- projections financières
+- roadmap de lancement
+
+Ajouter :
+“Rapport généré par [NOM DU SAAS]”
+
+====================================================
+UPSELLS
+====================================================
+
+Après résultats afficher :
+
+1. Formation Pressing
+2. SaaS Gestion Pressing
+3. Consultation Premium
+
+====================================================
+BASE DE DONNÉES
+====================================================
+
+Sauvegarder :
+- leads
+- budgets
+- pays
+- type de projet
+- analytics comportementales
+
+====================================================
+TECH STACK
+====================================================
+
+Utiliser :
+- Next.js
+- React
+- Tailwind CSS
+- Framer Motion
+- Node.js
+- Supabase/PostgreSQL
+- OpenAI API
+
+====================================================
+OBJECTIF FINAL
+====================================================
+
+Transformer l’ancienne option “Calculateur Lancement Pressing” en un véritable :
+
+- consultant business IA
+- moteur de génération de leads
+- outil premium de simulation business
+- tunnel de conversion intelligent
+- système SaaS scalable
