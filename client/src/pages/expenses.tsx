@@ -232,6 +232,7 @@ const expenseFormSchema = insertExpenditureSchema.extend({
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
 
 function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: Expenditure | null }) {
+  const { t } = useTranslation();
   const { mutate: createMutate, isPending: createPending } = useCreateExpenditure();
   const queryClient = useQueryClient();
   const [customCategory, setCustomCategory] = useState(false);
