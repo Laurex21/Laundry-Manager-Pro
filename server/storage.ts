@@ -28,6 +28,7 @@ export interface IStorage {
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
 
   getServices(): Promise<Service[]>;
+  getServicesBySite(siteId: number | null): Promise<Service[]>;
   getService(id: number): Promise<Service | undefined>;
   createService(service: InsertService): Promise<Service>;
   updateService(id: number, service: Partial<InsertService>): Promise<Service | undefined>;
@@ -147,6 +148,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getServices(): Promise<Service[]> {
+    return await db.select().from(services).where(eq(services.active, true)).orderBy(services.name);
+  }
+
+  async getServicesBySite(siteId: number | null): Promise<Service[]> {
+    if (siteId !== null) {
+      return await db.select().from(services)
+        .where(and(eq(services.active, true), eq(services.siteId, siteId)))
+        .orderBy(services.name);
+    }
     return await db.select().from(services).where(eq(services.active, true)).orderBy(services.name);
   }
 

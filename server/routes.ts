@@ -71,18 +71,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(customerOrders);
   });
 
-  app.get(api.services.list.path, isAuthenticated, async (req, res) => {
-    const services = await storage.getServices();
-    res.json(services);
+  app.get(api.services.list.path, isAuthenticated, async (req: any, res) => {
+    let svcList = await storage.getServicesBySite(req.siteId);
+    // Auto-seed default services for a brand-new site
+    if (svcList.length === 0 && req.siteId != null) {
+      await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: req.siteId } as any);
+      await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: req.siteId } as any);
+      await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: req.siteId } as any);
+      svcList = await storage.getServicesBySite(req.siteId);
+    }
+    res.json(svcList);
   });
 
-  app.post(api.services.create.path, isAuthenticated, async (req, res) => {
+  app.post(api.services.create.path, isAuthenticated, async (req: any, res) => {
     const input = api.services.create.input.parse(req.body);
-    const service = await storage.createService(input);
+    const service = await storage.createService({ ...input, siteId: req.siteId } as any);
     res.status(201).json(service);
   });
 
-  app.patch(api.services.update.path, isAuthenticated, async (req, res) => {
+  app.patch(api.services.update.path, isAuthenticated, async (req: any, res) => {
     const input = api.services.update.input.parse(req.body);
     const updated = await storage.updateService(Number(req.params.id), input);
     if (!updated) return res.status(404).json({ message: "Service not found" });
