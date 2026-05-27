@@ -32,6 +32,7 @@ import { format } from "date-fns";
 // ─── Identity Tab ─────────────────────────────────────────────────────────────
 
 function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSave: (d: any) => void; saving: boolean }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     businessName: settings.businessName || "",
     tagline: settings.tagline || "",
@@ -144,6 +145,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
 // ─── Receipt Layout Tab ───────────────────────────────────────────────────────
 
 function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave: (d: any) => void; saving: boolean }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     receiptHeaderColor: settings.receiptHeaderColor || "#1e3a5f",
     receiptLanguage: settings.receiptLanguage || "en",
@@ -262,6 +264,7 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
 // ─── Terms Tab ────────────────────────────────────────────────────────────────
 
 function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any) => void; saving: boolean }) {
+  const { t } = useTranslation();
   const [termsOfService, setTermsOfService] = useState(settings.termsOfService || DEFAULT_TERMS_EN);
 
   return (
@@ -298,6 +301,7 @@ function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any
 // ─── Team & Sites Tab ─────────────────────────────────────────────────────────
 
 function TeamTab() {
+  const { t } = useTranslation();
   const { user, isOwner, userRole } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -752,6 +756,7 @@ function TeamTab() {
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
 export default function Settings() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { isOwner } = useAuth();
