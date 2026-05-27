@@ -341,7 +341,7 @@ export default function OrderDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><CardTitle className="text-base">Services</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("services_card_title")}</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-2">
               {order.items?.map((item: any) => (
@@ -355,12 +355,12 @@ export default function OrderDetail() {
               ))}
               {Number(order.discount) > 0 && (
                 <div className="flex justify-between items-center p-2 text-sm text-red-600">
-                  <span>Discount</span>
+                  <span>{t("discount")}</span>
                   <span className="font-mono">-{symbol}{Number(order.discount).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center p-3 bg-primary/5 rounded-lg font-bold">
-                <span>Total</span>
+                <span>{t("total")}</span>
                 <span className="font-mono text-primary">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
               </div>
             </div>
@@ -370,13 +370,13 @@ export default function OrderDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              Garment Checklist
-              {hasReturnedItems && <Badge variant="outline" className="border-orange-300 text-orange-600">Returns Pending</Badge>}
+              {t("garment_checklist")}
+              {hasReturnedItems && <Badge variant="outline" className="border-orange-300 text-orange-600">{t("returns_pending")}</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {order.garmentItems?.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">No garment items recorded</p>
+              <p className="text-sm text-muted-foreground italic">{t("no_garment_items")}</p>
             ) : (
               <div className="space-y-2">
                 {order.garmentItems?.map((g: any) => (
@@ -388,17 +388,17 @@ export default function OrderDetail() {
                       <span>{g.quantity}x {g.itemName}</span>
                       {g.returnedForTreatment && !g.resolvedAt && (
                         <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-600">
-                          <RotateCcw className="w-3 h-3 mr-1" /> Returned: {g.returnStage}
+                          <RotateCcw className="w-3 h-3 mr-1" /> {t("returned_label")} {g.returnStage}
                         </Badge>
                       )}
                       {g.resolvedAt && (
-                        <Badge variant="outline" className="text-[10px] border-green-300 text-green-600">Resolved</Badge>
+                        <Badge variant="outline" className="text-[10px] border-green-300 text-green-600">{t("resolved")}</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-1">
                       {g.returnedForTreatment && !g.resolvedAt ? (
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResolveReturn(g.id)} data-testid={`button-resolve-${g.id}`}>
-                          Resolve
+                          {t("resolve_return")}
                         </Button>
                       ) : !g.resolvedAt && (
                         <Button
@@ -408,7 +408,7 @@ export default function OrderDetail() {
                           onClick={() => setReturnGarmentId(g.id)}
                           data-testid={`button-return-${g.id}`}
                         >
-                          <RotateCcw className="w-3 h-3 mr-1" /> Return
+                          <RotateCcw className="w-3 h-3 mr-1" /> {t("return_label")}
                         </Button>
                       )}
                     </div>
@@ -419,26 +419,26 @@ export default function OrderDetail() {
 
             {returnGarmentId && (
               <div className="mt-4 p-3 border rounded-lg bg-muted/20 space-y-3" data-testid="return-form">
-                <p className="text-sm font-medium">Flag garment for return treatment</p>
+                <p className="text-sm font-medium">{t("flag_for_return")}</p>
                 <Select value={returnStage} onValueChange={setReturnStage}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="washing">Re-wash</SelectItem>
-                    <SelectItem value="stain_treatment">Stain Treatment</SelectItem>
-                    <SelectItem value="ironing">Re-iron</SelectItem>
+                    <SelectItem value="washing">{t("rewash")}</SelectItem>
+                    <SelectItem value="stain_treatment">{t("stage_stain_treatment")}</SelectItem>
+                    <SelectItem value="ironing">{t("reironing")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
-                  placeholder="Notes (optional)"
+                  placeholder={t("notes_optional")}
                   value={returnNotes}
                   onChange={(e) => setReturnNotes(e.target.value)}
                   data-testid="input-return-notes"
                 />
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleMarkReturned} data-testid="button-confirm-return">Confirm Return</Button>
-                  <Button size="sm" variant="outline" onClick={() => setReturnGarmentId(null)}>Cancel</Button>
+                  <Button size="sm" onClick={handleMarkReturned} data-testid="button-confirm-return">{t("confirm_return")}</Button>
+                  <Button size="sm" variant="outline" onClick={() => setReturnGarmentId(null)}>{t("cancel")}</Button>
                 </div>
               </div>
             )}
@@ -448,7 +448,7 @@ export default function OrderDetail() {
 
       {order.statusHistory && order.statusHistory.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Status History</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("status_history_title")}</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-2">
               {order.statusHistory.map((entry: any) => (
@@ -465,17 +465,17 @@ export default function OrderDetail() {
       )}
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Payment History</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t("payment_history_title")}</CardTitle></CardHeader>
         <CardContent>
           {order.payments?.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">No payments recorded yet</p>
+            <p className="text-sm text-muted-foreground italic">{t("no_payments_recorded")}</p>
           ) : (
             <div className="space-y-2">
               {order.payments?.map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg text-sm">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{p.method}</span>
-                    {p.reference && <span className="text-xs text-muted-foreground">Ref: {p.reference}</span>}
+                    {p.reference && <span className="text-xs text-muted-foreground">{t("ref_label")} {p.reference}</span>}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-mono font-semibold text-green-600">{symbol}{Number(p.amount).toFixed(2)}</span>
@@ -492,18 +492,18 @@ export default function OrderDetail() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("request_cancellation")}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">Please provide a reason for cancellation. A manager will review your request.</p>
+            <p className="text-sm text-muted-foreground">{t("cancellation_review_note")}</p>
             <Textarea
-              placeholder="Reason for cancellation..."
+              placeholder={t("cancellation_reason_placeholder")}
               value={cancelReason}
               onChange={e => setCancelReason(e.target.value)}
               rows={3}
               data-testid="textarea-cancel-reason"
             />
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>{t("cancel")}</Button>
               <Button variant="destructive" onClick={handleRequestCancellation} disabled={!cancelReason.trim()} data-testid="button-submit-cancellation">
-                Submit Request
+                {t("submit_request")}
               </Button>
             </div>
           </div>
@@ -514,17 +514,17 @@ export default function OrderDetail() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("reject_cancellation")}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">Optionally provide a note explaining why the cancellation was rejected.</p>
+            <p className="text-sm text-muted-foreground">{t("rejection_review_note")}</p>
             <Textarea
-              placeholder="Rejection note (optional)..."
+              placeholder={t("rejection_note_placeholder")}
               value={rejectionNote}
               onChange={e => setRejectionNote(e.target.value)}
               rows={3}
               data-testid="textarea-rejection-note"
             />
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleRejectCancellation} data-testid="button-submit-rejection">Reject Cancellation</Button>
+              <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>{t("cancel")}</Button>
+              <Button onClick={handleRejectCancellation} data-testid="button-submit-rejection">{t("reject_cancellation")}</Button>
             </div>
           </div>
         </DialogContent>

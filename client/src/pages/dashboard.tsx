@@ -40,10 +40,10 @@ export default function Dashboard() {
   const alerts = dashData?.alerts || [];
 
   const orderStatusData = dashData?.ordersByStatus ? [
-    { name: "Received", value: dashData.ordersByStatus.received },
-    { name: "Washing", value: dashData.ordersByStatus.washing },
-    { name: "Ready", value: dashData.ordersByStatus.ready },
-    { name: "Delivered", value: dashData.ordersByStatus.delivered },
+    { name: t("stage_received"), value: dashData.ordersByStatus.received },
+    { name: t("stage_washing"), value: dashData.ordersByStatus.washing },
+    { name: t("stage_ready"), value: dashData.ordersByStatus.ready },
+    { name: t("stage_delivered"), value: dashData.ordersByStatus.delivered },
   ].filter(d => d.value > 0) : [];
 
   const monthProfit = (dashData?.monthRevenue || 0) - (dashData?.monthExpenses || 0);
@@ -53,7 +53,7 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground" data-testid="text-dashboard-title">{t('dashboard')}</h1>
-          <p className="text-muted-foreground mt-1">{t('welcome')}! Here's what's happening.</p>
+          <p className="text-muted-foreground mt-1">{t('welcome')}! {t('whats_happening')}</p>
         </div>
         <div className="flex gap-3">
           <Link href="/orders">

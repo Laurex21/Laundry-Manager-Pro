@@ -246,10 +246,10 @@ export default function Payments() {
                   </PopoverTrigger>
                   <PopoverContent className="w-[400px] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Search by order ID or customer..." />
+                      <CommandInput placeholder={t("search_order_customer")} />
                       <CommandList>
-                        <CommandEmpty>No unpaid orders found.</CommandEmpty>
-                        <CommandGroup heading="Unpaid / Partially Paid Orders">
+                        <CommandEmpty>{t("no_unpaid_orders")}</CommandEmpty>
+                        <CommandGroup heading={t("unpaid_partial_orders")}>
                           {orders.map((order: any) => (
                             <CommandItem
                               key={order.id}

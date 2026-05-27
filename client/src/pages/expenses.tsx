@@ -30,13 +30,13 @@ import { apiRequest } from "@/lib/queryClient";
 
 const COLORS = ["#3b82f6", "#f97316", "#ef4444", "#10b981", "#8b5cf6", "#ec4899"];
 
-const EXPENSE_TYPES = [
-  { key: "water", label: "Water", color: "bg-blue-100 text-blue-700" },
-  { key: "electricity", label: "Electricity", color: "bg-yellow-100 text-yellow-700" },
-  { key: "detergent", label: "Detergent", color: "bg-purple-100 text-purple-700" },
-  { key: "rent", label: "Rent", color: "bg-orange-100 text-orange-700" },
-  { key: "salary", label: "Salary", color: "bg-green-100 text-green-700" },
-  { key: "other", label: "Other", color: "bg-gray-100 text-gray-700" },
+const EXPENSE_TYPE_KEYS = [
+  { key: "water", labelKey: "cat_water", color: "bg-blue-100 text-blue-700" },
+  { key: "electricity", labelKey: "cat_electricity", color: "bg-yellow-100 text-yellow-700" },
+  { key: "detergent", labelKey: "cat_detergent", color: "bg-purple-100 text-purple-700" },
+  { key: "rent", labelKey: "cat_rent", color: "bg-orange-100 text-orange-700" },
+  { key: "salary", labelKey: "cat_salary", color: "bg-green-100 text-green-700" },
+  { key: "other", labelKey: "cat_other", color: "bg-gray-100 text-gray-700" },
 ];
 
 export default function Expenses() {
@@ -87,19 +87,19 @@ export default function Expenses() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-expenses-title">{t('expenses')}</h1>
-          <p className="text-muted-foreground mt-1">Track business expenses and costs</p>
+          <p className="text-muted-foreground mt-1">{t("expenses_subtitle")}</p>
         </div>
         <div className="flex gap-3">
           <Select value={dateFilter} onValueChange={setDateFilter}>
             <SelectTrigger className="w-[180px] bg-background border-border" data-testid="select-date-filter">
               <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Filter by date" />
+              <SelectValue placeholder={t("filter_by_date")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
-              <SelectItem value="7days">Last 7 Days</SelectItem>
-              <SelectItem value="30days">Last 30 Days</SelectItem>
-              <SelectItem value="thisYear">This Year</SelectItem>
+              <SelectItem value="all">{t("all_time")}</SelectItem>
+              <SelectItem value="7days">{t("last_7_days")}</SelectItem>
+              <SelectItem value="30days">{t("last_30_days")}</SelectItem>
+              <SelectItem value="thisYear">{t("this_year")}</SelectItem>
             </SelectContent>
           </Select>
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditingExpense(null); }}>
@@ -110,7 +110,7 @@ export default function Expenses() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>{editingExpense ? t("edit_expense") : "Log New Expense"}</DialogTitle>
+                <DialogTitle>{editingExpense ? t("edit_expense") : t("log_new_expense")}</DialogTitle>
               </DialogHeader>
               <ExpenseForm onSuccess={() => { setOpen(false); setEditingExpense(null); }} expense={editingExpense} />
             </DialogContent>
@@ -121,11 +121,11 @@ export default function Expenses() {
       {typeBreakdown.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="expense-type-breakdown">
           {typeBreakdown.map(({ key, total }) => {
-            const typeInfo = EXPENSE_TYPES.find(t => t.key === key) || EXPENSE_TYPES[5];
+            const typeInfo = EXPENSE_TYPE_KEYS.find(et => et.key === key) || EXPENSE_TYPE_KEYS[5];
             return (
               <Card key={key} className="shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => setTypeFilter(typeFilter === key ? "all" : key)} data-testid={`card-type-${key}`}>
                 <CardContent className="p-3 text-center">
-                  <Badge className={typeInfo.color} variant="secondary">{typeInfo.label}</Badge>
+                  <Badge className={typeInfo.color} variant="secondary">{t(typeInfo.labelKey)}</Badge>
                   <p className="font-bold mt-2">{symbol}{total.toFixed(0)}</p>
                 </CardContent>
               </Card>
@@ -137,13 +137,13 @@ export default function Expenses() {
       <div className="flex gap-2 flex-wrap" data-testid="expense-filter-tabs">
         <Button variant={typeFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setTypeFilter("all")}
           className={typeFilter === "all" ? "bg-primary text-white" : ""} data-testid="filter-tab-all">
-          All
+          {t("all")}
         </Button>
-        {EXPENSE_TYPES.map(et => (
+        {EXPENSE_TYPE_KEYS.map(et => (
           <Button key={et.key} variant={typeFilter === et.key ? "default" : "outline"} size="sm"
             onClick={() => setTypeFilter(typeFilter === et.key ? "all" : et.key)}
             className={typeFilter === et.key ? "bg-primary text-white" : ""} data-testid={`filter-tab-${et.key}`}>
-            {et.label}
+            {t(et.labelKey)}
           </Button>
         ))}
       </div>
@@ -286,14 +286,14 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
         <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name="amount" render={({ field }) => (
             <FormItem>
-              <FormLabel>Amount</FormLabel>
+              <FormLabel>{t("amount")}</FormLabel>
               <FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} value={field.value.toString()} data-testid="input-expense-amount" /></FormControl>
               <FormMessage />
             </FormItem>
           )} />
           <FormField control={form.control} name="date" render={({ field }) => (
             <FormItem>
-              <FormLabel>Date</FormLabel>
+              <FormLabel>{t("date")}</FormLabel>
               <FormControl><Input type="date" {...field} data-testid="input-expense-date" /></FormControl>
               <FormMessage />
             </FormItem>
@@ -302,27 +302,27 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
         <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name="category" render={({ field }) => (
             <FormItem>
-              <FormLabel>Category</FormLabel>
+              <FormLabel>{t("category")}</FormLabel>
               {customCategory ? (
                 <div className="flex gap-2">
-                  <FormControl><Input placeholder="Enter category..." {...field} autoFocus data-testid="input-expense-category-custom" /></FormControl>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => { setCustomCategory(false); field.onChange("Supplies"); }}>Cancel</Button>
+                  <FormControl><Input placeholder={t("enter_category")} {...field} autoFocus data-testid="input-expense-category-custom" /></FormControl>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setCustomCategory(false); field.onChange("Supplies"); }}>{t("cancel")}</Button>
                 </div>
               ) : (
                 <Select onValueChange={(value) => { if (value === "custom") { setCustomCategory(true); field.onChange(""); } else { field.onChange(value); }}} defaultValue={field.value}>
-                  <FormControl><SelectTrigger data-testid="select-expense-category"><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger data-testid="select-expense-category"><SelectValue placeholder={t("select_category_placeholder")} /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="Supplies">Supplies</SelectItem>
-                    <SelectItem value="Water">Water</SelectItem>
-                    <SelectItem value="Electricity">Electricity</SelectItem>
-                    <SelectItem value="Detergent">Detergent</SelectItem>
-                    <SelectItem value="Rent">Rent</SelectItem>
-                    <SelectItem value="Salary">Salary</SelectItem>
-                    <SelectItem value="Utilities">Utilities</SelectItem>
-                    <SelectItem value="Maintenance">Maintenance</SelectItem>
-                    <SelectItem value="Transportation">Transportation</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                    <SelectItem value="custom">+ Add New...</SelectItem>
+                    <SelectItem value="Supplies">{t("cat_supplies")}</SelectItem>
+                    <SelectItem value="Water">{t("cat_water")}</SelectItem>
+                    <SelectItem value="Electricity">{t("cat_electricity")}</SelectItem>
+                    <SelectItem value="Detergent">{t("cat_detergent")}</SelectItem>
+                    <SelectItem value="Rent">{t("cat_rent")}</SelectItem>
+                    <SelectItem value="Salary">{t("cat_salary")}</SelectItem>
+                    <SelectItem value="Utilities">{t("cat_utilities")}</SelectItem>
+                    <SelectItem value="Maintenance">{t("cat_maintenance")}</SelectItem>
+                    <SelectItem value="Transportation">{t("cat_transportation")}</SelectItem>
+                    <SelectItem value="Other">{t("cat_other")}</SelectItem>
+                    <SelectItem value="custom">{t("add_new_category")}</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -332,13 +332,13 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
         </div>
         <FormField control={form.control} name="description" render={({ field }) => (
           <FormItem>
-            <FormLabel>Description</FormLabel>
-            <FormControl><Textarea placeholder="Details about this expense..." className="resize-none" {...field} data-testid="input-expense-description" /></FormControl>
+            <FormLabel>{t("description")}</FormLabel>
+            <FormControl><Textarea placeholder={t("expenses_subtitle")} className="resize-none" {...field} data-testid="input-expense-description" /></FormControl>
             <FormMessage />
           </FormItem>
         )} />
         <Button type="submit" className="w-full mt-2" disabled={isPending} data-testid="button-save-expense">
-          {isPending ? "Saving..." : isEdit ? "Update Expense" : "Record Expense"}
+          {isPending ? t("saving") : isEdit ? t("update_expense") : t("record_expense")}
         </Button>
       </form>
     </Form>

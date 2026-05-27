@@ -97,7 +97,7 @@ export default function Orders() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create New Order</DialogTitle>
+              <DialogTitle>{t("create_new_order")}</DialogTitle>
             </DialogHeader>
             <OrderForm onSuccess={() => setOpen(false)} />
           </DialogContent>
@@ -125,7 +125,7 @@ export default function Orders() {
           <table className="w-full text-sm text-left">
             <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
               <tr>
-                <th className="px-6 py-4">Order ID</th>
+                <th className="px-6 py-4">{t("order_id_col")}</th>
                 <th className="px-6 py-4">{t('customers')}</th>
                 <th className="px-6 py-4">{t('date')}</th>
                 <th className="px-6 py-4">{t('status')}</th>
@@ -137,11 +137,11 @@ export default function Orders() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">Loading orders...</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">{t("loading_orders")}</td>
                 </tr>
               ) : filteredOrders?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">No orders found.</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">{t("no_orders_found")}</td>
                 </tr>
               ) : (
                 filteredOrders?.map((order: any) => (
@@ -427,7 +427,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                 name="customerId"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Customer</FormLabel>
+                    <FormLabel>{t("customers")}</FormLabel>
                     <Popover open={customerSearchOpen} onOpenChange={setCustomerSearchOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -441,16 +441,16 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                           >
                             {field.value
                               ? customers?.find((c) => c.id === field.value)?.name
-                              : "Select customer..."}
+                              : t("select_customer")}
                             <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                         <Command>
-                          <CommandInput placeholder="Search customers..." />
+                          <CommandInput placeholder={t("search_customers")} />
                           <CommandList>
-                            <CommandEmpty>No customer found.</CommandEmpty>
+                            <CommandEmpty>{t("no_customer_found")}</CommandEmpty>
                             <CommandGroup>
                               {customers?.map((customer) => (
                                 <CommandItem
@@ -486,7 +486,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   name="entryDate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Date of Entry</FormLabel>
+                      <FormLabel>{t("date_of_entry")}</FormLabel>
                       <FormControl><Input type="date" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -497,7 +497,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   name="pickupDate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Pick-up Date</FormLabel>
+                      <FormLabel>{t("pickup_date")}</FormLabel>
                       <FormControl><Input type="date" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -532,7 +532,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                           >
                             <FormControl>
                               <SelectTrigger className="h-9">
-                                <SelectValue placeholder="Select service" />
+                                <SelectValue placeholder={t("select_service")} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -672,13 +672,13 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                 />
               </div>
               <div className="flex justify-between items-center text-lg font-bold bg-primary/5 p-4 rounded-lg">
-                <span>Total:</span>
+                <span>{t("total")}:</span>
                 <span className="font-mono text-primary">{symbol}{total.toFixed(2)}</span>
               </div>
             </div>
 
             <Button type="submit" className="w-full" size="lg" disabled={isOrderPending}>
-              {isOrderPending ? "Creating Order..." : "Create Order"}
+              {isOrderPending ? t("saving") : t("create_new_order")}
             </Button>
           </form>
         </Form>

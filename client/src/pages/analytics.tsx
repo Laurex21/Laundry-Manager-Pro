@@ -62,9 +62,9 @@ function AnalyticsContent() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total kg" value={kpis?.totalKg || 0} />
+        <KpiCard label={t("total_kg_label")} value={kpis?.totalKg || 0} />
         <KpiCard label={t("total_orders")} value={kpis?.totalOrders || 0} />
-        <KpiCard label="Avg kg/order" value={(kpis?.avgWeightPerOrder || 0).toFixed(1)} />
+        <KpiCard label={t("avg_kg_order")} value={(kpis?.avgWeightPerOrder || 0).toFixed(1)} />
         <KpiCard label={t("total_revenue")} value={`${symbol}${(kpis?.totalRevenue || 0).toFixed(0)}`} />
         <KpiCard label={t("total_expenses_label")} value={`${symbol}${(kpis?.totalExpenses || 0).toFixed(0)}`} />
         <KpiCard label={t("net_profit")} value={`${symbol}${(kpis?.profit || 0).toFixed(0)}`} color={kpis?.profit >= 0 ? "text-green-600" : "text-red-600"} />
@@ -84,22 +84,22 @@ function AnalyticsContent() {
             <div className="text-sm">
               {kpis?.totalKg >= kpis?.breakEvenKg
                 ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {t("above_break_even")}</span>
-                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Need {((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)).toFixed(0)} more kg</span>}
+                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {t("need_more_kg", { count: ((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)).toFixed(0) })}</span>}
             </div>
           </div>
         </CardContent>
       </Card>
 
       <Card className="shadow-sm" data-testid="card-operational-kpis">
-        <CardHeader><CardTitle>Operational KPIs</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("operational_kpis")}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <div className="flex justify-between text-sm"><span>Machine Utilization</span><span>{(kpis?.machineUtilization || 0).toFixed(0)}%</span></div>
+            <div className="flex justify-between text-sm"><span>{t("machine_utilization")}</span><span>{(kpis?.machineUtilization || 0).toFixed(0)}%</span></div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, kpis?.machineUtilization || 0)}%` }} />
             </div>
           </div>
-          <div className="text-sm"><span className="text-muted-foreground">Employee Productivity:</span> {(kpis?.employeeProductivity || 0).toFixed(1)} kg/person</div>
+          <div className="text-sm"><span className="text-muted-foreground">{t("employee_productivity")}:</span> {(kpis?.employeeProductivity || 0).toFixed(1)} {t("kg_per_person")}</div>
         </CardContent>
       </Card>
 

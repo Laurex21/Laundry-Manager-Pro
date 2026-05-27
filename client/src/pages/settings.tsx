@@ -66,47 +66,47 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
     <div className="space-y-6 max-w-2xl">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="businessName">Business Name *</Label>
+          <Label htmlFor="businessName">{t("business_name_label")}</Label>
           <Input id="businessName" value={form.businessName} onChange={F("businessName")} placeholder="My Laundry" data-testid="input-business-name" />
         </div>
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="tagline">Tagline / Slogan</Label>
+          <Label htmlFor="tagline">{t("tagline")}</Label>
           <Input id="tagline" value={form.tagline} onChange={F("tagline")} placeholder="Premium laundry service" data-testid="input-tagline" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone">Phone (Primary)</Label>
+          <Label htmlFor="phone">{t("phone_primary")}</Label>
           <Input id="phone" value={form.phone} onChange={F("phone")} placeholder="+1 (555) 000-0000" data-testid="input-phone" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone2">Phone (Secondary)</Label>
+          <Label htmlFor="phone2">{t("phone_secondary")}</Label>
           <Input id="phone2" value={form.phone2} onChange={F("phone2")} placeholder="+1 (555) 000-0001" data-testid="input-phone2" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("email")}</Label>
           <Input id="email" type="email" value={form.email} onChange={F("email")} placeholder="hello@mybusiness.com" data-testid="input-email" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="website">Website</Label>
+          <Label htmlFor="website">{t("website")}</Label>
           <Input id="website" value={form.website} onChange={F("website")} placeholder="https://mybusiness.com" data-testid="input-website" />
         </div>
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="address">Street Address</Label>
+          <Label htmlFor="address">{t("street_address")}</Label>
           <Input id="address" value={form.address} onChange={F("address")} placeholder="123 Laundry Street" data-testid="input-address" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="city">City</Label>
+          <Label htmlFor="city">{t("city")}</Label>
           <Input id="city" value={form.city} onChange={F("city")} placeholder="Lagos" data-testid="input-city" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="country">Country</Label>
+          <Label htmlFor="country">{t("country")}</Label>
           <Input id="country" value={form.country} onChange={F("country")} placeholder="Nigeria" data-testid="input-country" />
         </div>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Business Logo</CardTitle>
-          <CardDescription className="text-xs">Shown on receipts. Max 500KB. PNG or JPG recommended.</CardDescription>
+          <CardTitle className="text-sm">{t("business_logo")}</CardTitle>
+          <CardDescription className="text-xs">{t("logo_upload_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4">
@@ -267,14 +267,14 @@ function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any
   return (
     <div className="space-y-4 max-w-2xl">
       <div>
-        <Label>Terms of Service (shown on receipts)</Label>
+        <Label>{t("terms_of_service_label")}</Label>
         <p className="text-xs text-muted-foreground mt-1 mb-2">One term per line. Each line will be a numbered list item.</p>
         <Textarea
           value={termsOfService}
           onChange={(e) => setTermsOfService(e.target.value)}
           rows={12}
           className="font-mono text-sm resize-y"
-          placeholder="Enter your terms and conditions..."
+          placeholder={t("terms_placeholder")}
           data-testid="textarea-terms"
         />
       </div>
@@ -497,7 +497,7 @@ function TeamTab() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">{site.memberCount || members.length} members</Badge>
+                    <Badge variant="outline" className="text-xs">{t("members_count", { count: site.memberCount || members.length })}</Badge>
                     {isOwner && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -506,14 +506,14 @@ function TeamTab() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditSite(site)}>Edit Site</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setEditSite(site)}>{t("edit_site")}</DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => {
                               if (confirm(`Remove site "${site.name}"?`)) deleteSiteMut.mutate(site.id);
                             }}
                           >
-                            Delete Site
+                            {t("delete_site")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -637,14 +637,14 @@ function TeamTab() {
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite Team Member</DialogTitle>
+            <DialogTitle>{t("invite_team_member")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Site</Label>
+              <Label>{t("sites")}</Label>
               <Select value={inviteForm.siteId} onValueChange={(v) => setInviteForm((f) => ({ ...f, siteId: v }))}>
                 <SelectTrigger data-testid="select-invite-site">
-                  <SelectValue placeholder="Select site" />
+                  <SelectValue placeholder={t("sites")} />
                 </SelectTrigger>
                 <SelectContent>
                   {sites.map((s: any) => (
@@ -654,7 +654,7 @@ function TeamTab() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Email or Username</Label>
+              <Label>{t("email")}</Label>
               <Input
                 value={inviteForm.identifier}
                 onChange={(e) => setInviteForm((f) => ({ ...f, identifier: e.target.value }))}
@@ -663,14 +663,14 @@ function TeamTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Role</Label>
+              <Label>{t("employee_role")}</Label>
               <Select value={inviteForm.role} onValueChange={(v) => setInviteForm((f) => ({ ...f, role: v }))}>
                 <SelectTrigger data-testid="select-invite-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="operator">Operator</SelectItem>
+                  <SelectItem value="manager">{t("role_manager")}</SelectItem>
+                  <SelectItem value="operator">{t("role_operator")}</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -679,7 +679,7 @@ function TeamTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setInviteOpen(false)}>{t("cancel")}</Button>
             <Button onClick={() => inviteMut.mutate(inviteForm)} disabled={inviteMut.isPending || !inviteForm.siteId || !inviteForm.identifier} data-testid="button-send-invite">
               <LinkIcon className="w-4 h-4 mr-2" />
               {inviteMut.isPending ? "Sending..." : "Create Invite Link"}
@@ -691,24 +691,24 @@ function TeamTab() {
       <Dialog open={newSiteOpen} onOpenChange={setNewSiteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Site</DialogTitle>
+            <DialogTitle>{t("add_new_site")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Site Name *</Label>
+              <Label>{t("site_name_label")}</Label>
               <Input value={newSiteName} onChange={(e) => setNewSiteName(e.target.value)} placeholder="Downtown Branch" data-testid="input-site-name" />
             </div>
             <div className="space-y-2">
-              <Label>Address</Label>
+              <Label>{t("address")}</Label>
               <Input value={newSiteAddress} onChange={(e) => setNewSiteAddress(e.target.value)} placeholder="123 Main St" data-testid="input-site-address" />
             </div>
             <div className="space-y-2">
-              <Label>City</Label>
+              <Label>{t("city")}</Label>
               <Input value={newSiteCity} onChange={(e) => setNewSiteCity(e.target.value)} placeholder="Lagos" data-testid="input-site-city" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewSiteOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setNewSiteOpen(false)}>{t("cancel")}</Button>
             <Button onClick={() => createSiteMut.mutate({ name: newSiteName, address: newSiteAddress, city: newSiteCity })} disabled={createSiteMut.isPending || !newSiteName} data-testid="button-create-site">
               {createSiteMut.isPending ? "Creating..." : "Create Site"}
             </Button>
@@ -719,28 +719,28 @@ function TeamTab() {
       <Dialog open={!!editSite} onOpenChange={() => setEditSite(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Site</DialogTitle>
+            <DialogTitle>{t("edit_site")}</DialogTitle>
           </DialogHeader>
           {editSite && (
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label>Site Name</Label>
+                <Label>{t("sites")}</Label>
                 <Input value={editSite.name} onChange={(e) => setEditSite((s: any) => ({ ...s, name: e.target.value }))} data-testid="input-edit-site-name" />
               </div>
               <div className="space-y-2">
-                <Label>Address</Label>
+                <Label>{t("address")}</Label>
                 <Input value={editSite.address || ""} onChange={(e) => setEditSite((s: any) => ({ ...s, address: e.target.value }))} data-testid="input-edit-site-address" />
               </div>
               <div className="space-y-2">
-                <Label>City</Label>
+                <Label>{t("city")}</Label>
                 <Input value={editSite.city || ""} onChange={(e) => setEditSite((s: any) => ({ ...s, city: e.target.value }))} data-testid="input-edit-site-city" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditSite(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditSite(null)}>{t("cancel")}</Button>
             <Button onClick={() => updateSiteMut.mutate({ id: editSite.id, data: editSite })} disabled={updateSiteMut.isPending} data-testid="button-save-site-edit">
-              {updateSiteMut.isPending ? "Saving..." : "Save"}
+              {updateSiteMut.isPending ? t("saving") : t("save_changes")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -834,8 +834,8 @@ export default function Settings() {
           <TabsContent value="identity">
             <Card>
               <CardHeader>
-                <CardTitle>Business Identity</CardTitle>
-                <CardDescription>Your business name, logo, and contact details appear on all receipts.</CardDescription>
+                <CardTitle>{t("business_identity")}</CardTitle>
+                <CardDescription>{t("business_identity_desc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <BusinessIdentityTab settings={merged} onSave={(d) => saveMut.mutate(d)} saving={saveMut.isPending} />
@@ -846,8 +846,8 @@ export default function Settings() {
           <TabsContent value="receipt">
             <Card>
               <CardHeader>
-                <CardTitle>Receipt Layout</CardTitle>
-                <CardDescription>Customize colors, language, and which sections appear on your receipts.</CardDescription>
+                <CardTitle>{t("receipt_layout")}</CardTitle>
+                <CardDescription>{t("receipt_layout_desc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <ReceiptLayoutTab settings={merged} onSave={(d) => saveMut.mutate(d)} saving={saveMut.isPending} />
@@ -858,8 +858,8 @@ export default function Settings() {
           <TabsContent value="terms">
             <Card>
               <CardHeader>
-                <CardTitle>Terms & Conditions</CardTitle>
-                <CardDescription>These terms are printed on every receipt. Edit to match your business policies.</CardDescription>
+                <CardTitle>{t("terms_conditions")}</CardTitle>
+                <CardDescription>{t("terms_conditions_desc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <TermsTab settings={merged} onSave={(d) => saveMut.mutate(d)} saving={saveMut.isPending} />
@@ -870,8 +870,8 @@ export default function Settings() {
           <TabsContent value="team">
             <Card>
               <CardHeader>
-                <CardTitle>Team & Site Management</CardTitle>
-                <CardDescription>Manage your branch locations and team member access.</CardDescription>
+                <CardTitle>{t("team_sites")}</CardTitle>
+                <CardDescription>{t("team_sites_desc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <TeamTab />
