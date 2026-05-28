@@ -32,10 +32,10 @@ function AnalyticsContent() {
   const { data: kpis, isLoading } = useQuery<any>({ queryKey: ["/api/analytics/kpis", period], queryFn: () => fetch(`/api/analytics/kpis?period=${period}`, { credentials: "include" }).then(r => r.json()) });
 
   const periods = [
-    { key: "day", label: "Day" },
-    { key: "week", label: "Week" },
-    { key: "month", label: "Month" },
-    { key: "year", label: "Year" },
+    { key: "day", label: t("period_day") },
+    { key: "week", label: t("period_week") },
+    { key: "month", label: t("period_month") },
+    { key: "year", label: t("period_year") },
   ];
 
   if (isLoading) {
@@ -130,14 +130,35 @@ function WasteSection() {
       <Card className="shadow-sm" data-testid="card-waste-locked">
         <CardHeader><CardTitle>{t("waste_detection")}</CardTitle></CardHeader>
         <CardContent className="text-center py-6">
-          <p className="text-muted-foreground mb-4">Business plan required</p>
-          <Link href="/subscriptions"><Button variant="outline" data-testid="button-upgrade-waste">Upgrade</Button></Link>
+          <p className="text-muted-foreground mb-4">{t("business_plan_required")}</p>
+          <Link href="/subscriptions"><Button variant="outline" data-testid="button-upgrade-waste">{t("upgrade")}</Button></Link>
         </CardContent>
       </Card>
     );
   }
 
   return <WasteAlerts />;
+}
+
+function getAlertMessage(alert: any, t: (key: string, opts?: any) => string): string {
+  if (alert.type === "costs_high") return t("alert_costs_high");
+  if (alert.type === "category_pct") {
+    const cat = (alert.category || "").toLowerCase();
+    if (cat === "water") return t("alert_water_pct", { pct: alert.pct });
+    if (cat === "electricity") return t("alert_electricity_pct", { pct: alert.pct });
+    return `${alert.category} — ${alert.pct}%`;
+  }
+  return alert.message || "";
+}
+
+function getAlertRecommendation(alert: any, t: (key: string) => string): string {
+  if (alert.type === "costs_high") return t("alert_costs_high_detail");
+  if (alert.type === "category_pct") {
+    const cat = (alert.category || "").toLowerCase();
+    if (cat === "water") return t("alert_reduce_water");
+    if (cat === "electricity") return t("alert_reduce_electricity");
+  }
+  return alert.recommendation || "";
 }
 
 function WasteAlerts() {
@@ -150,7 +171,7 @@ function WasteAlerts() {
       <CardContent>
         {!alerts || alerts.length === 0 ? (
           <div className="text-center py-4 text-green-600 flex items-center justify-center gap-2">
-            <CheckCircle className="w-5 h-5" /> No waste issues detected. Great job!
+            <CheckCircle className="w-5 h-5" /> {t("no_waste_detected")}
           </div>
         ) : (
           <div className="space-y-3">
@@ -158,9 +179,9 @@ function WasteAlerts() {
               <div key={i} className={`p-4 rounded-lg border ${alert.severity === "high" ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900" : "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-900"}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <Badge variant={alert.severity === "high" ? "destructive" : "secondary"}>{alert.severity}</Badge>
-                  <span className="font-medium">{alert.message}</span>
+                  <span className="font-medium">{getAlertMessage(alert, t)}</span>
                 </div>
-                <p className="text-sm text-muted-foreground">{alert.recommendation}</p>
+                <p className="text-sm text-muted-foreground">{getAlertRecommendation(alert, t)}</p>
               </div>
             ))}
           </div>
@@ -179,8 +200,8 @@ function PerformanceScoreSection() {
       <Card className="shadow-sm" data-testid="card-performance-locked">
         <CardHeader><CardTitle>{t("performance_score")}</CardTitle></CardHeader>
         <CardContent className="text-center py-6">
-          <p className="text-muted-foreground mb-4">Business plan required</p>
-          <Link href="/subscriptions"><Button variant="outline" data-testid="button-upgrade-performance">Upgrade</Button></Link>
+          <p className="text-muted-foreground mb-4">{t("business_plan_required")}</p>
+          <Link href="/subscriptions"><Button variant="outline" data-testid="button-upgrade-performance">{t("upgrade")}</Button></Link>
         </CardContent>
       </Card>
     );
@@ -210,8 +231,8 @@ function ProductionDelaysSection() {
           {delays.map((order: any) => (
             <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900">
               <div>
-                <p className="font-medium text-sm">Order #{order.id} — {order.customer?.name || "Unknown"}</p>
-                <p className="text-xs text-muted-foreground capitalize">{t("status")}: {order.status.replace(/_/g, " ")}</p>
+                <p className="font-medium text-sm">{t("order_number", { id: order.id })} — {order.customer?.name || t("unknown")}</p>
+                <p className="text-xs text-muted-foreground capitalize">{t("status")}: {t("stage_" + order.status, { defaultValue: order.status.replace(/_/g, " ") })}</p>
               </div>
               <div className="text-right">
                 <Badge variant="destructive" className="text-xs">{order.daysOverdue}d {t("delays_overdue")}</Badge>
@@ -243,13 +264,13 @@ function PerformanceScore() {
           </div>
           <div className="flex-1 space-y-3">
             {[
-              { label: "Machine Usage", value: score?.machineUsage || 0 },
-              { label: "Cost Efficiency", value: score?.costEfficiency || 0 },
-              { label: "Productivity", value: score?.productivity || 0 },
-              { label: "Waste Level", value: score?.wasteLevel || 0 },
+              { labelKey: "machine_usage", value: score?.machineUsage || 0 },
+              { labelKey: "cost_efficiency", value: score?.costEfficiency || 0 },
+              { labelKey: "productivity", value: score?.productivity || 0 },
+              { labelKey: "waste_level", value: score?.wasteLevel || 0 },
             ].map(item => (
-              <div key={item.label} className="space-y-1">
-                <div className="flex justify-between text-sm"><span>{item.label}</span><span>{item.value}%</span></div>
+              <div key={item.labelKey} className="space-y-1">
+                <div className="flex justify-between text-sm"><span>{t(item.labelKey)}</span><span>{item.value}%</span></div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${item.value}%` }} />
                 </div>

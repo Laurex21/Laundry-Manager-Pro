@@ -927,7 +927,7 @@ export class DatabaseStorage implements IStorage {
     const alerts: any[] = [];
 
     if (monthExpenses > monthRevenue * 0.8 && monthRevenue > 0) {
-      alerts.push({ category: "Cost", severity: "high", message: "Operating costs are very high relative to revenue", recommendation: "Review and optimize your expense categories" });
+      alerts.push({ category: "Cost", severity: "high", type: "costs_high" });
     }
 
     const expenseCatWhere = siteId !== null
@@ -939,7 +939,8 @@ export class DatabaseStorage implements IStorage {
     
     for (const cat of expensesByCategory) {
       if (Number(cat.total) > monthRevenue * 0.3 && monthRevenue > 0) {
-        alerts.push({ category: cat.category, severity: "medium", message: `${cat.category} expenses are ${Math.round((Number(cat.total) / monthRevenue) * 100)}% of revenue`, recommendation: `Consider reducing ${cat.category.toLowerCase()} costs` });
+        const pct = Math.round((Number(cat.total) / monthRevenue) * 100);
+        alerts.push({ category: cat.category, severity: "medium", type: "category_pct", pct });
       }
     }
 
@@ -956,7 +957,7 @@ export class DatabaseStorage implements IStorage {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, siteId);
     const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteId);
-    const costEfficiency = monthRevenue > 0 ? Math.min(100, ((monthRevenue - monthExpenses) / monthRevenue) * 100) : 50;
+    const costEfficiency = monthRevenue > 0 ? Math.min(100, Math.max(0, ((monthRevenue - monthExpenses) / monthRevenue) * 100)) : 50;
 
     const employeeWhere = siteId !== null ? eq(employees.siteId, siteId) : undefined;
     const allEmployees = employeeWhere ? await db.select().from(employees).where(employeeWhere) : await db.select().from(employees);

@@ -1,0 +1,271 @@
+Fix incomplete French translations throughout the app.
+
+The language switcher is set to FR but many strings remain in English.
+There are two causes to fix simultaneously.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CAUSE 1 — Hardcoded strings in components
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Find every hardcoded English string in these component/page files and 
+replace them with useTranslation() t() calls:
+
+In orders page / order form / order detail:
+  "Manage laundry orders and status"  → t("orders_subtitle")
+  "Order Details"                     → t("order_details")
+  "Register New Customer"             → t("register_new_customer")
+  "Order Pipeline"                    → t("order_pipeline")
+  "Advance to [stage name]"           → t("advance_to", { stage: t(nextStage) })
+  "Jump to stage..."                  → t("jump_to_stage")
+  "Current"                           → t("current_stage")
+  All pipeline stage labels:
+    "Received"        → t("step_received")
+    "Washing"         → t("step_washing")
+    "Stain Treatment" → t("step_stain_treatment")
+    "Drying"          → t("step_drying")
+    "Ironing"         → t("step_ironing")
+    "Ready"           → t("step_ready")
+    "Delivered"       → t("step_delivered")
+
+In clients page:
+  "Manage your customer base"         → t("clients_subtitle")
+
+In expenses page:
+  "Expense History"                   → t("expense_history")
+  "Period Spending"                   → t("period_spending")
+  "Based on current filter"           → t("based_on_filter")
+  "Spending Breakdown"                → t("spending_breakdown")
+  Expense type labels:
+    "Water"       → t("type_water")
+    "Electricity" → t("type_electricity")
+    "Detergent"   → t("type_detergent")
+    "Rent"        → t("type_rent")
+    "Salary"      → t("type_salary")
+    "Other"       → t("type_other")
+
+In payments page:
+  "Register Payment"                  → t("register_payment")
+  "Select Order"                      → t("select_order")
+  "Search for an order..."            → t("search_order_placeholder")
+  "Order Total"                       → t("order_total")
+  "Amount Paid"                       → t("amount_paid")
+  "Remaining"                         → t("remaining")
+  "Amount"                            → t("amount")
+  "Payment Method"                    → t("payment_method")
+  "Record Payment of"                 → t("record_payment_of")
+  "Quick Guide"                       → t("quick_guide")
+  "Search and select an unpaid order" → t("guide_step_1")
+  "Review the balance and enter payment amount" → t("guide_step_2")
+  "Choose payment method and submit"  → t("guide_step_3")
+  "Download the receipt for your records" → t("guide_step_4")
+
+In analytics page:
+  "Operating costs are very high relative to revenue" → t("alert_costs_high")
+  "Review and optimize your expense categories"       → t("alert_costs_high_detail")
+  "Water expenses are X% of revenue"     → t("alert_water_pct", { pct: value })
+  "Electricity expenses are X% of revenue" → t("alert_electricity_pct", { pct: value })
+  "Consider reducing water costs"        → t("alert_reduce_water")
+  "Consider reducing electricity costs"  → t("alert_reduce_electricity")
+  "Machine Usage"     → t("machine_usage")
+  "Cost Efficiency"   → t("cost_efficiency")
+  "Productivity"      → t("productivity")
+  "Waste Level"       → t("waste_level")
+  Order status labels in production delays section:
+    "Statut: Washing"   → "Statut: " + t("step_washing")
+    "Statut: Received"  → "Statut: " + t("step_received")
+    "Order #X"          → t("order_number", { id: X })
+
+In subscriptions/plans page:
+  All plan feature strings should use translation keys
+
+In settings page (receipt tab):
+  "Header Color"              → t("header_color")
+  "Receipt Language"          → t("receipt_language")
+  "Footer Note"               → t("receipt_footer_note")
+  "Sections to Show"          → t("sections_to_show")
+  "Choose what appears on printed/downloaded receipts" → t("sections_hint")
+  "Show Logo on Receipt"      → t("show_logo_on_receipt")
+  "Show Expected Pickup Date" → t("show_pickup_date")
+  "Show Garment Checklist"    → t("show_garment_list")
+  "Show Payment History"      → t("show_payment_history")
+  "Show Terms & Conditions"   → t("show_terms")
+  "Your Business Name"        → t("business_name")
+  "Laundry Service"           → t("tagline")
+  "Receipt preview (header color applied)" → t("receipt_preview")
+  "Save Changes"              → t("save_changes")
+
+In settings page (terms tab):
+  "Reset to Default"          → t("reset_to_default")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CAUSE 2 — Add all missing French keys to i18n.ts
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+In client/src/lib/i18n.ts (or wherever translations are defined),
+add ALL of the following keys to BOTH the "en" and "fr" objects.
+
+English additions:
+{
+  "orders_subtitle": "Manage laundry orders and status",
+  "order_details": "Order Details",
+  "register_new_customer": "Register New Customer",
+  "order_pipeline": "Order Pipeline",
+  "advance_to": "Advance to {{stage}}",
+  "jump_to_stage": "Jump to stage...",
+  "current_stage": "Current",
+  "step_received": "Received",
+  "step_washing": "Washing",
+  "step_stain_treatment": "Stain Treatment",
+  "step_drying": "Drying",
+  "step_ironing": "Ironing",
+  "step_ready": "Ready",
+  "step_delivered": "Delivered",
+  "clients_subtitle": "Manage your customer base",
+  "expense_history": "Expense History",
+  "period_spending": "Period Spending",
+  "based_on_filter": "Based on current filter",
+  "spending_breakdown": "Spending Breakdown",
+  "type_water": "Water",
+  "type_electricity": "Electricity",
+  "type_detergent": "Detergent",
+  "type_rent": "Rent",
+  "type_salary": "Salary",
+  "type_other": "Other",
+  "register_payment": "Register Payment",
+  "select_order": "Select Order",
+  "search_order_placeholder": "Search for an order...",
+  "order_total": "Order Total",
+  "amount_paid": "Amount Paid",
+  "remaining": "Remaining",
+  "record_payment_of": "Record Payment of",
+  "quick_guide": "Quick Guide",
+  "guide_step_1": "Search and select an unpaid order",
+  "guide_step_2": "Review the balance and enter payment amount",
+  "guide_step_3": "Choose payment method and submit",
+  "guide_step_4": "Download the receipt for your records",
+  "alert_costs_high": "Operating costs are very high relative to revenue",
+  "alert_costs_high_detail": "Review and optimize your expense categories",
+  "alert_water_pct": "Water expenses are {{pct}}% of revenue",
+  "alert_electricity_pct": "Electricity expenses are {{pct}}% of revenue",
+  "alert_reduce_water": "Consider reducing water costs",
+  "alert_reduce_electricity": "Consider reducing electricity costs",
+  "machine_usage": "Machine Usage",
+  "cost_efficiency": "Cost Efficiency",
+  "productivity": "Productivity",
+  "waste_level": "Waste Level",
+  "order_number": "Order #{{id}}",
+  "header_color": "Header Color",
+  "sections_to_show": "Sections to Show",
+  "sections_hint": "Choose what appears on printed/downloaded receipts",
+  "receipt_preview": "Receipt preview (header color applied)",
+  "reset_to_default": "Reset to Default",
+  "unpaid": "Unpaid",
+  "partial": "Partial",
+  "paid": "Paid"
+}
+
+French additions (add to the "fr" translation object):
+{
+  "orders_subtitle": "Gérer les commandes et leur statut",
+  "order_details": "Détails de la commande",
+  "register_new_customer": "Nouveau client",
+  "order_pipeline": "Pipeline de traitement",
+  "advance_to": "Passer à {{stage}}",
+  "jump_to_stage": "Aller à l'étape...",
+  "current_stage": "En cours",
+  "step_received": "Reçu",
+  "step_washing": "Lavage",
+  "step_stain_treatment": "Traitement des taches",
+  "step_drying": "Séchage",
+  "step_ironing": "Repassage",
+  "step_ready": "Prêt",
+  "step_delivered": "Livré",
+  "clients_subtitle": "Gérer votre base clients",
+  "expense_history": "Historique des dépenses",
+  "period_spending": "Dépenses de la période",
+  "based_on_filter": "Selon le filtre actif",
+  "spending_breakdown": "Répartition des dépenses",
+  "type_water": "Eau",
+  "type_electricity": "Électricité",
+  "type_detergent": "Détergent",
+  "type_rent": "Loyer",
+  "type_salary": "Salaire",
+  "type_other": "Autre",
+  "register_payment": "Enregistrer un paiement",
+  "select_order": "Sélectionner une commande",
+  "search_order_placeholder": "Rechercher une commande...",
+  "order_total": "Total commande",
+  "amount_paid": "Montant payé",
+  "remaining": "Reste à payer",
+  "record_payment_of": "Enregistrer le paiement de",
+  "quick_guide": "Guide rapide",
+  "guide_step_1": "Rechercher et sélectionner une commande impayée",
+  "guide_step_2": "Vérifier le solde et saisir le montant du paiement",
+  "guide_step_3": "Choisir le mode de paiement et valider",
+  "guide_step_4": "Télécharger le reçu pour vos archives",
+  "alert_costs_high": "Les charges d'exploitation sont très élevées par rapport au chiffre d'affaires",
+  "alert_costs_high_detail": "Vérifiez et optimisez vos catégories de dépenses",
+  "alert_water_pct": "Les dépenses en eau représentent {{pct}}% du chiffre d'affaires",
+  "alert_electricity_pct": "Les dépenses en électricité représentent {{pct}}% du chiffre d'affaires",
+  "alert_reduce_water": "Envisagez de réduire vos coûts en eau",
+  "alert_reduce_electricity": "Envisagez de réduire vos coûts en électricité",
+  "machine_usage": "Utilisation des machines",
+  "cost_efficiency": "Efficience des coûts",
+  "productivity": "Productivité",
+  "waste_level": "Niveau de gaspillage",
+  "order_number": "Commande #{{id}}",
+  "header_color": "Couleur d'en-tête",
+  "sections_to_show": "Sections à afficher",
+  "sections_hint": "Choisissez ce qui apparaît sur les reçus imprimés/téléchargés",
+  "receipt_preview": "Aperçu du reçu (couleur d'en-tête appliquée)",
+  "reset_to_default": "Réinitialiser par défaut",
+  "unpaid": "Impayé",
+  "partial": "Partiel",
+  "paid": "Payé"
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ADDITIONAL FIXES visible in the screenshots
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Image 8 — Payment amount bug: the "Record Payment" button shows
+   "Record Payment of CFA0.00" instead of the actual amount.
+   The amount field shows "12000.00" but the button reads CFA0.00.
+   Fix: the button label should read the current value of the amount
+   input field, not a separate state variable that is not being updated.
+
+2. Image 10/11 — Performance score shows "-171 / 100" and 
+   "Cost Efficiency: -823%". These are impossible values caused by
+   the analytics queries mixing data from multiple users (the data
+   isolation bug). Once the siteId filtering fix is applied, these
+   values should normalize. If they don't, add a Math.max(0, value)
+   clamp on the cost efficiency calculation so it never goes below 0%.
+
+3. Image 4 — The currency shows "XOF" in the header but order 
+   amounts show "CFA". Standardize: if currency is XOF/CFA, always
+   display as "FCFA" throughout the app (not CFA, not XOF).
+   Replace all instances of "CFA" prefix and "XOF" label with "FCFA".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After implementing, switch language to FR and verify:
+
+- [ ] Orders page subtitle shows in French
+- [ ] Order creation form title and all labels in French  
+- [ ] Pipeline stage names all in French
+- [ ] "Advance to Stain Treatment" button shows "Passer au traitement des taches"
+- [ ] "Jump to stage" dropdown shows in French with French stage names
+- [ ] Clients page subtitle in French
+- [ ] Expense history title, period spending, breakdown all in French
+- [ ] Expense type names (Water→Eau, Electricity→Électricité) in French
+- [ ] Payments page all labels in French
+- [ ] Quick guide steps in French
+- [ ] Analytics alerts text in French
+- [ ] Performance score sub-labels in French
+- [ ] Production delays order labels in French
+- [ ] Settings receipt tab all labels in French
+- [ ] Currency displays consistently as "FCFA" everywhere
+- [ ] Payment button shows correct amount (not CFA0.00)
+- [ ] Switch back to EN — all text returns to English correctly

@@ -87,7 +87,7 @@ export default function Orders() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('orders')}</h1>
-          <p className="text-muted-foreground mt-1">Manage laundry orders and status</p>
+          <p className="text-muted-foreground mt-1">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -193,7 +193,7 @@ export default function Orders() {
           </div>
         ) : filteredOrders?.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-xl">
-            No orders found.
+            {t("no_orders_found")}
           </div>
         ) : (
           filteredOrders?.map((order: any) => (
@@ -362,7 +362,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b pb-4">
-        <h3 className="font-semibold text-lg">Order Details</h3>
+        <h3 className="font-semibold text-lg">{t("order_details")}</h3>
         <Button 
           type="button" 
           variant="outline" 
@@ -370,7 +370,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
           onClick={() => setShowAddCustomer(!showAddCustomer)}
         >
           <UserPlus className="w-4 h-4 mr-2" />
-          {showAddCustomer ? "Select Existing" : "Register New Customer"}
+          {showAddCustomer ? t("select_existing") : t("register_new_customer")}
         </Button>
       </div>
 

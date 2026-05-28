@@ -194,7 +194,7 @@ export default function Payments() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('payments') || 'Payments'}</h1>
-          <p className="text-muted-foreground mt-1">Record and manage order payments</p>
+          <p className="text-muted-foreground mt-1">{t("payments_subtitle")}</p>
         </div>
       </div>
 
@@ -206,14 +206,14 @@ export default function Payments() {
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <h3 className="font-bold text-green-900 dark:text-green-300 text-lg">Payment Recorded Successfully</h3>
+                <h3 className="font-bold text-green-900 dark:text-green-300 text-lg">{t("payment_recorded_success")}</h3>
                 <p className="text-green-700 dark:text-green-400 text-sm mt-1">
-                  {symbol}{successPayment.amount} paid for Order #{successPayment.orderId} via {successPayment.method}.
-                  Status: <Badge variant="outline" className={successPayment.newStatus === 'paid' ? 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-400' : 'border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400'}>{successPayment.newStatus === 'paid' ? 'Fully Paid' : 'Partially Paid'}</Badge>
+                  {symbol}{successPayment.amount} {t("paid_for_order")} #{successPayment.orderId} {t("via")} {successPayment.method}.
+                  {t("status")}: <Badge variant="outline" className={successPayment.newStatus === 'paid' ? 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-400' : 'border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400'}>{successPayment.newStatus === 'paid' ? t("fully_paid") : t("partially_paid")}</Badge>
                 </p>
               </div>
               <Button onClick={downloadReceipt} variant="outline" className="gap-2" disabled={receiptLoading} data-testid="button-download-receipt">
-                <Download className="w-4 h-4" /> {receiptLoading ? "Preparing..." : "Download Receipt"}
+                <Download className="w-4 h-4" /> {receiptLoading ? t("preparing") : t("download_receipt")}
               </Button>
             </div>
           </CardContent>
@@ -224,13 +224,13 @@ export default function Payments() {
         <Card className="lg:col-span-2 shadow-sm border-border/50">
           <CardHeader>
             <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" /> Register Payment
+              <CreditCard className="w-5 h-5 text-primary" /> {t("register_payment")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Select Order</label>
+                <label className="text-sm font-medium">{t("select_order")}</label>
                 <Popover open={orderSearchOpen} onOpenChange={setOrderSearchOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -240,8 +240,8 @@ export default function Payments() {
                     >
                       <Search className="w-4 h-4 mr-2 text-muted-foreground" />
                       {selectedOrder
-                        ? `Order #${selectedOrder.id} - ${(selectedOrder as any)?.customer?.name || 'Customer'}`
-                        : "Search for an order..."}
+                        ? `${t("order_number", { id: selectedOrder.id })} - ${(selectedOrder as any)?.customer?.name || t("customer")}`
+                        : t("search_order_placeholder")}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[400px] p-0" align="start">
@@ -284,15 +284,15 @@ export default function Payments() {
                     <CardContent className="p-4">
                       <div className="grid grid-cols-3 gap-4 text-center">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Order Total</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t("order_total")}</p>
                           <p className="font-mono font-bold text-lg" data-testid="text-order-total">{symbol}{totalAmount.toFixed(2)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Amount Paid</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t("amount_paid")}</p>
                           <p className="font-mono font-bold text-lg text-green-600 dark:text-green-400" data-testid="text-amount-paid">{symbol}{totalPaid.toFixed(2)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Remaining</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t("remaining")}</p>
                           <p className="font-mono font-bold text-lg text-orange-600 dark:text-orange-400" data-testid="text-remaining-balance">{symbol}{remainingBalance.toFixed(2)}</p>
                         </div>
                       </div>
@@ -301,7 +301,7 @@ export default function Payments() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Amount</label>
+                      <label className="text-sm font-medium">{t("amount")}</label>
                       <div className="relative">
                         <Input
                           type="number"
@@ -320,7 +320,7 @@ export default function Payments() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Payment Method</label>
+                      <label className="text-sm font-medium">{t("payment_method")}</label>
                       <Select value={method} onValueChange={(v) => { setMethod(v); setReference(""); }}>
                         <SelectTrigger data-testid="select-payment-method">
                           <SelectValue />
@@ -339,7 +339,7 @@ export default function Payments() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Date</label>
+                      <label className="text-sm font-medium">{t("date")}</label>
                       <Input
                         type="date"
                         value={paymentDate}
@@ -368,7 +368,7 @@ export default function Payments() {
                     disabled={isPending || !amount || !!amountError}
                     data-testid="button-submit-payment"
                   >
-                    {isPending ? "Processing..." : `Record Payment of ${symbol}${amount || '0.00'}`}
+                    {isPending ? t("saving") : `${t("record_payment_of")} ${symbol}${Number(amount || 0).toFixed(2)}`}
                   </Button>
                 </>
               )}
@@ -380,25 +380,25 @@ export default function Payments() {
           <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/10 dark:to-card border-blue-100 dark:border-blue-900/20 shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-muted-foreground">Quick Guide</span>
+                <span className="text-sm font-medium text-muted-foreground">{t("quick_guide")}</span>
                 <Receipt className="w-4 h-4 text-primary" />
               </div>
               <div className="space-y-3 mt-3">
                 <div className="flex items-start gap-3">
                   <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">1</div>
-                  <p className="text-sm text-muted-foreground">Search and select an unpaid order</p>
+                  <p className="text-sm text-muted-foreground">{t("guide_step_1")}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">2</div>
-                  <p className="text-sm text-muted-foreground">Review the balance and enter payment amount</p>
+                  <p className="text-sm text-muted-foreground">{t("guide_step_2")}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">3</div>
-                  <p className="text-sm text-muted-foreground">Choose payment method and submit</p>
+                  <p className="text-sm text-muted-foreground">{t("guide_step_3")}</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">4</div>
-                  <p className="text-sm text-muted-foreground">Download the receipt for your records</p>
+                  <p className="text-sm text-muted-foreground">{t("guide_step_4")}</p>
                 </div>
               </div>
             </CardContent>
@@ -407,7 +407,7 @@ export default function Payments() {
           {selectedOrder && orderPayments && orderPayments.length > 0 && (
             <Card className="shadow-sm border-border/50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold">Payment History</CardTitle>
+                <CardTitle className="text-sm font-bold">{t("payment_history_title")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -416,7 +416,7 @@ export default function Payments() {
                       <div className="flex items-center gap-2">
                         <Banknote className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-muted-foreground">{p.method}</span>
-                        {p.reference && <span className="text-[10px] text-muted-foreground/70">Ref: {p.reference}</span>}
+                        {p.reference && <span className="text-[10px] text-muted-foreground/70">{t("ref_label")} {p.reference}</span>}
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-mono font-medium text-green-600 dark:text-green-400">{symbol}{Number(p.amount).toFixed(2)}</span>

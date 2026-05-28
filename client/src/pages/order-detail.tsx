@@ -245,8 +245,8 @@ export default function OrderDetail() {
           <CardContent className="p-4 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-orange-600" />
             <div>
-              <p className="font-semibold text-orange-800 dark:text-orange-300">Incomplete Order</p>
-              <p className="text-sm text-orange-700 dark:text-orange-400">Some garments have been returned for additional treatment.</p>
+              <p className="font-semibold text-orange-800 dark:text-orange-300">{t("incomplete_order")}</p>
+              <p className="text-sm text-orange-700 dark:text-orange-400">{t("returned_garments_alert")}</p>
             </div>
           </CardContent>
         </Card>
@@ -254,7 +254,7 @@ export default function OrderDetail() {
 
       <Card className="overflow-hidden" data-testid="pipeline-stepper">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Order Pipeline</CardTitle>
+          <CardTitle className="text-base">{t("order_pipeline")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-0 overflow-x-auto pb-2">
@@ -279,10 +279,10 @@ export default function OrderDetail() {
                       "text-[10px] font-medium text-center leading-tight",
                       isCurrent ? "text-primary font-bold" : isPast ? "text-green-600" : "text-muted-foreground"
                     )}>
-                      {stage.label}
+                      {t("stage_" + stage.key)}
                     </span>
                     {isCurrent && (
-                      <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Current</span>
+                      <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">{t("current_stage")}</span>
                     )}
                   </div>
                   {i < PIPELINE_STAGES.length - 1 && (
@@ -315,7 +315,7 @@ export default function OrderDetail() {
               <>
                 {currentStageIndex < PIPELINE_STAGES.length - 1 && (
                   <Button size="sm" onClick={handleAdvanceStatus} disabled={isUpdating} data-testid="button-advance-status">
-                    Advance to {PIPELINE_STAGES[currentStageIndex + 1]?.label}
+                    {t("advance_to", { stage: t("stage_" + PIPELINE_STAGES[currentStageIndex + 1]?.key) })}
                   </Button>
                 )}
                 <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setCancelDialogOpen(true)} data-testid="button-request-cancellation">
@@ -326,11 +326,11 @@ export default function OrderDetail() {
             {order.status !== "delivered" && order.status !== "cancelled" && (
               <Select onValueChange={handleSetStatus}>
                 <SelectTrigger className="w-[170px] h-9" data-testid="select-set-status">
-                  <SelectValue placeholder="Jump to stage..." />
+                  <SelectValue placeholder={t("jump_to_stage")} />
                 </SelectTrigger>
                 <SelectContent>
                   {PIPELINE_STAGES.map(s => (
-                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                    <SelectItem key={s.key} value={s.key}>{t("stage_" + s.key)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

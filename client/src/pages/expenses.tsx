@@ -150,7 +150,7 @@ export default function Expenses() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 shadow-sm border-border/50">
-          <CardHeader><CardTitle className="text-lg font-bold">Expense History</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg font-bold">{t("expense_history")}</CardTitle></CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="text-muted-foreground">Loading...</div>
@@ -190,16 +190,16 @@ export default function Expenses() {
           <Card className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/10 dark:to-card border-orange-100 dark:border-orange-900/20 shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-muted-foreground">Period Spending</span>
+                <span className="text-sm font-medium text-muted-foreground">{t("period_spending")}</span>
                 <TrendingDown className="w-4 h-4 text-orange-500" />
               </div>
               <h2 className="text-2xl sm:text-3xl font-display font-bold text-orange-900 dark:text-orange-400">{symbol}{totalFilteredExpenses.toFixed(2)}</h2>
-              <p className="text-xs text-muted-foreground mt-2">Based on current filter</p>
+              <p className="text-xs text-muted-foreground mt-2">{t("based_on_filter")}</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-sm border-border/50 overflow-hidden">
-            <CardHeader className="pb-2"><CardTitle className="text-lg font-bold">Spending Breakdown</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-lg font-bold">{t("spending_breakdown")}</CardTitle></CardHeader>
             <CardContent className="h-[300px] flex items-center justify-center p-0">
               {totalFilteredExpenses === 0 ? (
                 <div className="text-center p-6 text-muted-foreground flex flex-col items-center gap-2">

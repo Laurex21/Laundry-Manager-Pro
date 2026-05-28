@@ -51,7 +51,7 @@ export default function Customers() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('customers')}</h1>
-          <p className="text-muted-foreground mt-1">Manage your customer base</p>
+          <p className="text-muted-foreground mt-1">{t("clients_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -61,7 +61,7 @@ export default function Customers() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
+              <DialogTitle>{t("add_new_customer")}</DialogTitle>
             </DialogHeader>
             <CustomerForm onSuccess={() => setOpen(false)} />
           </DialogContent>
@@ -128,7 +128,7 @@ export default function Customers() {
           ))}
           {filteredCustomers?.length === 0 && (
             <div className="col-span-full text-center py-12 text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border">
-              No customers found. Create one to get started.
+              {t("no_customers_found")}
             </div>
           )}
         </div>
@@ -138,6 +138,7 @@ export default function Customers() {
 }
 
 function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
+  const { t } = useTranslation();
   const { mutate, isPending } = useCreateCustomer();
   
   const form = useForm<InsertCustomer>({
@@ -168,7 +169,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Full Name</FormLabel>
+              <FormLabel>{t("full_name")}</FormLabel>
               <FormControl>
                 <Input placeholder="John Doe" {...field} />
               </FormControl>
@@ -182,7 +183,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone</FormLabel>
+                <FormLabel>{t("phone")}</FormLabel>
                 <FormControl>
                   <Input placeholder="+1 234..." {...field} />
                 </FormControl>
@@ -195,7 +196,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Email (Optional)</FormLabel>
+                <FormLabel>{t("email_optional")}</FormLabel>
                 <FormControl>
                   <Input placeholder="john@example.com" {...field} value={field.value || ""} />
                 </FormControl>
@@ -209,7 +210,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
           name="address"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Address</FormLabel>
+              <FormLabel>{t("address")}</FormLabel>
               <FormControl>
                 <Input placeholder="123 Main St, City" {...field} />
               </FormControl>
@@ -218,7 +219,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
           )}
         />
         <Button type="submit" className="w-full mt-2" disabled={isPending}>
-          {isPending ? "Creating..." : "Create Customer"}
+          {isPending ? t("saving") : t("create_customer")}
         </Button>
       </form>
     </Form>

@@ -12,7 +12,7 @@ interface CurrencyStore {
 const symbols: Record<Currency, string> = {
   USD: "$",
   NGN: "₦",
-  XOF: "CFA",
+  XOF: "FCFA",
   EUR: "€",
 };
 
