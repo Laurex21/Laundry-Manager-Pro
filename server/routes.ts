@@ -102,8 +102,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ success: true });
   });
 
-  app.get("/api/orders/pending-cancellations", isAuthenticated, async (req, res) => {
-    const pending = await storage.getPendingCancellations();
+  app.get("/api/orders/pending-cancellations", isAuthenticated, async (req: any, res) => {
+    const pending = await storage.getPendingCancellations(req.siteId);
     res.json(pending);
   });
 
@@ -252,18 +252,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get(api.performance.get.path, isAuthenticated, async (req, res) => {
-    const data = await storage.getPerformanceData();
+  app.get(api.performance.get.path, isAuthenticated, async (req: any, res) => {
+    const data = await storage.getPerformanceData(req.siteId);
     res.json(data);
   });
 
-  app.get(api.reports.get.path, isAuthenticated, async (req, res) => {
+  app.get(api.reports.get.path, isAuthenticated, async (req: any, res) => {
     const { start, end } = req.query;
     const startDate = start ? new Date(start as string) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const endDate = end ? new Date(end as string) : new Date();
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
     endDate.setHours(23, 59, 59, 999);
-    const data = await storage.getReportData(startDate, endDate);
+    const data = await storage.getReportData(startDate, endDate, req.siteId);
     res.json(data);
   });
 
@@ -272,14 +272,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(stats);
   });
 
-  app.get("/api/machines", isAuthenticated, async (req, res) => {
-    const machines = await storage.getMachines((req.session as any).userId);
+  app.get("/api/machines", isAuthenticated, async (req: any, res) => {
+    const machines = await storage.getMachines(req.siteId, (req.session as any).userId);
     res.json(machines);
   });
 
-  app.post("/api/machines", isAuthenticated, async (req, res) => {
+  app.post("/api/machines", isAuthenticated, async (req: any, res) => {
     try {
-      const machine = await storage.createMachine({ ...req.body, userId: (req.session as any).userId });
+      const machine = await storage.createMachine({ ...req.body, userId: (req.session as any).userId, siteId: req.siteId });
       res.status(201).json(machine);
     } catch (err) {
       res.status(400).json({ message: "Invalid machine data" });
@@ -298,14 +298,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ success: true });
   });
 
-  app.get("/api/employees", isAuthenticated, async (req, res) => {
-    const employees = await storage.getEmployees((req.session as any).userId);
+  app.get("/api/employees", isAuthenticated, async (req: any, res) => {
+    const employees = await storage.getEmployees(req.siteId, (req.session as any).userId);
     res.json(employees);
   });
 
-  app.post("/api/employees", isAuthenticated, async (req, res) => {
+  app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const employee = await storage.createEmployee({ ...req.body, userId: (req.session as any).userId });
+      const employee = await storage.createEmployee({ ...req.body, userId: (req.session as any).userId, siteId: req.siteId });
       res.status(201).json(employee);
     } catch (err) {
       res.status(400).json({ message: "Invalid employee data" });
@@ -362,24 +362,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
-  app.get("/api/analytics/kpis", isAuthenticated, async (req, res) => {
+  app.get("/api/analytics/kpis", isAuthenticated, async (req: any, res) => {
     const period = (req.query.period as string) || "month";
-    const data = await storage.getAnalyticsKpis(period);
+    const data = await storage.getAnalyticsKpis(period, req.siteId);
     res.json(data);
   });
 
-  app.get("/api/analytics/waste", isAuthenticated, async (req, res) => {
-    const alerts = await storage.getWasteAlerts();
+  app.get("/api/analytics/waste", isAuthenticated, async (req: any, res) => {
+    const alerts = await storage.getWasteAlerts(req.siteId);
     res.json(alerts);
   });
 
-  app.get("/api/analytics/performance-score", isAuthenticated, async (req, res) => {
-    const score = await storage.getPerformanceScore();
+  app.get("/api/analytics/performance-score", isAuthenticated, async (req: any, res) => {
+    const score = await storage.getPerformanceScore(req.siteId);
     res.json(score);
   });
 
-  app.get("/api/analytics/production-delays", isAuthenticated, async (req, res) => {
-    const delays = await storage.getProductionDelays();
+  app.get("/api/analytics/production-delays", isAuthenticated, async (req: any, res) => {
+    const delays = await storage.getProductionDelays(req.siteId);
     res.json(delays);
   });
 
