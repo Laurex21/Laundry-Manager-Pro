@@ -171,7 +171,7 @@ function openPDF(lead: Lead, inp: Inputs, r: Results, mode: Mode, sym: string) {
   .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold}
 </style></head><body>
 <div class="header">
-  <div class="logo">👕 Xpress Clean</div>
+  <div class="logo">👕 XpressPro</div>
   <div class="title">Rapport de Rentabilité</div>
   <div class="sub">Calculateur de rentabilité pressing — ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}</div>
 </div>
@@ -202,10 +202,10 @@ function openPDF(lead: Lead, inp: Inputs, r: Results, mode: Mode, sym: string) {
 <h2>Répartition des coûts par cycle</h2>
 ${r.breakdown.map(b=>`<div class="row"><span>${b.name}</span><span>${fmt(b.value)} <span class="badge" style="background:#eff6ff;color:#2563eb">${b.pct.toFixed(0)}%</span></span></div>`).join("")}
 <div class="cta">
-  <strong>Optimisez votre pressing avec Xpress Clean</strong><br>
+  <strong>Optimisez votre pressing avec XpressPro</strong><br>
   <span style="font-size:12px;color:#1e40af">Gestion des commandes, clients, paiements et statistiques en temps réel.</span>
 </div>
-<div class="footer">© ${new Date().getFullYear()} Xpress Clean Inc. — Rapport confidentiel généré le ${new Date().toLocaleDateString("fr-FR")}</div>
+<div class="footer">© ${new Date().getFullYear()} XpressPro Inc. — Rapport confidentiel généré le ${new Date().toLocaleDateString("fr-FR")}</div>
 </body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
@@ -918,15 +918,15 @@ export default function RentabilitePage() {
             <h3 className="font-bold text-base mb-1">Un expert analyse votre résultat</h3>
             <p className="text-sm text-muted-foreground mb-3">Obtenez des recommandations personnalisées pour améliorer votre rentabilité.</p>
             <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all"
-              onClick={() => window.open(`https://wa.me/?text=Bonjour, j'ai calculé ma rentabilité sur Xpress Clean (bénéfice estimé : ${fmtN(r.monthlyProfit)} ${sym}/mois) et j'aimerais un accompagnement expert.`, "_blank")}>
+              onClick={() => window.open(`https://wa.me/?text=Bonjour, j'ai calculé ma rentabilité sur XpressPro (bénéfice estimé : ${fmtN(r.monthlyProfit)} ${sym}/mois) et j'aimerais un accompagnement expert.`, "_blank")}>
               <MessageCircle className="w-4 h-4 mr-2" /> Parler à un expert
             </Button>
           </div>
 
-          {/* Xpress Clean SaaS CTA */}
+          {/* XpressPro SaaS CTA */}
           <div className="bg-gradient-to-br from-blue-600 to-blue-900 text-white rounded-2xl p-6 shadow-lg">
             <div className="text-2xl mb-3">💻</div>
-            <h3 className="font-bold text-xl mb-2">Pilotez votre pressing avec Xpress Clean</h3>
+            <h3 className="font-bold text-xl mb-2">Pilotez votre pressing avec XpressPro</h3>
             <p className="text-blue-100 text-sm mb-5">Suivez votre rentabilité en temps réel — commandes, paiements, statistiques et bien plus.</p>
             <div className="grid grid-cols-2 gap-2 mb-5">
               {["Suivi des commandes","Gestion clients","Tableau de bord","Statistiques","Facturation","Multi-sites"].map(f=>(
@@ -940,7 +940,7 @@ export default function RentabilitePage() {
                 Essayer gratuitement
               </Button>
               <Button variant="outline" className="border-white/40 text-white hover:bg-white/10 w-full"
-                onClick={() => window.open("https://wa.me/?text=Bonjour, je voudrais une démo de Xpress Clean.", "_blank")}>
+                onClick={() => window.open("https://wa.me/?text=Bonjour, je voudrais une démo de XpressPro.", "_blank")}>
                 Demander une démo
               </Button>
             </div>

@@ -84,11 +84,11 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">{t("email")}</Label>
-          <Input id="email" type="email" value={form.email} onChange={F("email")} placeholder="hello@xpressclean.cm" data-testid="input-email" />
+          <Input id="email" type="email" value={form.email} onChange={F("email")} placeholder="hello@xpresspro.cm" data-testid="input-email" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="website">{t("website")}</Label>
-          <Input id="website" value={form.website} onChange={F("website")} placeholder="https://xpressclean.cm" data-testid="input-website" />
+          <Input id="website" value={form.website} onChange={F("website")} placeholder="https://xpresspro.cm" data-testid="input-website" />
         </div>
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="address">{t("street_address")}</Label>

@@ -131,7 +131,7 @@ function openPDF(form: any, score: number, answers: number[]) {
   const risk = getRiskIndex(score);
   const recs = getRecommendations(score);
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Diagnostic Pressing — ${form.fullName || "Xpress Clean"}</title>
+<title>Diagnostic Pressing — ${form.fullName || "XpressPro"}</title>
 <style>
   body{font-family:Arial,sans-serif;color:#1e293b;padding:40px;max-width:800px;margin:auto}
   .header{background:linear-gradient(135deg,#2563eb,#1e40af);color:white;padding:32px;border-radius:12px;margin-bottom:24px}
@@ -153,7 +153,7 @@ function openPDF(form: any, score: number, answers: number[]) {
   .footer{text-align:center;color:#94a3b8;font-size:12px;margin-top:32px;border-top:1px solid #e2e8f0;padding-top:16px}
 </style></head><body>
 <div class="header">
-  <div class="logo">👕 Xpress Clean</div>
+  <div class="logo">👕 XpressPro</div>
   <h1>Diagnostic Professionnel de Pressing</h1>
   <div class="sub">Rapport personnalisé — ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</div>
 </div>
@@ -185,9 +185,9 @@ function openPDF(form: any, score: number, answers: number[]) {
 </div>
 <div class="cta">
   <strong>Prêt à passer au niveau supérieur ?</strong><br>
-  <span style="font-size:13px;color:#1e40af">Digitalisez votre pressing avec Xpress Clean — gestion des commandes, clients, paiements et statistiques en temps réel.</span>
+  <span style="font-size:13px;color:#1e40af">Digitalisez votre pressing avec XpressPro — gestion des commandes, clients, paiements et statistiques en temps réel.</span>
 </div>
-<div class="footer">© ${new Date().getFullYear()} Xpress Clean Inc. — Tous droits réservés. Ce rapport est confidentiel.</div>
+<div class="footer">© ${new Date().getFullYear()} XpressPro Inc. — Tous droits réservés. Ce rapport est confidentiel.</div>
 </body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
@@ -208,7 +208,7 @@ function Header({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="text-center mb-8">
       <div className="inline-flex items-center gap-2 mb-4 text-primary font-semibold text-sm bg-blue-50 border border-blue-100 px-4 py-1.5 rounded-full">
-        <Shirt className="w-4 h-4" /> Xpress Clean Diagnostic
+        <Shirt className="w-4 h-4" /> XpressPro Diagnostic
       </div>
       <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground leading-tight mb-3">{title}</h1>
       {subtitle && <p className="text-muted-foreground text-base max-w-lg mx-auto">{subtitle}</p>}
@@ -668,7 +668,7 @@ export default function DiagnosticPage() {
             <div className="text-2xl mb-3">🤝</div>
             <h3 className="font-bold text-base mb-1">Besoin d'un accompagnement personnalisé ?</h3>
             <p className="text-sm text-muted-foreground mb-4">Nos experts vous accompagnent pour structurer et développer votre activité.</p>
-            <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all" onClick={() => window.open(`https://wa.me/?text=Bonjour, j'ai obtenu le niveau ${level.label} au diagnostic Xpress Clean (${totalScore}/60) et je souhaite un accompagnement.`, "_blank")}>
+            <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all" onClick={() => window.open(`https://wa.me/?text=Bonjour, j'ai obtenu le niveau ${level.label} au diagnostic XpressPro (${totalScore}/60) et je souhaite un accompagnement.`, "_blank")}>
               <MessageCircle className="w-4 h-4 mr-2" /> Parler à un expert
             </Button>
           </div>
@@ -699,7 +699,7 @@ export default function DiagnosticPage() {
               <Button className="w-full bg-white text-primary hover:bg-blue-50 font-semibold" onClick={() => setLocation("/auth")}>
                 Essayer la plateforme
               </Button>
-              <Button variant="outline" className="w-full border-white/40 text-white hover:bg-white/10" onClick={() => window.open("https://wa.me/?text=Bonjour, je souhaite une démo de la plateforme Xpress Clean.", "_blank")}>
+              <Button variant="outline" className="w-full border-white/40 text-white hover:bg-white/10" onClick={() => window.open("https://wa.me/?text=Bonjour, je souhaite une démo de la plateforme XpressPro.", "_blank")}>
                 Demander une démo
               </Button>
             </div>

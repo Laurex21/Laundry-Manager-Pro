@@ -76,8 +76,8 @@ function OperationalPreview() {
             <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-xs text-slate-400 font-medium">Revenue MTD</span>
           </div>
-          <p className="text-2xl font-bold text-white font-display">142K FCFA</p>
-          <p className="text-xs text-slate-400 mt-0.5">XAF · Franc CFA</p>
+          <p className="text-2xl font-bold text-white font-display">142K XAF</p>
+          <p className="text-xs text-slate-400 mt-0.5">Central African CFA</p>
         </div>
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -393,7 +393,7 @@ export default function AuthPage() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Shirt className="w-4.5 h-4.5 text-primary-foreground" strokeWidth={2} />
             </div>
-            <span className="font-display font-bold text-lg tracking-tight text-foreground">Xpress Clean</span>
+            <span className="font-display font-bold text-lg tracking-tight text-foreground">XpressPro</span>
           </div>
           <div
             className="flex items-center gap-0.5 bg-muted rounded-lg p-1"
@@ -473,7 +473,7 @@ export default function AuthPage() {
             </a>
           </div>
           <p className="text-xs text-muted-foreground/60">
-            © {new Date().getFullYear()} Xpress Clean · {t("all_rights_reserved")}
+            © {new Date().getFullYear()} XpressPro · {t("all_rights_reserved")}
           </p>
         </div>
 

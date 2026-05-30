@@ -44,7 +44,7 @@ const LANGUAGES = [
 ];
 
 const CURRENCIES: { code: Currency; label: string; symbol: string }[] = [
-  { code: "XAF", label: "FCFA (XAF)", symbol: "FCFA" },
+  { code: "XAF", label: "XAF", symbol: "XAF" },
 ];
 
 const PAGE_TITLES: Record<string, string> = {
@@ -243,7 +243,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             <Shirt className="w-5 h-5 text-primary-foreground" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="font-display font-bold text-[15px] tracking-tight leading-tight">Xpress Clean</h1>
+            <h1 className="font-display font-bold text-[15px] tracking-tight leading-tight">XpressPro</h1>
             <p className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">{t("laundry_manager")}</p>
           </div>
         </div>

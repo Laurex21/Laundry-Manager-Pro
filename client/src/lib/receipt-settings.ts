@@ -21,7 +21,7 @@ export interface ReceiptSettings {
 }
 
 export const DEFAULT_SETTINGS: ReceiptSettings = {
-  businessName: "Xpress Clean",
+  businessName: "XpressPro",
   tagline: "Laundry Management",
   logoBase64: null,
   address: "",

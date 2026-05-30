@@ -142,7 +142,7 @@ export default function Reports() {
   function handleDownloadReport() {
     if (!data) return;
     const lines: string[] = [];
-    lines.push(`Xpress Clean - ${t("monthly_report")}`);
+    lines.push(`XpressPro - ${t("monthly_report")}`);
     lines.push(`${t("period")}: ${format(dateFrom, "MMM d, yyyy")} - ${format(dateTo, "MMM d, yyyy")}`);
     lines.push("");
     lines.push(`--- ${t("summary")} ---`);

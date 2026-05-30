@@ -118,7 +118,7 @@ export default function AcceptInvitation() {
           </div>
           <CardTitle className="text-2xl">You're Invited!</CardTitle>
           <CardDescription>
-            <strong>{invitation.inviterName}</strong> has invited you to join their team on Xpress Clean.
+            <strong>{invitation.inviterName}</strong> has invited you to join their team on XpressPro.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

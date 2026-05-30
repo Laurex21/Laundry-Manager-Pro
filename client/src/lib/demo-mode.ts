@@ -1,6 +1,7 @@
 import { getDemoFixture } from "./demo-data";
 
 const LS_KEY = "laundry-demo-mode";
+const SITE_KEY = "laundry-demo-site-id";
 
 export function isDemoMode(): boolean {
   try {
@@ -13,10 +14,34 @@ export function isDemoMode(): boolean {
 export function exitDemoMode(): void {
   try {
     localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(SITE_KEY);
   } catch {
     // ignore
   }
   window.location.href = "/auth";
+}
+
+function getSelectedDemoSiteId(): number | null {
+  try {
+    const raw = localStorage.getItem(SITE_KEY);
+    if (!raw) return null;
+    const siteId = Number(raw);
+    return Number.isFinite(siteId) ? siteId : null;
+  } catch {
+    return null;
+  }
+}
+
+function setSelectedDemoSiteId(siteId: number | null): void {
+  try {
+    if (siteId) {
+      localStorage.setItem(SITE_KEY, String(siteId));
+    } else {
+      localStorage.removeItem(SITE_KEY);
+    }
+  } catch {
+    // ignore
+  }
 }
 
 function makeJsonResponse(data: unknown, status = 200): Response {
@@ -63,13 +88,14 @@ function installDemoFetchPatch(): void {
       return makeJsonResponse({ ok: true });
     }
 
-    // Switch site: no-op
     if (url === "/api/auth/switch-site" && method === "POST") {
+      const body = init?.body ? (() => { try { return JSON.parse(init.body as string); } catch { return {}; } })() : {};
+      setSelectedDemoSiteId(body.siteId ? Number(body.siteId) : null);
       return makeJsonResponse({ ok: true });
     }
 
     if (method === "GET") {
-      const fixture = getDemoFixture(url);
+      const fixture = getDemoFixture(url, getSelectedDemoSiteId());
       if (fixture !== undefined) {
         return makeJsonResponse(fixture);
       }
@@ -90,6 +116,10 @@ export function initDemoMode(): void {
     const params = new URLSearchParams(window.location.search);
     if (params.get("demo") === "1") {
       localStorage.setItem(LS_KEY, "1");
+      if (params.has("demoSite")) {
+        const siteId = Number(params.get("demoSite"));
+        setSelectedDemoSiteId(Number.isFinite(siteId) && siteId > 0 ? siteId : null);
+      }
       // Strip the query param without a reload
       const clean = window.location.pathname;
       window.history.replaceState(null, "", clean);

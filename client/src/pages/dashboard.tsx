@@ -30,7 +30,7 @@ export default function Dashboard() {
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
-  const { currentSite, allSites, isOwner, userRole } = useAuth();
+  const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
   const symbol = getSymbol();
 
   const isAllSitesMode = isOwner && currentSite === null;
@@ -216,7 +216,14 @@ export default function Dashboard() {
           <CardContent className="px-4 pb-3">
             <div className="divide-y divide-border/40">
               {sitesOverview.map((site: any) => (
-                <div key={site.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0" data-testid={`card-site-${site.id}`}>
+                <button
+                  key={site.id}
+                  type="button"
+                  onClick={() => switchSite(site.id)}
+                  disabled={isSwitchingSite}
+                  className="flex w-full items-center gap-3 py-2.5 first:pt-0 last:pb-0 text-left rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-70"
+                  data-testid={`button-site-${site.id}`}
+                >
                   <Building2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground leading-tight truncate">{site.name}</p>
@@ -233,8 +240,9 @@ export default function Dashboard() {
                     <Badge variant={site.isActive ? "default" : "secondary"} className="text-[10px]">
                       {site.isActive ? "Active" : "Inactive"}
                     </Badge>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>

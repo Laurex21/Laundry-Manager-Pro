@@ -5,12 +5,12 @@ const d = (daysAgo: number) => new Date(now.getTime() - daysAgo * 86400000).toIS
 
 export const DEMO_USER = {
   id: "demo-user-001",
-  email: "owner@xpressclean.cm",
+  email: "owner@xpresspro.cm",
   firstName: "Alex",
   lastName: "Osei",
   profileImageUrl: null,
   phone: "+237 655 012 345",
-  businessName: "Xpress Clean",
+  businessName: "XpressPro",
   role: "owner",
   organisationId: 1,
   currentSiteId: null,
@@ -38,7 +38,7 @@ export const DEMO_CUSTOMERS = [
     id: 2, name: "Bernard Tetteh", phone: "+237 677 010 202",
     email: "b.tetteh@gmail.com", address: "Avenue Ahmadou Ahidjo, Yaounde",
     notes: "", starchLevel: "medium", detergentType: "regular",
-    specialNotes: "", createdAt: d(45), updatedAt: d(10), organisationId: 1, siteId: 1,
+    specialNotes: "", createdAt: d(45), updatedAt: d(10), organisationId: 1, siteId: 2,
   },
   {
     id: 3, name: "Clara Owusu", phone: "+237 699 010 303",
@@ -46,6 +46,20 @@ export const DEMO_CUSTOMERS = [
     notes: "Sensitive skin - no fragrance", starchLevel: "none",
     detergentType: "fragrance_free", specialNotes: "Hypoallergenic only",
     createdAt: d(30), updatedAt: d(2), organisationId: 1, siteId: 1,
+  },
+  {
+    id: 4, name: "Marceline Ngono", phone: "+237 699 210 404",
+    email: "marceline.ngono@gmail.com", address: "Quartier Bastos, Yaounde",
+    notes: "Weekly hotel linens pickup", starchLevel: "none",
+    detergentType: "regular", specialNotes: "Separate white linens",
+    createdAt: d(25), updatedAt: d(3), organisationId: 1, siteId: 2,
+  },
+  {
+    id: 5, name: "Thierry Mbarga", phone: "+237 677 210 505",
+    email: "thierry.mbarga@gmail.com", address: "Omnisports, Yaounde",
+    notes: "Prefers evening pickup", starchLevel: "heavy",
+    detergentType: "regular", specialNotes: "Business shirts only",
+    createdAt: d(18), updatedAt: d(4), organisationId: 1, siteId: 2,
   },
 ];
 
@@ -71,43 +85,63 @@ export const DEMO_SERVICES = [
     expressAvailable: false, expressSurcharge: "0",
     createdAt: d(90), updatedAt: d(90), organisationId: 1, siteId: 1,
   },
+  {
+    id: 4, name: "Pressing chemises", price: "900", unit: "piece",
+    category: "Repassage", description: "Service express chemises pour bureaux Bastos",
+    minimumCharge: "1800", estimatedDuration: 8, durationUnit: "hours",
+    expressAvailable: true, expressSurcharge: "40",
+    createdAt: d(80), updatedAt: d(20), organisationId: 1, siteId: 2,
+  },
+  {
+    id: 5, name: "Linge hotelier", price: "650", unit: "kg",
+    category: "Lavage", description: "Lavage volume pour linge hotelier et bureaux",
+    minimumCharge: "6000", estimatedDuration: 24, durationUnit: "hours",
+    expressAvailable: false, expressSurcharge: "0",
+    createdAt: d(80), updatedAt: d(20), organisationId: 1, siteId: 2,
+  },
 ];
 
 const mkOrder = (
   id: number, customerId: number, status: string, paymentStatus: string,
-  totalAmount: string, daysAgo: number
-) => ({
-  id,
-  customerId,
-  status,
-  paymentStatus,
-  totalAmount,
-  discount: "0",
-  entryDate: d(daysAgo),
-  pickupDate: d(daysAgo - 2),
-  createdAt: d(daysAgo),
-  updatedAt: d(daysAgo - 1),
-  organisationId: 1,
-  siteId: 1,
-  hasReturnedItems: false,
-  customer: DEMO_CUSTOMERS.find((c) => c.id === customerId),
-  items: [
-    { id: id * 10, orderId: id, serviceId: (id % 3) + 1, quantity: 2, unitPrice: "750",
-      service: DEMO_SERVICES[(id % 3)] },
-  ],
-  garmentItems: [
-    { id: id * 100 + 1, orderId: id, name: "Chemise", quantity: 2, notes: "" },
-    { id: id * 100 + 2, orderId: id, name: "Pantalon", quantity: 1, notes: "" },
-  ],
-});
+  totalAmount: string, daysAgo: number, siteId = 1
+) => {
+  const servicePool = DEMO_SERVICES.filter((service) => service.siteId === siteId);
+  const service = servicePool[id % servicePool.length] ?? DEMO_SERVICES[0];
+  return {
+    id,
+    customerId,
+    status,
+    paymentStatus,
+    totalAmount,
+    discount: "0",
+    entryDate: d(daysAgo),
+    pickupDate: d(daysAgo - 2),
+    createdAt: d(daysAgo),
+    updatedAt: d(daysAgo - 1),
+    organisationId: 1,
+    siteId,
+    hasReturnedItems: false,
+    customer: DEMO_CUSTOMERS.find((c) => c.id === customerId),
+    items: [
+      { id: id * 10, orderId: id, serviceId: service.id, quantity: 2, unitPrice: service.price,
+        service },
+    ],
+    garmentItems: [
+      { id: id * 100 + 1, orderId: id, name: "Chemise", quantity: 2, notes: "" },
+      { id: id * 100 + 2, orderId: id, name: "Pantalon", quantity: 1, notes: "" },
+    ],
+  };
+};
 
 export const DEMO_ORDERS = [
-  mkOrder(1, 1, "delivered", "paid", "15000", 14),
-  mkOrder(2, 2, "ready", "unpaid", "19000", 5),
+  mkOrder(1, 1, "delivered", "paid", "15000", 14, 1),
+  mkOrder(2, 2, "ready", "unpaid", "19000", 5, 2),
   mkOrder(3, 3, "washing", "unpaid", "9500", 3),
   mkOrder(4, 1, "received", "unpaid", "24000", 1),
-  mkOrder(5, 2, "delivered", "paid", "14000", 20),
+  mkOrder(5, 4, "delivered", "paid", "14000", 20, 2),
   mkOrder(6, 3, "delivered", "paid", "10500", 25),
+  mkOrder(7, 4, "received", "unpaid", "17500", 2, 2),
+  mkOrder(8, 5, "delivered", "paid", "22500", 8, 2),
 ];
 
 export const DEMO_PAYMENTS = [
@@ -117,6 +151,8 @@ export const DEMO_PAYMENTS = [
     createdAt: d(19), updatedAt: d(19), organisationId: 1 },
   { id: 3, orderId: 6, amount: "10500", method: "cash", note: "",
     createdAt: d(24), updatedAt: d(24), organisationId: 1 },
+  { id: 4, orderId: 8, amount: "22500", method: "mobile_money", note: "",
+    createdAt: d(7), updatedAt: d(7), organisationId: 1 },
 ];
 
 export const DEMO_EXPENDITURES = [
@@ -130,6 +166,12 @@ export const DEMO_EXPENDITURES = [
     date: d(3), notes: "", createdAt: d(3), organisationId: 1, siteId: 1 },
   { id: 5, title: "Sacs & Cintres", description: "Reapprovisionnement emballages", amount: "24000", category: "Supplies",
     date: d(5), notes: "", createdAt: d(5), organisationId: 1, siteId: 1 },
+  { id: 6, title: "Transport Bastos", description: "Livraison bureaux et hotels", amount: "42000", category: "Transport",
+    date: d(6), notes: "", createdAt: d(6), organisationId: 1, siteId: 2 },
+  { id: 7, title: "Eau & electricite", description: "Charges site Yaounde", amount: "98000", category: "Utilities",
+    date: d(11), notes: "", createdAt: d(11), organisationId: 1, siteId: 2 },
+  { id: 8, title: "Salaires equipe Yaounde", description: "Paiement salaires quinzaine", amount: "280000", category: "Payroll",
+    date: d(4), notes: "", createdAt: d(4), organisationId: 1, siteId: 2 },
 ];
 
 export const DEMO_MACHINES = [
@@ -141,37 +183,115 @@ export const DEMO_MACHINES = [
     status: "active", capacity: "22kg", capacityKg: 22, purchaseDate: d(300), lastServiceDate: d(20),
     utilizationRate: 65, cycleCount: 980, totalKgProcessed: 16320,
     notes: "", organisationId: 1, siteId: 1, createdAt: d(300), updatedAt: d(20) },
+  { id: 3, name: "Washer Bastos", type: "washer", brand: "Whirlpool", model: "FWG91284W",
+    status: "active", capacity: "14kg", capacityKg: 14, purchaseDate: d(260), lastServiceDate: d(18),
+    utilizationRate: 71, cycleCount: 810, totalKgProcessed: 11840,
+    notes: "Dedicated to hotel linens", organisationId: 1, siteId: 2, createdAt: d(260), updatedAt: d(18) },
+  { id: 4, name: "Press Station YDE", type: "ironer", brand: "Miele", model: "PM1210",
+    status: "maintenance", capacity: "10kg", capacityKg: 10, purchaseDate: d(220), lastServiceDate: d(2),
+    utilizationRate: 52, cycleCount: 430, totalKgProcessed: 6240,
+    notes: "Awaiting steam valve inspection", organisationId: 1, siteId: 2, createdAt: d(220), updatedAt: d(2) },
 ];
 
 export const DEMO_EMPLOYEES = [
   { id: 1, name: "Kwame Boateng", role: "operator", phone: "+237 655 020 101",
-    email: "kwame@xpressclean.cm", status: "active", hireDate: d(180),
+    email: "kwame@xpresspro.cm", status: "active", hireDate: d(180),
     salary: "150000", notes: "", kgProcessed: 2140, ordersHandled: 98,
     organisationId: 1, siteId: 1, createdAt: d(180) },
   { id: 2, name: "Esi Asante", role: "manager", phone: "+237 677 020 202",
-    email: "esi@xpressclean.cm", status: "active", hireDate: d(365),
+    email: "esi@xpresspro.cm", status: "active", hireDate: d(365),
     salary: "250000", notes: "Responsable equipe nuit", kgProcessed: 3860, ordersHandled: 175,
     organisationId: 1, siteId: 1, createdAt: d(365) },
+  { id: 3, name: "Mireille Fotsing", role: "manager", phone: "+237 699 020 303",
+    email: "mireille@xpresspro.cm", status: "active", hireDate: d(140),
+    salary: "230000", notes: "Manages Yaounde business accounts", kgProcessed: 2880, ordersHandled: 122,
+    organisationId: 1, siteId: 2, createdAt: d(140) },
+  { id: 4, name: "Jean Paul Nkoa", role: "operator", phone: "+237 677 020 404",
+    email: "jeanpaul@xpresspro.cm", status: "active", hireDate: d(95),
+    salary: "135000", notes: "Pressing specialist", kgProcessed: 1740, ordersHandled: 84,
+    organisationId: 1, siteId: 2, createdAt: d(95) },
 ];
 
-export const DEMO_STATS = {
-  totalOrders: 6,
-  totalRevenue: 155000,
-  pendingOrders: 2,
-  activeCustomers: 3,
+const siteFromId = (siteId?: number | null) =>
+  DEMO_USER.allSites.find((site) => site.id === siteId) ?? null;
+
+const makeDemoUser = (siteId?: number | null) => {
+  const currentSite = siteFromId(siteId);
+  return {
+    ...DEMO_USER,
+    currentSiteId: currentSite?.id ?? null,
+    currentSite,
+  };
 };
 
-export const DEMO_DASHBOARD = {
-  siteCount: 2,
-  monthRevenue: 2840000,
-  monthExpenses: 1055000,
-  ordersByStatus: { received: 1, washing: 1, ready: 1, delivered: 3 },
-  readyForPickup: [DEMO_ORDERS[1]],
-  alerts: [],
-  sitesOverview: [
-    { id: 1, name: "Douala Akwa", city: "Douala", revenue: 1820000, orders: 4, memberCount: 3, isActive: true },
-    { id: 2, name: "Yaounde Bastos", city: "Yaounde", revenue: 1020000, orders: 2, memberCount: 2, isActive: true },
-  ],
+const filterBySite = <T extends { siteId?: number }>(items: T[], siteId?: number | null): T[] =>
+  siteId ? items.filter((item) => item.siteId === siteId) : items;
+
+const ordersForSite = (siteId?: number | null) => filterBySite(DEMO_ORDERS, siteId);
+const expensesForSite = (siteId?: number | null) => filterBySite(DEMO_EXPENDITURES, siteId);
+const customersForSite = (siteId?: number | null) => filterBySite(DEMO_CUSTOMERS, siteId);
+const servicesForSite = (siteId?: number | null) => filterBySite(DEMO_SERVICES, siteId);
+const machinesForSite = (siteId?: number | null) => filterBySite(DEMO_MACHINES, siteId);
+const employeesForSite = (siteId?: number | null) => filterBySite(DEMO_EMPLOYEES, siteId);
+const paymentsForSite = (siteId?: number | null) => {
+  const orderIds = new Set(ordersForSite(siteId).map((order) => order.id));
+  return siteId ? DEMO_PAYMENTS.filter((payment) => orderIds.has(payment.orderId)) : DEMO_PAYMENTS;
+};
+
+const moneySum = (items: { amount?: string; totalAmount?: string }[]) =>
+  items.reduce((total, item) => total + Number(item.totalAmount ?? item.amount ?? 0), 0);
+
+const statusCounts = (orders: typeof DEMO_ORDERS) =>
+  orders.reduce<Record<string, number>>((counts, order) => {
+    counts[order.status] = (counts[order.status] ?? 0) + 1;
+    return counts;
+  }, { received: 0, washing: 0, ready: 0, delivered: 0 });
+
+const makeStats = (siteId?: number | null) => {
+  const orders = ordersForSite(siteId);
+  return {
+    totalOrders: orders.length,
+    totalRevenue: moneySum(orders),
+    pendingOrders: orders.filter((order) => order.status !== "delivered").length,
+    activeCustomers: customersForSite(siteId).length,
+  };
+};
+
+const makeDashboard = (siteId?: number | null) => {
+  const orders = ordersForSite(siteId);
+  const expenses = expensesForSite(siteId);
+  const revenue = moneySum(orders);
+  const expensesTotal = moneySum(expenses);
+  const weekOrders = orders.filter((order) => new Date(order.createdAt) >= new Date(now.getTime() - 7 * 86400000));
+  const todayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === now.toDateString());
+
+  return {
+    siteCount: DEMO_USER.allSites.length,
+    todayOrders: todayOrders.length,
+    todayRevenue: moneySum(todayOrders),
+    weekOrders: weekOrders.length,
+    weekRevenue: moneySum(weekOrders),
+    monthOrders: orders.length,
+    monthRevenue: revenue,
+    monthExpenses: expensesTotal,
+    ordersByStatus: statusCounts(orders),
+    readyForPickup: orders.filter((order) => order.status === "ready"),
+    alerts: siteId === 2
+      ? [{ type: "warning", message: "Yaounde Bastos press station needs service", detail: "Steam valve inspection pending" }]
+      : [],
+    sitesOverview: siteId ? [] : DEMO_USER.allSites.map((site) => {
+      const siteOrders = ordersForSite(site.id);
+      return {
+        id: site.id,
+        name: site.name,
+        city: site.city,
+        revenue: moneySum(siteOrders),
+        orders: siteOrders.length,
+        memberCount: site.memberCount,
+        isActive: site.isActive,
+      };
+    }),
+  };
 };
 
 // Deterministic daily revenue: sine wave only, no Math.random.
@@ -181,56 +301,77 @@ const DAILY_REVENUE = Array.from({ length: 30 }, (_, i) => ({
   revenue: (80000 + Math.round(Math.sin(i / 4) * 30000) + DAILY_REVENUE_OFFSETS[i] * 1000),
 }));
 
-export const DEMO_REPORTS = {
-  totalRevenue: 2840000,
-  totalExpenses: 1055000,
-  netProfit: 1785000,
-  totalOrders: 6,
-  dailyRevenue: DAILY_REVENUE,
-  serviceDistribution: [
-    { name: "Lavage & Pliage", count: 8 },
-    { name: "Nettoyage a sec", count: 5 },
-    { name: "Repassage vapeur", count: 3 },
-  ],
-  topCustomers: [
-    { name: "Alice Mensah", orderCount: 2, totalSpent: 29000 },
-    { name: "Bernard Tetteh", orderCount: 2, totalSpent: 33000 },
-    { name: "Clara Owusu", orderCount: 2, totalSpent: 20000 },
-  ],
+const makeReports = (siteId?: number | null) => {
+  const orders = ordersForSite(siteId);
+  const expenses = expensesForSite(siteId);
+  const revenue = moneySum(orders);
+  const expenseTotal = moneySum(expenses);
+  const services = servicesForSite(siteId);
+
+  return {
+    totalRevenue: revenue,
+    totalExpenses: expenseTotal,
+    netProfit: revenue - expenseTotal,
+    totalOrders: orders.length,
+    dailyRevenue: DAILY_REVENUE.map((day, index) => ({
+      ...day,
+      revenue: Math.round(day.revenue * (siteId === 1 ? 0.58 : siteId === 2 ? 0.42 : 1)),
+    })),
+    serviceDistribution: services.map((service) => ({
+      name: service.name,
+      count: orders.filter((order) => order.items.some((item) => item.serviceId === service.id)).length,
+    })),
+    topCustomers: customersForSite(siteId).map((customer) => {
+      const customerOrders = orders.filter((order) => order.customerId === customer.id);
+      return {
+        name: customer.name,
+        orderCount: customerOrders.length,
+        totalSpent: moneySum(customerOrders),
+      };
+    }).filter((customer) => customer.orderCount > 0),
+  };
 };
 
-export const DEMO_PERFORMANCE = {
-  currentMonthRevenue: 2840000,
-  currentMonthExpenses: 1055000,
-  currentMonthProfit: 1785000,
-  last30Revenue: 2840000,
-  prev30Revenue: 2410000,
-  last30Expenses: 1055000,
-  prev30Expenses: 980000,
-  last30Profit: 1785000,
-  prev30Profit: 1430000,
-  monthlyComparison: [
-    { month: "Fev", income: 2100000, expenses: 900000 },
-    { month: "Mar", income: 2350000, expenses: 940000 },
-    { month: "Avr", income: 2410000, expenses: 980000 },
-    { month: "Mai", income: 2840000, expenses: 1055000 },
-  ],
+const makePerformance = (siteId?: number | null) => {
+  const reports = makeReports(siteId);
+  const revenue = reports.totalRevenue;
+  const expenses = reports.totalExpenses;
+  return {
+    currentMonthRevenue: revenue,
+    currentMonthExpenses: expenses,
+    currentMonthProfit: revenue - expenses,
+    last30Revenue: revenue,
+    prev30Revenue: Math.round(revenue * 0.86),
+    last30Expenses: expenses,
+    prev30Expenses: Math.round(expenses * 0.91),
+    last30Profit: revenue - expenses,
+    prev30Profit: Math.round((revenue - expenses) * 0.81),
+    monthlyComparison: [
+      { month: "Fev", income: Math.round(revenue * 0.74), expenses: Math.round(expenses * 0.78) },
+      { month: "Mar", income: Math.round(revenue * 0.83), expenses: Math.round(expenses * 0.84) },
+      { month: "Avr", income: Math.round(revenue * 0.86), expenses: Math.round(expenses * 0.91) },
+      { month: "Mai", income: revenue, expenses },
+    ],
+  };
 };
 
-export const DEMO_KPIS = {
-  revenue: 2840000,
-  orders: 6,
-  avgOrderValue: 473000,
-  repeatCustomers: 2,
-  topService: "Lavage & Pliage",
-  revenueGrowth: 17.8,
+const makeKpis = (siteId?: number | null) => {
+  const reports = makeReports(siteId);
+  return {
+    revenue: reports.totalRevenue,
+    orders: reports.totalOrders,
+    avgOrderValue: reports.totalOrders ? Math.round(reports.totalRevenue / reports.totalOrders) : 0,
+    repeatCustomers: reports.topCustomers.filter((customer) => customer.orderCount > 1).length,
+    topService: reports.serviceDistribution.sort((a, b) => b.count - a.count)[0]?.name ?? "Lavage & Pliage",
+    revenueGrowth: siteId === 2 ? 12.4 : 17.8,
+  };
 };
 
 export const DEMO_SETTINGS = {
-  businessName: "Xpress Clean Cameroon",
+  businessName: "XpressPro Cameroon",
   address: "Rue Joss, Akwa, Douala",
   phone: "+237 655 012 345",
-  email: "owner@xpressclean.cm",
+  email: "owner@xpresspro.cm",
   currency: "XAF",
   timezone: "Africa/Douala",
 };
@@ -238,17 +379,17 @@ export const DEMO_SETTINGS = {
 export const DEMO_SITES = DEMO_USER.allSites;
 
 // Given a fetch URL, return demo fixture data or undefined if no match.
-export function getDemoFixture(url: string): unknown {
+export function getDemoFixture(url: string, selectedSiteId: number | null = null): unknown {
   const path = url.split("?")[0];
 
   // Auth
-  if (path === "/api/auth/user") return DEMO_USER;
+  if (path === "/api/auth/user") return makeDemoUser(selectedSiteId);
 
   // Stats
-  if (path === "/api/stats") return DEMO_STATS;
+  if (path === "/api/stats") return makeStats(selectedSiteId);
 
   // Orders list or single order
-  if (path === "/api/orders") return DEMO_ORDERS;
+  if (path === "/api/orders") return ordersForSite(selectedSiteId);
   const orderMatch = path.match(/^\/api\/orders\/(\d+)$/);
   if (orderMatch) {
     const found = DEMO_ORDERS.find((o) => o.id === Number(orderMatch[1]));
@@ -257,7 +398,7 @@ export function getDemoFixture(url: string): unknown {
   const orderPaymentsMatch = path.match(/^\/api\/orders\/(\d+)\/payments$/);
   if (orderPaymentsMatch) {
     const oid = Number(orderPaymentsMatch[1]);
-    return DEMO_PAYMENTS.filter((p) => p.orderId === oid);
+    return paymentsForSite(selectedSiteId).filter((p) => p.orderId === oid);
   }
   const orderStatusHistoryMatch = path.match(/^\/api\/orders\/(\d+)\/status-history$/);
   if (orderStatusHistoryMatch) {
@@ -270,7 +411,7 @@ export function getDemoFixture(url: string): unknown {
   }
 
   // Customers
-  if (path === "/api/customers") return DEMO_CUSTOMERS;
+  if (path === "/api/customers") return customersForSite(selectedSiteId);
   const customerMatch = path.match(/^\/api\/customers\/(\d+)$/);
   if (customerMatch) {
     const found = DEMO_CUSTOMERS.find((c) => c.id === Number(customerMatch[1]));
@@ -279,34 +420,34 @@ export function getDemoFixture(url: string): unknown {
   const customerOrdersMatch = path.match(/^\/api\/customers\/(\d+)\/orders$/);
   if (customerOrdersMatch) {
     const cid = Number(customerOrdersMatch[1]);
-    return DEMO_ORDERS.filter((o) => o.customerId === cid);
+    return ordersForSite(selectedSiteId).filter((o) => o.customerId === cid);
   }
 
   // Services
-  if (path === "/api/services") return DEMO_SERVICES;
+  if (path === "/api/services") return servicesForSite(selectedSiteId);
 
   // Expenditures
-  if (path === "/api/expenditures") return DEMO_EXPENDITURES;
+  if (path === "/api/expenditures") return expensesForSite(selectedSiteId);
 
   // Payments list (some pages may call this)
-  if (path === "/api/payments") return DEMO_PAYMENTS;
+  if (path === "/api/payments") return paymentsForSite(selectedSiteId);
 
   // Analytics
-  if (path === "/api/analytics/dashboard") return DEMO_DASHBOARD;
-  if (path.startsWith("/api/analytics/kpis")) return DEMO_KPIS;
+  if (path === "/api/analytics/dashboard") return makeDashboard(selectedSiteId);
+  if (path.startsWith("/api/analytics/kpis")) return makeKpis(selectedSiteId);
   if (path === "/api/analytics/waste") return [];
   if (path === "/api/analytics/production-delays") return [];
   if (path === "/api/analytics/performance-score") return { score: 82, label: "Good" };
 
   // Reports
-  if (path === "/api/reports") return DEMO_REPORTS;
-  if (path === "/api/reports/performance") return DEMO_PERFORMANCE;
+  if (path === "/api/reports") return makeReports(selectedSiteId);
+  if (path === "/api/reports/performance") return makePerformance(selectedSiteId);
 
   // Machines
-  if (path === "/api/machines") return DEMO_MACHINES;
+  if (path === "/api/machines") return machinesForSite(selectedSiteId);
 
   // Employees
-  if (path === "/api/employees") return DEMO_EMPLOYEES;
+  if (path === "/api/employees") return employeesForSite(selectedSiteId);
 
   // Settings
   if (path === "/api/settings") return DEMO_SETTINGS;
@@ -315,11 +456,14 @@ export function getDemoFixture(url: string): unknown {
   if (path === "/api/sites") return DEMO_SITES;
   const siteMembersMatch = path.match(/^\/api\/sites\/(\d+)\/members$/);
   if (siteMembersMatch) {
+    const siteId = Number(siteMembersMatch[1]);
+    const manager = siteId === 2
+      ? { id: 3, userId: "demo-emp-003", siteId, role: "manager", name: "Mireille Fotsing", email: "mireille@xpresspro.cm" }
+      : { id: 2, userId: "demo-emp-002", siteId, role: "manager", name: "Esi Asante", email: "esi@xpresspro.cm" };
     return [
-      { id: 1, userId: "demo-user-001", siteId: Number(siteMembersMatch[1]), role: "owner",
-        name: "Alex Osei", email: "owner@cleanease.demo" },
-      { id: 2, userId: "demo-emp-002", siteId: Number(siteMembersMatch[1]), role: "manager",
-        name: "Esi Asante", email: "esi@cleanease.demo" },
+      { id: 1, userId: "demo-user-001", siteId, role: "owner",
+        name: "Alex Osei", email: "owner@xpresspro.cm" },
+      manager,
     ];
   }
 
