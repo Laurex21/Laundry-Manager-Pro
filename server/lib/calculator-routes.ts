@@ -347,7 +347,7 @@ export function registerCalculatorRoutes(app: Express) {
         lastName:     lead.lastName ?? undefined,
         city:         lead.city,
         countryLabel,
-        pressingType: lead.pressingType,
+        pressingType: lead.pressingType ?? "",
         minBudget:    standardTier?.totalBudget?.min ?? report.totalBudget?.min ?? 0,
         maxBudget:    standardTier?.totalBudget?.max ?? report.totalBudget?.max ?? 0,
         currency:     report.currency ?? "FCFA",

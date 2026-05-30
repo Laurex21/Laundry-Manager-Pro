@@ -76,19 +76,19 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone">{t("phone_primary")}</Label>
-          <Input id="phone" value={form.phone} onChange={F("phone")} placeholder="+1 (555) 000-0000" data-testid="input-phone" />
+          <Input id="phone" value={form.phone} onChange={F("phone")} placeholder="+237 655 000 000" data-testid="input-phone" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone2">{t("phone_secondary")}</Label>
-          <Input id="phone2" value={form.phone2} onChange={F("phone2")} placeholder="+1 (555) 000-0001" data-testid="input-phone2" />
+          <Input id="phone2" value={form.phone2} onChange={F("phone2")} placeholder="+237 656 000 001" data-testid="input-phone2" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">{t("email")}</Label>
-          <Input id="email" type="email" value={form.email} onChange={F("email")} placeholder="hello@mybusiness.com" data-testid="input-email" />
+          <Input id="email" type="email" value={form.email} onChange={F("email")} placeholder="hello@xpressclean.cm" data-testid="input-email" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="website">{t("website")}</Label>
-          <Input id="website" value={form.website} onChange={F("website")} placeholder="https://mybusiness.com" data-testid="input-website" />
+          <Input id="website" value={form.website} onChange={F("website")} placeholder="https://xpressclean.cm" data-testid="input-website" />
         </div>
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="address">{t("street_address")}</Label>
@@ -96,11 +96,11 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
         </div>
         <div className="space-y-2">
           <Label htmlFor="city">{t("city")}</Label>
-          <Input id="city" value={form.city} onChange={F("city")} placeholder="Lagos" data-testid="input-city" />
+          <Input id="city" value={form.city} onChange={F("city")} placeholder="Douala" data-testid="input-city" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="country">{t("country")}</Label>
-          <Input id="country" value={form.country} onChange={F("country")} placeholder="Nigeria" data-testid="input-country" />
+          <Input id="country" value={form.country} onChange={F("country")} placeholder="Cameroon" data-testid="input-country" />
         </div>
       </div>
 
@@ -160,7 +160,9 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
   const LANGUAGE_OPTIONS = [
     { value: "en", label: "English" },
     { value: "fr", label: "Français" },
+    { value: "pt", label: "Português" },
     { value: "both", label: "Both (EN + FR)" },
+    { value: "all", label: "All (EN + FR + PT)" },
   ];
 
   const toggles = [
@@ -211,7 +213,7 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
           <Input
             value={form.receiptFooterNote}
             onChange={(e) => setForm((f) => ({ ...f, receiptFooterNote: e.target.value }))}
-            placeholder="Thank you for your trust · Merci de votre confiance"
+            placeholder="Thank you for your trust · Merci de votre confiance · Obrigado pela confiança"
             data-testid="input-footer-note"
           />
         </div>
@@ -708,7 +710,7 @@ function TeamTab() {
             </div>
             <div className="space-y-2">
               <Label>{t("city")}</Label>
-              <Input value={newSiteCity} onChange={(e) => setNewSiteCity(e.target.value)} placeholder="Lagos" data-testid="input-site-city" />
+              <Input value={newSiteCity} onChange={(e) => setNewSiteCity(e.target.value)} placeholder="Yaounde" data-testid="input-site-city" />
             </div>
           </div>
           <DialogFooter>

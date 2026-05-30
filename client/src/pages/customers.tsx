@@ -5,13 +5,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCustomerSchema, type InsertCustomer } from "@shared/schema";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
-import { 
-  Plus, 
-  Search, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  ChevronRight 
+import {
+  Plus,
+  Search,
+  Phone,
+  Mail,
+  MapPin,
+  ChevronRight,
+  Users,
+  UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +32,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -41,22 +42,24 @@ export default function Customers() {
   const { t } = useTranslation();
   const [, navigate] = useLocation();
 
-  const filteredCustomers = customers?.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredCustomers = customers?.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.phone.includes(search)
   );
 
+  const totalCount = customers?.length ?? 0;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('customers')}</h1>
-          <p className="text-muted-foreground mt-1">{t("clients_subtitle")}</p>
+          <h1 className="text-2xl font-display font-bold leading-tight">{t("customers")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("clients_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              <Plus className="w-4 h-4 mr-2" /> {t('add_customer')}
+            <Button size="sm" className="shrink-0">
+              <Plus className="w-4 h-4 mr-1.5" /> {t("add_customer")}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
@@ -68,69 +71,97 @@ export default function Customers() {
         </Dialog>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input 
-          placeholder={t('search_customers')} 
-          className="pl-10 max-w-sm bg-background border-border focus:ring-primary/20 transition-all"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder={t("search_customers")}
+            className="pl-9 h-9 bg-background"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {!isLoading && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5" />
+            {t("n_customers", { count: filteredCustomers?.length ?? totalCount })}
+          </span>
+        )}
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}
+        <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-4 px-4 py-3">
+              <Skeleton className="h-9 w-9 rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-3 w-24 hidden sm:block" />
+            </div>
+          ))}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCustomers?.map((customer) => (
-            <Card
+      ) : filteredCustomers && filteredCustomers.length > 0 ? (
+        <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+          {filteredCustomers.map((customer) => (
+            <button
               key={customer.id}
-              className="group cursor-pointer hover-elevate transition-all duration-300 border-border/50"
+              type="button"
+              className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset transition-colors group"
               onClick={() => navigate(`/customers/${customer.id}`)}
               data-testid={`card-customer-${customer.id}`}
             >
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-12 w-12 border-2 border-muted bg-muted">
-                      <AvatarFallback className="font-bold text-primary text-lg">
-                        {customer.name.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <h3 className="font-bold text-lg leading-none">{customer.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">ID: #{customer.id}</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
-                </div>
-                
-                <div className="mt-6 space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="w-4 h-4 text-primary/70" />
-                    <span>{customer.phone}</span>
-                  </div>
-                  {customer.email && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Mail className="w-4 h-4 text-primary/70" />
-                      <span>{customer.email}</span>
-                    </div>
-                  )}
-                  <div className="flex items-start gap-2 text-muted-foreground">
-                    <MapPin className="w-4 h-4 text-primary/70 mt-0.5" />
-                    <span className="flex-1">{customer.address}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <Avatar className="h-9 w-9 shrink-0 border border-border bg-muted text-sm">
+                <AvatarFallback className="font-semibold text-primary text-sm">
+                  {customer.name.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm leading-snug truncate">{customer.name}</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <Phone className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{customer.phone}</span>
+                </p>
+              </div>
+
+              {/* Email - hidden on small screens */}
+              {customer.email ? (
+                <p className="hidden md:flex items-center gap-1 text-xs text-muted-foreground min-w-0 max-w-[180px]">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{customer.email}</span>
+                </p>
+              ) : (
+                <span className="hidden md:block w-[180px]" />
+              )}
+
+              {/* Address - hidden on small screens */}
+              {customer.address ? (
+                <p className="hidden lg:flex items-center gap-1 text-xs text-muted-foreground min-w-0 max-w-[200px]">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{customer.address}</span>
+                </p>
+              ) : (
+                <span className="hidden lg:block w-[200px]" />
+              )}
+
+              <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0 group-hover:text-muted-foreground transition-colors" />
+            </button>
           ))}
-          {filteredCustomers?.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border">
-              {t("no_customers_found")}
-            </div>
-          )}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 border border-dashed border-border rounded-lg text-center">
+          <div className="bg-muted rounded-full p-3">
+            <UserX className="w-6 h-6 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-medium text-sm">{t("no_customers_found")}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("clients_subtitle")}</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" /> {t("add_customer")}
+          </Button>
         </div>
       )}
     </div>
@@ -140,16 +171,10 @@ export default function Customers() {
 function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
   const { t } = useTranslation();
   const { mutate, isPending } = useCreateCustomer();
-  
+
   const form = useForm<InsertCustomer>({
     resolver: zodResolver(insertCustomerSchema),
-    defaultValues: {
-      name: "",
-      phone: "",
-      email: "",
-      address: "",
-      notes: ""
-    }
+    defaultValues: { name: "", phone: "", email: "", address: "", notes: "" },
   });
 
   function onSubmit(data: InsertCustomer) {
@@ -157,7 +182,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
       onSuccess: () => {
         form.reset();
         onSuccess();
-      }
+      },
     });
   }
 

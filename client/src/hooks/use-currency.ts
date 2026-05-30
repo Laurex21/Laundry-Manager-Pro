@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Currency = "USD" | "NGN" | "XOF" | "EUR";
+export type Currency = "XAF" | "USD" | "NGN" | "XOF" | "EUR";
 
 interface CurrencyStore {
   currency: Currency;
@@ -10,16 +10,17 @@ interface CurrencyStore {
 }
 
 const symbols: Record<Currency, string> = {
+  XAF: "XAF ",
   USD: "$",
   NGN: "₦",
-  XOF: "FCFA",
+  XOF: "XOF ",
   EUR: "€",
 };
 
 export const useCurrency = create<CurrencyStore>()(
   persist(
     (set, get) => ({
-      currency: "USD",
+      currency: "XAF",
       setCurrency: (currency: Currency) => set({ currency }),
       getSymbol: () => symbols[get().currency],
     }),

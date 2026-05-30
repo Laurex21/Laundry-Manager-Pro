@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Outfit:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,72 +8,98 @@
   --font-sans: 'DM Sans', sans-serif;
   --font-display: 'Outfit', sans-serif;
 
-  /* Fresh, clean laundry theme - Blues and Whites */
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
+  /* Calm, professional slate-blue palette */
+  --background: 210 20% 98%;
+  --foreground: 222 39% 11%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
+  --card-foreground: 222 39% 11%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
+  --popover-foreground: 222 39% 11%;
 
-  --primary: 221 83% 53%;
-  --primary-foreground: 210 40% 98%;
+  /* Indigo-slate primary — more composed than pure blue */
+  --primary: 226 71% 48%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 214 32% 94%;
+  --secondary-foreground: 222 39% 20%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 214 25% 95%;
+  --muted-foreground: 218 14% 50%;
 
-  --accent: 199 89% 48%; /* Brighter blue for accents */
-  --accent-foreground: 210 40% 98%;
+  --accent: 226 71% 48%;
+  --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 221 83% 53%;
+  --border: 216 24% 90%;
+  --input: 216 24% 90%;
+  --ring: 226 71% 48%;
 
-  --radius: 0.75rem;
+  /* Sidebar — very slightly off-white to distinguish from content */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 39% 11%;
+  --sidebar-border: 216 24% 90%;
+  --sidebar-ring: 226 71% 48%;
+  --sidebar-primary: 226 71% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 214 25% 95%;
+  --sidebar-accent-foreground: 222 39% 11%;
+
+  --radius: 0.5rem;
 }
 
 .dark {
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
+  --background: 222 28% 10%;
+  --foreground: 210 30% 96%;
 
-  --card: 222 47% 13%;
-  --card-foreground: 210 40% 98%;
+  --card: 222 28% 13%;
+  --card-foreground: 210 30% 96%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 222 28% 10%;
+  --popover-foreground: 210 30% 96%;
 
-  --primary: 217 91% 60%;
-  --primary-foreground: 222 47% 11%;
+  --primary: 226 71% 58%;
+  --primary-foreground: 222 28% 10%;
 
-  --secondary: 217 32% 17%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 220 20% 18%;
+  --secondary-foreground: 210 30% 90%;
 
-  --muted: 217 32% 17%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 220 20% 18%;
+  --muted-foreground: 218 16% 58%;
 
-  --accent: 199 89% 48%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 226 71% 58%;
+  --accent-foreground: 222 28% 10%;
 
-  --destructive: 0 62% 30%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 55% 40%;
+  --destructive-foreground: 210 30% 96%;
 
-  --border: 217 32% 17%;
-  --input: 217 32% 17%;
-  --ring: 224 76% 48%;
+  --border: 220 20% 20%;
+  --input: 220 20% 20%;
+  --ring: 226 71% 58%;
+
+  --sidebar: 222 28% 11%;
+  --sidebar-foreground: 210 30% 96%;
+  --sidebar-border: 220 20% 20%;
+  --sidebar-ring: 226 71% 58%;
+  --sidebar-primary: 226 71% 58%;
+  --sidebar-primary-foreground: 222 28% 10%;
+  --sidebar-accent: 220 20% 18%;
+  --sidebar-accent-foreground: 210 30% 90%;
 }
 
 @layer base {
+  * {
+    @apply border-border;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -82,35 +108,38 @@
   }
 }
 
-/* Custom Scrollbar for a polished look */
+/* Polished scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 4px;
+  background: hsl(var(--muted-foreground) / 0.25);
+  border-radius: 99px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--muted-foreground) / 0.45);
 }
 
-/* Animations */
-.fade-in {
-  animation: fadeIn 0.5s ease-out forwards;
+/* Page entry animation */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.animate-in {
+  animation: fadeSlideIn 0.3s ease-out forwards;
 }
 
+/* Utility: glass card */
 .glass-card {
   @apply bg-white/80 dark:bg-black/50 backdrop-blur-md border border-white/20 shadow-xl;
+}
+
+/* Dense table rows */
+.dense-table td, .dense-table th {
+  @apply py-2 px-3;
 }

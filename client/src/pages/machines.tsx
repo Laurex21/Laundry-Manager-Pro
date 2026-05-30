@@ -2,19 +2,20 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
-import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useForm } from "react-hook-form";
 import { Cog, Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
@@ -29,13 +30,14 @@ export default function Machines() {
   const { hasFeature } = useAuth();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Machine | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
 
   if (!hasFeature("machines")) {
     return <UpgradePrompt title={t("machines")} description="Track your machine fleet, utilization rates and maintenance." requiredPlan="Pro" />;
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-machines-title">{t("machines")}</h1>
@@ -45,27 +47,64 @@ export default function Machines() {
         </Button>
       </div>
 
-      <MachineList onEdit={(m) => { setEditing(m); setOpen(true); }} />
+      <MachineList
+        onEdit={(m) => { setEditing(m); setOpen(true); }}
+        onDelete={setDeleteTarget}
+      />
 
       <MachineDialog open={open} onOpenChange={setOpen} machine={editing} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("delete")} {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("delete_service_confirm", { name: deleteTarget?.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <DeleteMachineAction machine={deleteTarget} onDone={() => setDeleteTarget(null)} />
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function MachineList({ onEdit }: { onEdit: (m: Machine) => void }) {
+function DeleteMachineAction({ machine, onDone }: { machine: Machine | null; onDone: () => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: machines, isLoading } = useQuery<Machine[]>({ queryKey: ["/api/machines"] });
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/machines/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/machines"] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/machines"] }); onDone(); },
   });
+
+  return (
+    <AlertDialogAction
+      className="bg-destructive text-destructive-foreground"
+      disabled={deleteMutation.isPending}
+      onClick={() => machine && deleteMutation.mutate(machine.id)}
+    >
+      {deleteMutation.isPending ? t("deleting") : t("delete")}
+    </AlertDialogAction>
+  );
+}
+
+function statusVariant(status: string) {
+  if (status === "active") return "default";
+  if (status === "maintenance") return "secondary";
+  return "outline";
+}
+
+function MachineList({ onEdit, onDelete }: { onEdit: (m: Machine) => void; onDelete: (m: Machine) => void }) {
+  const { t } = useTranslation();
+  const { data: machines, isLoading } = useQuery<Machine[]>({ queryKey: ["/api/machines"] });
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded" />)}
       </div>
     );
   }
@@ -73,54 +112,56 @@ function MachineList({ onEdit }: { onEdit: (m: Machine) => void }) {
   if (!machines || machines.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground border border-dashed rounded-xl">
-        <Cog className="w-12 h-12 mx-auto mb-4 opacity-30" />
-        <p data-testid="text-no-machines">{t("no_machines_yet")}</p>
+        <Cog className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="text-sm" data-testid="text-no-machines">{t("no_machines_yet")}</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="border rounded-lg overflow-hidden divide-y divide-border">
+      <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span>{t("machine_name")}</span>
+        <span>{t("machine_type")}</span>
+        <span>{t("machine_status")}</span>
+        <span>{t("utilization")}</span>
+        <span>{t("cycles")}</span>
+        <span></span>
+      </div>
       {machines.map((machine) => {
         const utilization = Number(machine.utilizationRate);
         const utilColor = utilization >= 70 ? "bg-green-500" : utilization >= 40 ? "bg-yellow-500" : "bg-red-500";
-        const statusColor = machine.status === "active" ? "default" : machine.status === "maintenance" ? "secondary" : "outline";
-        const typeLabel = machine.type.charAt(0).toUpperCase() + machine.type.slice(1);
+        const typeLabel = t(`machine_type_${machine.type}`, machine.type.charAt(0).toUpperCase() + machine.type.slice(1));
 
         return (
-          <Card key={machine.id} className="shadow-sm hover:shadow-md transition-shadow" data-testid={`card-machine-${machine.id}`}>
-            <CardContent className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-lg">{machine.name}</h3>
-                <Badge variant={statusColor as any} data-testid={`badge-status-${machine.id}`}>
-                  {machine.status}
-                </Badge>
+          <div key={machine.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-x-4 gap-y-1 px-4 py-3 items-center hover:bg-muted/20 transition-colors" data-testid={`card-machine-${machine.id}`}>
+            <span className="font-medium text-sm">{machine.name}</span>
+            <span className="text-sm text-muted-foreground">{typeLabel}</span>
+            <span>
+              <Badge variant={statusVariant(machine.status) as any} className="text-xs" data-testid={`badge-status-${machine.id}`}>
+                {t(`machine_status_${machine.status}`, machine.status)}
+              </Badge>
+            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div className={`h-full ${utilColor} rounded-full transition-all`} style={{ width: `${Math.min(100, utilization)}%` }} />
               </div>
-              <Badge variant="outline">{typeLabel}</Badge>
-              <div className="text-sm text-muted-foreground">{t("capacity_kg")}: {machine.capacityKg} kg</div>
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span>{t("utilization")}</span>
-                  <span>{utilization}%</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className={`h-full ${utilColor} rounded-full transition-all`} style={{ width: `${Math.min(100, utilization)}%` }} />
-                </div>
-              </div>
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{t("cycles")}: {machine.cycleCount}</span>
-                <span>{t("total_kg")}: {machine.totalKgProcessed}</span>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={() => onEdit(machine)} data-testid={`button-edit-machine-${machine.id}`}>
-                  <Pencil className="w-3 h-3 mr-1" /> {t("edit")}
-                </Button>
-                <Button variant="outline" size="sm" className="text-destructive" onClick={() => { if (confirm("Delete this machine?")) deleteMutation.mutate(machine.id); }} data-testid={`button-delete-machine-${machine.id}`}>
-                  <Trash2 className="w-3 h-3 mr-1" /> {t("delete")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              <span className="text-xs text-muted-foreground w-8 shrink-0">{utilization}%</span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <span>{machine.cycleCount}</span>
+              <span className="text-muted-foreground/50 mx-1">/</span>
+              <span>{machine.totalKgProcessed} kg</span>
+            </div>
+            <div className="flex gap-1 justify-end">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(machine)} data-testid={`button-edit-machine-${machine.id}`}>
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(machine)} data-testid={`button-delete-machine-${machine.id}`}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -179,10 +220,10 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl><SelectTrigger data-testid="select-machine-type"><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="washer">Washer</SelectItem>
-                    <SelectItem value="dryer">Dryer</SelectItem>
-                    <SelectItem value="press">Press</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="washer">{t("machine_type_washer")}</SelectItem>
+                    <SelectItem value="dryer">{t("machine_type_dryer")}</SelectItem>
+                    <SelectItem value="press">{t("machine_type_press")}</SelectItem>
+                    <SelectItem value="other">{t("machine_type_other")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -201,16 +242,16 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl><SelectTrigger data-testid="select-machine-status"><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="active">{t("machine_status_active")}</SelectItem>
+                    <SelectItem value="maintenance">{t("machine_status_maintenance")}</SelectItem>
+                    <SelectItem value="inactive">{t("machine_status_inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )} />
             <Button type="submit" className="w-full" disabled={mutation.isPending} data-testid="button-save-machine">
-              {mutation.isPending ? "Saving..." : isEdit ? t("save_changes") : t("add_machine")}
+              {mutation.isPending ? t("saving") : isEdit ? t("save_changes") : t("add_machine")}
             </Button>
           </form>
         </Form>

@@ -4,8 +4,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "react-i18next";
 import { Loader2, ShieldOff } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useEffect, lazy, Suspense } from "react";
 import LayoutShell from "@/components/layout-shell";
 
@@ -35,31 +36,46 @@ const AcceptInvitation  = lazy(() => import("@/pages/accept-invitation"));
 // ─── Skeleton fallback while a chunk loads ────────────────────────────────────
 function PageSkeleton() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-4 animate-pulse">
-        <div className="h-8 w-48 bg-muted rounded-lg" />
-        <div className="h-4 w-72 bg-muted/70 rounded" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4">
-          <div className="h-24 bg-muted rounded-2xl" />
-          <div className="h-24 bg-muted rounded-2xl" />
-          <div className="h-24 bg-muted rounded-2xl" />
+    <div className="min-h-screen bg-background animate-pulse">
+      <div className="h-14 border-b border-border/40 bg-muted/20" />
+      <div className="max-w-5xl mx-auto px-4 pt-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1.5">
+            <div className="h-4 w-28 bg-muted rounded" />
+            <div className="h-3 w-40 bg-muted/60 rounded" />
+          </div>
+          <div className="h-5 w-28 bg-muted/70 rounded" />
         </div>
-        <div className="h-64 bg-muted/70 rounded-2xl mt-4" />
+        <div className="h-9 bg-muted/50 rounded-lg" />
+        <div className="grid grid-cols-4 gap-2">
+          <div className="h-14 bg-muted/60 rounded-lg" />
+          <div className="h-14 bg-muted/60 rounded-lg" />
+          <div className="h-14 bg-muted/60 rounded-lg" />
+          <div className="h-14 bg-muted/60 rounded-lg" />
+        </div>
+        <div className="h-48 bg-muted/40 rounded-lg" />
       </div>
     </div>
   );
 }
 
 function AccessDenied() {
+  const { t } = useTranslation();
+  const [, setLocation] = useLocation();
   return (
-    <div className="flex items-center justify-center min-h-64">
-      <Card className="max-w-sm w-full">
-        <CardContent className="p-8 text-center">
-          <ShieldOff className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <h2 className="font-semibold mb-2">Access Denied</h2>
-          <p className="text-sm text-muted-foreground">You don't have permission to view this page.</p>
-        </CardContent>
-      </Card>
+    <div className="flex items-center justify-center min-h-48 p-8">
+      <div className="text-center max-w-sm space-y-4 p-6 rounded-xl border border-border/60 bg-card">
+        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center mx-auto">
+          <ShieldOff className="w-5 h-5 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-foreground text-sm">{t('access_denied')}</h2>
+          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{t('access_denied_msg')}</p>
+        </div>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setLocation("/")}>
+          {t('go_home')}
+        </Button>
+      </div>
     </div>
   );
 }

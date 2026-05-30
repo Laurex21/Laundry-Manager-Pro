@@ -10,17 +10,14 @@ import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import {
   CreditCard,
   CheckCircle2,
-  Search,
   Download,
-  Receipt,
   Banknote,
-  Smartphone,
-  Building2,
-  Calendar
+  Calendar,
+  ClipboardList,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -29,19 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { format } from "date-fns";
 
 export default function Payments() {
@@ -52,7 +36,6 @@ export default function Payments() {
   const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
 
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const [orderSearchOpen, setOrderSearchOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
   const [reference, setReference] = useState("");
@@ -70,7 +53,7 @@ export default function Payments() {
   const { data: orderPayments } = usePaymentsByOrder(selectedOrderId || 0);
   const { mutate: createPayment, isPending } = useCreatePayment();
 
-  const orders = useMemo(() => {
+  const unpaidOrders = useMemo(() => {
     if (!allOrders) return [];
     return allOrders.filter((o: any) => o.paymentStatus !== "paid");
   }, [allOrders]);
@@ -90,23 +73,16 @@ export default function Payments() {
 
   const handleSelectOrder = useCallback((orderId: number) => {
     setSelectedOrderId(orderId);
-    setOrderSearchOpen(false);
     setAmount("");
     setSuccessPayment(null);
   }, []);
 
-  const handleAmountSet = useCallback(() => {
-    if (remainingBalance > 0) {
-      setAmount(remainingBalance.toFixed(2));
-    }
-  }, [remainingBalance]);
-
   const amountError = useMemo(() => {
     const val = Number(amount);
-    if (amount && val <= 0) return "Amount must be greater than zero";
-    if (amount && val > remainingBalance) return "Amount exceeds remaining balance";
+    if (amount && val <= 0) return t("amount_gt_zero");
+    if (amount && val > remainingBalance) return t("amount_exceeds_balance");
     return null;
-  }, [amount, remainingBalance]);
+  }, [amount, remainingBalance, t]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,7 +93,7 @@ export default function Payments() {
     const newStatus = newTotalPaid >= totalAmount ? "paid" : "partial";
 
     createPayment(
-      { orderId: selectedOrderId, amount: amount, method, reference: reference || undefined },
+      { orderId: selectedOrderId, amount, method, reference: reference || undefined },
       {
         onSuccess: () => {
           setSuccessPayment({
@@ -142,295 +118,393 @@ export default function Payments() {
   async function downloadReceipt() {
     if (!successPayment) return;
     setReceiptLoading(true);
-
     try {
-    let orderDetails: any = null;
-    try {
-      const res = await fetch(`/api/orders/${successPayment.orderId}`, { credentials: "include" });
-      if (res.ok) orderDetails = await res.json();
-    } catch {
-      // proceed with available data
-    }
+      let orderDetails: any = null;
+      try {
+        const res = await fetch(`/api/orders/${successPayment.orderId}`, { credentials: "include" });
+        if (res.ok) orderDetails = await res.json();
+      } catch {
+        // proceed with available data
+      }
 
-    const items = orderDetails?.items || [];
-    const garments = orderDetails?.garmentItems || [];
-    const customer = orderDetails?.customer || {};
-    const pickupDate = orderDetails?.pickupDate
-      ? format(new Date(orderDetails.pickupDate), "MMM dd, yyyy")
-      : "N/A";
-    const entryDate = orderDetails?.entryDate
-      ? format(new Date(orderDetails.entryDate), "MMM dd, yyyy")
-      : successPayment.date;
+      const items = orderDetails?.items || [];
+      const garments = orderDetails?.garmentItems || [];
+      const customer = orderDetails?.customer || {};
+      const pickupDate = orderDetails?.pickupDate
+        ? format(new Date(orderDetails.pickupDate), "MMM dd, yyyy")
+        : "N/A";
+      const entryDate = orderDetails?.entryDate
+        ? format(new Date(orderDetails.entryDate), "MMM dd, yyyy")
+        : successPayment.date;
 
-    const mergedSettings = settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS;
-    const allPayments = orderDetails?.payments || [];
-    const discount = Number(orderDetails?.discount || 0);
+      const mergedSettings = settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS;
+      const allPayments = orderDetails?.payments || [];
+      const discount = Number(orderDetails?.discount || 0);
 
-    generatePaymentReceipt(
-      successPayment.orderId,
-      customer,
-      items,
-      garments,
-      {
-        amount: successPayment.amount,
-        method: successPayment.method,
-        date: successPayment.date,
-        newStatus: successPayment.newStatus,
-      },
-      allPayments,
-      entryDate,
-      pickupDate,
-      discount,
-      symbol,
-      mergedSettings
-    );
+      generatePaymentReceipt(
+        successPayment.orderId,
+        customer,
+        items,
+        garments,
+        {
+          amount: successPayment.amount,
+          method: successPayment.method,
+          date: successPayment.date,
+          newStatus: successPayment.newStatus,
+        },
+        allPayments,
+        entryDate,
+        pickupDate,
+        discount,
+        symbol,
+        mergedSettings
+      );
     } finally {
       setReceiptLoading(false);
     }
   }
 
+  const presets = useMemo(() => {
+    if (remainingBalance <= 0) return [];
+    return [
+      { label: "25%", value: (remainingBalance * 0.25).toFixed(2) },
+      { label: "50%", value: (remainingBalance * 0.5).toFixed(2) },
+      { label: "75%", value: (remainingBalance * 0.75).toFixed(2) },
+      { label: t("pay_full_balance"), value: remainingBalance.toFixed(2) },
+    ];
+  }, [remainingBalance, t]);
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('payments') || 'Payments'}</h1>
-          <p className="text-muted-foreground mt-1">{t("payments_subtitle")}</p>
-        </div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h1 className="text-2xl font-display font-bold leading-tight">{t("payments")}</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
       </div>
 
       {successPayment && (
-        <Card className="border-green-200 dark:border-green-900/30 bg-green-50/50 dark:bg-green-950/10 shadow-sm" data-testid="payment-success-card">
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-3 rounded-full">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-bold text-green-900 dark:text-green-300 text-lg">{t("payment_recorded_success")}</h3>
-                <p className="text-green-700 dark:text-green-400 text-sm mt-1">
-                  {symbol}{successPayment.amount} {t("paid_for_order")} #{successPayment.orderId} {t("via")} {successPayment.method}.
-                  {t("status")}: <Badge variant="outline" className={successPayment.newStatus === 'paid' ? 'border-green-300 text-green-700 dark:border-green-700 dark:text-green-400' : 'border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400'}>{successPayment.newStatus === 'paid' ? t("fully_paid") : t("partially_paid")}</Badge>
-                </p>
-              </div>
-              <Button onClick={downloadReceipt} variant="outline" className="gap-2" disabled={receiptLoading} data-testid="button-download-receipt">
-                <Download className="w-4 h-4" /> {receiptLoading ? t("preparing") : t("download_receipt")}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div
+          className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border border-green-200 dark:border-green-900/40 bg-green-50/60 dark:bg-green-950/10"
+          data-testid="payment-success-card"
+        >
+          <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5 sm:mt-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-green-900 dark:text-green-300 text-sm leading-snug">
+              {t("payment_recorded_success")}
+            </p>
+            <p className="text-green-700 dark:text-green-400 text-xs mt-0.5">
+              {symbol}{successPayment.amount} {t("paid_for_order")} #{successPayment.orderId} {t("via")} {successPayment.method}.{" "}
+              <Badge
+                variant="outline"
+                className={
+                  successPayment.newStatus === "paid"
+                    ? "border-green-400 text-green-700 dark:border-green-700 dark:text-green-400 text-[10px] py-0"
+                    : "border-yellow-400 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400 text-[10px] py-0"
+                }
+              >
+                {successPayment.newStatus === "paid" ? t("fully_paid") : t("partially_paid")}
+              </Badge>
+            </p>
+          </div>
+          <Button
+            onClick={downloadReceipt}
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20"
+            disabled={receiptLoading}
+            data-testid="button-download-receipt"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {receiptLoading ? t("preparing") : t("download_receipt")}
+          </Button>
+        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 shadow-sm border-border/50">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" /> {t("register_payment")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("select_order")}</label>
-                <Popover open={orderSearchOpen} onOpenChange={setOrderSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                      data-testid="button-select-order"
-                    >
-                      <Search className="w-4 h-4 mr-2 text-muted-foreground" />
-                      {selectedOrder
-                        ? `${t("order_number", { id: selectedOrder.id })} - ${(selectedOrder as any)?.customer?.name || t("customer")}`
-                        : t("search_order_placeholder")}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder={t("search_order_customer")} />
-                      <CommandList>
-                        <CommandEmpty>{t("no_unpaid_orders")}</CommandEmpty>
-                        <CommandGroup heading={t("unpaid_partial_orders")}>
-                          {orders.map((order: any) => (
-                            <CommandItem
-                              key={order.id}
-                              value={`${order.id} ${order.customer?.name || ''}`}
-                              onSelect={() => handleSelectOrder(order.id)}
-                              data-testid={`order-option-${order.id}`}
-                            >
-                              <div className="flex items-center justify-between w-full">
-                                <div className="flex flex-col">
-                                  <span className="font-medium">Order #{order.id}</span>
-                                  <span className="text-xs text-muted-foreground">{order.customer?.name || 'N/A'}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs">
-                                    {order.paymentStatus}
-                                  </Badge>
-                                  <span className="font-mono text-sm">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
-                                </div>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Payment form - 2/3 */}
+        <div className="lg:col-span-2 border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+            <CreditCard className="w-4 h-4 text-primary" />
+            <span className="font-semibold text-sm">{t("register_payment")}</span>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-4 space-y-5">
+            {/* Order selector - shown when no order selected */}
+            {!selectedOrder && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {t("select_order")}
+                </label>
+                <p className="text-sm text-muted-foreground">
+                  {ordersLoading
+                    ? t("loading_orders")
+                    : unpaidOrders.length === 0
+                    ? t("no_unpaid_orders")
+                    : t("select_order_from_queue")}
+                </p>
               </div>
+            )}
 
-              {selectedOrder && (
-                <>
-                  <Card className="bg-muted/30 border-border/50">
-                    <CardContent className="p-4">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">{t("order_total")}</p>
-                          <p className="font-mono font-bold text-lg" data-testid="text-order-total">{symbol}{totalAmount.toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">{t("amount_paid")}</p>
-                          <p className="font-mono font-bold text-lg text-green-600 dark:text-green-400" data-testid="text-amount-paid">{symbol}{totalPaid.toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">{t("remaining")}</p>
-                          <p className="font-mono font-bold text-lg text-orange-600 dark:text-orange-400" data-testid="text-remaining-balance">{symbol}{remainingBalance.toFixed(2)}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+            {selectedOrder && (
+              <div className="flex items-center justify-between gap-3 p-3 rounded-md bg-muted/40 border border-border">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {t("order_number", { id: selectedOrder.id })}
+                    {(selectedOrder as any)?.customer?.name && (
+                      <span className="font-normal text-muted-foreground"> - {(selectedOrder as any).customer.name}</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("status")}: <span className="capitalize">{selectedOrder.paymentStatus}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                  onClick={() => { setSelectedOrderId(null); setAmount(""); }}
+                >
+                  {t("change")}
+                </button>
+              </div>
+            )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("amount")}</label>
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          max={remainingBalance}
-                          placeholder={remainingBalance.toFixed(2)}
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value)}
-                          onFocus={() => { if (!amount) handleAmountSet(); }}
-                          className={amountError ? "border-destructive" : ""}
-                          data-testid="input-amount"
-                        />
-                      </div>
-                      {amountError && <p className="text-xs text-destructive">{amountError}</p>}
-                    </div>
+            {selectedOrder && (
+              <>
+                <div className="grid grid-cols-3 gap-px bg-border rounded-md overflow-hidden border border-border">
+                  <div className="bg-background px-3 py-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("order_total")}</p>
+                    <p className="font-mono font-bold text-base mt-0.5" data-testid="text-order-total">
+                      {symbol}{totalAmount.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="bg-background px-3 py-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("amount_paid")}</p>
+                    <p className="font-mono font-bold text-base mt-0.5 text-green-600 dark:text-green-400" data-testid="text-amount-paid">
+                      {symbol}{totalPaid.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="bg-background px-3 py-2.5 text-center">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("remaining")}</p>
+                    <p className="font-mono font-bold text-base mt-0.5 text-orange-600 dark:text-orange-400" data-testid="text-remaining-balance">
+                      {symbol}{remainingBalance.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("payment_method")}</label>
-                      <Select value={method} onValueChange={(v) => { setMethod(v); setReference(""); }}>
-                        <SelectTrigger data-testid="select-payment-method">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {PAYMENT_REGIONS.map(region => (
-                            <div key={region}>
-                              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{region}</div>
-                              {PAYMENT_METHODS.filter(m => m.region === region).map(m => (
-                                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                              ))}
-                            </div>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">{t("date")}</label>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {t("amount")}
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                        {symbol}
+                      </span>
                       <Input
-                        type="date"
-                        value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        data-testid="input-payment-date"
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={remainingBalance}
+                        placeholder={remainingBalance.toFixed(2)}
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className={`pl-7 font-mono ${amountError ? "border-destructive" : ""}`}
+                        data-testid="input-amount"
                       />
                     </div>
                   </div>
-
-                  {getMethodDef(method).requiresReference && (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Transaction Reference</label>
-                      <Input
-                        placeholder="e.g. transaction ID, receipt number..."
-                        value={reference}
-                        onChange={(e) => setReference(e.target.value)}
-                        data-testid="input-reference"
-                      />
-                      <p className="text-xs text-muted-foreground">Enter the reference number from the {getMethodDef(method).label} transaction</p>
+                  {remainingBalance > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {presets.map((p) => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => setAmount(p.value)}
+                          className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                            amount === p.value
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                     </div>
                   )}
+                  {amountError && <p className="text-xs text-destructive">{amountError}</p>}
+                </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full shadow-lg shadow-primary/25"
-                    disabled={isPending || !amount || !!amountError}
-                    data-testid="button-submit-payment"
-                  >
-                    {isPending ? t("saving") : `${t("record_payment_of")} ${symbol}${Number(amount || 0).toFixed(2)}`}
-                  </Button>
-                </>
-              )}
-            </form>
-          </CardContent>
-        </Card>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {t("payment_method")}
+                    </label>
+                    <Select value={method} onValueChange={(v) => { setMethod(v); setReference(""); }}>
+                      <SelectTrigger data-testid="select-payment-method">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {PAYMENT_REGIONS.map((region) => (
+                          <div key={region}>
+                            <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              {region}
+                            </div>
+                            {PAYMENT_METHODS.filter((m) => m.region === region).map((m) => (
+                              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                            ))}
+                          </div>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-        <div className="space-y-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/10 dark:to-card border-blue-100 dark:border-blue-900/20 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-muted-foreground">{t("quick_guide")}</span>
-                <Receipt className="w-4 h-4 text-primary" />
-              </div>
-              <div className="space-y-3 mt-3">
-                <div className="flex items-start gap-3">
-                  <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">1</div>
-                  <p className="text-sm text-muted-foreground">{t("guide_step_1")}</p>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {t("date")}
+                    </label>
+                    <Input
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      data-testid="input-payment-date"
+                    />
+                  </div>
                 </div>
-                <div className="flex items-start gap-3">
-                  <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">2</div>
-                  <p className="text-sm text-muted-foreground">{t("guide_step_2")}</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">3</div>
-                  <p className="text-sm text-muted-foreground">{t("guide_step_3")}</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="bg-primary/10 text-primary rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shrink-0">4</div>
-                  <p className="text-sm text-muted-foreground">{t("guide_step_4")}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
-          {selectedOrder && orderPayments && orderPayments.length > 0 && (
-            <Card className="shadow-sm border-border/50">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold">{t("payment_history_title")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {orderPayments.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Banknote className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">{p.method}</span>
-                        {p.reference && <span className="text-[10px] text-muted-foreground/70">{t("ref_label")} {p.reference}</span>}
+                {/* Reference - conditional */}
+                {getMethodDef(method).requiresReference && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {t("transaction_reference")}
+                    </label>
+                    <Input
+                      placeholder={t("reference_placeholder")}
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                      data-testid="input-reference"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("ref_from_method", { method: getMethodDef(method).label })}
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isPending || !amount || !!amountError}
+                  data-testid="button-submit-payment"
+                >
+                  {isPending
+                    ? t("saving")
+                    : `${t("record_payment_of")} ${symbol}${Number(amount || 0).toFixed(2)}`}
+                </Button>
+
+                {orderPayments && orderPayments.length > 0 && (
+                  <div className="pt-2 border-t border-border space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {t("payment_history_title")}
+                    </p>
+                    {orderPayments.map((p: any) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between px-3 py-2 rounded-md bg-muted/30 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Banknote className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">{p.method}</span>
+                          {p.reference && (
+                            <span className="text-muted-foreground/60">
+                              {t("ref_label")} {p.reference}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-medium text-green-600 dark:text-green-400">
+                            {symbol}{Number(p.amount).toFixed(2)}
+                          </span>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {format(new Date(p.date), "MMM d")}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono font-medium text-green-600 dark:text-green-400">{symbol}{Number(p.amount).toFixed(2)}</span>
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {format(new Date(p.date), "MMM d")}
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </form>
+        </div>
+
+        {/* Unpaid queue - 1/3 */}
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+            <ClipboardList className="w-4 h-4 text-primary" />
+            <span className="font-semibold text-sm">{t("unpaid_queue")}</span>
+            {unpaidOrders.length > 0 && (
+              <span className="ml-auto text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {unpaidOrders.length}
+              </span>
+            )}
+          </div>
+
+          <div className="overflow-y-auto max-h-[480px]">
+            {ordersLoading ? (
+              <div className="divide-y divide-border">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="px-4 py-3 space-y-1.5">
+                    <div className="h-3 bg-muted rounded w-24 animate-pulse" />
+                    <div className="h-3 bg-muted rounded w-16 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : unpaidOrders.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">{t("no_unpaid_orders")}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {unpaidOrders.map((order: any) => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors group ${
+                      selectedOrderId === order.id
+                        ? "bg-primary/5 border-l-2 border-l-primary"
+                        : "hover:bg-muted/40"
+                    }`}
+                    onClick={() => handleSelectOrder(order.id)}
+                    data-testid={`order-option-${order.id}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-snug">
+                        #{order.id}
+                        {order.customer?.name && (
+                          <span className="font-normal text-muted-foreground"> - {order.customer.name}</span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] py-0 px-1.5 ${
+                            order.paymentStatus === "partial"
+                              ? "border-yellow-300 text-yellow-700 dark:border-yellow-700 dark:text-yellow-400"
+                              : "border-red-300 text-red-700 dark:border-red-700 dark:text-red-400"
+                          }`}
+                        >
+                          {order.paymentStatus === "partial" ? t("partial") : t("unpaid")}
+                        </Badge>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {symbol}{Number(order.totalAmount).toFixed(2)}
                         </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0 group-hover:text-muted-foreground transition-colors" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

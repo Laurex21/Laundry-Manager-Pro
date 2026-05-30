@@ -84,7 +84,7 @@ function AnalyticsContent() {
             <div className="text-sm">
               {kpis?.totalKg >= kpis?.breakEvenKg
                 ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {t("above_break_even")}</span>
-                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {t("need_more_kg", { count: ((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)).toFixed(0) })}</span>}
+                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {t("need_more_kg", { count: Math.round((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)) })}</span>}
             </div>
           </div>
         </CardContent>

@@ -13,16 +13,16 @@ import { useCurrency } from "@/hooks/use-currency";
 import { generateDepositReceipt } from "@/lib/receipt";
 import { useQuery as useSettingsQuery } from "@tanstack/react-query";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
-import { 
-  Plus, 
-  Search, 
-  Filter,
+import {
+  Plus,
+  Search,
   Trash2,
   ChevronRight,
   UserPlus,
   Check,
   Shirt,
-  AlertTriangle
+  AlertTriangle,
+  PackageOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,37 +61,69 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
+const ACTIVE_STATUSES = new Set(["pending", "washing", "drying", "ironing", "stain_treatment", "received"]);
+
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "ready" | "unpaid">("all");
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
 
-  const filteredOrders = orders?.filter((o: any) => 
-    o.id.toString().includes(search) || 
-    o.customer?.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const summary = useMemo(() => {
+    if (!orders) return { total: 0, active: 0, ready: 0, unpaid: 0 };
+    return {
+      total: orders.length,
+      active: orders.filter((o: any) => ACTIVE_STATUSES.has(o.status)).length,
+      ready: orders.filter((o: any) => o.status === "ready").length,
+      unpaid: orders.filter((o: any) => o.paymentStatus === "unpaid" || o.paymentStatus === "partial").length,
+    };
+  }, [orders]);
+
+  const filteredOrders = useMemo(() => {
+    if (!orders) return [];
+    let result = orders;
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((o: any) =>
+        o.id.toString().includes(q) ||
+        (o.customer?.name || "").toLowerCase().includes(q)
+      );
+    }
+    if (statusFilter === "active") result = result.filter((o: any) => ACTIVE_STATUSES.has(o.status));
+    if (statusFilter === "ready") result = result.filter((o: any) => o.status === "ready");
+    if (statusFilter === "unpaid") result = result.filter((o: any) => o.paymentStatus === "unpaid" || o.paymentStatus === "partial");
+    return result;
+  }, [orders, search, statusFilter]);
+
+  const chips: { key: typeof statusFilter; labelKey: string; count: number; color: string }[] = [
+    { key: "all",    labelKey: "all",           count: summary.total,  color: "bg-muted text-foreground" },
+    { key: "active", labelKey: "orders_active", count: summary.active, color: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
+    { key: "ready",  labelKey: "orders_ready",  count: summary.ready,  color: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" },
+    { key: "unpaid", labelKey: "orders_unpaid", count: summary.unpaid, color: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
+  ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-5 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('orders')}</h1>
-          <p className="text-muted-foreground mt-1">{t("orders_subtitle")}</p>
+          <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+            <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all shrink-0">
               <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
             </Button>
           </DialogTrigger>
@@ -104,76 +136,120 @@ export default function Orders() {
         </Dialog>
       </div>
 
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder={t('search_orders')} 
-            className="pl-10 bg-background border-border"
+      {/* Summary chips */}
+      <div className="flex flex-wrap gap-2">
+        {chips.map(chip => (
+          <button
+            key={chip.key}
+            onClick={() => setStatusFilter(chip.key)}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+              statusFilter === chip.key
+                ? "border-primary ring-1 ring-primary/30 shadow-sm"
+                : "border-transparent hover:border-border",
+              chip.color
+            )}
+          >
+            {t(chip.labelKey)}
+            <span className={cn(
+              "inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold",
+              statusFilter === chip.key ? "bg-primary/15 text-primary" : "bg-black/10 dark:bg-white/10"
+            )}>
+              {chip.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Operations toolbar */}
+      <div className="flex gap-2 p-2 rounded-lg border border-border bg-muted/30">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder={t('search_orders')}
+            className="pl-8 h-8 text-sm bg-background border-border"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button variant="outline" size="icon">
-          <Filter className="w-4 h-4 text-muted-foreground" />
-        </Button>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="h-8 shadow-sm shadow-primary/20 hover:-translate-y-px transition-all">
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> {t('new_order')}
+            </Button>
+          </DialogTrigger>
+        </Dialog>
       </div>
 
       {/* Desktop table */}
       <Card className="hidden md:block border-border/50 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
+            <thead className="bg-muted/60 text-muted-foreground text-xs font-semibold uppercase tracking-wide border-b border-border">
               <tr>
-                <th className="px-6 py-4">{t("order_id_col")}</th>
-                <th className="px-6 py-4">{t('customers')}</th>
-                <th className="px-6 py-4">{t('date')}</th>
-                <th className="px-6 py-4">{t('status')}</th>
-                <th className="px-6 py-4">{t('payment')}</th>
-                <th className="px-6 py-4 text-right">{t('amount')}</th>
-                <th className="px-6 py-4"></th>
+                <th className="px-3 py-2.5">{t("order_id_col")}</th>
+                <th className="px-3 py-2.5">{t('customers')}</th>
+                <th className="px-3 py-2.5">{t('date')}</th>
+                <th className="px-3 py-2.5">{t('status')}</th>
+                <th className="px-3 py-2.5">{t('payment')}</th>
+                <th className="px-3 py-2.5 text-right">{t('amount')}</th>
+                <th className="px-2 py-2.5 w-8"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-y divide-border/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">{t("loading_orders")}</td>
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">{t("loading_orders")}</td>
                 </tr>
-              ) : filteredOrders?.length === 0 ? (
+              ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">{t("no_orders_found")}</td>
+                  <td colSpan={7} className="px-3 py-14 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <PackageOpen className="w-8 h-8 text-muted-foreground/40" />
+                      <p className="text-muted-foreground text-sm">{t("no_orders_found")}</p>
+                      {!search && statusFilter === "all" && (
+                        <Dialog open={open} onOpenChange={setOpen}>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline">{t('new_order')}</Button>
+                          </DialogTrigger>
+                        </Dialog>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ) : (
-                filteredOrders?.map((order: any) => (
-                  <tr key={order.id} className="group hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 font-medium">#{order.id}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">{order.customer?.name || "Unknown"}</div>
-                      <div className="text-xs text-muted-foreground">{order.customer?.phone}</div>
+                filteredOrders.map((order: any) => (
+                  <tr key={order.id} className="group hover:bg-muted/25 transition-colors">
+                    <td className="px-3 py-2.5 font-mono text-xs font-semibold text-muted-foreground">
+                      #{order.id}
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium text-foreground leading-tight">{order.customer?.name || t("unknown")}</div>
+                      {order.customer?.phone && (
+                        <div className="text-xs text-muted-foreground mt-0.5">{order.customer.phone}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">
                       {format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1">
                         <StatusBadge status={order.status} />
                         {order.hasReturnedItems && (
-                          <span className="text-orange-500" title="Has returned garments">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                          </span>
+                          <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-2.5">
                       <StatusBadge status={order.paymentStatus} />
                     </td>
-                    <td className="px-6 py-4 text-right font-mono font-medium">
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-semibold tabular-nums">
                       {symbol}{Number(order.totalAmount).toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-2 py-2.5 text-right">
                       <Link href={`/orders/${order.id}`}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
-                          <ChevronRight className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary">
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </Button>
                       </Link>
                     </td>
@@ -186,34 +262,55 @@ export default function Orders() {
       </Card>
 
       {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-2">
         {isLoading ? (
-          <div className="space-y-3">
-            {[1,2,3].map(i => <div key={i} className="h-24 bg-muted/40 rounded-xl animate-pulse" />)}
+          <div className="space-y-2">
+            {[1,2,3].map(i => <div key={i} className="h-20 bg-muted/40 rounded-xl animate-pulse" />)}
           </div>
-        ) : filteredOrders?.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-xl">
-            {t("no_orders_found")}
+        ) : filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center gap-4 py-16 border-2 border-dashed border-border rounded-xl text-center">
+            <PackageOpen className="w-10 h-10 text-muted-foreground/40" />
+            <div>
+              <p className="font-medium text-foreground">{t("no_orders_found")}</p>
+              {!search && statusFilter === "all" && (
+                <p className="text-sm text-muted-foreground mt-1">{t("orders_empty_hint")}</p>
+              )}
+            </div>
+            {!search && statusFilter === "all" && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="w-4 h-4 mr-1.5" />{t('new_order')}
+                  </Button>
+                </DialogTrigger>
+              </Dialog>
+            )}
           </div>
         ) : (
-          filteredOrders?.map((order: any) => (
+          filteredOrders.map((order: any) => (
             <Link key={order.id} href={`/orders/${order.id}`}>
-              <Card className="border-border/50 shadow-sm active:scale-[0.98] transition-transform cursor-pointer" data-testid={`card-order-${order.id}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
+              <Card className="border-border/50 shadow-sm active:scale-[0.99] transition-transform cursor-pointer" data-testid={`card-order-${order.id}`}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Left: customer + meta */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-foreground truncate">{order.customer?.name || "Unknown"}</span>
-                        {order.hasReturnedItems && <AlertTriangle className="w-3.5 h-3.5 text-orange-500 shrink-0" />}
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="font-semibold text-foreground truncate text-sm">{order.customer?.name || t("unknown")}</span>
+                        {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
                       </div>
-                      <p className="text-xs text-muted-foreground">#{order.id} · {format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</p>
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <span className="font-mono font-medium">#{order.id}</span>
+                        <span>·</span>
+                        <span>{format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <StatusBadge status={order.status} />
                         <StatusBadge status={order.paymentStatus} />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-mono font-bold text-base">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
+                    {/* Right: amount + chevron */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="font-mono font-bold text-sm tabular-nums">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </div>
@@ -235,7 +332,8 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const { data: services } = useServices();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
-  
+
+  const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
@@ -343,7 +441,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
         quantity: Number(g.quantity),
       })) : [],
     };
-    
+
     createOrder(formattedData, {
       onSuccess: async (newOrder: any) => {
         try {
@@ -363,10 +461,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b pb-4">
         <h3 className="font-semibold text-lg">{t("order_details")}</h3>
-        <Button 
-          type="button" 
-          variant="outline" 
-          size="sm" 
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => setShowAddCustomer(!showAddCustomer)}
         >
           <UserPlus className="w-4 h-4 mr-2" />
@@ -513,11 +611,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   <Plus className="w-3 h-3 mr-1" /> {t('add_service', 'Add Service')}
                 </Button>
               </div>
-              
+
               {fields.map((field, index) => {
                 const selectedService = services?.find(s => s.id === watchedItems[index]?.serviceId);
                 const itemPrice = selectedService ? Number(selectedService.price) * (watchedItems[index]?.quantity || 0) : 0;
-                
+
                 return (
                   <div key={field.id} className="flex gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
                     <FormField
@@ -554,11 +652,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                         <FormItem className="w-20">
                           <FormLabel className="text-xs">Qty</FormLabel>
                           <FormControl>
-                            <Input 
-                              type="number" 
-                              min="1" 
-                              className="h-9" 
-                              {...field} 
+                            <Input
+                              type="number"
+                              min="1"
+                              className="h-9"
+                              {...field}
                               onChange={e => field.onChange(Number(e.target.value))}
                             />
                           </FormControl>
@@ -570,10 +668,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                       <span className="text-xs text-muted-foreground block">Price</span>
                       <span className="font-mono font-medium">{symbol}{itemPrice.toFixed(2)}</span>
                     </div>
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       className="h-9 w-9 text-muted-foreground hover:text-destructive"
                       onClick={() => remove(index)}
                       disabled={fields.length === 1}
@@ -597,7 +695,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
-                
+
                 {garmentFields.map((field, index) => (
                   <div key={field.id} className="flex gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
                     <FormField
@@ -620,10 +718,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                         <FormItem className="w-20">
                           <FormLabel className="text-xs">{t('qty', 'Qty')}</FormLabel>
                           <FormControl>
-                            <Input 
-                              type="number" 
-                              min="1" 
-                              {...field} 
+                            <Input
+                              type="number"
+                              min="1"
+                              {...field}
                               onChange={e => field.onChange(Number(e.target.value))}
                             />
                           </FormControl>
@@ -631,10 +729,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                         </FormItem>
                       )}
                     />
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => removeGarment(index)}
                       data-testid={`button-remove-garment-${index}`}

@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
   AlertCircle, AlertTriangle, Info, Building2, MapPin, UserCheck,
-  TrendingUp, CalendarDays, Package
+  TrendingUp, CalendarDays, Package, CreditCard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,9 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
-const STATUS_COLORS = ["#3b82f6", "#f97316", "#10b981", "#8b5cf6"];
+const QUEUE_STAGES = [
+  { key: "received", colorCls: "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400" },
+  { key: "washing",  colorCls: "text-sky-700 bg-sky-50 border-sky-100 dark:bg-sky-950/20 dark:border-sky-900/30 dark:text-sky-400" },
+  { key: "ready",    colorCls: "text-emerald-700 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400" },
+  { key: "delivered",colorCls: "text-muted-foreground bg-muted/40 border-border/40" },
+];
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStats();
@@ -32,142 +36,204 @@ export default function Dashboard() {
   const isAllSitesMode = isOwner && currentSite === null;
   const sitesOverview: any[] = dashData?.sitesOverview ?? [];
   const siteCount = dashData?.siteCount ?? allSites.length;
-  const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 5) || [];
+  const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 6) || [];
   const readyForPickup: any[] = dashData?.readyForPickup ?? [];
 
   if (statsLoading) return <DashboardSkeleton />;
 
   const alerts = dashData?.alerts || [];
-
-  const orderStatusData = dashData?.ordersByStatus ? [
-    { name: t("stage_received"), value: dashData.ordersByStatus.received },
-    { name: t("stage_washing"), value: dashData.ordersByStatus.washing },
-    { name: t("stage_ready"), value: dashData.ordersByStatus.ready },
-    { name: t("stage_delivered"), value: dashData.ordersByStatus.delivered },
-  ].filter(d => d.value > 0) : [];
-
   const monthProfit = (dashData?.monthRevenue || 0) - (dashData?.monthExpenses || 0);
+  const ordersByStatus = dashData?.ordersByStatus;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-4 animate-in fade-in duration-300">
+
+      {/* Header */}
+      <div className="flex items-center justify-between min-h-[2rem]">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground" data-testid="text-dashboard-title">{t('dashboard')}</h1>
-          <p className="text-muted-foreground mt-1">{t('welcome')}! {t('whats_happening')}</p>
+          <h1 className="text-sm font-semibold text-foreground" data-testid="text-dashboard-title">
+            {t('dashboard')}
+          </h1>
+          <p className="text-[11px] text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/orders">
-            <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all" data-testid="button-new-order">
-              <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
-            </Button>
-          </Link>
-        </div>
+        {!isAllSitesMode && currentSite && (
+          <div className="flex items-center gap-1.5" data-testid="banner-current-site">
+            <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground hidden sm:inline">{currentSite.name}</span>
+            {currentSite.city && <span className="text-xs text-muted-foreground hidden sm:inline opacity-60">· {currentSite.city}</span>}
+            <Badge variant="outline" className="capitalize text-[10px] h-5">{userRole}</Badge>
+          </div>
+        )}
       </div>
 
-      {isAllSitesMode ? (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/15" data-testid="banner-all-sites">
-          <div className="bg-primary/10 p-2 rounded-lg">
-            <Building2 className="w-5 h-5 text-primary" />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold text-foreground">{t('all_sites_view')}</p>
-            <p className="text-sm text-muted-foreground">{t('all_sites_subtitle', { count: siteCount })}</p>
-          </div>
-          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 hidden sm:flex">{t('consolidated_data')}</Badge>
-        </div>
-      ) : currentSite ? (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border border-border/50" data-testid="banner-current-site">
-          <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <p className="text-sm text-muted-foreground">
-            {t('viewing_site', { name: currentSite.name })}
-            {currentSite.city && <span className="ml-1 opacity-70">· {currentSite.city}</span>}
-          </p>
-          <Badge variant="outline" className="ml-auto capitalize text-xs">{userRole}</Badge>
-        </div>
-      ) : null}
+      {/* Operations command strip */}
+      <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-row sm:items-center sm:gap-px bg-muted/20 border border-border/50 rounded-lg p-1 w-full min-w-0">
+        <Link href="/orders" className="contents sm:inline-flex">
+          <Button size="sm" className="h-7 text-xs px-3 rounded-md font-medium w-full sm:w-auto" data-testid="button-new-order">
+            <Plus className="w-3.5 h-3.5 mr-1.5" />{t('new_order')}
+          </Button>
+        </Link>
+        <div className="hidden sm:block w-px h-4 bg-border/60 mx-1.5 shrink-0" />
+        <Link href="/payments" className="contents sm:inline-flex">
+          <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
+            <CreditCard className="w-3.5 h-3.5 mr-1.5" />{t('register_payment')}
+          </Button>
+        </Link>
+        <Link href="/orders" className="contents sm:inline-flex">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${readyForPickup.length > 0 ? " text-emerald-700 dark:text-emerald-400" : ""}`}
+          >
+            <Package className="w-3.5 h-3.5 mr-1.5" />
+            {t('ready_for_pickup')}
+            {readyForPickup.length > 0 && (
+              <span className="ml-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm tabular-nums">
+                {readyForPickup.length}
+              </span>
+            )}
+          </Button>
+        </Link>
+        <div className="hidden sm:block w-px h-4 bg-border/60 mx-1.5 shrink-0" />
+        <Link href="/customers" className="contents sm:inline-flex">
+          <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
+            <Users className="w-3.5 h-3.5 mr-1.5" />{t('customers')}
+          </Button>
+        </Link>
+        <Link href="/reports" className="contents sm:inline-flex">
+          <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
+            <TrendingUp className="w-3.5 h-3.5 mr-1.5" />{t('reports')}
+          </Button>
+        </Link>
+      </div>
 
+      {/* All-sites banner */}
+      {isAllSitesMode && (
+        <div className="flex items-center gap-3 px-3.5 py-2 rounded-lg bg-primary/5 border border-primary/15" data-testid="banner-all-sites">
+          <Building2 className="w-4 h-4 text-primary flex-shrink-0" />
+          <p className="text-sm font-medium text-foreground">{t('all_sites_view')}</p>
+          <span className="text-xs text-muted-foreground hidden sm:inline">· {t('all_sites_subtitle', { count: siteCount })}</span>
+          <Badge variant="secondary" className="ml-auto hidden sm:flex text-xs">{t('consolidated_data')}</Badge>
+        </div>
+      )}
+
+      {/* Alerts */}
       {alerts.length > 0 && (
-        <div className="space-y-2" data-testid="dashboard-alerts">
+        <div className="space-y-1.5" data-testid="dashboard-alerts">
           {alerts.map((alert: any, i: number) => {
             const styles: Record<string, { bg: string; icon: any }> = {
-              danger: { bg: "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400", icon: AlertCircle },
-              warning: { bg: "bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/30 dark:border-yellow-900 dark:text-yellow-400", icon: AlertTriangle },
-              info: { bg: "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/30 dark:border-blue-900 dark:text-blue-400", icon: Info },
+              danger:  { bg: "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400",    icon: AlertCircle },
+              warning: { bg: "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-400", icon: AlertTriangle },
+              info:    { bg: "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/30 dark:border-blue-900 dark:text-blue-400",   icon: Info },
             };
             const s = styles[alert.type] || styles.info;
             const Icon = s.icon;
             return (
-              <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border ${s.bg}`} data-testid={`alert-banner-${i}`}>
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium">{alert.message}</span>
-                  {alert.detail && <span className="ml-2 text-sm opacity-80">{alert.detail}</span>}
-                </div>
+              <div key={i} className={`flex items-center gap-3 px-3.5 py-2 rounded-lg border text-sm ${s.bg}`} data-testid={`alert-banner-${i}`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="font-medium">{alert.message}</span>
+                {alert.detail && <span className="ml-1 opacity-75">{alert.detail}</span>}
               </div>
             );
           })}
         </div>
       )}
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          <CalendarDays className="w-3.5 h-3.5" /> Today
+      {/* Workflow queue strip */}
+      {ordersByStatus && (
+        <div data-testid="card-orders-status-chart">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+            {t('order_pipeline')}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {QUEUE_STAGES.map(({ key, colorCls }) => (
+              <Link href="/orders" key={key}>
+                <div className={`rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow min-w-0 ${colorCls}`}>
+                  <p className="text-xl font-bold tabular-nums leading-none">{ordersByStatus[key] ?? 0}</p>
+                  <p className="text-[11px] mt-1 font-medium opacity-75">{t(`stage_${key}` as any)}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="blue" data-testid="card-today-orders" />
-          <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
-          <MetricCard label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="orange" data-testid="card-pending-orders" />
-          <MetricCard label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="indigo" data-testid="card-ready-count" />
+      )}
+
+      {/* KPI groups */}
+      <div className="space-y-3">
+        {/* Today */}
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+            <CalendarDays className="w-3 h-3" />{t('today')}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <MetricCard label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
+            <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
+            <MetricCard label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
+            <MetricCard label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
+          </div>
+        </div>
+
+        {/* This Week */}
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+            <TrendingUp className="w-3 h-3" />{t('this_week')}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <MetricCard label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
+            <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
+          </div>
+        </div>
+
+        {/* This Month */}
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+            <CalendarDays className="w-3 h-3" />{t('this_month')}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <MetricCard label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
+            <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
+            <MetricCard label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
+            <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          <TrendingUp className="w-3.5 h-3.5" /> This Week
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <MetricCard label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="blue" data-testid="card-week-orders" />
-          <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          <CalendarDays className="w-3.5 h-3.5" /> This Month
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="blue" data-testid="card-month-orders" />
-          <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
-          <MetricCard label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
-          <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
-        </div>
-      </div>
-
+      {/* Sites overview (owner / all-sites mode) */}
       {isAllSitesMode && sitesOverview.length > 0 && (
-        <Card className="shadow-md border-border/50" data-testid="card-sites-overview">
-          <CardHeader className="pb-3">
+        <Card className="border-border/50" data-testid="card-sites-overview">
+          <CardHeader className="pb-2 pt-4 px-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-primary" />{t('sites_overview')}
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-muted-foreground" />{t('sites_overview')}
               </CardTitle>
               <Link href="/settings">
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary text-xs">
-                  Manage Sites <ChevronRight className="w-3 h-3 ml-1" />
+                <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
+                  {t('settings')} <ChevronRight className="w-3 h-3 ml-1" />
                 </Button>
               </Link>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <CardContent className="px-4 pb-3">
+            <div className="divide-y divide-border/40">
               {sitesOverview.map((site: any) => (
-                <div key={site.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors" data-testid={`card-site-${site.id}`}>
-                  <div className="bg-primary/10 p-2 rounded-lg flex-shrink-0"><Building2 className="w-4 h-4 text-primary" /></div>
+                <div key={site.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0" data-testid={`card-site-${site.id}`}>
+                  <Building2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-foreground truncate">{site.name}</p>
-                    {site.city && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" /> {site.city}</p>}
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"><UserCheck className="w-3 h-3" /> {t('site_members', { count: site.memberCount })}</p>
+                    <p className="text-sm font-medium text-foreground leading-tight truncate">{site.name}</p>
+                    {site.city && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-2.5 h-2.5" />{site.city}
+                      </p>
+                    )}
                   </div>
-                  <Badge variant={site.isActive ? "default" : "secondary"} className="text-xs flex-shrink-0">{site.isActive ? "Active" : "Inactive"}</Badge>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs text-muted-foreground">
+                      <UserCheck className="w-3 h-3 inline mr-0.5" />{t('site_members', { count: site.memberCount })}
+                    </span>
+                    <Badge variant={site.isActive ? "default" : "secondary"} className="text-[10px]">
+                      {site.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
                 </div>
               ))}
             </div>
@@ -175,35 +241,40 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Card className="lg:col-span-2 shadow-md border-border/50" data-testid="card-recent-orders">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-bold">Recent Orders</CardTitle>
+      {/* Main grid: Recent Orders + Sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Recent Orders */}
+        <Card className="lg:col-span-2 border-border/50" data-testid="card-recent-orders">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">{t('recent_orders')}</CardTitle>
             <Link href="/orders">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
-                View All <ChevronRight className="w-4 h-4 ml-1" />
+              <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
+                {t('view_all')} <ChevronRight className="w-3 h-3 ml-1" />
               </Button>
             </Link>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 pb-4">
             {ordersLoading ? (
-              <div className="space-y-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}</div>
+              <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}</div>
             ) : latestOrders.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No orders yet.</div>
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground border border-dashed border-border/50 rounded-lg">
+                {t('no_orders_yet')}
+              </div>
             ) : (
-              <div className="space-y-1">
+              <div className="divide-y divide-border/40">
                 {latestOrders.map((order: any) => (
-                  <div key={order.id} className="group flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg transition-colors border border-transparent hover:border-border/50" data-testid={`row-order-${order.id}`}>
-                    <div className="flex flex-col gap-1">
-                      <span className="font-medium text-foreground">{order.customer?.name || `Order #${order.id}`}</span>
-                      <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d, yyyy")}</span>
+                  <div key={order.id} className="group flex items-center justify-between py-2.5 hover:bg-muted/30 px-1 rounded transition-colors" data-testid={`row-order-${order.id}`}>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-foreground leading-tight">{order.customer?.name || `#${order.id}`}</span>
+                      <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d")}</span>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <StatusBadge status={order.status} />
-                      <span className="font-mono text-sm font-medium w-20 text-right">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
+                      <span className="font-mono text-sm w-16 text-right">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
                       <Link href={`/orders/${order.id}`}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <ChevronRight className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </Button>
                       </Link>
                     </div>
@@ -214,116 +285,126 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="shadow-md border-border/50" data-testid="card-orders-status-chart">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-bold">Orders by Status</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[220px]">
-              {orderStatusData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={orderStatusData} cx="50%" cy="45%" innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value">
-                      {orderStatusData.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                    <Legend verticalAlign="bottom" iconSize={10} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">No order data</div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Sidebar */}
+        <div className="space-y-4">
 
-          <Card className="shadow-md bg-primary/5 border-primary/10">
-            <CardHeader><CardTitle className="text-base font-bold text-primary">Quick Actions</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Link href="/customers">
-                <Button variant="outline" className="w-full justify-start bg-background hover:bg-white hover:text-primary hover:border-primary/30 transition-all" data-testid="button-add-customer">
-                  <Users className="w-4 h-4 mr-2" /> Add Customer
-                </Button>
-              </Link>
-              <Link href="/expenses">
-                <Button variant="outline" className="w-full justify-start bg-background hover:bg-white hover:text-primary hover:border-primary/30 transition-all" data-testid="button-log-expense">
-                  <DollarSign className="w-4 h-4 mr-2" /> Log Expense
-                </Button>
-              </Link>
-              {isOwner && (
-                <Link href="/settings">
-                  <Button variant="outline" className="w-full justify-start bg-background hover:bg-white hover:text-primary hover:border-primary/30 transition-all" data-testid="button-manage-sites">
-                    <Building2 className="w-4 h-4 mr-2" /> Manage Sites
+          {/* Ready for Pickup */}
+          <Card className="border-border/50" data-testid="card-ready-for-pickup">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Package className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                {t('ready_for_pickup')}
+                {readyForPickup.length > 0 && (
+                  <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] h-4 px-1">
+                    {readyForPickup.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              {readyForPickup.length > 0 && (
+                <Link href="/orders">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
+                    {t('view_all')} <ChevronRight className="w-3 h-3 ml-1" />
                   </Button>
                 </Link>
               )}
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              {readyForPickup.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3 text-center border border-dashed border-border/40 rounded-lg">
+                  {t('no_pending_pickups')}
+                </p>
+              ) : (
+                <div className="divide-y divide-border/30">
+                  {readyForPickup.slice(0, 5).map((order: any) => (
+                    <div key={order.id} className="flex items-center justify-between py-2" data-testid={`row-ready-${order.id}`}>
+                      <div>
+                        <p className="text-sm font-medium leading-tight">{order.customer?.name || `#${order.id}`}</p>
+                        <p className="text-xs text-muted-foreground">{symbol}{Number(order.totalAmount).toFixed(2)}</p>
+                      </div>
+                      <Link href={`/orders/${order.id}`}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                        </Button>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Quick Actions */}
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t('quick_actions')}</p>
+            <div className="rounded-lg border border-border/50 bg-card overflow-hidden divide-y divide-border/30">
+              <Link href="/customers">
+                <div className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground hover:bg-muted/30 transition-colors cursor-pointer" data-testid="button-add-customer">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />{t('add_customer')}
+                </div>
+              </Link>
+              <Link href="/expenses">
+                <div className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground hover:bg-muted/30 transition-colors cursor-pointer" data-testid="button-log-expense">
+                  <DollarSign className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />{t('log_expense')}
+                </div>
+              </Link>
+              {isOwner && (
+                <Link href="/settings">
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground hover:bg-muted/30 transition-colors cursor-pointer" data-testid="button-manage-sites">
+                    <Building2 className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />{t('sites')}
+                  </div>
+                </Link>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
-
-      {readyForPickup.length > 0 && (
-        <Card className="shadow-md border-border/50" data-testid="card-ready-for-pickup">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <Package className="w-5 h-5 text-indigo-500" /> {t('ready_for_pickup')}
-              <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">{readyForPickup.length}</Badge>
-            </CardTitle>
-            <Link href="/orders">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary text-xs">
-                View All <ChevronRight className="w-3 h-3 ml-1" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {readyForPickup.slice(0, 5).map((order: any) => (
-                <div key={order.id} className="flex items-center justify-between p-3 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/20 rounded-lg" data-testid={`row-ready-${order.id}`}>
-                  <div>
-                    <p className="font-medium">{order.customer?.name || `Order #${order.id}`}</p>
-                    <p className="text-xs text-muted-foreground">#{order.id} · {symbol}{Number(order.totalAmount).toFixed(2)}</p>
-                  </div>
-                  <Link href={`/orders/${order.id}`}>
-                    <Button variant="outline" size="sm" className="h-7 text-xs">View</Button>
-                  </Link>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
 
 function MetricCard({ label, value, icon: Icon, color, ...props }: any) {
-  const colorMap: Record<string, string> = {
-    blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
-    green: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400",
-    orange: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400",
-    red: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
-    indigo: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400",
+  const iconCls: Record<string, string> = {
+    neutral: "text-muted-foreground",
+    green:   "text-emerald-600 dark:text-emerald-400",
+    amber:   "text-amber-600 dark:text-amber-400",
+    emerald: "text-emerald-600 dark:text-emerald-400",
+    red:     "text-red-600 dark:text-red-400",
+    blue:    "text-blue-600 dark:text-blue-400",
+    orange:  "text-orange-600 dark:text-orange-400",
+    indigo:  "text-indigo-600 dark:text-indigo-400",
   };
   return (
-    <Card className="shadow-sm border-border/50 hover:shadow-md transition-all duration-300" {...props}>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <div className={`p-1.5 rounded-lg ${colorMap[color] || colorMap.blue}`}>
-            <Icon className="w-4 h-4" />
-          </div>
-        </div>
-        <p className="text-2xl font-bold font-display">{value}</p>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border border-border/50 bg-card p-3 min-w-0" {...props}>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[11px] text-muted-foreground leading-tight truncate">{label}</p>
+        <Icon className={`w-3 h-3 flex-shrink-0 ${iconCls[color] ?? iconCls.neutral}`} />
+      </div>
+      <p className="text-lg font-semibold tabular-nums leading-none">{value}</p>
+    </div>
   );
 }
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-8 p-4 md:p-8">
-      <div className="flex justify-between"><div className="space-y-2"><Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-64" /></div><Skeleton className="h-10 w-32" /></div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8"><Skeleton className="lg:col-span-2 h-64 rounded-xl" /><Skeleton className="h-64 rounded-xl" /></div>
+    <div className="space-y-4">
+      <div className="flex justify-between items-start">
+        <div className="space-y-1">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3 w-36" />
+        </div>
+        <Skeleton className="h-5 w-28 rounded" />
+      </div>
+      <Skeleton className="h-9 w-full rounded-lg" />
+      <div className="grid grid-cols-4 gap-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-[60px] rounded-lg" />)}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Skeleton className="lg:col-span-2 h-52 rounded-lg" />
+        <div className="space-y-4">
+          <Skeleton className="h-36 rounded-lg" />
+          <Skeleton className="h-28 rounded-lg" />
+        </div>
+      </div>
     </div>
   );
 }

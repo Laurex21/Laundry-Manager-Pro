@@ -142,7 +142,7 @@ export default function Reports() {
   function handleDownloadReport() {
     if (!data) return;
     const lines: string[] = [];
-    lines.push(`CleanEase - ${t("monthly_report")}`);
+    lines.push(`Xpress Clean - ${t("monthly_report")}`);
     lines.push(`${t("period")}: ${format(dateFrom, "MMM d, yyyy")} - ${format(dateTo, "MMM d, yyyy")}`);
     lines.push("");
     lines.push(`--- ${t("summary")} ---`);
@@ -171,7 +171,7 @@ export default function Reports() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `CleanEase_Report_${queryParams.start}_${queryParams.end}.txt`;
+    a.download = `XpressClean_Report_${queryParams.start}_${queryParams.end}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -204,28 +204,24 @@ export default function Reports() {
         </Button>
       </div>
 
-      <Card data-testid="card-date-filter">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <span className="text-sm font-medium text-muted-foreground">{t("date_range")}:</span>
-            <div className="flex items-center gap-2 flex-wrap">
-              <DatePickerButton
-                date={dateFrom}
-                onSelect={setDateFrom}
-                label={t("from")}
-                testId="button-date-from"
-              />
-              <span className="text-muted-foreground">—</span>
-              <DatePickerButton
-                date={dateTo}
-                onSelect={setDateTo}
-                label={t("to")}
-                testId="button-date-to"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3" data-testid="card-date-filter">
+        <span className="text-sm font-medium text-muted-foreground">{t("date_range")}:</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <DatePickerButton
+            date={dateFrom}
+            onSelect={setDateFrom}
+            label={t("from")}
+            testId="button-date-from"
+          />
+          <span className="text-muted-foreground text-sm">to</span>
+          <DatePickerButton
+            date={dateTo}
+            onSelect={setDateTo}
+            label={t("to")}
+            testId="button-date-to"
+          />
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -321,42 +317,34 @@ export default function Reports() {
                   <p className="text-xs text-muted-foreground mb-3">{t("vs_previous_30_days")}</p>
                   <div className="space-y-2">
                     {alerts.length === 0 ? (
-                      <Card>
-                        <CardContent className="p-3 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-md flex items-center justify-center bg-muted flex-shrink-0">
-                            <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                          <p className="text-sm text-muted-foreground" data-testid="text-no-alerts">{t("no_alerts")}</p>
-                        </CardContent>
-                      </Card>
+                      <div className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-muted/40" data-testid="card-alert-0">
+                        <CheckCircle2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <p className="text-sm text-muted-foreground" data-testid="text-no-alerts">{t("no_alerts")}</p>
+                      </div>
                     ) : (
                       alerts.map((alert, idx) => (
-                        <Card key={idx} data-testid={`card-alert-${idx}`}>
-                          <CardContent className="p-3 flex items-center gap-3">
-                            <div className={cn(
-                              "w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0",
-                              alert.type === "warning" ? "bg-amber-100 dark:bg-amber-900/30" :
-                              alert.type === "danger" ? "bg-red-100 dark:bg-red-900/30" :
-                              "bg-emerald-100 dark:bg-emerald-900/30"
-                            )}>
-                              {alert.type === "warning" ? (
-                                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                              ) : alert.type === "danger" ? (
-                                <ArrowDownRight className="w-4 h-4 text-red-600 dark:text-red-400" />
-                              ) : (
-                                <ArrowUpRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                              )}
-                            </div>
-                            <p className={cn(
-                              "text-sm",
-                              alert.type === "warning" ? "text-amber-700 dark:text-amber-300" :
-                              alert.type === "danger" ? "text-red-700 dark:text-red-300" :
-                              "text-emerald-700 dark:text-emerald-300"
-                            )} data-testid={`text-alert-${idx}`}>
-                              {alert.message}
-                            </p>
-                          </CardContent>
-                        </Card>
+                        <div key={idx} className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-md",
+                          alert.type === "warning" ? "bg-amber-50 dark:bg-amber-900/20" :
+                          alert.type === "danger" ? "bg-red-50 dark:bg-red-900/20" :
+                          "bg-emerald-50 dark:bg-emerald-900/20"
+                        )} data-testid={`card-alert-${idx}`}>
+                          {alert.type === "warning" ? (
+                            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                          ) : alert.type === "danger" ? (
+                            <ArrowDownRight className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+                          ) : (
+                            <ArrowUpRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          )}
+                          <p className={cn(
+                            "text-sm",
+                            alert.type === "warning" ? "text-amber-700 dark:text-amber-300" :
+                            alert.type === "danger" ? "text-red-700 dark:text-red-300" :
+                            "text-emerald-700 dark:text-emerald-300"
+                          )} data-testid={`text-alert-${idx}`}>
+                            {alert.message}
+                          </p>
+                        </div>
                       ))
                     )}
                   </div>

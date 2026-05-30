@@ -129,9 +129,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         subtotal += Number(service.price) * item.quantity;
         return { ...item, priceAtOrder: service.price };
       }));
-      const discountPct = Number(orderData.discountPct || 0);
-      const discountFixed = Number(orderData.discount || 0);
-      const discountAmount = discountPct > 0 ? (subtotal * discountPct / 100) : discountFixed;
+      const discountAmount = Number(orderData.discount || 0);
       const totalAmount = Math.max(0, subtotal - discountAmount);
       const order = await storage.createOrder({
         ...orderData,
@@ -139,12 +137,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalAmount: totalAmount.toString(),
         originalPrice: subtotal.toString(),
         discountAmount: discountAmount.toString(),
-        discountPct: discountPct > 0 ? discountPct.toString() : "0",
         discount: discountAmount.toString(),
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
         siteId: (req as any).siteId,
-      }, items, garments);
+      } as any, items, garments);
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -472,7 +469,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/sites/:id/members/:userId/role", isAuthenticated, async (req, res) => {
     try {
-      const updated = await storage.updateSiteMemberRole(Number(req.params.id), req.params.userId, req.body.role);
+      const updated = await storage.updateSiteMemberRole(Number(req.params.id), req.params.userId as string, req.body.role);
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to update role" });
@@ -481,7 +478,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/sites/:id/members/:userId", isAuthenticated, async (req, res) => {
     try {
-      await storage.removeSiteMember(Number(req.params.id), req.params.userId);
+      await storage.removeSiteMember(Number(req.params.id), req.params.userId as string);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to remove member" });
@@ -538,7 +535,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/invitations/accept/:token", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const result = await storage.acceptInvitation(req.params.token, userId);
+      const result = await storage.acceptInvitation(req.params.token as string, userId);
       if (!result) return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
       res.json({ success: true, invitation: result });
     } catch (err) {

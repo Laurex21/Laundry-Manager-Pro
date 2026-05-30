@@ -8,11 +8,14 @@ import { useForm } from "react-hook-form";
 import { UserCheck, Plus, Pencil, Trash2, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
@@ -24,13 +27,14 @@ export default function Employees() {
   const { hasFeature } = useAuth();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
 
   if (!hasFeature("employees")) {
     return <UpgradePrompt title={t("employees")} description="Track staff productivity, kg processed and salaries." requiredPlan="Pro" />;
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-employees-title">{t("employees")}</h1>
@@ -40,78 +44,118 @@ export default function Employees() {
         </Button>
       </div>
 
-      <EmployeeList onEdit={(e) => { setEditing(e); setOpen(true); }} />
+      <EmployeeList onEdit={(e) => { setEditing(e); setOpen(true); }} onDelete={setDeleteTarget} />
 
       <EmployeeDialog open={open} onOpenChange={setOpen} employee={editing} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("delete")} {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("delete_service_confirm", { name: deleteTarget?.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <DeleteEmployeeAction employee={deleteTarget} onDone={() => setDeleteTarget(null)} />
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function EmployeeList({ onEdit }: { onEdit: (e: Employee) => void }) {
+function DeleteEmployeeAction({ employee, onDone }: { employee: Employee | null; onDone: () => void }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/employees/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/employees"] }); onDone(); },
+  });
+
+  return (
+    <AlertDialogAction
+      className="bg-destructive text-destructive-foreground"
+      disabled={deleteMutation.isPending}
+      onClick={() => employee && deleteMutation.mutate(employee.id)}
+    >
+      {deleteMutation.isPending ? t("deleting") : t("delete")}
+    </AlertDialogAction>
+  );
+}
+
+const AVATAR_COLORS = ["bg-blue-500", "bg-green-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
+
+function EmployeeList({ onEdit, onDelete }: { onEdit: (e: Employee) => void; onDelete: (e: Employee) => void }) {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
-  const queryClient = useQueryClient();
   const { data: employees, isLoading } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/employees/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/employees"] }),
-  });
-
   if (isLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>;
+    return <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded" />)}</div>;
   }
 
   if (!employees || employees.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground border border-dashed rounded-xl">
-        <UserCheck className="w-12 h-12 mx-auto mb-4 opacity-30" />
-        <p data-testid="text-no-employees">{t("no_employees_yet")}</p>
+        <UserCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="text-sm" data-testid="text-no-employees">{t("no_employees_yet")}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="border rounded-lg overflow-hidden divide-y divide-border">
+      <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span>{t("employee_name")}</span>
+        <span>{t("employee_role")}</span>
+        <span>{t("phone")} / {t("email")}</span>
+        <span>{t("kg_processed")}</span>
+        <span>{t("orders_handled")}</span>
+        <span>{t("monthly_salary")}</span>
+        <span></span>
+      </div>
       {employees.map((emp) => {
         const initial = emp.name.charAt(0).toUpperCase();
-        const colors = ["bg-blue-500", "bg-green-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
-        const bgColor = colors[emp.id % colors.length];
+        const bgColor = AVATAR_COLORS[emp.id % AVATAR_COLORS.length];
 
         return (
-          <Card key={emp.id} className="shadow-sm hover:shadow-md transition-shadow" data-testid={`card-employee-${emp.id}`}>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 ${bgColor} rounded-full flex items-center justify-center text-white font-bold text-lg`}>
-                  {initial}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h3 className="font-bold text-lg">{emp.name}</h3>
-                    <span className="text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded">{emp.role}</span>
-                  </div>
-                  <div className="flex gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
-                    {emp.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{emp.phone}</span>}
-                    {emp.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{emp.email}</span>}
-                  </div>
-                </div>
-                <div className="text-right space-y-1 hidden sm:block">
-                  <div className="text-sm"><span className="text-muted-foreground">{t("kg_processed")}:</span> {emp.kgProcessed}</div>
-                  <div className="text-sm"><span className="text-muted-foreground">{t("orders_handled")}:</span> {emp.ordersHandled}</div>
-                  {emp.salary && <div className="text-sm font-medium">{t("monthly_salary")}: {symbol}{Number(emp.salary).toFixed(0)}</div>}
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => onEdit(emp)} data-testid={`button-edit-employee-${emp.id}`}>
-                    <Pencil className="w-3 h-3" />
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => { if (confirm("Delete this employee?")) deleteMutation.mutate(emp.id); }} data-testid={`button-delete-employee-${emp.id}`}>
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
+          <div key={emp.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_1fr_1fr_auto] gap-x-4 gap-y-1 px-4 py-3 items-center hover:bg-muted/20 transition-colors" data-testid={`card-employee-${emp.id}`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                {initial}
               </div>
-            </CardContent>
-          </Card>
+              <span className="font-medium text-sm truncate">{emp.name}</span>
+            </div>
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded w-fit">{emp.role}</span>
+            <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-w-0">
+              {emp.phone && (
+                <span className="flex items-center gap-1 truncate">
+                  <Phone className="w-3 h-3 shrink-0" />{emp.phone}
+                </span>
+              )}
+              {emp.email && (
+                <span className="flex items-center gap-1 truncate">
+                  <Mail className="w-3 h-3 shrink-0" />{emp.email}
+                </span>
+              )}
+            </div>
+            <span className="text-sm font-mono">{emp.kgProcessed}</span>
+            <span className="text-sm font-mono">{emp.ordersHandled}</span>
+            <span className="text-sm font-medium">
+              {emp.salary ? `${symbol}${Number(emp.salary).toFixed(0)}` : "-"}
+            </span>
+            <div className="flex gap-1 justify-end">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(emp)} data-testid={`button-edit-employee-${emp.id}`}>
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(emp)} data-testid={`button-delete-employee-${emp.id}`}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -169,7 +213,7 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
             <FormField control={form.control} name="role" rules={{ required: true }} render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("employee_role")}</FormLabel>
-                <FormControl><Input {...field} placeholder="e.g. Operator" data-testid="input-employee-role" /></FormControl>
+                <FormControl><Input {...field} placeholder={t("role_placeholder")} data-testid="input-employee-role" /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
@@ -203,12 +247,12 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
               <FormField control={form.control} name="ordersHandled" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("orders_handled")}</FormLabel>
-                  <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 0)} data-testid="input-employee-orders" /></FormControl>
+                  <FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 0)} data-testid="input-employee-orders" /></FormControl>
                 </FormItem>
               )} />
             </div>
             <Button type="submit" className="w-full" disabled={mutation.isPending} data-testid="button-save-employee">
-              {mutation.isPending ? "Saving..." : isEdit ? t("save_changes") : t("add_employee")}
+              {mutation.isPending ? t("saving") : isEdit ? t("save_changes") : t("add_employee")}
             </Button>
           </form>
         </Form>
