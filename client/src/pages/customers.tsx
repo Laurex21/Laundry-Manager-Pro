@@ -196,7 +196,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
             <FormItem>
               <FormLabel>{t("full_name")}</FormLabel>
               <FormControl>
-                <Input placeholder="John Doe" {...field} />
+                <Input placeholder={t("customer_name_placeholder")} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -210,7 +210,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
               <FormItem>
                 <FormLabel>{t("phone")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="+1 234..." {...field} />
+                  <Input placeholder={t("phone_placeholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -223,7 +223,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
               <FormItem>
                 <FormLabel>{t("email_optional")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="john@example.com" {...field} value={field.value || ""} />
+                  <Input placeholder={t("customer_email_placeholder")} {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -237,7 +237,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
             <FormItem>
               <FormLabel>{t("address")}</FormLabel>
               <FormControl>
-                <Input placeholder="123 Main St, City" {...field} />
+                <Input placeholder={t("customer_address_placeholder")} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

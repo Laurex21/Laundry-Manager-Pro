@@ -11,6 +11,8 @@ import {
   Download, MessageCircle, Zap, Shield, Globe, Clock,
   TrendingUp, AlertTriangle, ArrowRight, Star, Lock,
 } from "lucide-react";
+import { PublicLanguageTools, publicLangCode } from "@/components/public-language-tools";
+import { useTranslation } from "react-i18next";
 
 // ─── Country data (kept from original) ────────────────────────────────────────
 const COUNTRY_META: Record<string, { label: string; currency: string; dialCode: string; dialCodeNumeric: string; cityPlaceholder: string }> = {
@@ -175,6 +177,7 @@ function NavRow({ onBack, onNext, nextLabel="Étape suivante", disabled=false }:
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function CalculatorPage() {
+  const { i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const [stage,   setStage  ] = useState<Stage>("hero");
   const [form,    setForm   ] = useState<CalcForm>(EMPTY_FORM);
@@ -242,6 +245,7 @@ export default function CalculatorPage() {
           objective:   form.objective,
           budget:      form.budget,
           experience:  form.experience,
+          language:    publicLangCode(i18n.language),
         }),
       });
       const data = await res.json();
@@ -302,7 +306,8 @@ export default function CalculatorPage() {
   // ─── HERO ──────────────────────────────────────────────────────────────────
   if (stage === "hero") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white flex flex-col">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white flex flex-col" data-public-tool-root>
+        <PublicLanguageTools />
         {/* Animated grid overlay */}
         <div className="absolute inset-0 opacity-10 pointer-events-none"
           style={{ backgroundImage:"linear-gradient(rgba(255,255,255,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.15) 1px,transparent 1px)", backgroundSize:"40px 40px" }} />
@@ -639,7 +644,8 @@ export default function CalculatorPage() {
   }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background" data-public-tool-root>
+      <PublicLanguageTools />
       {/* Hero banner */}
       <div className="bg-gradient-to-br from-blue-700 to-blue-900 text-white py-10 px-4">
         <div className="max-w-2xl mx-auto text-center">

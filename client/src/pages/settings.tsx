@@ -28,6 +28,13 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
+
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
 
 // ─── Identity Tab ─────────────────────────────────────────────────────────────
 
@@ -51,7 +58,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 500 * 1024) {
-      alert("Logo file must be under 500KB");
+      alert(t("logo_file_size_error"));
       return;
     }
     const reader = new FileReader();
@@ -68,11 +75,11 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="businessName">{t("business_name_label")}</Label>
-          <Input id="businessName" value={form.businessName} onChange={F("businessName")} placeholder="My Laundry" data-testid="input-business-name" />
+          <Input id="businessName" value={form.businessName} onChange={F("businessName")} placeholder={t("business_name_placeholder")} data-testid="input-business-name" />
         </div>
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="tagline">{t("tagline")}</Label>
-          <Input id="tagline" value={form.tagline} onChange={F("tagline")} placeholder="Premium laundry service" data-testid="input-tagline" />
+          <Input id="tagline" value={form.tagline} onChange={F("tagline")} placeholder={t("tagline_placeholder")} data-testid="input-tagline" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone">{t("phone_primary")}</Label>
@@ -92,7 +99,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
         </div>
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="address">{t("street_address")}</Label>
-          <Input id="address" value={form.address} onChange={F("address")} placeholder="123 Laundry Street" data-testid="input-address" />
+          <Input id="address" value={form.address} onChange={F("address")} placeholder={t("street_address_placeholder")} data-testid="input-address" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="city">{t("city")}</Label>
@@ -100,7 +107,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
         </div>
         <div className="space-y-2">
           <Label htmlFor="country">{t("country")}</Label>
-          <Input id="country" value={form.country} onChange={F("country")} placeholder="Cameroon" data-testid="input-country" />
+          <Input id="country" value={form.country} onChange={F("country")} placeholder={t("country_placeholder")} data-testid="input-country" />
         </div>
       </div>
 
@@ -113,7 +120,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
           <div className="flex items-center gap-4">
             {form.logoBase64 ? (
               <div className="relative">
-                <img src={form.logoBase64} alt="Logo preview" className="h-16 w-16 object-contain rounded-lg border" />
+                <img src={form.logoBase64} alt={t("logo_preview_alt")} className="h-16 w-16 object-contain rounded-lg border" />
                 <button onClick={() => setForm((f) => ({ ...f, logoBase64: "" }))} className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center" data-testid="button-remove-logo">
                   <X className="w-3 h-3" />
                 </button>
@@ -127,7 +134,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} data-testid="input-logo-file" />
               <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} data-testid="button-upload-logo">
                 <Upload className="w-4 h-4 mr-2" />
-                {form.logoBase64 ? "Change Logo" : "Upload Logo"}
+                {form.logoBase64 ? t("change_logo") : t("upload_logo")}
               </Button>
             </div>
           </div>
@@ -136,7 +143,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
 
       <Button onClick={() => onSave(form)} disabled={saving} data-testid="button-save-identity">
         <Save className="w-4 h-4 mr-2" />
-        {saving ? "Saving..." : "Save Changes"}
+        {saving ? t("saving") : t("save_changes")}
       </Button>
     </div>
   );
@@ -158,26 +165,26 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
   });
 
   const LANGUAGE_OPTIONS = [
-    { value: "en", label: "English" },
+    { value: "en", label: t("language_english") },
     { value: "fr", label: "Français" },
     { value: "pt", label: "Português" },
-    { value: "both", label: "Both (EN + FR)" },
-    { value: "all", label: "All (EN + FR + PT)" },
+    { value: "both", label: t("language_both_en_fr") },
+    { value: "all", label: t("language_all_en_fr_pt") },
   ];
 
   const toggles = [
-    { key: "showLogo" as const, label: "Show Logo on Receipt" },
-    { key: "showPickupDate" as const, label: "Show Expected Pickup Date" },
-    { key: "showGarmentList" as const, label: "Show Garment Checklist" },
-    { key: "showPaymentHistory" as const, label: "Show Payment History" },
-    { key: "showTerms" as const, label: "Show Terms & Conditions" },
+    { key: "showLogo" as const, labelKey: "show_logo" },
+    { key: "showPickupDate" as const, labelKey: "show_pickup_date" },
+    { key: "showGarmentList" as const, labelKey: "show_garment_list" },
+    { key: "showPaymentHistory" as const, labelKey: "show_payment_history" },
+    { key: "showTerms" as const, labelKey: "show_terms" },
   ];
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Header Color</Label>
+          <Label>{t("header_color")}</Label>
           <div className="flex items-center gap-3">
             <input
               type="color"
@@ -196,7 +203,7 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Receipt Language</Label>
+          <Label>{t("receipt_language")}</Label>
           <Select value={form.receiptLanguage} onValueChange={(v) => setForm((f) => ({ ...f, receiptLanguage: v }))}>
             <SelectTrigger data-testid="select-receipt-language">
               <SelectValue />
@@ -209,7 +216,7 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
           </Select>
         </div>
         <div className="space-y-2 md:col-span-2">
-          <Label>Footer Note</Label>
+          <Label>{t("footer_note")}</Label>
           <Input
             value={form.receiptFooterNote}
             onChange={(e) => setForm((f) => ({ ...f, receiptFooterNote: e.target.value }))}
@@ -221,13 +228,13 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Sections to Show</CardTitle>
-          <CardDescription className="text-xs">Choose what appears on printed/downloaded receipts.</CardDescription>
+          <CardTitle className="text-sm">{t("sections_to_show")}</CardTitle>
+          <CardDescription className="text-xs">{t("sections_hint")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {toggles.map(({ key, label }) => (
+          {toggles.map(({ key, labelKey }) => (
             <div key={key} className="flex items-center justify-between">
-              <Label className="text-sm font-normal">{label}</Label>
+              <Label className="text-sm font-normal">{t(labelKey)}</Label>
               <Switch
                 checked={form[key]}
                 onCheckedChange={(v) => setForm((f) => ({ ...f, [key]: v }))}
@@ -241,23 +248,23 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
       <div className="border rounded-lg overflow-hidden">
         <div className="text-xs p-3 font-bold text-white flex justify-between items-center" style={{ backgroundColor: form.receiptHeaderColor }}>
           <div>
-            <div className="text-sm font-bold">Your Business Name</div>
-            <div className="opacity-80 text-xs">Laundry Service</div>
+            <div className="text-sm font-bold">{t("business_name")}</div>
+            <div className="opacity-80 text-xs">{t("laundry_manager")}</div>
           </div>
           <div className="text-right">
-            <div className="opacity-70 text-xs">Order No.</div>
+            <div className="opacity-70 text-xs">{t("order_id")}</div>
             <div className="text-lg font-black">#001</div>
           </div>
         </div>
         <div className="p-3 bg-muted/30">
-          <p className="text-xs text-muted-foreground">Receipt preview (header color applied)</p>
+          <p className="text-xs text-muted-foreground">{t("receipt_preview")}</p>
           {form.receiptFooterNote && <p className="text-xs text-center mt-2 italic text-muted-foreground">"{form.receiptFooterNote}"</p>}
         </div>
       </div>
 
       <Button onClick={() => onSave(form)} disabled={saving} data-testid="button-save-layout">
         <Save className="w-4 h-4 mr-2" />
-        {saving ? "Saving..." : "Save Changes"}
+        {saving ? t("saving") : t("save_changes")}
       </Button>
     </div>
   );
@@ -273,7 +280,7 @@ function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any
     <div className="space-y-4 max-w-2xl">
       <div>
         <Label>{t("terms_of_service_label")}</Label>
-        <p className="text-xs text-muted-foreground mt-1 mb-2">One term per line. Each line will be a numbered list item.</p>
+        <p className="text-xs text-muted-foreground mt-1 mb-2">{t("terms_one_per_line")}</p>
         <Textarea
           value={termsOfService}
           onChange={(e) => setTermsOfService(e.target.value)}
@@ -286,14 +293,14 @@ function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any
       <div className="flex gap-2">
         <Button onClick={() => onSave({ termsOfService })} disabled={saving} data-testid="button-save-terms">
           <Save className="w-4 h-4 mr-2" />
-          {saving ? "Saving..." : "Save Terms"}
+          {saving ? t("saving") : t("save_terms")}
         </Button>
         <Button
           variant="outline"
           onClick={() => setTermsOfService(DEFAULT_TERMS_EN)}
           data-testid="button-reset-terms"
         >
-          Reset to Default
+          {t("reset_to_default")}
         </Button>
       </div>
     </div>
@@ -303,7 +310,7 @@ function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any
 // ─── Team & Sites Tab ─────────────────────────────────────────────────────────
 
 function TeamTab() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, isOwner, userRole } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -355,9 +362,9 @@ function TeamTab() {
       setNewSiteName("");
       setNewSiteAddress("");
       setNewSiteCity("");
-      toast({ title: "Site created" });
+      toast({ title: t("site_created") });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   const deleteSiteMut = useMutation({
@@ -367,9 +374,9 @@ function TeamTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/sites"] });
-      toast({ title: "Site removed" });
+      toast({ title: t("site_removed") });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   const updateSiteMut = useMutation({
@@ -386,9 +393,9 @@ function TeamTab() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/sites"] });
       setEditSite(null);
-      toast({ title: "Site updated" });
+      toast({ title: t("site_updated") });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   const removeMemberMut = useMutation({
@@ -398,7 +405,7 @@ function TeamTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/sites"] });
-      toast({ title: "Member removed" });
+      toast({ title: t("member_removed") });
     },
   });
 
@@ -414,7 +421,7 @@ function TeamTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/sites"] });
-      toast({ title: "Role updated" });
+      toast({ title: t("role_updated") });
     },
   });
 
@@ -434,10 +441,10 @@ function TeamTab() {
       setInviteOpen(false);
       if (data.invitationLink) {
         navigator.clipboard.writeText(data.invitationLink);
-        toast({ title: "Invitation created & link copied!", description: "Share this link with your team member." });
+        toast({ title: t("invitation_created"), description: t("share_invitation_link") });
       }
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   const revokeInviteMut = useMutation({
@@ -447,7 +454,7 @@ function TeamTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/invitations/pending"] });
-      toast({ title: "Invitation revoked" });
+      toast({ title: t("invitation_revoked") });
     },
   });
 
@@ -470,7 +477,7 @@ function TeamTab() {
         <Card>
           <CardContent className="p-8 text-center">
             <Shield className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Team management is only available to account owners.</p>
+            <p className="text-sm text-muted-foreground">{t("team_owner_only")}</p>
             <Badge className={`mt-3 ${ROLE_COLORS[userRole]}`}>{userRole}</Badge>
           </CardContent>
         </Card>
@@ -482,10 +489,10 @@ function TeamTab() {
     <div className="space-y-6 max-w-3xl">
       {/* Sites */}
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold">Sites</h3>
+        <h3 className="text-base font-semibold">{t("sites")}</h3>
         <Button size="sm" onClick={() => setNewSiteOpen(true)} data-testid="button-add-site">
           <Plus className="w-4 h-4 mr-2" />
-          Add Site
+          {t("add_site")}
         </Button>
       </div>
 
@@ -516,7 +523,7 @@ function TeamTab() {
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => {
-                              if (confirm(`Remove site "${site.name}"?`)) deleteSiteMut.mutate(site.id);
+                              if (confirm(t("remove_site_confirm", { name: site.name }))) deleteSiteMut.mutate(site.id);
                             }}
                           >
                             {t("delete_site")}
@@ -551,9 +558,9 @@ function TeamTab() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="owner">Owner</SelectItem>
-                              <SelectItem value="manager">Manager</SelectItem>
-                              <SelectItem value="operator">Operator</SelectItem>
+                              <SelectItem value="owner">{t("role_owner")}</SelectItem>
+                              <SelectItem value="manager">{t("role_manager")}</SelectItem>
+                              <SelectItem value="operator">{t("role_operator")}</SelectItem>
                             </SelectContent>
                           </Select>
                           {m.role !== "owner" && (
@@ -573,7 +580,7 @@ function TeamTab() {
                   </div>
                   <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => { setInviteForm((f) => ({ ...f, siteId: String(site.id) })); setInviteOpen(true); }} data-testid={`button-invite-to-${site.id}`}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Invite Member
+                    {t("invite_member")}
                   </Button>
                 </CardContent>
               )}
@@ -581,7 +588,7 @@ function TeamTab() {
                 <CardContent className="pt-0">
                   <Button size="sm" variant="outline" className="w-full" onClick={() => { setInviteForm((f) => ({ ...f, siteId: String(site.id) })); setInviteOpen(true); }} data-testid={`button-invite-first-${site.id}`}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Invite First Member
+                    {t("invite_first_member")}
                   </Button>
                 </CardContent>
               )}
@@ -591,7 +598,7 @@ function TeamTab() {
         {sites.length === 0 && (
           <div className="text-center py-12 border border-dashed rounded-lg">
             <Globe2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No sites yet. Create your first site.</p>
+            <p className="text-sm text-muted-foreground">{t("no_sites_create_first")}</p>
           </div>
         )}
       </div>
@@ -599,7 +606,7 @@ function TeamTab() {
       {/* Pending Invitations */}
       {(pending as any[]).length > 0 && (
         <div>
-          <h3 className="text-base font-semibold mb-3">Pending Invitations</h3>
+          <h3 className="text-base font-semibold mb-3">{t("pending_invitations")}</h3>
           <div className="space-y-2">
             {(pending as any[]).map((inv: any) => (
               <div key={inv.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border" data-testid={`row-invite-${inv.id}`}>
@@ -609,7 +616,7 @@ function TeamTab() {
                   </div>
                   <div>
                     <p className="text-sm font-medium">{inv.identifier}</p>
-                    <p className="text-xs text-muted-foreground">{inv.siteName} · {inv.role} · Expires {format(new Date(inv.expiresAt), "MMM dd")}</p>
+                    <p className="text-xs text-muted-foreground">{inv.siteName} · {t("role_" + inv.role, inv.role)} · {t("expires")} {format(new Date(inv.expiresAt), "MMM dd", { locale: dateLocaleFor(i18n.language) })}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -619,7 +626,7 @@ function TeamTab() {
                     className="h-7 w-7"
                     onClick={() => copyInviteLink(inv.token)}
                     data-testid={`button-copy-invite-${inv.id}`}
-                    title="Copy invite link"
+                    title={t("copy_invite_link")}
                   >
                     {copiedLink === inv.token ? <span className="text-xs text-green-600">✓</span> : <Copy className="w-3.5 h-3.5" />}
                   </Button>
@@ -664,7 +671,7 @@ function TeamTab() {
               <Input
                 value={inviteForm.identifier}
                 onChange={(e) => setInviteForm((f) => ({ ...f, identifier: e.target.value }))}
-                placeholder="team@example.com"
+                placeholder={t("invite_email_placeholder")}
                 data-testid="input-invite-identifier"
               />
             </div>
@@ -680,7 +687,7 @@ function TeamTab() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Manager: access to all pages except Settings & Subscriptions. Operator: orders, customers, payments only.
+                {t("role_access_hint")}
               </p>
             </div>
           </div>
@@ -688,7 +695,7 @@ function TeamTab() {
             <Button variant="outline" onClick={() => setInviteOpen(false)}>{t("cancel")}</Button>
             <Button onClick={() => inviteMut.mutate(inviteForm)} disabled={inviteMut.isPending || !inviteForm.siteId || !inviteForm.identifier} data-testid="button-send-invite">
               <LinkIcon className="w-4 h-4 mr-2" />
-              {inviteMut.isPending ? "Sending..." : "Create Invite Link"}
+              {inviteMut.isPending ? t("sending") : t("create_invite_link")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -702,11 +709,11 @@ function TeamTab() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>{t("site_name_label")}</Label>
-              <Input value={newSiteName} onChange={(e) => setNewSiteName(e.target.value)} placeholder="Downtown Branch" data-testid="input-site-name" />
+              <Input value={newSiteName} onChange={(e) => setNewSiteName(e.target.value)} placeholder={t("site_name_placeholder")} data-testid="input-site-name" />
             </div>
             <div className="space-y-2">
               <Label>{t("address")}</Label>
-              <Input value={newSiteAddress} onChange={(e) => setNewSiteAddress(e.target.value)} placeholder="123 Main St" data-testid="input-site-address" />
+              <Input value={newSiteAddress} onChange={(e) => setNewSiteAddress(e.target.value)} placeholder={t("street_address_placeholder")} data-testid="input-site-address" />
             </div>
             <div className="space-y-2">
               <Label>{t("city")}</Label>
@@ -716,7 +723,7 @@ function TeamTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewSiteOpen(false)}>{t("cancel")}</Button>
             <Button onClick={() => createSiteMut.mutate({ name: newSiteName, address: newSiteAddress, city: newSiteCity })} disabled={createSiteMut.isPending || !newSiteName} data-testid="button-create-site">
-              {createSiteMut.isPending ? "Creating..." : "Create Site"}
+              {createSiteMut.isPending ? t("creating") : t("create_site")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -780,9 +787,9 @@ export default function Settings() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/settings"] });
-      toast({ title: "Settings saved!" });
+      toast({ title: t("settings_saved") });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   const merged = { ...DEFAULT_SETTINGS, ...(settings || {}) };
@@ -802,8 +809,8 @@ export default function Settings() {
         <Card className="max-w-sm w-full">
           <CardContent className="p-8 text-center">
             <Shield className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <h2 className="font-semibold mb-2">Access Restricted</h2>
-            <p className="text-sm text-muted-foreground">Settings are only accessible to account owners.</p>
+            <h2 className="font-semibold mb-2">{t("access_denied")}</h2>
+            <p className="text-sm text-muted-foreground">{t("settings_owner_only")}</p>
           </CardContent>
         </Card>
       </div>
@@ -813,27 +820,27 @@ export default function Settings() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-display font-bold">Settings</h1>
-        <p className="text-muted-foreground mt-1">Configure your business profile, receipts, and team</p>
+        <h1 className="text-2xl sm:text-3xl font-display font-bold">{t("settings")}</h1>
+        <p className="text-muted-foreground mt-1">{t("settings_subtitle")}</p>
       </div>
 
       <Tabs defaultValue="identity">
         <TabsList className="grid w-full max-w-xl grid-cols-4" data-testid="settings-tabs">
           <TabsTrigger value="identity" className="gap-2" data-testid="tab-identity">
             <Building2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Business</span>
+            <span className="hidden sm:inline">{t("business")}</span>
           </TabsTrigger>
           <TabsTrigger value="receipt" className="gap-2" data-testid="tab-receipt">
             <Receipt className="w-4 h-4" />
-            <span className="hidden sm:inline">Receipt</span>
+            <span className="hidden sm:inline">{t("receipt")}</span>
           </TabsTrigger>
           <TabsTrigger value="terms" className="gap-2" data-testid="tab-terms">
             <FileText className="w-4 h-4" />
-            <span className="hidden sm:inline">Terms</span>
+            <span className="hidden sm:inline">{t("terms")}</span>
           </TabsTrigger>
           <TabsTrigger value="team" className="gap-2" data-testid="tab-team">
             <Users className="w-4 h-4" />
-            <span className="hidden sm:inline">Team</span>
+            <span className="hidden sm:inline">{t("team")}</span>
           </TabsTrigger>
         </TabsList>
 

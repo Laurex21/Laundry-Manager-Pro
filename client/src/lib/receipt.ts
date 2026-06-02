@@ -1,19 +1,37 @@
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 
-const PIPELINE_LABELS: Record<string, string> = {
-  received: "Received",
-  washing: "Washing",
-  stain_treatment: "Stain Treatment",
-  drying: "Drying",
-  ironing: "Ironing",
-  ready: "Ready for Pickup",
-  delivered: "Delivered",
+const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
+  received: { en: "Received", fr: "Reçu" },
+  washing: { en: "Washing", fr: "Lavage" },
+  stain_treatment: { en: "Stain Treatment", fr: "Traitement des taches" },
+  drying: { en: "Drying", fr: "Séchage" },
+  ironing: { en: "Ironing", fr: "Repassage" },
+  ready: { en: "Ready for Pickup", fr: "Prêt à récupérer" },
+  delivered: { en: "Delivered", fr: "Livré" },
 };
 
 const PIPELINE_ORDER = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered"];
 
-function buildPipelineHtml(currentStatus: string): string {
+function dateLocaleFor(lang: string) {
+  if (lang.startsWith("fr") || lang === "both" || lang === "all") return fr;
+  if (lang.startsWith("pt")) return pt;
+  return enUS;
+}
+
+function formatReceiptDate(date: Date | string | null | undefined, pattern: string, lang: string): string {
+  if (!date) return label("N/A", "N/D", lang);
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return label("N/A", "N/D", lang);
+  return format(value, pattern, { locale: dateLocaleFor(lang) });
+}
+
+function paymentReference(reference: string | null | undefined, lang: string): string {
+  return reference ? ` (${label("Ref:", "Réf :", lang)} ${reference})` : "";
+}
+
+function buildPipelineHtml(currentStatus: string, lang: string): string {
   const currentIdx = PIPELINE_ORDER.indexOf(currentStatus);
   return PIPELINE_ORDER.map((stage, i) => {
     const isPast = i < currentIdx;
@@ -21,10 +39,11 @@ function buildPipelineHtml(currentStatus: string): string {
     const bg = isCurrent ? "#2563eb" : isPast ? "#16a34a" : "#e2e8f0";
     const fg = isCurrent || isPast ? "#fff" : "#94a3b8";
     const border = isCurrent ? "3px solid #2563eb" : isPast ? "2px solid #16a34a" : "2px solid #e2e8f0";
+    const stageLabel = PIPELINE_LABELS[stage] || { en: stage, fr: stage };
     return `<div style="display:flex;align-items:center;gap:6px;flex:1;">
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
         <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:${border};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${fg};">${i + 1}</div>
-        <span style="font-size:9px;font-weight:600;color:${isCurrent ? '#2563eb' : isPast ? '#16a34a' : '#94a3b8'};text-align:center;line-height:1.2;">${PIPELINE_LABELS[stage]}</span>
+        <span style="font-size:9px;font-weight:600;color:${isCurrent ? '#2563eb' : isPast ? '#16a34a' : '#94a3b8'};text-align:center;line-height:1.2;">${label(stageLabel.en, stageLabel.fr, lang)}</span>
       </div>
       ${i < PIPELINE_ORDER.length - 1 ? `<div style="height:2px;flex:1;min-width:12px;background:${isPast ? '#16a34a' : '#e2e8f0'};"></div>` : ''}
     </div>`;
@@ -71,23 +90,23 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
-  const entryDate = order.entryDate ? format(new Date(order.entryDate), "MMM dd, yyyy") : format(new Date(), "MMM dd, yyyy");
-  const pickupDate = order.pickupDate ? format(new Date(order.pickupDate), "MMM dd, yyyy") : "N/A";
+  const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
+  const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
   const discount = Number(order.discount || 0);
   const subtotal = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
 
-  const statusLabel = order.paymentStatus === "paid" ? "PAID" : order.paymentStatus === "partial" ? "PARTIAL" : "UNPAID";
+  const statusLabel = order.paymentStatus === "paid" ? label("PAID", "PAYÉ", lang) : order.paymentStatus === "partial" ? label("PARTIAL", "PARTIEL", lang) : label("UNPAID", "IMPAYÉ", lang);
   const statusColor = order.paymentStatus === "paid" ? "#16a34a" : order.paymentStatus === "partial" ? "#d97706" : "#dc2626";
   const statusBg = order.paymentStatus === "paid" ? "#dcfce7" : order.paymentStatus === "partial" ? "#fef3c7" : "#fee2e2";
 
   const itemsHtml = items.map((item: any) => {
     const svc = item.service || {};
     const qty = item.quantity;
-    const unit = svc.unit === "kg" ? "Loads" : "Pieces";
+    const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
     const price = Number(item.priceAtOrder);
     const lineTotal = qty * price;
     return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || 'Service'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || label("Service", "Service", lang)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
@@ -95,17 +114,17 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${g.itemName}</td></tr>`
-  ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">No garment items recorded</td></tr>`;
+  ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
 
-  const pipelineHtml = buildPipelineHtml(order.status || "received");
+  const pipelineHtml = buildPipelineHtml(order.status || "received", lang);
 
   const paymentsHtml = (order.payments || []).map((p: any) => {
-    const ref = p.reference ? ` (Ref: ${p.reference})` : '';
+    const ref = paymentReference(p.reference, lang);
     return `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
       <span>${p.method}${ref}</span>
       <span style="color:#16a34a;font-weight:600;">${symbol}${Number(p.amount).toFixed(2)}</span>
     </div>`;
-  }).join("") || '<div style="font-size:12px;color:#94a3b8;font-style:italic;">No payments recorded</div>';
+  }).join("") || `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
 
   const totalPaid = (order.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
   const balance = Math.max(0, Number(order.totalAmount) - totalPaid);
@@ -117,12 +136,14 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const footerNote = settings.receiptFooterNote || label("Thank you for your trust", "Merci de votre confiance", lang);
   const generatedLabel = label("Receipt generated on", "Reçu généré le", lang);
   const depositLabel = label("Deposit Receipt", "Reçu de Dépôt", lang);
+  const orderTitle = label("Order No.", "N° Commande", lang);
+  const emptyValue = label("N/A", "N/D", lang);
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${depositLabel} - Order #${order.id}</title>
+  <title>${depositLabel} - ${orderTitle} ${order.id}</title>
   <style>
     @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -163,7 +184,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   </style>
 </head>
 <body>
-  <button class="print-btn no-print" onclick="window.print()">Print Receipt</button>
+  <button class="print-btn no-print" onclick="window.print()">${label("Print Receipt", "Imprimer le reçu", lang)}</button>
   <div class="receipt">
     <div class="header">
       <div class="header-top">
@@ -176,9 +197,9 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     </div>
 
     <div class="meta">
-      <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || 'N/A'}</div></div>
+      <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || emptyValue}</div></div>
       <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${entryDate}</div></div>
-      <div class="meta-item"><div class="label">${label("Phone", "Téléphone", lang)}</div><div class="value">${customer.phone || 'N/A'}</div></div>
+      <div class="meta-item"><div class="label">${label("Phone", "Téléphone", lang)}</div><div class="value">${customer.phone || emptyValue}</div></div>
       ${settings.showPickupDate ? `<div class="meta-item"><div class="label">${label("Expected Pickup", "Retrait prévu", lang)}</div><div class="value">${pickupDate}</div></div>` : ""}
     </div>
 
@@ -191,7 +212,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
       <div class="section-title">${label("Service Summary", "Résumé des services", lang)}</div>
       <table class="items-table">
         <thead><tr><th>${label("Service Name", "Service", lang)}</th><th>${label("Qty", "Qté", lang)}</th><th>${label("Price", "Prix", lang)}</th></tr></thead>
-        <tbody>${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">No services recorded</td></tr>`}</tbody>
+        <tbody>${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">${label("No services recorded", "Aucun service enregistré", lang)}</td></tr>`}</tbody>
       </table>
     </div>
 
@@ -232,7 +253,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.businessName} &bull; ${generatedLabel} ${new Date().toLocaleDateString("fr-FR")}</p>
+      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}</p>
     </div>
   </div>
 </body>
@@ -255,15 +276,17 @@ export function generatePaymentReceipt(
   settings: ReceiptSettings = DEFAULT_SETTINGS
 ) {
   const lang = settings.receiptLanguage || "en";
+  const displayEntryDate = formatReceiptDate(entryDate, "MMM dd, yyyy", lang);
+  const displayPickupDate = formatReceiptDate(pickupDate, "MMM dd, yyyy", lang);
 
   const itemsHtml = items.map((item: any) => {
     const svc = item.service || {};
     const qty = item.quantity;
-    const unit = svc.unit === "kg" ? "Loads" : "Pieces";
+    const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
     const price = Number(item.priceAtOrder);
     const lineTotal = qty * price;
     return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || 'Service'}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || label("Service", "Service", lang)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
@@ -271,18 +294,18 @@ export function generatePaymentReceipt(
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${g.itemName}</td></tr>`
-  ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">No garment items recorded</td></tr>`;
+  ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
 
   const subtotalAmount = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
-  const statusLabel = payment.newStatus === "paid" ? "PAID" : payment.newStatus === "partial" ? "PARTIAL" : "UNPAID";
+  const statusLabel = payment.newStatus === "paid" ? label("PAID", "PAYÉ", lang) : payment.newStatus === "partial" ? label("PARTIAL", "PARTIEL", lang) : label("UNPAID", "IMPAYÉ", lang);
   const statusColor = payment.newStatus === "paid" ? "#16a34a" : payment.newStatus === "partial" ? "#d97706" : "#dc2626";
   const statusBg = payment.newStatus === "paid" ? "#dcfce7" : payment.newStatus === "partial" ? "#fef3c7" : "#fee2e2";
 
   const paymentsHistoryHtml = settings.showPaymentHistory && allPayments.length > 0
     ? allPayments.map((p: any) => {
-        const ref = p.reference ? ` (Ref: ${p.reference})` : '';
+        const ref = paymentReference(p.reference, lang);
         return `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>${format(new Date(p.date || payment.date), "MMM dd")} &bull; ${p.method}${ref}</span>
+          <span>${formatReceiptDate(p.date || payment.date, "MMM dd", lang)} &bull; ${p.method}${ref}</span>
           <span style="color:#16a34a;font-weight:600;">${symbol}${Number(p.amount).toFixed(2)}</span>
         </div>`;
       }).join("")
@@ -295,12 +318,14 @@ export function generatePaymentReceipt(
   const footerNote = settings.receiptFooterNote || label("Thank you for your trust", "Merci de votre confiance", lang);
   const receiptTitle = label("Payment Receipt", "Reçu de Paiement", lang);
   const generatedLabel = label("Receipt generated on", "Reçu généré le", lang);
+  const orderTitle = label("Order No.", "N° Commande", lang);
+  const emptyValue = label("N/A", "N/D", lang);
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${receiptTitle} - Order #${orderId}</title>
+  <title>${receiptTitle} - ${orderTitle} ${orderId}</title>
   <style>
     @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -335,7 +360,7 @@ export function generatePaymentReceipt(
   </style>
 </head>
 <body>
-  <button class="print-btn no-print" onclick="window.print()">Print Receipt</button>
+  <button class="print-btn no-print" onclick="window.print()">${label("Print Receipt", "Imprimer le reçu", lang)}</button>
   <div class="receipt">
     <div class="header">
       <div class="header-top">
@@ -348,10 +373,10 @@ export function generatePaymentReceipt(
     </div>
 
     <div class="meta">
-      <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || 'N/A'}</div></div>
-      <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${entryDate}</div></div>
-      <div class="meta-item"><div class="label">${label("Receipt Date", "Date du reçu", lang)}</div><div class="value">${format(new Date(payment.date), "MMM dd, yyyy")}</div></div>
-      ${settings.showPickupDate ? `<div class="meta-item"><div class="label">${label("Expected Pickup", "Retrait prévu", lang)}</div><div class="value">${pickupDate}</div></div>` : ""}
+      <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || emptyValue}</div></div>
+      <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${displayEntryDate}</div></div>
+      <div class="meta-item"><div class="label">${label("Receipt Date", "Date du reçu", lang)}</div><div class="value">${formatReceiptDate(payment.date, "MMM dd, yyyy", lang)}</div></div>
+      ${settings.showPickupDate ? `<div class="meta-item"><div class="label">${label("Expected Pickup", "Retrait prévu", lang)}</div><div class="value">${displayPickupDate}</div></div>` : ""}
     </div>
 
     <div class="section">
@@ -371,7 +396,7 @@ export function generatePaymentReceipt(
       <div class="section-title">${label("Service Summary", "Résumé des services", lang)}</div>
       <table class="items-table">
         <thead><tr><th>${label("Service", "Service", lang)}</th><th>${label("Qty", "Qté", lang)}</th><th>${label("Price", "Prix", lang)}</th></tr></thead>
-        <tbody>${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">No services</td></tr>`}</tbody>
+        <tbody>${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">${label("No services recorded", "Aucun service enregistré", lang)}</td></tr>`}</tbody>
       </table>
       <div class="summary-box" style="margin-top:12px;">
         <div class="summary-row"><span>${label("Subtotal", "Sous-total", lang)}</span><span>${symbol}${subtotalAmount.toFixed(2)}</span></div>
@@ -400,7 +425,7 @@ export function generatePaymentReceipt(
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.businessName} &bull; ${generatedLabel} ${new Date().toLocaleDateString("fr-FR")}</p>
+      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}</p>
     </div>
   </div>
 </body>

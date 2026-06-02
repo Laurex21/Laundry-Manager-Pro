@@ -372,7 +372,7 @@ export const DEMO_SETTINGS = {
   address: "Rue Joss, Akwa, Douala",
   phone: "+237 655 012 345",
   email: "owner@xpresspro.cm",
-  currency: "XAF",
+  currency: "FCFA",
   timezone: "Africa/Douala",
 };
 

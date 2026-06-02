@@ -15,6 +15,7 @@ import {
   Calendar,
   ClipboardList,
   ArrowRight,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,15 +28,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
+
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
 
 export default function Payments() {
   const { data: allOrders, isLoading: ordersLoading } = useOrders();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
 
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
   const [reference, setReference] = useState("");
@@ -55,8 +64,18 @@ export default function Payments() {
 
   const unpaidOrders = useMemo(() => {
     if (!allOrders) return [];
-    return allOrders.filter((o: any) => o.paymentStatus !== "paid");
-  }, [allOrders]);
+    const q = orderSearch.trim().toLowerCase();
+    return allOrders
+      .filter((o: any) => o.paymentStatus !== "paid")
+      .filter((o: any) => {
+        if (!q) return true;
+        return (
+          o.id.toString().includes(q) ||
+          (o.customer?.name || "").toLowerCase().includes(q) ||
+          (o.customer?.phone || "").toLowerCase().includes(q)
+        );
+      });
+  }, [allOrders, orderSearch]);
 
   const selectedOrder = useMemo(() => {
     if (!selectedOrderId || !allOrders) return null;
@@ -101,7 +120,7 @@ export default function Payments() {
             amount: paidAmount.toFixed(2),
             method,
             date: paymentDate,
-            customerName: (selectedOrder as any)?.customer?.name || `Order #${selectedOrderId}`,
+            customerName: (selectedOrder as any)?.customer?.name || t("order_number", { id: selectedOrderId }),
             totalAmount: totalAmount.toFixed(2),
             newStatus,
           });
@@ -130,14 +149,14 @@ export default function Payments() {
       const items = orderDetails?.items || [];
       const garments = orderDetails?.garmentItems || [];
       const customer = orderDetails?.customer || {};
-      const pickupDate = orderDetails?.pickupDate
-        ? format(new Date(orderDetails.pickupDate), "MMM dd, yyyy")
-        : "N/A";
-      const entryDate = orderDetails?.entryDate
-        ? format(new Date(orderDetails.entryDate), "MMM dd, yyyy")
-        : successPayment.date;
+      const pickupDate = orderDetails?.pickupDate || "";
+      const entryDate = orderDetails?.entryDate || successPayment.date;
 
-      const mergedSettings = settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS;
+      const mergedSettings = {
+        ...DEFAULT_SETTINGS,
+        ...(settings || {}),
+        receiptLanguage: settings?.receiptLanguage || i18n.language,
+      };
       const allPayments = orderDetails?.payments || [];
       const discount = Number(orderDetails?.discount || 0);
 
@@ -254,7 +273,7 @@ export default function Payments() {
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("status")}: <span className="capitalize">{selectedOrder.paymentStatus}</span>
+                    {t("status")}: <span>{selectedOrder.paymentStatus === "partial" ? t("partial") : selectedOrder.paymentStatus === "unpaid" ? t("unpaid") : t("paid")}</span>
                   </p>
                 </div>
                 <button
@@ -424,7 +443,7 @@ export default function Payments() {
                           </span>
                           <span className="text-muted-foreground flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {format(new Date(p.date), "MMM d")}
+                            {format(new Date(p.date), "MMM d", { locale: dateLocaleFor(i18n.language) })}
                           </span>
                         </div>
                       </div>
@@ -446,6 +465,18 @@ export default function Payments() {
                 {unpaidOrders.length}
               </span>
             )}
+          </div>
+          <div className="p-3 border-b border-border bg-background">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder={t("search_order_placeholder")}
+                className="h-8 pl-8 text-sm"
+                data-testid="input-payment-order-search"
+              />
+            </div>
           </div>
 
           <div className="overflow-y-auto max-h-[480px]">

@@ -10,6 +10,7 @@ async function generateAiReport(data: {
   pressingType: string; pressingSize: string;
   services: string[]; objective: string;
   budget: string; experience: string;
+  language?: string;
 }) {
   const { GoogleGenerativeAI } = await import("@google/generative-ai");
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -45,10 +46,15 @@ async function generateAiReport(data: {
   const servicesLabel = data.services.length > 0
     ? data.services.join(", ")
     : "Services standards";
+  const outputLanguage =
+    data.language === "pt" ? "portugais" :
+    data.language === "en" ? "anglais" :
+    "français";
 
   const prompt =
     `Tu es un consultant expert senior spécialisé dans la création de pressings et blanchisseries ` +
     `professionnelles en Afrique francophone et Europe francophone.\n\n` +
+    `Langue de sortie obligatoire : ${outputLanguage}. Tous les champs textuels JSON, titres, recommandations, risques, disclaimers et descriptions doivent être dans cette langue.\n\n` +
     `Un entrepreneur souhaite ouvrir :\n` +
     `- Localisation : ${data.city}, ${data.countryLabel}\n` +
     `- Type de pressing : ${typeLabels[data.pressingType] ?? data.pressingType}\n` +
@@ -265,7 +271,7 @@ export function registerCalculatorRoutes(app: Express) {
     }
     try {
       const leadId = parseInt(req.params.leadId);
-      const { services, objective, budget, experience } = req.body;
+      const { services, objective, budget, experience, language } = req.body;
 
       const [lead] = await db.select().from(calculatorLeads)
         .where(eq(calculatorLeads.id, leadId));
@@ -301,6 +307,7 @@ export function registerCalculatorRoutes(app: Express) {
         objective:    objective ?? "",
         budget:       budget ?? "",
         experience:   experience ?? "",
+        language:     language ?? "fr",
       });
 
       // Use standard tier for DB budget fields
@@ -356,7 +363,18 @@ export function registerCalculatorRoutes(app: Express) {
       res.json({ leadId, reportUrl, report, whatsappSent, clickToChatUrl, expertUrl });
     } catch (err: any) {
       console.error("generate-report error:", err);
-      res.status(500).json({ message: err.message ?? "Erreur lors de la génération du rapport" });
+      const rawMessage = String(err?.message ?? "");
+      const isQuotaError =
+        rawMessage.includes("429") ||
+        rawMessage.toLowerCase().includes("too many requests") ||
+        rawMessage.toLowerCase().includes("quota") ||
+        rawMessage.toLowerCase().includes("prepaid credits");
+
+      res.status(isQuotaError ? 503 : 500).json({
+        message: isQuotaError
+          ? "Le générateur IA est temporairement indisponible: les crédits Gemini sont épuisés. Veuillez réessayer plus tard."
+          : "Erreur lors de la génération du rapport. Veuillez réessayer.",
+      });
     }
   });
 

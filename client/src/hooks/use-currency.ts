@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Currency = "XAF" | "USD" | "NGN" | "XOF" | "EUR";
+export type Currency = "FCFA" | "USD" | "NGN" | "EUR" | "ZAR";
 
 interface CurrencyStore {
   currency: Currency;
@@ -10,22 +10,34 @@ interface CurrencyStore {
 }
 
 const symbols: Record<Currency, string> = {
-  XAF: "XAF ",
+  FCFA: "FCFA ",
   USD: "$",
   NGN: "₦",
-  XOF: "XOF ",
   EUR: "€",
+  ZAR: "R",
 };
+const SUPPORTED_CURRENCIES = new Set<Currency>(["FCFA", "USD", "NGN", "EUR", "ZAR"]);
+
+function normalizeCurrency(value: unknown): Currency {
+  return typeof value === "string" && SUPPORTED_CURRENCIES.has(value as Currency)
+    ? (value as Currency)
+    : "FCFA";
+}
 
 export const useCurrency = create<CurrencyStore>()(
   persist(
     (set, get) => ({
-      currency: "XAF",
-      setCurrency: (currency: Currency) => set({ currency }),
-      getSymbol: () => symbols[get().currency],
+      currency: "FCFA",
+      setCurrency: (currency: Currency) => set({ currency: normalizeCurrency(currency) }),
+      getSymbol: () => symbols[normalizeCurrency(get().currency)],
     }),
     {
       name: "currency-storage",
+      version: 1,
+      migrate: (persisted: any) => ({
+        ...persisted,
+        currency: normalizeCurrency(persisted?.currency),
+      }),
     }
   )
 );

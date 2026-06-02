@@ -8,6 +8,7 @@ import { insertCustomerSchema, type InsertCustomer, type Customer } from "@share
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
 import {
   Pen,
   Crown,
@@ -57,6 +58,12 @@ import {
 
 const VIP_THRESHOLD = 50000;
 
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
+
 function useCustomerOrders(customerId: number) {
   return useQuery({
     queryKey: ["/api/customers", customerId, "orders"],
@@ -73,7 +80,7 @@ export default function CustomerDetail() {
   const params = useParams<{ id: string }>();
   const customerId = Number(params.id);
   const [, navigate] = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
 
@@ -239,22 +246,22 @@ export default function CustomerDetail() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Truck className="w-4 h-4 text-primary" />
-              Delivery Punctuality
+              {t("delivery_punctuality")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="text-center">
                 <p className="text-2xl font-bold" data-testid="text-total-deliveries">{customer.totalDeliveries}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Total</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("total")}</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-on-time-deliveries">{customer.onTimeDeliveries}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">On Time</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("on_time")}</p>
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-late-deliveries">{customer.lateDeliveries}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Late</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("late")}</p>
               </div>
             </div>
 
@@ -264,7 +271,7 @@ export default function CustomerDetail() {
               return (
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> On-time rate</span>
+                    <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> {t("on_time_rate")}</span>
                     <span className="font-semibold text-foreground" data-testid="text-on-time-rate">{pct}%</span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -275,7 +282,7 @@ export default function CustomerDetail() {
                     />
                   </div>
                   <p className={`text-xs font-medium ${pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
-                    {pct >= 80 ? "Excellent punctuality" : pct >= 50 ? "Room for improvement" : "Frequent late deliveries"}
+                    {pct >= 80 ? t("excellent_punctuality") : pct >= 50 ? t("room_for_improvement") : t("frequent_late_deliveries")}
                   </p>
                 </div>
               );
@@ -357,7 +364,7 @@ export default function CustomerDetail() {
                         <tr key={order.id} className="border-b last:border-0 hover-elevate" data-testid={`row-order-${order.id}`}>
                           <td className="p-3 font-medium" data-testid={`text-order-id-${order.id}`}>#{order.id}</td>
                           <td className="p-3 text-muted-foreground">
-                            {order.createdAt ? format(new Date(order.createdAt), "MMM dd, yyyy") : "-"}
+                            {order.createdAt ? format(new Date(order.createdAt), "MMM dd, yyyy", { locale: dateLocaleFor(i18n.language) }) : "-"}
                           </td>
                           <td className="p-3 text-right font-medium">{symbol}{Number(order.totalAmount).toFixed(2)}</td>
                           <td className="p-3 text-center">

@@ -16,6 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
+
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
 
 const QUEUE_STAGES = [
   { key: "received", colorCls: "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400" },
@@ -28,7 +35,7 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
   const symbol = getSymbol();
@@ -275,7 +282,7 @@ export default function Dashboard() {
                   <div key={order.id} className="group flex items-center justify-between py-2.5 hover:bg-muted/30 px-1 rounded transition-colors" data-testid={`row-order-${order.id}`}>
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-foreground leading-tight">{order.customer?.name || `#${order.id}`}</span>
-                      <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d")}</span>
+                      <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d", { locale: dateLocaleFor(i18n.language) })}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <StatusBadge status={order.status} />

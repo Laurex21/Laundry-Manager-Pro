@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Calculator, Printer, Link2, ChevronDown, MessageCircle, Users, Download, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { PublicLanguageTools } from "@/components/public-language-tools";
 
 const COUNTRY_CURRENCY: Record<string, string> = {
   cameroun: "FCFA", senegal: "FCFA", cote_divoire: "FCFA", mali: "FCFA",
@@ -109,7 +110,8 @@ export default function PublicReportPage() {
   );
 
   if (isError || !data) return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center" data-public-tool-root>
+      <PublicLanguageTools />
       <h1 className="text-2xl font-bold">Rapport introuvable</h1>
       <p className="text-muted-foreground">Ce rapport n'existe pas ou a expiré.</p>
       <a href="/calculateur"><Button>Créer mon rapport</Button></a>
@@ -117,7 +119,8 @@ export default function PublicReportPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800" data-public-tool-root>
+      <PublicLanguageTools />
       {/* Nav */}
       <nav className="bg-white dark:bg-slate-900 border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <a href="/" className="flex items-center gap-2">

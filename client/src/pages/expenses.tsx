@@ -24,8 +24,16 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format, subDays, isWithinInterval, startOfYear } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { apiRequest } from "@/lib/queryClient";
+import { labelForCategory } from "@/lib/display-labels";
+
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
 
 const COLORS = ["#3b82f6", "#f97316", "#ef4444", "#10b981", "#8b5cf6", "#ec4899"];
 
@@ -44,7 +52,7 @@ export default function Expenses() {
   const [editingExpense, setEditingExpense] = useState<Expenditure | null>(null);
   const [dateFilter, setDateFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
 
@@ -166,7 +174,7 @@ export default function Expenses() {
             )}
           </div>
           {isLoading ? (
-            <div className="text-muted-foreground text-sm">Loading...</div>
+            <div className="text-muted-foreground text-sm">{t("loading")}</div>
           ) : filteredExpenditures.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground border border-dashed rounded-xl text-sm">
               {t("no_data_for_period")}
@@ -178,14 +186,14 @@ export default function Expenses() {
                 return (
                   <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-background hover:bg-muted/30 transition-colors" data-testid={`row-expense-${item.id}`}>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${typeInfo.color}`}>
-                      {item.category}
+                      {labelForCategory(item.category, t)}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                     </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
                       <Calendar className="w-3 h-3" />
-                      <span>{format(new Date(item.date!), "MMM d")}</span>
+                      <span>{format(new Date(item.date!), "MMM d", { locale: dateLocaleFor(i18n.language) })}</span>
                     </div>
                     <span className="font-mono text-sm font-semibold text-orange-600 dark:text-orange-400 shrink-0">
                       -{symbol}{Number(item.amount).toFixed(2)}
@@ -332,16 +340,16 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
                 <Select onValueChange={(value) => { if (value === "custom") { setCustomCategory(true); field.onChange(""); } else { field.onChange(value); } }} defaultValue={field.value}>
                   <FormControl><SelectTrigger data-testid="select-expense-category"><SelectValue placeholder={t("select_category_placeholder")} /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="Supplies">{t("cat_supplies")}</SelectItem>
-                    <SelectItem value="Water">{t("cat_water")}</SelectItem>
-                    <SelectItem value="Electricity">{t("cat_electricity")}</SelectItem>
-                    <SelectItem value="Detergent">{t("cat_detergent")}</SelectItem>
-                    <SelectItem value="Rent">{t("cat_rent")}</SelectItem>
-                    <SelectItem value="Salary">{t("cat_salary")}</SelectItem>
-                    <SelectItem value="Utilities">{t("cat_utilities")}</SelectItem>
-                    <SelectItem value="Maintenance">{t("cat_maintenance")}</SelectItem>
-                    <SelectItem value="Transportation">{t("cat_transportation")}</SelectItem>
-                    <SelectItem value="Other">{t("cat_other")}</SelectItem>
+                    <SelectItem value="supplies">{t("cat_supplies")}</SelectItem>
+                    <SelectItem value="water">{t("cat_water")}</SelectItem>
+                    <SelectItem value="electricity">{t("cat_electricity")}</SelectItem>
+                    <SelectItem value="detergent">{t("cat_detergent")}</SelectItem>
+                    <SelectItem value="rent">{t("cat_rent")}</SelectItem>
+                    <SelectItem value="salary">{t("cat_salary")}</SelectItem>
+                    <SelectItem value="utilities">{t("cat_utilities")}</SelectItem>
+                    <SelectItem value="maintenance">{t("cat_maintenance")}</SelectItem>
+                    <SelectItem value="transportation">{t("cat_transportation")}</SelectItem>
+                    <SelectItem value="other">{t("cat_other")}</SelectItem>
                     <SelectItem value="custom">{t("add_new_category")}</SelectItem>
                   </SelectContent>
                 </Select>

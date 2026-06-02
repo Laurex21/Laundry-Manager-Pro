@@ -59,8 +59,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { labelForCategory } from "@/lib/display-labels";
 
-const DEFAULT_CATEGORIES = ["Dry Clean", "Laundry", "Pressing"];
+const DEFAULT_CATEGORIES = ["dry_cleaning", "laundry", "pressing", "ironing", "washing"];
 
 export default function Services() {
   const { data: services, isLoading } = useServices();
@@ -135,7 +136,7 @@ export default function Services() {
           {Object.entries(grouped).map(([category, items]) => (
             <div key={category}>
               <div className="flex items-center gap-2 mb-1 pb-1 border-b">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{category}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{labelForCategory(category, t)}</span>
                 <span className="text-xs text-muted-foreground">({items.length})</span>
               </div>
               <div className="divide-y divide-border">
@@ -290,7 +291,7 @@ function CreatableCategorySelect({
           className="w-full justify-between font-normal"
           data-testid="select-category"
         >
-          {value || t("select_category")}
+          {value ? labelForCategory(value, t) : t("select_category")}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -317,7 +318,7 @@ function CreatableCategorySelect({
               data-testid={`option-category-${cat.toLowerCase().replace(/\s+/g, "-")}`}
             >
               {value === cat && <Check className="w-3 h-3 text-primary" />}
-              <span className={value === cat ? "font-medium" : ""}>{cat}</span>
+              <span className={value === cat ? "font-medium" : ""}>{labelForCategory(cat, t)}</span>
             </button>
           ))}
           {showCreate && (
@@ -526,7 +527,7 @@ function ServiceForm({ onSuccess, categories, service }: { onSuccess: () => void
                   <Input
                     type="number"
                     min="1"
-                    placeholder="e.g. 24"
+                    placeholder={t("duration_placeholder")}
                     {...field}
                     value={field.value?.toString() || ""}
                     onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value, 10) : undefined)}
@@ -592,7 +593,7 @@ function ServiceForm({ onSuccess, categories, service }: { onSuccess: () => void
                       step="1"
                       min="0"
                       max="100"
-                      placeholder="e.g. 50"
+                      placeholder={t("surcharge_placeholder")}
                       {...field}
                       value={field.value?.toString() || ""}
                       onChange={(e) => field.onChange(e.target.value || undefined)}

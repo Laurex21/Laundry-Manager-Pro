@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Building2, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
 
 export default function AcceptInvitation() {
+  const { t } = useTranslation();
   const { token } = useParams<{ token: string }>();
   const [, setLocation] = useLocation();
   const { user, isLoading: authLoading } = useAuth();
@@ -37,7 +39,7 @@ export default function AcceptInvitation() {
     queryKey: ["/api/invitations/join", token],
     queryFn: async () => {
       const res = await fetch(`/api/invitations/join/${token}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Invitation not found or expired");
+      if (!res.ok) throw new Error(t("invitation_not_found_or_expired"));
       return res.json();
     },
     enabled: !!token,
@@ -52,7 +54,7 @@ export default function AcceptInvitation() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Failed to accept invitation");
+        throw new Error(data.message || t("failed_accept_invitation"));
       }
       return res.json();
     },
@@ -60,10 +62,10 @@ export default function AcceptInvitation() {
       sessionStorage.removeItem("pendingInviteToken");
       setAccepted(true);
       qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      toast({ title: "Welcome to the team!", description: `You've joined ${invitation?.siteName}` });
+      toast({ title: t("welcome_to_team"), description: t("joined_site", { name: invitation?.siteName }) });
       setTimeout(() => setLocation("/"), 2500);
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
 
   if (authLoading || invLoading) {
@@ -86,8 +88,8 @@ export default function AcceptInvitation() {
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">You're in!</h2>
-            <p className="text-muted-foreground text-sm">You've successfully joined <strong>{invitation?.siteName}</strong>. Redirecting...</p>
+            <h2 className="text-xl font-bold mb-2">{t("youre_in")}</h2>
+            <p className="text-muted-foreground text-sm">{t("successfully_joined")} <strong>{invitation?.siteName}</strong>. {t("redirecting")}</p>
           </CardContent>
         </Card>
       </div>
@@ -100,9 +102,9 @@ export default function AcceptInvitation() {
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <XCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">Invalid Invitation</h2>
-            <p className="text-muted-foreground text-sm">This invitation link is invalid, expired, or has already been used.</p>
-            <Button className="mt-6" onClick={() => setLocation("/")}>Go to App</Button>
+            <h2 className="text-xl font-bold mb-2">{t("invalid_invitation")}</h2>
+            <p className="text-muted-foreground text-sm">{t("invalid_invitation_desc")}</p>
+            <Button className="mt-6" onClick={() => setLocation("/")}>{t("go_to_app")}</Button>
           </CardContent>
         </Card>
       </div>
@@ -116,9 +118,9 @@ export default function AcceptInvitation() {
           <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/20">
             <ShieldCheck className="w-8 h-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">You're Invited!</CardTitle>
+          <CardTitle className="text-2xl">{t("youre_invited")}</CardTitle>
           <CardDescription>
-            <strong>{invitation.inviterName}</strong> has invited you to join their team on XpressPro.
+            {t("invited_by_prefix")} <strong>{invitation.inviterName}</strong> {t("invited_by_suffix")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -126,19 +128,19 @@ export default function AcceptInvitation() {
             <div className="flex items-center gap-3">
               <Building2 className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-xs text-muted-foreground">Site</p>
+                <p className="text-xs text-muted-foreground">{t("site")}</p>
                 <p className="font-medium text-sm">{invitation.siteName}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Building2 className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-xs text-muted-foreground">Organisation</p>
+                <p className="text-xs text-muted-foreground">{t("organisation")}</p>
                 <p className="font-medium text-sm">{invitation.organisationName}</p>
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Your Role</p>
+              <p className="text-xs text-muted-foreground">{t("your_role")}</p>
               <Badge className={ROLE_COLORS[invitation.role] || ""} data-testid="badge-invite-role">
                 {invitation.role}
               </Badge>
@@ -147,19 +149,19 @@ export default function AcceptInvitation() {
 
           {!user ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center">You need to sign in or create an account to accept this invitation.</p>
+              <p className="text-sm text-muted-foreground text-center">{t("sign_in_to_accept_invitation")}</p>
               <Button
                 className="w-full"
                 onClick={() => setLocation("/auth")}
                 data-testid="button-sign-in-to-accept"
               >
-                Sign In / Register
+                {t("sign_in_register")}
               </Button>
             </div>
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground text-center">
-                Accepting as <strong>{user.email}</strong>
+                {t("accepting_as")} <strong>{user.email}</strong>
               </p>
               <Button
                 className="w-full"
@@ -168,13 +170,13 @@ export default function AcceptInvitation() {
                 data-testid="button-accept-invite"
               >
                 {acceptMut.isPending ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Joining...</>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("joining")}</>
                 ) : (
-                  "Accept Invitation & Join Team"
+                  t("accept_invitation_join_team")
                 )}
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => setLocation("/")} data-testid="button-decline-invite">
-                Decline
+                {t("decline")}
               </Button>
             </div>
           )}

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shirt, ChevronRight, ChevronLeft, CheckCircle2, Download, MessageCircle, Star, Award, TrendingUp, ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
+import { PublicLanguageTools } from "@/components/public-language-tools";
 
 // ─── Questions ────────────────────────────────────────────────────────────────
 const QUESTIONS = [
@@ -196,7 +197,8 @@ function openPDF(form: any, score: number, answers: number[]) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background" data-public-tool-root>
+      <PublicLanguageTools />
       <div className="max-w-2xl mx-auto px-4 py-8">
         {children}
       </div>
@@ -569,7 +571,8 @@ export default function DiagnosticPage() {
   const weaknesses = getWeaknesses(answers);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background" data-public-tool-root>
+      <PublicLanguageTools />
       {/* Results hero */}
       <div className="bg-gradient-to-br from-blue-600 to-blue-900 text-white py-12 px-4">
         <div className="max-w-2xl mx-auto text-center">

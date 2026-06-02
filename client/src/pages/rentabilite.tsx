@@ -12,6 +12,7 @@ import {
   Users, TrendingUp, AlertTriangle, CheckCircle2, Info, Download,
   MessageCircle, ArrowRight, BarChart2, Sparkles, BadgeCheck,
 } from "lucide-react";
+import { PublicLanguageTools } from "@/components/public-language-tools";
 
 // ─── Geo presets ─────────────────────────────────────────────────────────────
 const GEO: Record<string, { sym: string; kwh: number; waterM3: number; diesel: number; minWage: number; benchLow: number; benchHigh: number }> = {
@@ -214,7 +215,8 @@ ${r.breakdown.map(b=>`<div class="row"><span>${b.name}</span><span>${fmt(b.value
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background" data-public-tool-root>
+      <PublicLanguageTools />
       <div className="max-w-2xl mx-auto px-4 py-8">{children}</div>
     </div>
   );
@@ -762,7 +764,8 @@ export default function RentabilitePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-background" data-public-tool-root>
+      <PublicLanguageTools />
       {/* Hero banner */}
       <div className="bg-gradient-to-br from-blue-600 to-blue-900 text-white py-10 px-4">
         <div className="max-w-2xl mx-auto text-center">

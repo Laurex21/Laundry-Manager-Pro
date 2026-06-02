@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
-import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, type Locale } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
 import {
   DollarSign,
   TrendingUp,
@@ -35,6 +36,12 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
 import {
   LineChart,
   Line,
@@ -86,9 +93,10 @@ type PerformanceData = {
 };
 
 export default function Reports() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const activeDateLocale = dateLocaleFor(i18n.language);
 
   const [dateFrom, setDateFrom] = useState<Date>(startOfMonth(new Date()));
   const [dateTo, setDateTo] = useState<Date>(new Date());
@@ -143,7 +151,7 @@ export default function Reports() {
     if (!data) return;
     const lines: string[] = [];
     lines.push(`XpressPro - ${t("monthly_report")}`);
-    lines.push(`${t("period")}: ${format(dateFrom, "MMM d, yyyy")} - ${format(dateTo, "MMM d, yyyy")}`);
+    lines.push(`${t("period")}: ${format(dateFrom, "MMM d, yyyy", { locale: activeDateLocale })} - ${format(dateTo, "MMM d, yyyy", { locale: activeDateLocale })}`);
     lines.push("");
     lines.push(`--- ${t("summary")} ---`);
     lines.push(`${t("total_revenue")}: ${symbol}${data.totalRevenue.toFixed(2)}`);
@@ -180,9 +188,9 @@ export default function Reports() {
     if (!data?.dailyRevenue) return [];
     return data.dailyRevenue.map((d) => ({
       ...d,
-      label: format(new Date(d.date + "T00:00:00"), "MMM d"),
+      label: format(new Date(d.date + "T00:00:00"), "MMM d", { locale: dateLocaleFor(i18n.language) }),
     }));
-  }, [data?.dailyRevenue]);
+  }, [data?.dailyRevenue, i18n.language]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -212,13 +220,15 @@ export default function Reports() {
             onSelect={setDateFrom}
             label={t("from")}
             testId="button-date-from"
+            locale={activeDateLocale}
           />
-          <span className="text-muted-foreground text-sm">to</span>
+          <span className="text-muted-foreground text-sm">{t("to")}</span>
           <DatePickerButton
             date={dateTo}
             onSelect={setDateTo}
             label={t("to")}
             testId="button-date-to"
+            locale={activeDateLocale}
           />
         </div>
       </div>
@@ -577,11 +587,13 @@ function DatePickerButton({
   onSelect,
   label,
   testId,
+  locale,
 }: {
   date: Date;
   onSelect: (d: Date) => void;
   label: string;
   testId: string;
+  locale: Locale;
 }) {
   return (
     <Popover>
@@ -592,7 +604,7 @@ function DatePickerButton({
           data-testid={testId}
         >
           <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-          {format(date, "MMM d, yyyy")}
+          {format(date, "MMM d, yyyy", { locale })}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

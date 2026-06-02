@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import { labelForStatus } from "@/lib/display-labels";
 
 type StatusType = "received" | "washing" | "stain_treatment" | "drying" | "ironing" | "ready" | "delivered" | "cancelled" | "pending" | "processing" | "paid" | "unpaid" | "partial";
 
@@ -19,12 +21,13 @@ const STATUS_CONFIG: Record<StatusType, { label: string; className: string }> = 
 };
 
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const normalizedStatus = status.toLowerCase() as StatusType;
   const config = STATUS_CONFIG[normalizedStatus] || { label: status, className: "bg-gray-100 text-gray-700 border-gray-200" };
 
   return (
     <span className={cn("px-2.5 py-0.5 rounded-full text-xs font-semibold border inline-flex items-center", config.className)}>
-      {config.label}
+      {labelForStatus(normalizedStatus, t)}
     </span>
   );
 }

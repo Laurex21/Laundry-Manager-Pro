@@ -23,20 +23,27 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 
 const PIPELINE_STAGES = [
-  { key: "received", label: "Received", icon: Package, color: "text-yellow-600" },
-  { key: "washing", label: "Washing", icon: Droplets, color: "text-blue-600" },
-  { key: "stain_treatment", label: "Stain Treatment", icon: Sparkles, color: "text-amber-600" },
-  { key: "drying", label: "Drying", icon: Wind, color: "text-cyan-600" },
-  { key: "ironing", label: "Ironing", icon: Shirt, color: "text-violet-600" },
-  { key: "ready", label: "Ready", icon: CheckCircle2, color: "text-indigo-600" },
-  { key: "delivered", label: "Delivered", icon: Truck, color: "text-green-600" },
+  { key: "received", icon: Package, color: "text-yellow-600" },
+  { key: "washing", icon: Droplets, color: "text-blue-600" },
+  { key: "stain_treatment", icon: Sparkles, color: "text-amber-600" },
+  { key: "drying", icon: Wind, color: "text-cyan-600" },
+  { key: "ironing", icon: Shirt, color: "text-violet-600" },
+  { key: "ready", icon: CheckCircle2, color: "text-indigo-600" },
+  { key: "delivered", icon: Truck, color: "text-green-600" },
 ];
+
+const dateLocaleFor = (language: string) => {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+};
 
 function getStageIndex(status: string): number {
   const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
@@ -48,7 +55,7 @@ export default function OrderDetail() {
   const orderId = Number(params?.id);
   const { data: order, isLoading } = useOrder(orderId);
   const { mutate: updateStatus, isPending: isUpdating } = useUpdateOrderStatus();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { toast } = useToast();
@@ -66,16 +73,18 @@ export default function OrderDetail() {
   const [rejectionNote, setRejectionNote] = useState("");
   const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
   const [deliverDate, setDeliverDate] = useState(new Date().toISOString().split('T')[0]);
+  const formatLocalDate = (date: Date | string, pattern: string) =>
+    format(new Date(date), pattern, { locale: dateLocaleFor(i18n.language) });
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-20 text-muted-foreground">Loading order...</div>;
+    return <div className="flex items-center justify-center py-20 text-muted-foreground">{t("loading_order")}</div>;
   }
 
   if (!order) {
     return (
       <div className="text-center py-20">
-        <p className="text-muted-foreground mb-4">Order not found</p>
-        <Link href="/orders"><Button variant="outline">Back to Orders</Button></Link>
+        <p className="text-muted-foreground mb-4">{t("order_not_found")}</p>
+        <Link href="/orders"><Button variant="outline">{t("back_to_orders")}</Button></Link>
       </div>
     );
   }
@@ -103,13 +112,13 @@ export default function OrderDetail() {
         credentials: "include",
       });
       if (res.ok) {
-        toast({ title: "Garment flagged", description: "Garment marked for return treatment" });
+        toast({ title: t("garment_flagged"), description: t("garment_flagged_desc") });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
         setReturnGarmentId(null);
         setReturnNotes("");
       }
     } catch {
-      toast({ title: "Error", description: "Failed to flag garment", variant: "destructive" });
+      toast({ title: t("error"), description: t("failed_flag_garment"), variant: "destructive" });
     }
   }
 
@@ -120,16 +129,20 @@ export default function OrderDetail() {
         credentials: "include",
       });
       if (res.ok) {
-        toast({ title: "Resolved", description: "Garment return resolved" });
+        toast({ title: t("resolved"), description: t("garment_return_resolved") });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
       }
     } catch {
-      toast({ title: "Error", description: "Failed to resolve", variant: "destructive" });
+      toast({ title: t("error"), description: t("failed_resolve"), variant: "destructive" });
     }
   }
 
   function handleDownloadReceipt() {
-    const mergedSettings = settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS;
+  const mergedSettings = {
+    ...DEFAULT_SETTINGS,
+    ...(settings || {}),
+    receiptLanguage: settings?.receiptLanguage || i18n.language,
+  };
     generateDepositReceipt(order, symbol, mergedSettings);
   }
 
@@ -146,7 +159,7 @@ export default function OrderDetail() {
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
         setCancelDialogOpen(false); setCancelReason("");
       }
-    } catch { toast({ title: "Error", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), variant: "destructive" }); }
   }
 
   async function handleApproveCancellation() {
@@ -155,11 +168,11 @@ export default function OrderDetail() {
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
       });
       if (res.ok) {
-        toast({ title: t("approve_cancellation"), description: "Order has been cancelled." });
+        toast({ title: t("approve_cancellation"), description: t("order_cancelled_desc") });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       }
-    } catch { toast({ title: "Error", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), variant: "destructive" }); }
   }
 
   async function handleRejectCancellation() {
@@ -169,12 +182,12 @@ export default function OrderDetail() {
         body: JSON.stringify({ note: rejectionNote }), credentials: "include",
       });
       if (res.ok) {
-        toast({ title: t("reject_cancellation"), description: "Cancellation request has been rejected." });
+        toast({ title: t("reject_cancellation"), description: t("cancellation_rejected_desc") });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
         setRejectDialogOpen(false); setRejectionNote("");
       }
-    } catch { toast({ title: "Error", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), variant: "destructive" }); }
   }
 
   async function handleMarkDelivered() {
@@ -184,12 +197,12 @@ export default function OrderDetail() {
         body: JSON.stringify({ deliveredAt: deliverDate }), credentials: "include",
       });
       if (res.ok) {
-        toast({ title: t("mark_as_delivered"), description: `Order marked as delivered on ${deliverDate}` });
+        toast({ title: t("mark_as_delivered"), description: t("order_delivered_on", { date: deliverDate }) });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
         setDeliverDialogOpen(false);
       }
-    } catch { toast({ title: "Error", variant: "destructive" }); }
+    } catch { toast({ title: t("error"), variant: "destructive" }); }
   }
 
   return (
@@ -201,14 +214,14 @@ export default function OrderDetail() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-display font-bold">Order #{order.id}</h1>
+          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: order.id })}</h1>
           <p className="text-muted-foreground text-sm">
-            {order.customer?.name} &bull; {order.entryDate ? format(new Date(order.entryDate), "MMM d, yyyy") : "N/A"}
+            {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
-            <Download className="w-4 h-4 mr-2" /> Receipt
+            <Download className="w-4 h-4 mr-2" /> {t("receipt")}
           </Button>
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />
@@ -225,8 +238,8 @@ export default function OrderDetail() {
             </div>
             {isManager && (
               <div className="flex gap-2">
-                <Button size="sm" variant="destructive" onClick={handleApproveCancellation}>Approve</Button>
-                <Button size="sm" variant="outline" onClick={() => setRejectDialogOpen(true)}>Reject</Button>
+                <Button size="sm" variant="destructive" onClick={handleApproveCancellation}>{t("approve")}</Button>
+                <Button size="sm" variant="outline" onClick={() => setRejectDialogOpen(true)}>{t("reject")}</Button>
               </div>
             )}
           </CardContent>
@@ -236,7 +249,7 @@ export default function OrderDetail() {
       {order.status === "delivered" && order.deliveredAt && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/10 border border-green-200 dark:border-green-900 text-green-800 dark:text-green-400 text-sm">
           <CalendarCheck className="w-4 h-4 flex-shrink-0" />
-          <span>{t("delivered_at")}: <strong>{format(new Date(order.deliveredAt), "MMM d, yyyy")}</strong></span>
+          <span>{t("delivered_at")}: <strong>{formatLocalDate(order.deliveredAt, "MMM d, yyyy")}</strong></span>
         </div>
       )}
 
@@ -455,7 +468,7 @@ export default function OrderDetail() {
                 <div key={entry.id} className="flex items-center gap-3 text-sm p-2 bg-muted/20 rounded">
                   <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                   <StatusBadge status={entry.status} />
-                  <span className="text-muted-foreground">{entry.changedAt ? format(new Date(entry.changedAt), "MMM d, yyyy h:mm a") : ""}</span>
+                  <span className="text-muted-foreground">{entry.changedAt ? formatLocalDate(entry.changedAt, "MMM d, yyyy h:mm a") : ""}</span>
                   {entry.notes && <span className="text-muted-foreground italic">- {entry.notes}</span>}
                 </div>
               ))}
@@ -479,7 +492,7 @@ export default function OrderDetail() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-mono font-semibold text-green-600">{symbol}{Number(p.amount).toFixed(2)}</span>
-                    <span className="text-xs text-muted-foreground">{p.date ? format(new Date(p.date), "MMM d") : ""}</span>
+                    <span className="text-xs text-muted-foreground">{p.date ? formatLocalDate(p.date, "MMM d") : ""}</span>
                   </div>
                 </div>
               ))}
@@ -534,12 +547,12 @@ export default function OrderDetail() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("mark_as_delivered")}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">Select the actual delivery date for this order.</p>
+            <p className="text-sm text-muted-foreground">{t("select_actual_delivery_date")}</p>
 
             {order.pickupDate && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                 <CalendarCheck className="w-4 h-4 flex-shrink-0" />
-                <span>Expected by: <strong>{format(new Date(order.pickupDate), "MMM d, yyyy")}</strong></span>
+                <span>{t("expected_by")}: <strong>{formatLocalDate(order.pickupDate, "MMM d, yyyy")}</strong></span>
               </div>
             )}
 
@@ -562,15 +575,15 @@ export default function OrderDetail() {
               const isOnTime = delivered <= pickup;
               return (
                 <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${isOnTime ? "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800" : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"}`} data-testid="indicator-punctuality">
-                  {isOnTime ? "✅ On time" : "⚠️ Late delivery"}
+                  {isOnTime ? t("on_time") : t("late_delivery")}
                 </div>
               );
             })()}
 
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>{t("cancel")}</Button>
               <Button onClick={handleMarkDelivered} data-testid="button-confirm-deliver">
-                <CalendarCheck className="w-4 h-4 mr-1" /> Confirm Delivery
+                <CalendarCheck className="w-4 h-4 mr-1" /> {t("confirm_delivery")}
               </Button>
             </div>
           </div>

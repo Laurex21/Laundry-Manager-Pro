@@ -21,17 +21,17 @@ const LANGUAGES = [
 // ── Operational Preview (right panel) ─────────────────────────────────────────
 
 const PREVIEW_ORDERS = [
-  { id: "1042", customer: "Dupont Jean", items: 4, stage: "Washing", stageColor: "text-blue-400" },
-  { id: "1041", customer: "Fatima K.", items: 2, stage: "Ready", stageColor: "text-emerald-400" },
-  { id: "1040", customer: "Pierre M.", items: 7, stage: "Ironing", stageColor: "text-amber-400" },
-  { id: "1039", customer: "Aminata S.", items: 3, stage: "Delivered", stageColor: "text-slate-400" },
-  { id: "1038", customer: "Marcel N.", items: 5, stage: "Received", stageColor: "text-violet-400" },
+  { id: "1042", customer: "Dupont Jean", items: 4, stageKey: "stage_washing", stageColor: "text-blue-400" },
+  { id: "1041", customer: "Fatima K.", items: 2, stageKey: "stage_ready", stageColor: "text-emerald-400" },
+  { id: "1040", customer: "Pierre M.", items: 7, stageKey: "stage_ironing", stageColor: "text-amber-400" },
+  { id: "1039", customer: "Aminata S.", items: 3, stageKey: "stage_delivered", stageColor: "text-slate-400" },
+  { id: "1038", customer: "Marcel N.", items: 5, stageKey: "stage_received", stageColor: "text-violet-400" },
 ];
 
 const PREVIEW_BRANCHES = [
-  { name: "Main Branch", active: 12, online: true },
-  { name: "Akwa Branch", active: 6, online: true },
-  { name: "Bonamoussadi", active: 0, online: false },
+  { nameKey: "auth_preview_main_branch", active: 12, online: true },
+  { nameKey: "auth_preview_akwa_branch", active: 6, online: true },
+  { nameKey: "auth_preview_bonamoussadi", active: 0, online: false },
 ];
 
 function StageDot({ color }: { color: string }) {
@@ -39,6 +39,7 @@ function StageDot({ color }: { color: string }) {
 }
 
 function OperationalPreview() {
+  const { t } = useTranslation();
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 3000);
@@ -56,9 +57,9 @@ function OperationalPreview() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
           </span>
-          <span className="text-xs font-semibold text-emerald-400 tracking-widest uppercase">Live Operations</span>
+          <span className="text-xs font-semibold text-emerald-400 tracking-widest uppercase">{t("auth_preview_live_operations")}</span>
         </div>
-        <p className="text-slate-400 text-xs">Real-time view · Updated just now</p>
+        <p className="text-slate-400 text-xs">{t("auth_preview_realtime")}</p>
       </div>
 
       {/* KPI grid */}
@@ -66,40 +67,40 @@ function OperationalPreview() {
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Package className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400 font-medium">Today's Orders</span>
+            <span className="text-xs text-slate-400 font-medium">{t("auth_preview_today_orders")}</span>
           </div>
           <p className="text-2xl font-bold text-white font-display">24</p>
-          <p className="text-xs text-emerald-400 mt-0.5">+3 this hour</p>
+          <p className="text-xs text-emerald-400 mt-0.5">{t("auth_preview_orders_delta")}</p>
         </div>
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400 font-medium">Revenue MTD</span>
+            <span className="text-xs text-slate-400 font-medium">{t("auth_preview_revenue_mtd")}</span>
           </div>
-          <p className="text-2xl font-bold text-white font-display">142K XAF</p>
-          <p className="text-xs text-slate-400 mt-0.5">Central African CFA</p>
+          <p className="text-2xl font-bold text-white font-display">142K FCFA</p>
+          <p className="text-xs text-slate-400 mt-0.5">{t("auth_preview_fcfa")}</p>
         </div>
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Activity className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400 font-medium">Queue</span>
+            <span className="text-xs text-slate-400 font-medium">{t("auth_preview_queue")}</span>
           </div>
           <p className="text-2xl font-bold text-white font-display">{queueCount}</p>
-          <p className="text-xs text-amber-400 mt-0.5">items in process</p>
+          <p className="text-xs text-amber-400 mt-0.5">{t("auth_preview_items_process")}</p>
         </div>
         <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400 font-medium">Avg Turnaround</span>
+            <span className="text-xs text-slate-400 font-medium">{t("auth_preview_avg_turnaround")}</span>
           </div>
           <p className="text-2xl font-bold text-white font-display">2.4</p>
-          <p className="text-xs text-slate-400 mt-0.5">days avg</p>
+          <p className="text-xs text-slate-400 mt-0.5">{t("auth_preview_days_avg")}</p>
         </div>
       </div>
 
       {/* Order queue */}
       <div>
-        <p className="text-xs text-slate-500 font-semibold tracking-widest uppercase mb-3">Order Queue</p>
+        <p className="text-xs text-slate-500 font-semibold tracking-widest uppercase mb-3">{t("auth_preview_order_queue")}</p>
         <div className="space-y-1.5">
           {PREVIEW_ORDERS.map((order) => (
             <div key={order.id} className="flex items-center justify-between bg-slate-800/40 border border-slate-700/30 rounded-lg px-3 py-2.5 hover:bg-slate-800/60 transition-colors">
@@ -108,10 +109,10 @@ function OperationalPreview() {
                 <span className="text-sm text-slate-200 font-medium truncate">{order.customer}</span>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-slate-500">{order.items} items</span>
+                <span className="text-xs text-slate-500">{t("auth_preview_items", { count: order.items })}</span>
                 <span className={`text-xs font-medium flex items-center ${order.stageColor}`}>
                   <StageDot color={order.stageColor} />
-                  {order.stage}
+                  {t(order.stageKey)}
                 </span>
               </div>
             </div>
@@ -121,23 +122,23 @@ function OperationalPreview() {
 
       {/* Branches */}
       <div>
-        <p className="text-xs text-slate-500 font-semibold tracking-widest uppercase mb-3">Branch Status</p>
+        <p className="text-xs text-slate-500 font-semibold tracking-widest uppercase mb-3">{t("auth_preview_branch_status")}</p>
         <div className="space-y-1.5">
           {PREVIEW_BRANCHES.map((branch) => (
-            <div key={branch.name} className="flex items-center justify-between px-3 py-2">
+            <div key={branch.nameKey} className="flex items-center justify-between px-3 py-2">
               <div className="flex items-center gap-2">
                 <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-sm text-slate-300">{branch.name}</span>
+                <span className="text-sm text-slate-300">{t(branch.nameKey)}</span>
               </div>
               <div className="flex items-center gap-2">
                 {branch.online ? (
                   <>
-                    <span className="text-xs text-slate-400">{branch.active} active</span>
+                    <span className="text-xs text-slate-400">{t("auth_preview_active", { count: branch.active })}</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   </>
                 ) : (
                   <>
-                    <span className="text-xs text-slate-600">offline</span>
+                    <span className="text-xs text-slate-600">{t("auth_preview_offline")}</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
                   </>
                 )}
@@ -150,7 +151,7 @@ function OperationalPreview() {
       {/* Footer note */}
       <div className="mt-auto pt-4 border-t border-slate-700/30">
         <p className="text-xs text-slate-600 leading-relaxed">
-          This preview shows a representative snapshot. Your live data will appear after sign-in.
+          {t("auth_preview_footer")}
         </p>
       </div>
     </div>

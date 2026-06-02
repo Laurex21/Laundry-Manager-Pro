@@ -43,8 +43,12 @@ const LANGUAGES = [
   { code: "pt", label: "Português", short: "PT" },
 ];
 
-const CURRENCIES: { code: Currency; label: string; symbol: string }[] = [
-  { code: "XAF", label: "XAF", symbol: "XAF" },
+const CURRENCIES: { code: Currency; labelKey: string; symbol: string }[] = [
+  { code: "FCFA", labelKey: "currency_fcfa", symbol: "FCFA" },
+  { code: "NGN", labelKey: "currency_naira", symbol: "₦" },
+  { code: "ZAR", labelKey: "currency_rand", symbol: "R" },
+  { code: "USD", labelKey: "currency_us_dollar", symbol: "$" },
+  { code: "EUR", labelKey: "currency_euro", symbol: "€" },
 ];
 
 const PAGE_TITLES: Record<string, string> = {
@@ -109,7 +113,7 @@ function RegionalSettings() {
             data-testid="button-currency-toggle"
           >
             <Banknote className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span className="text-xs font-medium hidden sm:inline">{currentCurrency.code}</span>
+            <span className="text-xs font-medium hidden sm:inline">{t(currentCurrency.labelKey)}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -121,7 +125,7 @@ function RegionalSettings() {
               className={cn("flex items-center justify-between gap-2 text-sm", currency === cur.code && "text-primary font-semibold")}
               data-testid={`menu-item-currency-${cur.code}`}
             >
-              <span>{cur.symbol} {cur.label}</span>
+              <span>{cur.symbol} {t(cur.labelKey)}</span>
               {currency === cur.code && <Check className="w-3.5 h-3.5 text-primary" />}
             </DropdownMenuItem>
           ))}
@@ -132,6 +136,7 @@ function RegionalSettings() {
 }
 
 function SiteSwitcher() {
+  const { t } = useTranslation();
   const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
 
   if (!isOwner && !currentSite) return null;
@@ -141,7 +146,7 @@ function SiteSwitcher() {
       <div className="px-3 py-2 mb-1">
         <div className="flex items-center gap-2 px-2.5 py-2 bg-muted/50 rounded-lg">
           <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-medium truncate flex-1">{currentSite?.name || "Main Site"}</span>
+          <span className="text-xs font-medium truncate flex-1">{currentSite?.name || t("main_site")}</span>
           <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 h-auto ml-auto">{userRole}</Badge>
         </div>
       </div>
@@ -161,20 +166,20 @@ function SiteSwitcher() {
           >
             <div className="flex items-center gap-2 min-w-0">
               <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate">{currentSite ? currentSite.name : "All Sites"}</span>
+              <span className="truncate">{currentSite ? currentSite.name : t("all_sites")}</span>
             </div>
             <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0 ml-1" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">Switch Site</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">{t("switch_site")}</DropdownMenuLabel>
           <DropdownMenuItem
             onClick={() => switchSite(null)}
             className={cn("text-sm", !currentSite && "font-semibold text-primary")}
             data-testid="menu-item-all-sites"
           >
             <LayoutDashboard className="w-3.5 h-3.5 mr-2" />
-            All Sites
+            {t("all_sites")}
             {!currentSite && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -398,7 +403,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           data-testid="bottom-nav-more"
         >
           <MoreHorizontal className="w-4.5 h-4.5" />
-          <span className="text-[10px] font-semibold leading-none">More</span>
+          <span className="text-[10px] font-semibold leading-none">{t("more")}</span>
         </button>
       </nav>
     </div>

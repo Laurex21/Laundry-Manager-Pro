@@ -75,7 +75,7 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "ready" | "unpaid">("all");
   const [open, setOpen] = useState(false);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
@@ -122,11 +122,6 @@ export default function Orders() {
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all shrink-0">
-              <Plus className="w-4 h-4 mr-2" /> {t('new_order')}
-            </Button>
-          </DialogTrigger>
           <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t("create_new_order")}</DialogTitle>
@@ -325,7 +320,7 @@ export default function Orders() {
 }
 
 function OrderForm({ onSuccess }: { onSuccess: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { data: customers } = useCustomers();
@@ -448,7 +443,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
             const orderDetails = await res.json();
-            generateDepositReceipt(orderDetails, symbol, settings ? { ...DEFAULT_SETTINGS, ...settings } : DEFAULT_SETTINGS);
+            generateDepositReceipt(orderDetails, symbol, {
+              ...DEFAULT_SETTINGS,
+              ...(settings || {}),
+              receiptLanguage: settings?.receiptLanguage || i18n.language,
+            });
           }
         } catch {}
         form.reset();
@@ -475,15 +474,15 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
       {showAddCustomer ? (
         <Form {...customerForm}>
           <form onSubmit={customerForm.handleSubmit(onAddCustomerSubmit)} className="space-y-4 p-4 bg-muted/20 rounded-lg border">
-            <h4 className="font-medium text-sm">Quick Register Customer</h4>
+            <h4 className="font-medium text-sm">{t("quick_register_customer")}</h4>
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={customerForm.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs">Name</FormLabel>
-                    <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                    <FormLabel className="text-xs">{t("name")}</FormLabel>
+                    <FormControl><Input placeholder={t("customer_name_placeholder")} {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -493,7 +492,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs">Phone</FormLabel>
+                    <FormLabel className="text-xs">{t("phone")}</FormLabel>
                     <FormControl><Input placeholder="+1..." {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -505,14 +504,14 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
               name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-xs">Address</FormLabel>
-                  <FormControl><Input placeholder="123 Main St" {...field} /></FormControl>
+                  <FormLabel className="text-xs">{t("address")}</FormLabel>
+                  <FormControl><Input placeholder={t("street_address_placeholder")} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <Button type="submit" size="sm" className="w-full" disabled={isCustomerPending}>
-              {isCustomerPending ? "Registering..." : "Register & Select"}
+              {isCustomerPending ? t("registering") : t("register_and_select")}
             </Button>
           </form>
         </Form>
@@ -623,7 +622,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                       name={`items.${index}.serviceId`}
                       render={({ field }) => (
                         <FormItem className="flex-1">
-                          <FormLabel className="text-xs">Service</FormLabel>
+                          <FormLabel className="text-xs">{t("service")}</FormLabel>
                           <Select
                             onValueChange={(val) => field.onChange(Number(val))}
                             value={field.value > 0 ? field.value.toString() : ""}
@@ -650,7 +649,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                       name={`items.${index}.quantity`}
                       render={({ field }) => (
                         <FormItem className="w-20">
-                          <FormLabel className="text-xs">Qty</FormLabel>
+                          <FormLabel className="text-xs">{t("qty")}</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -665,7 +664,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                       )}
                     />
                     <div className="w-24 pb-2 text-right">
-                      <span className="text-xs text-muted-foreground block">Price</span>
+                      <span className="text-xs text-muted-foreground block">{t("price")}</span>
                       <span className="font-mono font-medium">{symbol}{itemPrice.toFixed(2)}</span>
                     </div>
                     <Button
@@ -746,7 +745,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
 
             <div className="border-t pt-4 space-y-4">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Subtotal:</span>
+                <span className="text-muted-foreground">{t("subtotal")}:</span>
                 <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center max-w-[200px] ml-auto">

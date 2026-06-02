@@ -17,10 +17,17 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { enUS, fr, pt } from "date-fns/locale";
 import type { Plan, SubscriptionWithPlan } from "@shared/schema";
 
+function dateLocaleFor(language: string) {
+  if (language.startsWith("fr")) return fr;
+  if (language.startsWith("pt")) return pt;
+  return enUS;
+}
+
 export default function Subscriptions() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const [payDialog, setPayDialog] = useState<Plan | null>(null);
@@ -45,13 +52,13 @@ export default function Subscriptions() {
               <div className="flex items-center gap-3">
                 <Crown className="w-6 h-6 text-primary" />
                 <div>
-                  <h3 className="font-bold text-lg">{currentSub.plan.name} Plan</h3>
+                  <h3 className="font-bold text-lg">{t("plan_name", { name: currentSub.plan.name })}</h3>
                   <p className="text-sm text-muted-foreground">{t("current_plan")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-sm">
-                <Badge variant="default" className="bg-green-600">Active</Badge>
-                {currentSub.endDate && <span className="text-muted-foreground">{t("valid_until")}: {format(new Date(currentSub.endDate), "MMM d, yyyy")}</span>}
+                <Badge variant="default" className="bg-green-600">{t("active")}</Badge>
+                {currentSub.endDate && <span className="text-muted-foreground">{t("valid_until")}: {format(new Date(currentSub.endDate), "MMM d, yyyy", { locale: dateLocaleFor(i18n.language) })}</span>}
                 <span>{t("orders_this_month")}: {currentSub.ordersUsed} / {currentSub.plan.maxOrders ?? "∞"}</span>
               </div>
             </div>
@@ -69,14 +76,14 @@ export default function Subscriptions() {
             <Card key={plan.id} className={`shadow-sm relative overflow-hidden transition-all ${isActive ? "ring-2 ring-green-500" : ""} ${isBusiness ? "border-primary shadow-md" : ""}`} data-testid={`card-plan-${plan.slug}`}>
               {isBusiness && (
                 <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs px-3 py-1 rounded-bl-lg font-medium flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Most Popular
+                  <Sparkles className="w-3 h-3" /> {t("most_popular")}
                 </div>
               )}
               <CardHeader>
                 <CardTitle className="text-xl">{plan.name}</CardTitle>
                 <div className="mt-2">
                   <span className="text-3xl font-bold font-display">{symbol}{Number(plan.price).toLocaleString()}</span>
-                  <span className="text-muted-foreground text-sm"> /month</span>
+                  <span className="text-muted-foreground text-sm"> {t("per_month")}</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -89,12 +96,12 @@ export default function Subscriptions() {
                   ))}
                 </div>
                 <div className="text-xs text-muted-foreground pt-2 border-t space-y-1">
-                  <div>Orders: {plan.maxOrders ? `${plan.maxOrders}/month` : "Unlimited"}</div>
-                  <div>Users: {plan.maxUsers ?? "Unlimited"}</div>
+                  <div>{t("orders")}: {plan.maxOrders ? t("orders_per_month", { count: plan.maxOrders }) : t("unlimited")}</div>
+                  <div>{t("users")}: {plan.maxUsers ?? t("unlimited")}</div>
                 </div>
                 <Button className="w-full" disabled={isActive} variant={isBusiness ? "default" : "outline"}
                   onClick={() => !isActive && setPayDialog(plan)} data-testid={`button-select-plan-${plan.slug}`}>
-                  {isActive ? t("current_plan") : `Upgrade to ${plan.name}`}
+                  {isActive ? t("current_plan") : t("upgrade_to_plan", { name: plan.name })}
                 </Button>
               </CardContent>
             </Card>
@@ -129,12 +136,12 @@ function PaymentDialog({ plan, onClose }: { plan: Plan | null; onClose: () => vo
     <Dialog open={!!plan} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upgrade to {plan.name}</DialogTitle>
+          <DialogTitle>{t("upgrade_to_plan", { name: plan.name })}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-            <span className="font-medium">{plan.name} Plan</span>
-            <span className="font-bold text-lg">{symbol}{Number(plan.price).toLocaleString()}/mo</span>
+            <span className="font-medium">{t("plan_name", { name: plan.name })}</span>
+            <span className="font-bold text-lg">{symbol}{Number(plan.price).toLocaleString()}{t("per_month_short")}</span>
           </div>
 
           <div>
@@ -142,7 +149,7 @@ function PaymentDialog({ plan, onClose }: { plan: Plan | null; onClose: () => vo
             <Select value={method} onValueChange={setMethod}>
               <SelectTrigger data-testid="select-payment-method"><SelectValue /></SelectTrigger>
               <SelectContent className="max-h-[300px]">
-                <SelectItem value="simulate">Simulate Payment (Demo)</SelectItem>
+                <SelectItem value="simulate">{t("simulate_payment_demo")}</SelectItem>
                 {PAYMENT_REGIONS.map(region => (
                   <div key={region}>
                     <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{region}</div>
@@ -158,12 +165,12 @@ function PaymentDialog({ plan, onClose }: { plan: Plan | null; onClose: () => vo
           {method === "simulate" && (
             <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-sm text-blue-700 dark:text-blue-400">
               <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>Demo mode: payment will be simulated and subscription activated immediately.</span>
+              <span>{t("demo_payment_notice")}</span>
             </div>
           )}
 
           <Button className="w-full" onClick={() => mutation.mutate({ planId: plan.id, method })} disabled={mutation.isPending} data-testid="button-confirm-payment">
-            {mutation.isPending ? "Processing..." : t("confirm_payment")}
+            {mutation.isPending ? t("processing") : t("confirm_payment")}
           </Button>
         </div>
       </DialogContent>
