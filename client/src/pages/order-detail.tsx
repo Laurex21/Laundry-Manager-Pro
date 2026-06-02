@@ -477,6 +477,53 @@ export default function OrderDetail() {
         </Card>
       )}
 
+      {(() => {
+        const totalPaid = (order.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+        const balance = Math.max(0, Number(order.totalAmount) - totalPaid);
+        const pickupCost = Number(order.pickupCost || 0);
+        const discount = Number(order.discount || 0);
+        const originalSubtotal = Number(order.originalPrice || 0) || (Number(order.totalAmount) + discount - pickupCost);
+        return (
+          <Card className="border-primary/20 bg-primary/2">
+            <CardHeader className="pb-3"><CardTitle className="text-base">{t("balance_due")}</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {originalSubtotal > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{t("subtotal")}</span>
+                  <span className="font-mono">{symbol}{originalSubtotal.toFixed(2)}</span>
+                </div>
+              )}
+              {discount > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{t("discount")}</span>
+                  <span className="font-mono text-destructive">-{symbol}{discount.toFixed(2)}</span>
+                </div>
+              )}
+              {pickupCost > 0 && (
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{t("transport")}</span>
+                  <span className="font-mono text-blue-600">+{symbol}{pickupCost.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-semibold border-t pt-2">
+                <span>{t("total")}</span>
+                <span className="font-mono">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
+              </div>
+              {totalPaid > 0 && (
+                <div className="flex justify-between text-sm text-green-700 dark:text-green-400">
+                  <span>{t("advance_payment_made")}</span>
+                  <span className="font-mono font-semibold">-{symbol}{totalPaid.toFixed(2)}</span>
+                </div>
+              )}
+              <div className={`flex justify-between text-base font-bold border-t pt-2 ${balance === 0 ? "text-green-600" : "text-destructive"}`}>
+                <span>{t("balance_due")}</span>
+                <span className="font-mono">{balance === 0 ? `✓ ${t("fully_paid_label")}` : `${symbol}${balance.toFixed(2)}`}</span>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       <Card>
         <CardHeader><CardTitle className="text-base">{t("payment_history_title")}</CardTitle></CardHeader>
         <CardContent>
@@ -488,6 +535,11 @@ export default function OrderDetail() {
                 <div key={p.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg text-sm">
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{p.method}</span>
+                    {p.isAdvance && (
+                      <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 px-2 py-0.5 rounded-full font-semibold">
+                        {t("advance_badge")}
+                      </span>
+                    )}
                     {p.reference && <span className="text-xs text-muted-foreground">{t("ref_label")} {p.reference}</span>}
                   </div>
                   <div className="flex items-center gap-3">

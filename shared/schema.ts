@@ -90,6 +90,7 @@ export const payments = pgTable("payments", {
   method: varchar("method", { length: 50 }).notNull(),
   reference: varchar("reference", { length: 255 }),
   date: timestamp("date").defaultNow(),
+  isAdvance: boolean("is_advance").default(false),
 });
 
 export const garmentItems = pgTable("garment_items", {

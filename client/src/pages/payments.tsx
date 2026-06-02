@@ -159,6 +159,7 @@ export default function Payments() {
       };
       const allPayments = orderDetails?.payments || [];
       const discount = Number(orderDetails?.discount || 0);
+      const pickupCost = Number(orderDetails?.pickupCost || 0);
 
       generatePaymentReceipt(
         successPayment.orderId,
@@ -176,7 +177,8 @@ export default function Payments() {
         pickupDate,
         discount,
         symbol,
-        mergedSettings
+        mergedSettings,
+        pickupCost
       );
     } finally {
       setReceiptLoading(false);

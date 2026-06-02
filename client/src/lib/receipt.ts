@@ -228,9 +228,12 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
       <div class="summary-box">
         <div class="summary-row"><span>${label("Subtotal", "Sous-total", lang)}</span><span>${symbol}${subtotal.toFixed(2)}</span></div>
         ${discount > 0 ? `<div class="summary-row"><span>${label("Discount", "Réduction", lang)}</span><span style="color:#dc2626;">-${symbol}${discount.toFixed(2)}</span></div>` : ""}
+        ${Number(order.pickupCost || 0) > 0 ? `<div class="summary-row"><span>${label("Transport / Delivery", "Transport / Livraison", lang)}</span><span style="color:#2563eb;">+${symbol}${Number(order.pickupCost).toFixed(2)}</span></div>` : ""}
         <div class="summary-row total"><span>${label("Total Amount", "Montant total", lang)}</span><span>${symbol}${Number(order.totalAmount).toFixed(2)}</span></div>
-        <div class="summary-row"><span>${label("Total Paid", "Total payé", lang)}</span><span style="color:#16a34a;font-weight:600;">${symbol}${totalPaid.toFixed(2)}</span></div>
-        ${balance > 0 ? `<div class="summary-row"><span>${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:600;">${symbol}${balance.toFixed(2)}</span></div>` : ''}
+        ${totalPaid > 0 ? `<div class="summary-row" style="margin-top:6px;"><span>${label("Advance Payment", "Acompte versé", lang)} <span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:20px;font-weight:700;margin-left:4px;">${label("PAID", "PAYÉ", lang)}</span></span><span style="color:#16a34a;font-weight:600;">-${symbol}${totalPaid.toFixed(2)}</span></div>` : ""}
+        ${balance > 0
+          ? `<div class="summary-row" style="border-top:2px solid #fca5a5;margin-top:8px;padding-top:10px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;font-size:15px;">${symbol}${balance.toFixed(2)}</span></div>`
+          : totalPaid > 0 ? `<div class="summary-row" style="border-top:2px solid #86efac;margin-top:8px;padding-top:10px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>` : ""}
       </div>
     </div>
 
@@ -273,7 +276,8 @@ export function generatePaymentReceipt(
   pickupDate: string,
   discount: number,
   symbol: string,
-  settings: ReceiptSettings = DEFAULT_SETTINGS
+  settings: ReceiptSettings = DEFAULT_SETTINGS,
+  pickupCost: number = 0
 ) {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = formatReceiptDate(entryDate, "MMM dd, yyyy", lang);
@@ -401,7 +405,14 @@ export function generatePaymentReceipt(
       <div class="summary-box" style="margin-top:12px;">
         <div class="summary-row"><span>${label("Subtotal", "Sous-total", lang)}</span><span>${symbol}${subtotalAmount.toFixed(2)}</span></div>
         ${discount > 0 ? `<div class="summary-row"><span>${label("Discount", "Réduction", lang)}</span><span style="color:#dc2626;">-${symbol}${discount.toFixed(2)}</span></div>` : ""}
-        <div class="summary-row total"><span>${label("Order Total", "Total commande", lang)}</span><span>${symbol}${(subtotalAmount - discount).toFixed(2)}</span></div>
+        ${pickupCost > 0 ? `<div class="summary-row"><span>${label("Transport / Delivery", "Transport / Livraison", lang)}</span><span style="color:#2563eb;">+${symbol}${pickupCost.toFixed(2)}</span></div>` : ""}
+        <div class="summary-row total"><span>${label("Order Total", "Total commande", lang)}</span><span>${symbol}${(subtotalAmount - discount + pickupCost).toFixed(2)}</span></div>
+        ${allPayments.length > 1 ? (() => {
+          const previousPaid = allPayments.filter((_: any, i: number) => i < allPayments.length - 1).reduce((s: number, p: any) => s + Number(p.amount), 0);
+          const remaining = Math.max(0, (subtotalAmount - discount + pickupCost) - allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0));
+          return `<div class="summary-row" style="margin-top:4px;"><span style="color:#64748b;">${label("Previously Paid", "Déjà payé", lang)}</span><span style="color:#16a34a;">-${symbol}${previousPaid.toFixed(2)}</span></div>
+          ${remaining > 0 ? `<div class="summary-row" style="border-top:1px solid #fca5a5;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;">${symbol}${remaining.toFixed(2)}</span></div>` : `<div class="summary-row" style="border-top:1px solid #86efac;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>`}`;
+        })() : ""}
       </div>
     </div>
 

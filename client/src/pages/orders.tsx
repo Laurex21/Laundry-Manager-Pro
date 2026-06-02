@@ -340,6 +340,8 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
       entryDate: format(new Date(), "yyyy-MM-dd"),
       discount: "0",
       pickupCost: "0",
+      advancePayment: "0",
+      advancePaymentMethod: "Cash",
       items: [{ serviceId: 0, quantity: 1 }],
       garmentItems: [],
     }
@@ -373,6 +375,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const watchedPickupCost = useWatch({
     control: form.control,
     name: "pickupCost"
+  });
+
+  const watchedAdvancePayment = useWatch({
+    control: form.control,
+    name: "advancePayment"
   });
 
   const watchedCustomerId = useWatch({
@@ -809,6 +816,59 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
               <div className="flex justify-between items-center text-lg font-bold bg-primary/5 p-4 rounded-lg">
                 <span>{t("total")}:</span>
                 <span className="font-mono text-primary">{symbol}{total.toFixed(2)}</span>
+              </div>
+
+              <div className="border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 rounded-lg p-4 space-y-3">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">{t("advance_payment")} — {t("enter_advance")}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="advancePayment"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">{t("advance_payment")} ({symbol})</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" min="0" placeholder="0.00" className="h-8 text-right font-mono" {...field} data-testid="input-advance-payment" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="advancePaymentMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">{t("advance_payment_method")}</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="h-8" data-testid="select-advance-method">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Cash">Cash</SelectItem>
+                            <SelectItem value="Mobile Money">Mobile Money</SelectItem>
+                            <SelectItem value="Card">Card</SelectItem>
+                            <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                {Number(watchedAdvancePayment) > 0 && (
+                  <div className="flex justify-between items-center pt-2 border-t border-amber-200 dark:border-amber-700">
+                    <span className="text-sm font-semibold text-muted-foreground">{t("remaining_balance")}:</span>
+                    <span className={`font-mono font-bold text-base ${Math.max(0, total - Number(watchedAdvancePayment)) === 0 ? "text-green-600" : "text-destructive"}`}>
+                      {Math.max(0, total - Number(watchedAdvancePayment)) === 0
+                        ? `✓ ${t("fully_paid_label")}`
+                        : `${symbol}${Math.max(0, total - Number(watchedAdvancePayment)).toFixed(2)}`}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

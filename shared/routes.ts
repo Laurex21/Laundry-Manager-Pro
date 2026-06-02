@@ -34,6 +34,8 @@ export const createOrderWithItemsSchema = z.object({
   pickupDate: z.string().optional(),
   discount: z.string().optional(),
   pickupCost: z.string().optional().default("0"),
+  advancePayment: z.string().optional().default("0"),
+  advancePaymentMethod: z.string().optional().default("Cash"),
   items: z.array(z.object({
     serviceId: z.number().min(1, "Please select a service"),
     quantity: z.number().min(1, "Quantity must be at least 1"),

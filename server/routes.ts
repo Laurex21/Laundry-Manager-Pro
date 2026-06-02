@@ -131,7 +131,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }));
       const discountAmount = Number(orderData.discount || 0);
       const pickupCostAmount = Number(orderData.pickupCost || 0);
+      const advanceAmount = Number(orderData.advancePayment || 0);
       const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
+      const initialPaymentStatus = advanceAmount >= totalAmount ? "paid" : advanceAmount > 0 ? "partial" : "unpaid";
       const order = await storage.createOrder({
         ...orderData,
         status: "received",
@@ -140,10 +142,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         discountAmount: discountAmount.toString(),
         discount: discountAmount.toString(),
         pickupCost: pickupCostAmount.toString(),
+        paymentStatus: initialPaymentStatus,
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
         siteId: (req as any).siteId,
       } as any, items, garments);
+      if (advanceAmount > 0) {
+        await storage.createPayment({
+          orderId: order.id,
+          amount: advanceAmount.toString(),
+          method: orderData.advancePaymentMethod || "Cash",
+          isAdvance: true,
+        } as any);
+      }
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
