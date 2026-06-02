@@ -1,0 +1,621 @@
+# FULL REPLIT AGENT PROMPT — XPRESSPRO LANDING PAGE
+
+You are a senior SaaS frontend engineer and UI/UX architect specialized in:
+
+* Next.js
+* React
+* TailwindCSS
+* Framer Motion
+* SaaS landing pages
+* high-conversion B2B interfaces
+* modern dashboards
+* scalable frontend architecture
+* multilingual SaaS systems
+* enterprise-grade UI systems
+
+Your task is to redesign and upgrade the EXISTING landing page of our laundry SaaS platform called:
+
+# XPRESSPRO
+
+IMPORTANT:
+This is NOT a new project.
+
+You must:
+
+* preserve the existing architecture,
+* preserve the current multilingual system,
+* preserve the current routing,
+* preserve the existing authentication system,
+* preserve existing services/modules.
+
+You are only redesigning and improving the landing page experience.
+
+The final result must feel:
+
+* premium,
+* enterprise-grade,
+* modern,
+* fast,
+* scalable,
+* trustworthy,
+* investor-ready.
+
+The platform is positioning itself as:
+
+# “The digital operating system for laundries and dry cleaners across Africa.”
+
+---
+
+# GLOBAL DESIGN DIRECTION
+
+---
+
+Design inspiration:
+
+* Stripe
+* Linear
+* Vercel
+* Notion
+* modern enterprise SaaS
+
+The experience must feel:
+
+* elegant,
+* minimal,
+* fluid,
+* modern,
+* alive,
+* premium.
+
+Use:
+
+* TailwindCSS
+* Framer Motion
+* subtle animations
+* soft glows
+* glassmorphism only where appropriate
+* responsive mobile-first layout
+
+Color palette:
+
+* deep blue gradients
+* white
+* soft grays
+* subtle glow effects
+* premium shadows
+
+---
+
+# TOP NAVBAR
+
+---
+
+Create a clean premium navbar.
+
+LEFT SIDE:
+Display logo/name:
+
+# “XPRESSPRO”
+
+Style:
+
+* clean typography
+* premium SaaS appearance
+* strong brand presence
+
+CENTER / RIGHT:
+Navigation links:
+
+* Features
+* Tools
+* Pricing
+* About
+
+RIGHT SIDE:
+
+* Login button
+* Start Free Trial button
+
+IMPORTANT:
+Do NOT create a new language system.
+
+The language toggle MUST use the multilingual/language system already implemented in the platform.
+
+Respect:
+
+* existing translation files,
+* existing i18n structure,
+* existing locale switching logic.
+
+Do not rebuild translations from scratch.
+
+---
+
+# HERO SECTION
+
+---
+
+Create a premium hero section.
+
+---
+
+# HEADLINE
+
+---
+
+Main title:
+
+# “Gestion de pressing, simplifiée.”
+
+---
+
+# SUBHEADLINE
+
+---
+
+Add a stronger positioning subheadline:
+
+# “Centralisez vos commandes, clients, paiements et opérations sur une seule plateforme moderne.”
+
+Alternative translations must use the existing multilingual system.
+
+---
+
+# HERO VISUAL
+
+---
+
+LEFT SIDE:
+Create a premium illustration of:
+
+* a modern laundry/dry-cleaning manager,
+* using a tablet,
+* with subtle operational/laundry icons around him.
+
+The illustration should feel:
+
+* modern,
+* premium,
+* clean,
+* corporate.
+
+RIGHT SIDE:
+Create a stylized glowing map of Africa.
+
+---
+
+# AFRICA MAP SECTION
+
+---
+
+IMPORTANT:
+The map must NOT use fake statistics.
+
+The system MUST dynamically use REAL DATA from subscribed users already stored in the platform database.
+
+The map should automatically aggregate:
+
+* active laundries by country,
+* orders processed,
+* garments cleaned,
+* transactions,
+* customers served.
+
+---
+
+# DATA SOURCE
+
+---
+
+Use existing production/subscriber database data.
+
+Create backend aggregation queries to calculate:
+
+* subscribers per country,
+* total orders,
+* total transactions,
+* total garments processed,
+* active customers.
+
+---
+
+# MAP EXPERIENCE
+
+---
+
+The Africa map must:
+
+* glow softly,
+* feel alive,
+* use subtle pulse animations,
+* contain animated active nodes,
+* use elegant connection aesthetics.
+
+DO NOT overload the map.
+
+The experience must remain:
+
+* minimal,
+* premium,
+* elegant,
+* performant.
+
+---
+
+# MAP CONTENT
+
+---
+
+Display curated country insights dynamically.
+
+Examples:
+
+* Sénégal → 50k+ orders managed
+* Nigeria → 100k+ transactions processed
+* Côte d’Ivoire → 75k+ customers served
+
+IMPORTANT:
+These values must come from real aggregated subscriber data.
+
+If a country has insufficient data:
+
+* hide the stat,
+  OR
+* gracefully fallback to smaller messaging.
+
+---
+
+# LIVE SYSTEM BEHAVIOR
+
+---
+
+The map should:
+
+* refresh periodically,
+* animate softly,
+* support live updates without page reload.
+
+Use:
+
+* efficient polling,
+  OR
+* websocket/event updates if architecture supports it.
+
+Optimize performance carefully.
+
+---
+
+# HERO BULLET FEATURES
+
+---
+
+Below hero section:
+Display 3 operational benefits:
+
+* Suivi des commandes en temps réel
+* Gestion des profils clients
+* Facturation & reçus automatisés
+
+Each with:
+
+* subtle icon,
+* premium spacing,
+* soft animations.
+
+---
+
+# MAIN CTA
+
+---
+
+Create a highly visible CTA section.
+
+Primary button:
+
+# “Démarrer l’essai gratuit”
+
+Secondary button:
+
+# “Voir une démo”
+
+Buttons must:
+
+* feel premium,
+* animate on hover,
+* have soft glow,
+* be visually dominant.
+
+---
+
+# PRODUCT PREVIEW SECTION
+
+---
+
+IMPORTANT:
+Add a dedicated section showcasing the actual software UI.
+
+Title:
+
+# “Pilotez votre pressing depuis un tableau de bord intelligent”
+
+Display:
+
+* dashboard screenshots,
+* analytics UI,
+* order management,
+* customer management,
+* payment tracking,
+* mobile responsive previews.
+
+The UI previews should feel:
+
+* premium,
+* enterprise-grade,
+* operationally powerful.
+
+---
+
+# FEATURES SECTION
+
+---
+
+Create modern SaaS feature cards.
+
+Features:
+
+* Gestion des commandes
+* Gestion des paiements
+* Gestion multi-agences
+* Gestion des clients
+* Reçus automatiques
+* Statistiques avancées
+* Analyse de rentabilité
+* Suivi des vêtements
+* Historique des opérations
+
+Each card:
+
+* subtle hover animation,
+* premium icon,
+* clean typography.
+
+---
+
+# OPERATIONAL TOOLS SECTION
+
+---
+
+Preserve and improve the existing tools section.
+
+Title:
+
+# “ACCÉDEZ À NOS OUTILS DE PILOTAGE”
+
+Keep the 3 cards:
+
+---
+
+# CARD 1
+
+---
+
+Title:
+
+# “Diagnostic Professionnel”
+
+Description:
+“Identifier les axes d’amélioration opérationnelle et financière.”
+
+Button:
+
+# “Lancer le Diagnostic”
+
+---
+
+# CARD 2
+
+---
+
+Title:
+
+# “Calculateur de lancement”
+
+Description:
+“Estimer vos coûts totaux de démarrage.”
+
+Button:
+
+# “Estimer les Coûts”
+
+---
+
+# CARD 3
+
+---
+
+Title:
+
+# “Calculateur de rentabilité”
+
+Description:
+“Projeter vos profits mensuels sur la base d’indicateurs clés.”
+
+Button:
+
+# “Analyser les Profits”
+
+---
+
+# TOOLS SECTION DESIGN
+
+---
+
+Improve existing cards with:
+
+* better shadows,
+* soft hover lift,
+* premium borders,
+* consistent spacing,
+* modern SaaS styling.
+
+DO NOT radically redesign this section.
+Only improve polish and visual consistency.
+
+---
+
+# TRUST SECTION
+
+---
+
+Create a professional trust/social proof section.
+
+Display:
+
+* countries covered,
+* number of laundries,
+* transactions processed,
+* garments managed.
+
+Add:
+
+* customer testimonials,
+* business logos if available,
+* trust badges.
+
+---
+
+# FINAL CTA SECTION
+
+---
+
+Create a powerful bottom CTA.
+
+Headline:
+
+# “Accédez à tous nos outils et commencez à simplifier votre pressing dès aujourd’hui.”
+
+Buttons:
+
+* Commencer l’essai gratuit
+* Se connecter
+
+Design:
+
+* large CTA block,
+* premium gradient,
+* subtle animated background,
+* modern spacing.
+
+---
+
+# PERFORMANCE
+
+---
+
+IMPORTANT:
+The landing page must remain:
+
+* ultra fast,
+* optimized,
+* lightweight.
+
+Use:
+
+* lazy loading,
+* optimized animations,
+* efficient rendering,
+* image optimization,
+* code splitting.
+
+---
+
+# RESPONSIVE DESIGN
+
+---
+
+The landing page must be:
+
+* fully responsive,
+* mobile-first,
+* tablet optimized,
+* desktop optimized.
+
+The Africa map must adapt elegantly to mobile.
+
+---
+
+# SEO
+
+---
+
+Optimize for:
+
+* logiciel pressing
+* logiciel blanchisserie
+* laundry management software
+* gestion pressing Afrique
+* logiciel pressing Afrique
+* SaaS blanchisserie
+* dry cleaning software
+
+Add:
+
+* proper metadata,
+* structured headings,
+* semantic HTML,
+* OpenGraph tags.
+
+---
+
+# UX REQUIREMENTS
+
+---
+
+The experience should communicate:
+
+* trust,
+* scale,
+* operational intelligence,
+* modern infrastructure,
+* continental ambition.
+
+The page should feel like:
+
+# “the infrastructure layer powering modern laundries in Africa.”
+
+---
+
+# IMPORTANT DEVELOPMENT RULES
+
+---
+
+DO NOT:
+
+* break existing architecture,
+* replace current multilingual system,
+* modify authentication logic,
+* rebuild routing unnecessarily.
+
+DO:
+
+* integrate cleanly,
+* reuse existing systems,
+* preserve scalability,
+* maintain clean component architecture.
+
+---
+
+# EXPECTED FINAL RESULT
+
+---
+
+The final landing page should feel:
+
+* premium,
+* enterprise-ready,
+* investor-level,
+* modern,
+* scalable,
+* category-defining.
+
+The result must look comparable to a funded modern SaaS startup.

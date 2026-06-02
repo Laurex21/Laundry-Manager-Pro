@@ -33,6 +33,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   seedDatabase().catch(console.error);
   storage.backfillNullSiteIds().catch(console.error);
 
+  app.get("/api/public/stats", async (_req, res) => {
+    try {
+      const stats = await storage.getPublicStats();
+      res.json(stats);
+    } catch {
+      res.json({ totalOrders: 0, totalCustomers: 0, totalTransactions: 0, totalLaundries: 0, totalGarments: 0 });
+    }
+  });
+
   const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {

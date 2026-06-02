@@ -52,6 +52,7 @@ export interface IStorage {
   createExpenditure(expenditure: InsertExpenditure): Promise<Expenditure>;
   updateExpenditure(id: number, data: Partial<InsertExpenditure>): Promise<Expenditure | undefined>;
 
+  getPublicStats(): Promise<{ totalOrders: number; totalCustomers: number; totalTransactions: number; totalLaundries: number; totalGarments: number }>;
   getStats(): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
 
   getPerformanceData(siteId: number | null): Promise<{
@@ -1141,6 +1142,23 @@ export class DatabaseStorage implements IStorage {
   async getUserSiteRole(userId: string, siteId: number): Promise<string | null> {
     const [member] = await db.select().from(siteMembers).where(and(eq(siteMembers.userId, userId), eq(siteMembers.siteId, siteId)));
     return member?.role || null;
+  }
+
+  async getPublicStats() {
+    const [[o], [c], [p], [g]] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(orders),
+      db.select({ count: sql<number>`count(*)::int` }).from(customers),
+      db.select({ count: sql<number>`count(*)::int` }).from(payments),
+      db.select({ total: sql<number>`coalesce(sum(${orderItems.quantity}),0)::int` }).from(orderItems),
+    ]);
+    const laundries = await db.selectDistinct({ uid: siteMembers.userId }).from(siteMembers).where(eq(siteMembers.role, "owner"));
+    return {
+      totalOrders: o?.count || 0,
+      totalCustomers: c?.count || 0,
+      totalTransactions: p?.count || 0,
+      totalLaundries: laundries.length || 0,
+      totalGarments: g?.total || 0,
+    };
   }
 
   async migrateToMultiSite(): Promise<void> {

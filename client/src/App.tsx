@@ -12,6 +12,7 @@ import LayoutShell from "@/components/layout-shell";
 
 // ─── Lazy-loaded routes (code-split into separate chunks) ─────────────────────
 const NotFound          = lazy(() => import("@/pages/not-found"));
+const LandingPage       = lazy(() => import("@/pages/landing"));
 const Dashboard         = lazy(() => import("@/pages/dashboard"));
 const AuthPage          = lazy(() => import("@/pages/auth-page"));
 const CalculatorPage    = lazy(() => import("@/pages/calculator"));
@@ -80,6 +81,29 @@ function AccessDenied() {
   );
 }
 
+function RootRoute() {
+  const { user, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && user) setLocation("/dashboard");
+  }, [isLoading, user, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (user) return null;
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <LandingPage />
+    </Suspense>
+  );
+}
+
 function ProtectedRoute({ component: Component, page }: { component: React.ComponentType; page?: string }) {
   const { user, isLoading, canAccess } = useAuth();
   const [, setLocation] = useLocation();
@@ -123,6 +147,9 @@ function Router() {
         <Route path="/join/:token" component={AcceptInvitation} />
 
         <Route path="/">
+          <RootRoute />
+        </Route>
+        <Route path="/dashboard">
           <ProtectedRoute component={Dashboard} page="dashboard" />
         </Route>
         <Route path="/customers">
