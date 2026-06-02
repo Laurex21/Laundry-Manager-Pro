@@ -54,6 +54,7 @@ export const orders = pgTable("orders", {
   discountPct: decimal("discount_pct", { precision: 5, scale: 2 }).default("0"),
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0"),
   originalPrice: decimal("original_price", { precision: 10, scale: 2 }),
+  pickupCost: decimal("pickup_cost", { precision: 10, scale: 2 }).default("0"),
   cancellationReason: text("cancellation_reason"),
   cancellationRequestedBy: varchar("cancellation_requested_by"),
   cancellationRequestedAt: timestamp("cancellation_requested_at"),

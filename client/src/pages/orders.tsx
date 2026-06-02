@@ -339,6 +339,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
       paymentStatus: "unpaid",
       entryDate: format(new Date(), "yyyy-MM-dd"),
       discount: "0",
+      pickupCost: "0",
       items: [{ serviceId: 0, quantity: 1 }],
       garmentItems: [],
     }
@@ -367,6 +368,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const watchedDiscount = useWatch({
     control: form.control,
     name: "discount"
+  });
+
+  const watchedPickupCost = useWatch({
+    control: form.control,
+    name: "pickupCost"
   });
 
   const watchedCustomerId = useWatch({
@@ -410,8 +416,9 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
 
   const total = useMemo(() => {
     const discountVal = Number(watchedDiscount) || 0;
-    return Math.max(0, subtotal - discountVal);
-  }, [subtotal, watchedDiscount]);
+    const pickupVal = Number(watchedPickupCost) || 0;
+    return Math.max(0, subtotal - discountVal + pickupVal);
+  }, [subtotal, watchedDiscount, watchedPickupCost]);
 
   function onAddCustomerSubmit(data: z.infer<typeof insertCustomerSchema>) {
     createCustomer(data, {
@@ -743,31 +750,62 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
               </div>
             )}
 
-            <div className="border-t pt-4 space-y-4">
+            <div className="border-t pt-4 space-y-3">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{t("subtotal")}:</span>
                 <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center max-w-[200px] ml-auto">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="discount"
                   render={({ field }) => (
-                    <FormItem className="w-full">
+                    <FormItem>
                       <FormLabel className="text-xs text-muted-foreground">
-                        Discount ({symbol})
+                        {t("discount")} ({symbol})
                         {customerDiscountPct > 0 && (
-                          <span className="ml-1 text-primary font-medium">({customerDiscountPct}% applied)</span>
+                          <span className="ml-1 text-primary font-medium">({customerDiscountPct}%)</span>
                         )}
                       </FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" className="h-8 text-right font-mono" {...field} data-testid="input-discount" />
+                        <Input type="number" step="0.01" min="0" className="h-8 text-right font-mono" {...field} data-testid="input-discount" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="pickupCost"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        {t("pickup_cost")} ({symbol})
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" placeholder="0.00" className="h-8 text-right font-mono" {...field} data-testid="input-pickup-cost" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+              {(Number(watchedPickupCost) > 0 || Number(watchedDiscount) > 0) && (
+                <div className="text-xs text-muted-foreground space-y-1 px-1">
+                  {Number(watchedDiscount) > 0 && (
+                    <div className="flex justify-between">
+                      <span>- {t("discount")}:</span>
+                      <span className="font-mono text-destructive">-{symbol}{Number(watchedDiscount).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {Number(watchedPickupCost) > 0 && (
+                    <div className="flex justify-between">
+                      <span>+ {t("pickup_cost")}:</span>
+                      <span className="font-mono text-primary">+{symbol}{Number(watchedPickupCost).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex justify-between items-center text-lg font-bold bg-primary/5 p-4 rounded-lg">
                 <span>{t("total")}:</span>
                 <span className="font-mono text-primary">{symbol}{total.toFixed(2)}</span>

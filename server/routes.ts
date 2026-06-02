@@ -130,7 +130,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return { ...item, priceAtOrder: service.price };
       }));
       const discountAmount = Number(orderData.discount || 0);
-      const totalAmount = Math.max(0, subtotal - discountAmount);
+      const pickupCostAmount = Number(orderData.pickupCost || 0);
+      const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
       const order = await storage.createOrder({
         ...orderData,
         status: "received",
@@ -138,6 +139,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         originalPrice: subtotal.toString(),
         discountAmount: discountAmount.toString(),
         discount: discountAmount.toString(),
+        pickupCost: pickupCostAmount.toString(),
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
         siteId: (req as any).siteId,
