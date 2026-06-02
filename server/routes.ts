@@ -8,6 +8,22 @@ import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 
+function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
+  const out = { ...obj };
+  for (const f of fields) {
+    if (f in out) {
+      const v = out[f];
+      if (v === "" || v === null || v === undefined) {
+        out[f] = null;
+      } else {
+        const n = Number(v);
+        out[f] = isNaN(n) ? null : String(n);
+      }
+    }
+  }
+  return out;
+}
+
 async function seedDatabase() {
   const servicesList = await storage.getServices();
   if (servicesList.length === 0) {
@@ -296,9 +312,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(machines);
   });
 
+  const MACHINE_NUMERIC = ["capacityKg", "utilizationRate", "cycleCount", "totalKgProcessed"];
+
   app.post("/api/machines", isAuthenticated, async (req: any, res) => {
     try {
-      const machine = await storage.createMachine({ ...req.body, userId: (req.session as any).userId, siteId: req.siteId });
+      const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
+      if (!body.capacityKg) body.capacityKg = "0";
+      const machine = await storage.createMachine({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
       res.status(201).json(machine);
     } catch (err) {
       res.status(400).json({ message: "Invalid machine data" });
@@ -306,7 +326,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/machines/:id", isAuthenticated, async (req, res) => {
-    const updated = await storage.updateMachine(Number(req.params.id), req.body);
+    const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
+    const updated = await storage.updateMachine(Number(req.params.id), body);
     if (!updated) return res.status(404).json({ message: "Machine not found" });
     res.json(updated);
   });
@@ -322,9 +343,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(employees);
   });
 
+  const EMPLOYEE_NUMERIC = ["salary", "kgProcessed", "ordersHandled"];
+
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const employee = await storage.createEmployee({ ...req.body, userId: (req.session as any).userId, siteId: req.siteId });
+      const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
+      const employee = await storage.createEmployee({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
       res.status(201).json(employee);
     } catch (err) {
       res.status(400).json({ message: "Invalid employee data" });
@@ -332,7 +356,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
-    const updated = await storage.updateEmployee(Number(req.params.id), req.body);
+    const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
+    const updated = await storage.updateEmployee(Number(req.params.id), body);
     if (!updated) return res.status(404).json({ message: "Employee not found" });
     res.json(updated);
   });
