@@ -316,8 +316,8 @@ export default function Payments() {
                     {t("amount")}
                   </label>
                   <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    <div className="flex flex-1 rounded-md border border-input overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                      <span className="flex items-center px-3 bg-muted text-muted-foreground text-sm font-medium border-r border-input whitespace-nowrap select-none">
                         {symbol}
                       </span>
                       <Input
@@ -328,7 +328,7 @@ export default function Payments() {
                         placeholder={remainingBalance.toFixed(2)}
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
-                        className={`pl-7 font-mono ${amountError ? "border-destructive" : ""}`}
+                        className={`border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono flex-1 ${amountError ? "border-destructive" : ""}`}
                         data-testid="input-amount"
                       />
                     </div>
