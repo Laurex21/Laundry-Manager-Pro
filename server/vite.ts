@@ -8,6 +8,41 @@ import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
+// Known SPA routes: exact matches and prefixes for dynamic segments
+const KNOWN_EXACT_ROUTES = new Set([
+  "/",
+  "/auth",
+  "/calculateur",
+  "/calculator",
+  "/diagnostic",
+  "/rentabilite",
+  "/dashboard",
+  "/customers",
+  "/orders",
+  "/services",
+  "/expenses",
+  "/payments",
+  "/reports",
+  "/machines",
+  "/employees",
+  "/analytics",
+  "/subscriptions",
+  "/settings",
+]);
+
+const KNOWN_PREFIXES = [
+  "/rapport/",
+  "/join/",
+  "/customers/",
+  "/orders/",
+];
+
+function isKnownSpaRoute(pathname: string): boolean {
+  const p = pathname.split("?")[0].replace(/\/$/, "") || "/";
+  if (KNOWN_EXACT_ROUTES.has(p)) return true;
+  return KNOWN_PREFIXES.some((prefix) => p.startsWith(prefix));
+}
+
 export async function setupVite(server: Server, app: Express) {
   const serverOptions = {
     middlewareMode: true,
@@ -31,6 +66,11 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
+  // Server-side 301 redirect: /calculator → /calculateur
+  app.get("/calculator", (_req, res) => {
+    res.redirect(301, "/calculateur");
+  });
+
   app.use("/{*path}", async (req, res, next) => {
     const url = req.originalUrl;
 
@@ -49,7 +89,8 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
       const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      const status = isKnownSpaRoute(req.originalUrl) ? 200 : 404;
+      res.status(status).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);

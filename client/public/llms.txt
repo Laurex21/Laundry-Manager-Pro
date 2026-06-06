@@ -1,0 +1,16 @@
+# CleanEase
+
+CleanEase is a laundry business management platform for African markets. It helps laundry shop operators manage customers, orders, services, payments, and team members with multi-site and multi-currency support.
+
+## Public pages
+
+- https://www.cleanease.app/ — Landing page and product overview
+- https://www.cleanease.app/calculateur — Laundry pricing calculator (canonical URL; /calculator redirects here)
+- https://www.cleanease.app/diagnostic — Business diagnostic tool
+- https://www.cleanease.app/rentabilite — Profitability analysis tool
+- https://www.cleanease.app/auth — Sign up and sign in
+
+## Notes
+
+- The calculator is available in French at /calculateur. The English alias /calculator performs a permanent redirect to /calculateur.
+- Authenticated application routes (/dashboard, /orders, /customers, etc.) require a user account and are not public.

@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Allow: /auth
+Allow: /calculateur
+Allow: /diagnostic
+Allow: /rentabilite
+
+# Disallow private application areas
+Disallow: /dashboard
+Disallow: /customers
+Disallow: /orders
+Disallow: /services
+Disallow: /expenses
+Disallow: /payments
+Disallow: /reports
+Disallow: /machines
+Disallow: /employees
+Disallow: /analytics
+Disallow: /subscriptions
+Disallow: /settings
+Disallow: /join/
+Disallow: /rapport/
+Disallow: /api/
+
+Sitemap: https://www.cleanease.app/sitemap.xml
