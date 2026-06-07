@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
+import { useCustomers } from "@/hooks/use-customers";
+import { useOrders } from "@/hooks/use-orders";
 import { Link } from "wouter";
 import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -104,9 +106,73 @@ function AnalyticsContent() {
       </Card>
 
       <WasteSection />
+      <CustomerAreaSection />
       <PerformanceScoreSection />
       <ProductionDelaysSection />
     </div>
+  );
+}
+
+function CustomerAreaSection() {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data: customers } = useCustomers();
+  const { data: orders } = useOrders();
+
+  const rows = (customers || []).map((customer: any) => {
+    const area = customer.area || customer.address?.split(",")[0]?.trim() || "Unspecified";
+    const customerOrders = (orders || []).filter((order: any) => order.customerId === customer.id && order.status !== "cancelled");
+    return {
+      area,
+      orders: customerOrders.length,
+      revenue: customerOrders.reduce((sum: number, order: any) => sum + Number(order.totalAmount || 0), 0),
+      customers: 1,
+    };
+  }).reduce((acc: Record<string, { area: string; customers: number; orders: number; revenue: number }>, row) => {
+    if (!acc[row.area]) acc[row.area] = { area: row.area, customers: 0, orders: 0, revenue: 0 };
+    acc[row.area].customers += row.customers;
+    acc[row.area].orders += row.orders;
+    acc[row.area].revenue += row.revenue;
+    return acc;
+  }, {});
+
+  const grouped = Object.values(rows).sort((a, b) => b.orders - a.orders || b.revenue - a.revenue);
+
+  return (
+    <Card className="shadow-sm" data-testid="card-customers-by-area">
+      <CardHeader>
+        <CardTitle>{t("customers_by_area_quarter")}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {grouped.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("no_customer_area_data")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground uppercase border-b">
+                <tr>
+                  <th className="text-left py-2">{t("area_quarter")}</th>
+                  <th className="text-right py-2">Customers</th>
+                  <th className="text-right py-2">Orders</th>
+                  <th className="text-right py-2">Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped.map((row) => (
+                  <tr key={row.area} className="border-b last:border-0">
+                    <td className="py-2 font-medium">{row.area}</td>
+                    <td className="py-2 text-right">{row.customers}</td>
+                    <td className="py-2 text-right">{row.orders}</td>
+                    <td className="py-2 text-right font-mono">{symbol}{row.revenue.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -36,7 +36,7 @@ export interface IStorage {
 
   getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order>;
+  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; details?: string }[]): Promise<Order>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
@@ -105,6 +105,7 @@ export interface IStorage {
   getPerformanceScore(siteId: number | null): Promise<any>;
 
   getSettings(userId: string): Promise<BusinessSettings>;
+  getPublicSupportSettings(): Promise<Pick<BusinessSettings, "businessName" | "phone" | "phone2"> | null>;
   upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings>;
 
   getOrganisationByOwner(ownerId: string): Promise<Organisation | null>;
@@ -227,7 +228,7 @@ export class DatabaseStorage implements IStorage {
     return { ...order, customer, items, payments: orderPayments, garmentItems: orderGarments, statusHistory: history };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
+  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; details?: string }[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
 
@@ -247,7 +248,12 @@ export class DatabaseStorage implements IStorage {
 
       if (garments && garments.length > 0) {
         for (const garment of garments) {
-          await tx.insert(garmentItems).values({ orderId: order.id, itemName: garment.itemName, quantity: garment.quantity });
+          await tx.insert(garmentItems).values({
+            orderId: order.id,
+            itemName: garment.itemName,
+            quantity: garment.quantity,
+            details: garment.details || null,
+          });
         }
       }
 
@@ -986,6 +992,19 @@ export class DatabaseStorage implements IStorage {
       businessName: userRow?.businessName || "My Laundry",
     }).returning();
     return created;
+  }
+
+  async getPublicSupportSettings(): Promise<Pick<BusinessSettings, "businessName" | "phone" | "phone2"> | null> {
+    const [settings] = await db
+      .select({
+        businessName: businessSettings.businessName,
+        phone: businessSettings.phone,
+        phone2: businessSettings.phone2,
+      })
+      .from(businessSettings)
+      .orderBy(desc(businessSettings.updatedAt))
+      .limit(1);
+    return settings || null;
   }
 
   async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings> {

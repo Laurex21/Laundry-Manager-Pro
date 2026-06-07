@@ -43,6 +43,7 @@ export const createOrderWithItemsSchema = z.object({
   garmentItems: z.array(z.object({
     itemName: z.string(),
     quantity: z.number(),
+    details: z.string().optional(),
   })).optional().default([]),
 });
 

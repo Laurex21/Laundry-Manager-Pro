@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Currency = "FCFA" | "USD" | "NGN" | "EUR" | "ZAR";
+export type Currency = "FCFA" | "USD" | "NGN" | "EUR" | "ZAR" | "MRU";
 
 interface CurrencyStore {
   currency: Currency;
@@ -15,8 +15,9 @@ const symbols: Record<Currency, string> = {
   NGN: "₦",
   EUR: "€",
   ZAR: "R",
+  MRU: "UM ",
 };
-const SUPPORTED_CURRENCIES = new Set<Currency>(["FCFA", "USD", "NGN", "EUR", "ZAR"]);
+const SUPPORTED_CURRENCIES = new Set<Currency>(["FCFA", "USD", "NGN", "EUR", "ZAR", "MRU"]);
 
 function normalizeCurrency(value: unknown): Currency {
   return typeof value === "string" && SUPPORTED_CURRENCIES.has(value as Currency)
