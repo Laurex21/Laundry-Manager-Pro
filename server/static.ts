@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { getRouteMeta, injectMetaIntoHtml } from "./lib/seo-metadata";
 
 // Known SPA routes: exact matches and prefixes for dynamic segments
 const KNOWN_EXACT_ROUTES = new Set([
@@ -52,9 +53,32 @@ export function serveStatic(app: Express) {
     res.redirect(301, "/calculateur");
   });
 
+  // Cache the base index.html content (read once per process start)
+  let cachedIndexHtml: string | null = null;
+  function getIndexHtml(): string {
+    if (!cachedIndexHtml) {
+      cachedIndexHtml = fs.readFileSync(path.resolve(distPath, "index.html"), "utf-8");
+    }
+    return cachedIndexHtml;
+  }
+
   // fall through to index.html if the file doesn't exist
   app.use("/{*path}", (req, res) => {
     const status = isKnownSpaRoute(req.originalUrl) ? 200 : 404;
-    res.status(status).sendFile(path.resolve(distPath, "index.html"));
+
+    try {
+      let html = getIndexHtml();
+
+      // Inject route-specific SEO metadata for public acquisition routes
+      const pathname = req.originalUrl.split("?")[0].replace(/\/$/, "") || "/";
+      const meta = getRouteMeta(pathname);
+      if (meta) {
+        html = injectMetaIntoHtml(html, meta);
+      }
+
+      res.status(status).set({ "Content-Type": "text/html" }).end(html);
+    } catch {
+      res.status(status).sendFile(path.resolve(distPath, "index.html"));
+    }
   });
 }
