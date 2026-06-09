@@ -19,7 +19,7 @@ import {
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
-import { eq, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, isNull, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -99,7 +99,7 @@ export interface IStorage {
   getStatsBySite(siteId: number | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
   backfillNullSiteIds(): Promise<void>;
 
-  getDashboardData(siteId?: number | null, allSites?: boolean): Promise<any>;
+  getDashboardData(siteId?: number | null, allSites?: boolean, organisationId?: number | null): Promise<any>;
   getAnalyticsKpis(period: string, siteId: number | null): Promise<any>;
   getWasteAlerts(siteId: number | null): Promise<any[]>;
   getPerformanceScore(siteId: number | null): Promise<any>;
@@ -619,6 +619,34 @@ export class DatabaseStorage implements IStorage {
     return Number(result?.total || 0);
   }
 
+  private async sumPaymentsInRangeBySiteIds(start: Date, end: Date, siteIds: number[]): Promise<number> {
+    if (siteIds.length === 0) return 0;
+    const siteOrderIds = (await db.select({ id: orders.id }).from(orders).where(inArray(orders.siteId, siteIds))).map(o => o.id);
+    if (siteOrderIds.length === 0) return 0;
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(payments)
+      .where(and(
+        sql`${payments.date} IS NOT NULL`,
+        sql`${payments.date} >= ${start}`,
+        sql`${payments.date} <= ${end}`,
+        inArray(payments.orderId, siteOrderIds)
+      ));
+    return Number(result?.total || 0);
+  }
+
+  private async sumExpensesInRangeBySiteIds(start: Date, end: Date, siteIds: number[]): Promise<number> {
+    if (siteIds.length === 0) return 0;
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+      .from(expenditures)
+      .where(and(
+        sql`${expenditures.date} IS NOT NULL`,
+        sql`${expenditures.date} >= ${start}`,
+        sql`${expenditures.date} <= ${end}`,
+        inArray(expenditures.siteId, siteIds)
+      ));
+    return Number(result?.total || 0);
+  }
+
   async getPerformanceData(siteId: number | null) {
     const now = new Date();
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -789,7 +817,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getDashboardData(siteId?: number | null, allSites?: boolean) {
+  async getDashboardData(siteId?: number | null, allSites?: boolean, organisationId?: number | null) {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
@@ -798,21 +826,36 @@ export class DatabaseStorage implements IStorage {
     const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0);
 
     const siteFilter = siteId !== null && siteId !== undefined && !allSites;
-    const siteWhere = siteFilter ? eq(orders.siteId, siteId as number) : sql`1=1`;
-    const expSiteWhere = siteFilter ? eq(expenditures.siteId, siteId as number) : sql`1=1`;
+    const allSiteRowsForOrg = allSites && organisationId
+      ? await db.select().from(sites).where(and(eq(sites.organisationId, organisationId), eq(sites.isActive, true)))
+      : [];
+    const allSiteIds = allSiteRowsForOrg.map(s => s.id);
+    const siteWhere = siteFilter
+      ? eq(orders.siteId, siteId as number)
+      : allSites
+        ? (allSiteIds.length ? inArray(orders.siteId, allSiteIds) : sql`1=0`)
+        : sql`1=1`;
 
-    const todayRevenue = await this.sumPaymentsInRangeBySite(todayStart, todayEnd, siteFilter ? siteId as number : null);
+    const todayRevenue = allSites
+      ? await this.sumPaymentsInRangeBySiteIds(todayStart, todayEnd, allSiteIds)
+      : await this.sumPaymentsInRangeBySite(todayStart, todayEnd, siteFilter ? siteId as number : null);
     const todayOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(siteWhere, sql`${orders.createdAt} >= ${todayStart}`, sql`${orders.createdAt} <= ${todayEnd}`));
     const todayOrders = Number(todayOrdersResult[0]?.count || 0);
 
-    const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, now, siteFilter ? siteId as number : null);
+    const weekRevenue = allSites
+      ? await this.sumPaymentsInRangeBySiteIds(weekStart, now, allSiteIds)
+      : await this.sumPaymentsInRangeBySite(weekStart, now, siteFilter ? siteId as number : null);
     const weekOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(siteWhere, sql`${orders.createdAt} >= ${weekStart}`, sql`${orders.createdAt} <= ${now}`));
     const weekOrders = Number(weekOrdersResult[0]?.count || 0);
 
-    const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
-    const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
+    const monthRevenue = allSites
+      ? await this.sumPaymentsInRangeBySiteIds(monthStart, now, allSiteIds)
+      : await this.sumPaymentsInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
+    const monthExpenses = allSites
+      ? await this.sumExpensesInRangeBySiteIds(monthStart, now, allSiteIds)
+      : await this.sumExpensesInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
     const monthOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(siteWhere, sql`${orders.createdAt} >= ${monthStart}`, sql`${orders.createdAt} <= ${now}`));
     const monthOrders = Number(monthOrdersResult[0]?.count || 0);
@@ -836,7 +879,9 @@ export class DatabaseStorage implements IStorage {
       const dayStart = new Date(now); dayStart.setDate(dayStart.getDate() - i); dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(dayStart); dayEnd.setHours(23, 59, 59, 999);
       const dateStr = dayStart.toISOString().split('T')[0];
-      const rev = await this.sumPaymentsInRangeBySite(dayStart, dayEnd, siteFilter ? siteId as number : null);
+      const rev = allSites
+        ? await this.sumPaymentsInRangeBySiteIds(dayStart, dayEnd, allSiteIds)
+        : await this.sumPaymentsInRangeBySite(dayStart, dayEnd, siteFilter ? siteId as number : null);
       revenueByDay.push({ date: dateStr, value: rev });
       kgByDay.push({ date: dateStr, value: 0 });
     }
@@ -850,20 +895,28 @@ export class DatabaseStorage implements IStorage {
     if (pendingCount > 10) alerts.push({ type: "warning", message: `You have ${pendingCount} pending orders`, detail: "Consider processing them soon" });
     if (monthExpenses > monthRevenue && monthRevenue > 0) alerts.push({ type: "danger", message: "Expenses exceed revenue this month", detail: "Review your expenditure logs" });
 
+    const scopedOrderIds = allSites && allSiteIds.length
+      ? (await db.select({ id: orders.id }).from(orders).where(inArray(orders.siteId, allSiteIds))).map(o => o.id)
+      : [];
     const returnedGarments = await db.select({ count: sql<number>`count(*)` }).from(garmentItems)
-      .where(and(eq(garmentItems.returnedForTreatment, true), sql`${garmentItems.resolvedAt} IS NULL`));
+      .where(and(
+        eq(garmentItems.returnedForTreatment, true),
+        sql`${garmentItems.resolvedAt} IS NULL`,
+        allSites ? (scopedOrderIds.length ? inArray(garmentItems.orderId, scopedOrderIds) : sql`1=0`) : sql`1=1`
+      ));
     const returnedCount = Number(returnedGarments[0]?.count || 0);
     if (returnedCount > 0) alerts.push({ type: "warning", message: `${returnedCount} garment(s) returned for treatment`, detail: "Check orders with returned items" });
 
     // Build site overview for All Sites mode
     let sitesOverview: { id: number; name: string; city?: string | null; memberCount: number; isActive: boolean }[] = [];
     if (allSites) {
-      const allSiteRows = await db.select().from(sites).where(eq(sites.isActive, true));
       const memberCounts = await db.select({ siteId: siteMembers.siteId, count: sql<number>`count(*)` })
-        .from(siteMembers).groupBy(siteMembers.siteId);
+        .from(siteMembers)
+        .where(allSiteIds.length ? inArray(siteMembers.siteId, allSiteIds) : sql`1=0`)
+        .groupBy(siteMembers.siteId);
       const countMap: Record<number, number> = {};
       for (const mc of memberCounts) countMap[mc.siteId] = Number(mc.count);
-      sitesOverview = allSiteRows.map(s => ({
+      sitesOverview = allSiteRowsForOrg.map(s => ({
         id: s.id, name: s.name, city: s.city, memberCount: countMap[s.id] ?? 0, isActive: s.isActive ?? true,
       }));
     }
@@ -871,7 +924,9 @@ export class DatabaseStorage implements IStorage {
     const readyOrders = await db.select().from(orders).where(and(siteWhere, eq(orders.status, "ready"))).orderBy(desc(orders.updatedAt));
     const readyCustomers = siteFilter
       ? await db.select().from(customers).where(eq(customers.siteId, siteId as number))
-      : await db.select().from(customers);
+      : allSites
+        ? await db.select().from(customers).where(allSiteIds.length ? inArray(customers.siteId, allSiteIds) : sql`1=0`)
+        : await db.select().from(customers);
     const readyCustMap = new Map(readyCustomers.map(c => [c.id, c]));
     const readyForPickup = readyOrders.map(o => ({ ...o, customer: readyCustMap.get(o.customerId) || null }));
 

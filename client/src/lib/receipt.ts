@@ -1,6 +1,5 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
@@ -30,6 +29,18 @@ function formatReceiptDate(date: Date | string | null | undefined, pattern: stri
 
 function paymentReference(reference: string | null | undefined, lang: string): string {
   return reference ? ` (${label("Ref:", "Réf :", lang)} ${reference})` : "";
+}
+
+function serviceUnitLabel(unit: string | null | undefined, lang: string): string {
+  return unit === "kg" ? "kg" : label("Pieces", "Pièces", lang);
+}
+
+function orderSubtotal(items: any[]): number {
+  return items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * Number(item.quantity || 0)), 0);
+}
+
+function orderTotalFromParts(subtotal: number, discount: number, pickupCost: number): number {
+  return Math.max(0, subtotal - discount + pickupCost);
 }
 
 function escapeHtml(value: unknown): string {
@@ -120,9 +131,11 @@ async function downloadReceiptPdf(args: {
   businessName: string;
   subtitle?: string;
   contactLines?: string[];
+  logoBase64?: string | null;
   sections: PdfSection[];
   footer: string;
 }) {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -143,14 +156,29 @@ async function downloadReceiptPdf(args: {
   };
 
   page.drawRectangle({ x: 0, y: pageHeight - 118, width: pageWidth, height: 118, color: rgb(0.08, 0.22, 0.45) });
-  draw(args.businessName, margin, 22, bold, rgb(1, 1, 1));
+  let brandX = margin;
+  if (args.logoBase64) {
+    try {
+      const [meta, data] = args.logoBase64.split(",");
+      const bytes = Uint8Array.from(atob(data || meta), c => c.charCodeAt(0));
+      const image = meta?.includes("image/jpeg") || meta?.includes("image/jpg")
+        ? await pdf.embedJpg(bytes)
+        : await pdf.embedPng(bytes);
+      const scale = Math.min(56 / image.width, 42 / image.height);
+      page.drawImage(image, { x: margin, y: pageHeight - 86, width: image.width * scale, height: image.height * scale });
+      brandX = margin + image.width * scale + 14;
+    } catch {
+      brandX = margin;
+    }
+  }
+  page.drawText(args.businessName.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 22, font: bold, color: rgb(1, 1, 1) });
   y -= 26;
   if (args.subtitle) {
-    draw(args.subtitle, margin, 10, regular, rgb(0.86, 0.91, 0.98));
+    page.drawText(args.subtitle.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 10, font: regular, color: rgb(0.86, 0.91, 0.98) });
     y -= 15;
   }
   (args.contactLines || []).slice(0, 3).forEach((line) => {
-    draw(line, margin, 8, regular, rgb(0.86, 0.91, 0.98));
+    page.drawText(line.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 8, font: regular, color: rgb(0.86, 0.91, 0.98) });
     y -= 12;
   });
   y = pageHeight - 52;
@@ -219,7 +247,9 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
   const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
   const discount = Number(order.discount || 0);
-  const subtotal = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
+  const subtotal = orderSubtotal(items);
+  const pickupCost = Number(order.pickupCost || 0);
+  const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
 
   const statusLabel = order.paymentStatus === "paid" ? label("PAID", "PAYÉ", lang) : order.paymentStatus === "partial" ? label("PARTIAL", "PARTIEL", lang) : label("UNPAID", "IMPAYÉ", lang);
   const statusColor = order.paymentStatus === "paid" ? "#16a34a" : order.paymentStatus === "partial" ? "#d97706" : "#dc2626";
@@ -228,7 +258,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const itemsHtml = items.map((item: any) => {
     const svc = item.service || {};
     const qty = item.quantity;
-    const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
+    const unit = serviceUnitLabel(svc.unit, lang);
     const price = Number(item.priceAtOrder);
     const lineTotal = qty * price;
     return `<tr>
@@ -253,7 +283,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   }).join("") || `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
 
   const totalPaid = (order.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-  const balance = Math.max(0, Number(order.totalAmount) - totalPaid);
+  const balance = Math.max(0, orderTotal - totalPaid);
 
   const contactLines = getContactLines(settings);
   const tagline = settings.tagline || label("Laundry Service", "Service de Blanchisserie", lang);
@@ -354,8 +384,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
       <div class="summary-box">
         <div class="summary-row"><span>${label("Subtotal", "Sous-total", lang)}</span><span>${symbol}${subtotal.toFixed(2)}</span></div>
         ${discount > 0 ? `<div class="summary-row"><span>${label("Discount", "Réduction", lang)}</span><span style="color:#dc2626;">-${symbol}${discount.toFixed(2)}</span></div>` : ""}
-        ${Number(order.pickupCost || 0) > 0 ? `<div class="summary-row"><span>${label("Transport / Delivery", "Transport / Livraison", lang)}</span><span style="color:#2563eb;">+${symbol}${Number(order.pickupCost).toFixed(2)}</span></div>` : ""}
-        <div class="summary-row total"><span>${label("Total Amount", "Montant total", lang)}</span><span>${symbol}${Number(order.totalAmount).toFixed(2)}</span></div>
+        ${pickupCost > 0 ? `<div class="summary-row"><span>${label("Transport / Delivery", "Transport / Livraison", lang)}</span><span style="color:#2563eb;">+${symbol}${pickupCost.toFixed(2)}</span></div>` : ""}
+        <div class="summary-row total"><span>${label("Total Amount", "Montant total", lang)}</span><span>${symbol}${orderTotal.toFixed(2)}</span></div>
         ${totalPaid > 0 ? `<div class="summary-row" style="margin-top:6px;"><span>${label("Advance Payment", "Acompte versé", lang)} <span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:20px;font-weight:700;margin-left:4px;">${label("PAID", "PAYÉ", lang)}</span></span><span style="color:#16a34a;font-weight:600;">-${symbol}${totalPaid.toFixed(2)}</span></div>` : ""}
         ${balance > 0
           ? `<div class="summary-row" style="border-top:2px solid #fca5a5;margin-top:8px;padding-top:10px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;font-size:15px;">${symbol}${balance.toFixed(2)}</span></div>`
@@ -394,6 +424,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     businessName: settings.businessName,
     subtitle: tagline,
     contactLines,
+    logoBase64: settings.showLogo ? settings.logoBase64 : null,
     footer: `${footerNote} - ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
     sections: [
       {
@@ -411,7 +442,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
           ? items.map((item: any) => {
               const svc = item.service || {};
               const qty = item.quantity;
-              const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
+              const unit = serviceUnitLabel(svc.unit, lang);
               const price = Number(item.priceAtOrder);
               return {
                 value: `${svc.name || label("Service", "Service", lang)} - ${qty} ${unit} - ${symbol}${(qty * price).toFixed(2)}`,
@@ -432,7 +463,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
         lines: [
           { label: label("Subtotal", "Sous-total", lang), value: `${symbol}${subtotal.toFixed(2)}` },
           ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${symbol}${discount.toFixed(2)}` }] : []),
-          { label: label("Total Amount", "Montant total", lang), value: `${symbol}${Number(order.totalAmount).toFixed(2)}`, strong: true },
+          ...(pickupCost > 0 ? [{ label: label("Transport / Delivery", "Transport / Livraison", lang), value: `+${symbol}${pickupCost.toFixed(2)}` }] : []),
+          { label: label("Total Amount", "Montant total", lang), value: `${symbol}${orderTotal.toFixed(2)}`, strong: true },
           { label: label("Total Paid", "Total payé", lang), value: `${symbol}${totalPaid.toFixed(2)}` },
           ...(balance > 0 ? [{ label: label("Balance Due", "Solde dû", lang), value: `${symbol}${balance.toFixed(2)}`, strong: true }] : []),
         ],
@@ -459,10 +491,20 @@ export function printDepositReceipt(order: any, symbol: string, settings: Receip
   const garments = order.garmentItems || [];
   const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
   const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
+  const subtotal = orderSubtotal(items);
+  const discount = Number(order.discount || 0);
+  const pickupCost = Number(order.pickupCost || 0);
+  const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
+  const totalPaid = (order.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+  const balance = Math.max(0, orderTotal - totalPaid);
+  const logoHtml = settings.showLogo && settings.logoBase64
+    ? `<img src="${settings.logoBase64}" style="max-height:42px;max-width:120px;object-fit:contain;margin:0 auto 6px;display:block;" />`
+    : "";
   const rows = items.map((item: any) => {
     const svc = item.service || {};
     const qty = item.quantity;
-    return `<tr><td>${escapeHtml(svc.name || "Service")}</td><td style="text-align:center;">${qty}</td><td style="text-align:right;">${symbol}${(Number(item.priceAtOrder) * qty).toFixed(2)}</td></tr>`;
+    const unit = serviceUnitLabel(svc.unit, lang);
+    return `<tr><td>${escapeHtml(svc.name || "Service")}</td><td style="text-align:center;">${qty} ${unit}</td><td style="text-align:right;">${symbol}${(Number(item.priceAtOrder) * qty).toFixed(2)}</td></tr>`;
   }).join("");
   const garmentRows = garments.map((g: any) => `<tr><td>${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><small>${escapeHtml(g.details)}</small>` : ""}</td></tr>`).join("");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${order.id}</title><style>
@@ -470,10 +512,15 @@ export function printDepositReceipt(order: any, symbol: string, settings: Receip
     h1{font-size:18px;margin:0}.muted{color:#555;font-size:11px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;font-size:12px}td{border-bottom:1px solid #eee;padding:5px 0}.total{font-weight:700;font-size:14px}.no-print{display:block;margin:10px auto}
     @media print{.no-print{display:none}}
   </style></head><body><button class="no-print" onclick="window.print()">${escapeHtml(label("Print", "Imprimer", lang))}</button><div class="receipt">
-    <div class="header"><h1>${escapeHtml(settings.businessName)}</h1><div class="muted">${escapeHtml(settings.phone || "")}</div><strong>Order #${order.id}</strong></div>
+    <div class="header">${logoHtml}<h1>${escapeHtml(settings.businessName)}</h1><div class="muted">${escapeHtml(settings.phone || "")}</div><strong>Order #${order.id}</strong></div>
     <div class="row"><span>Customer</span><strong>${escapeHtml(customer.name || "")}</strong></div><div class="row"><span>Date</span><span>${entryDate}</span></div><div class="row"><span>Pickup</span><span>${pickupDate}</span></div>
     <h2 style="font-size:13px;">Services</h2><table>${rows}</table>${garmentRows ? `<h2 style="font-size:13px;">Items</h2><table>${garmentRows}</table>` : ""}
-    <div class="row total"><span>Total</span><span>${symbol}${Number(order.totalAmount).toFixed(2)}</span></div>
+    <div class="row"><span>${escapeHtml(label("Subtotal", "Sous-total", lang))}</span><span>${symbol}${subtotal.toFixed(2)}</span></div>
+    ${discount > 0 ? `<div class="row"><span>${escapeHtml(label("Discount", "Réduction", lang))}</span><span>-${symbol}${discount.toFixed(2)}</span></div>` : ""}
+    ${pickupCost > 0 ? `<div class="row"><span>${escapeHtml(label("Transport / Delivery", "Transport / Livraison", lang))}</span><span>+${symbol}${pickupCost.toFixed(2)}</span></div>` : ""}
+    <div class="row total"><span>Total</span><span>${symbol}${orderTotal.toFixed(2)}</span></div>
+    ${totalPaid > 0 ? `<div class="row"><span>${escapeHtml(label("Total Paid", "Total payé", lang))}</span><span>-${symbol}${totalPaid.toFixed(2)}</span></div>` : ""}
+    <div class="row total"><span>${escapeHtml(label("Balance Due", "Solde dû", lang))}</span><span>${balance === 0 ? escapeHtml(label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)) : `${symbol}${balance.toFixed(2)}`}</span></div>
     <p class="muted">${escapeHtml(settings.receiptFooterNote || "Thank you")}</p>
   </div></body></html>`;
   openPrintWindow(html, paperSize);
@@ -500,7 +547,7 @@ export function generatePaymentReceipt(
   const itemsHtml = items.map((item: any) => {
     const svc = item.service || {};
     const qty = item.quantity;
-    const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
+    const unit = serviceUnitLabel(svc.unit, lang);
     const price = Number(item.priceAtOrder);
     const lineTotal = qty * price;
     return `<tr>
@@ -514,7 +561,14 @@ export function generatePaymentReceipt(
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
 
-  const subtotalAmount = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
+  const subtotalAmount = orderSubtotal(items);
+  const orderTotal = orderTotalFromParts(subtotalAmount, discount, pickupCost);
+  const currentPaymentAmount = Number(payment.amount || 0);
+  const totalPaid = allPayments.length > 0
+    ? allPayments.reduce((sum: number, p: any) => sum + Number(p.amount), 0)
+    : currentPaymentAmount;
+  const previousPaid = Math.max(0, totalPaid - currentPaymentAmount);
+  const remaining = Math.max(0, orderTotal - totalPaid);
   const statusLabel = payment.newStatus === "paid" ? label("PAID", "PAYÉ", lang) : payment.newStatus === "partial" ? label("PARTIAL", "PARTIEL", lang) : label("UNPAID", "IMPAYÉ", lang);
   const statusColor = payment.newStatus === "paid" ? "#16a34a" : payment.newStatus === "partial" ? "#d97706" : "#dc2626";
   const statusBg = payment.newStatus === "paid" ? "#dcfce7" : payment.newStatus === "partial" ? "#fef3c7" : "#fee2e2";
@@ -620,13 +674,10 @@ export function generatePaymentReceipt(
         <div class="summary-row"><span>${label("Subtotal", "Sous-total", lang)}</span><span>${symbol}${subtotalAmount.toFixed(2)}</span></div>
         ${discount > 0 ? `<div class="summary-row"><span>${label("Discount", "Réduction", lang)}</span><span style="color:#dc2626;">-${symbol}${discount.toFixed(2)}</span></div>` : ""}
         ${pickupCost > 0 ? `<div class="summary-row"><span>${label("Transport / Delivery", "Transport / Livraison", lang)}</span><span style="color:#2563eb;">+${symbol}${pickupCost.toFixed(2)}</span></div>` : ""}
-        <div class="summary-row total"><span>${label("Order Total", "Total commande", lang)}</span><span>${symbol}${(subtotalAmount - discount + pickupCost).toFixed(2)}</span></div>
-        ${allPayments.length > 1 ? (() => {
-          const previousPaid = allPayments.filter((_: any, i: number) => i < allPayments.length - 1).reduce((s: number, p: any) => s + Number(p.amount), 0);
-          const remaining = Math.max(0, (subtotalAmount - discount + pickupCost) - allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0));
-          return `<div class="summary-row" style="margin-top:4px;"><span style="color:#64748b;">${label("Previously Paid", "Déjà payé", lang)}</span><span style="color:#16a34a;">-${symbol}${previousPaid.toFixed(2)}</span></div>
-          ${remaining > 0 ? `<div class="summary-row" style="border-top:1px solid #fca5a5;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;">${symbol}${remaining.toFixed(2)}</span></div>` : `<div class="summary-row" style="border-top:1px solid #86efac;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>`}`;
-        })() : ""}
+        <div class="summary-row total"><span>${label("Order Total", "Total commande", lang)}</span><span>${symbol}${orderTotal.toFixed(2)}</span></div>
+        ${previousPaid > 0 ? `<div class="summary-row" style="margin-top:4px;"><span style="color:#64748b;">${label("Previously Paid", "Déjà payé", lang)}</span><span style="color:#16a34a;">-${symbol}${previousPaid.toFixed(2)}</span></div>` : ""}
+        <div class="summary-row" style="margin-top:4px;"><span style="color:#64748b;">${label("This Payment", "Ce paiement", lang)}</span><span style="color:#16a34a;">-${symbol}${currentPaymentAmount.toFixed(2)}</span></div>
+        ${remaining > 0 ? `<div class="summary-row" style="border-top:1px solid #fca5a5;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;">${symbol}${remaining.toFixed(2)}</span></div>` : `<div class="summary-row" style="border-top:1px solid #86efac;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>`}
       </div>
     </div>
 
@@ -662,6 +713,7 @@ export function generatePaymentReceipt(
     businessName: settings.businessName,
     subtitle: tagline,
     contactLines,
+    logoBase64: settings.showLogo ? settings.logoBase64 : null,
     footer: `${footerNote} - ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
     sections: [
       {
@@ -687,7 +739,7 @@ export function generatePaymentReceipt(
           ? items.map((item: any) => {
               const svc = item.service || {};
               const qty = item.quantity;
-              const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
+              const unit = serviceUnitLabel(svc.unit, lang);
               const price = Number(item.priceAtOrder);
               return {
                 value: `${svc.name || label("Service", "Service", lang)} - ${qty} ${unit} - ${symbol}${(qty * price).toFixed(2)}`,
@@ -708,7 +760,11 @@ export function generatePaymentReceipt(
         lines: [
           { label: label("Subtotal", "Sous-total", lang), value: `${symbol}${subtotalAmount.toFixed(2)}` },
           ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${symbol}${discount.toFixed(2)}` }] : []),
-          { label: label("Order Total", "Total commande", lang), value: `${symbol}${(subtotalAmount - discount).toFixed(2)}`, strong: true },
+          ...(pickupCost > 0 ? [{ label: label("Transport / Delivery", "Transport / Livraison", lang), value: `+${symbol}${pickupCost.toFixed(2)}` }] : []),
+          { label: label("Order Total", "Total commande", lang), value: `${symbol}${orderTotal.toFixed(2)}`, strong: true },
+          ...(previousPaid > 0 ? [{ label: label("Previously Paid", "Déjà payé", lang), value: `-${symbol}${previousPaid.toFixed(2)}` }] : []),
+          { label: label("This Payment", "Ce paiement", lang), value: `-${symbol}${currentPaymentAmount.toFixed(2)}` },
+          { label: label("Balance Due", "Solde dû", lang), value: remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang), strong: true },
         ],
       },
       ...(paymentsHistoryHtml

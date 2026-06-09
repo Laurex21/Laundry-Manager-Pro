@@ -231,7 +231,14 @@ export default function Orders() {
                       <div className="flex items-center gap-1">
                         <StatusBadge status={order.status} />
                         {order.hasReturnedItems && (
-                          <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-700"
+                            title={t("returns_pending")}
+                            data-testid={`returned-warning-${order.id}`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span className="hidden xl:inline">{t("returns_pending")}</span>
+                          </span>
                         )}
                       </div>
                     </td>
@@ -291,7 +298,14 @@ export default function Orders() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <span className="font-semibold text-foreground truncate text-sm">{order.customer?.name || t("unknown")}</span>
-                        {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
+                        {order.hasReturnedItems && (
+                          <span
+                            title={t("returns_pending")}
+                            data-testid={`returned-warning-${order.id}`}
+                          >
+                            <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                         <span className="font-mono font-medium">#{order.id}</span>

@@ -76,6 +76,7 @@ export default function OrderDetail() {
   const [rejectionNote, setRejectionNote] = useState("");
   const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
   const [deliverDate, setDeliverDate] = useState(new Date().toISOString().split('T')[0]);
+  const [returnedDeliveryConfirmOpen, setReturnedDeliveryConfirmOpen] = useState(false);
   const formatLocalDate = (date: Date | string, pattern: string) =>
     format(new Date(date), pattern, { locale: dateLocaleFor(i18n.language) });
 
@@ -343,7 +344,7 @@ export default function OrderDetail() {
               </>
             ) : order.status === "ready" ? (
               <>
-                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} data-testid="button-mark-delivered">
+                <Button size="sm" onClick={() => hasReturnedItems ? setReturnedDeliveryConfirmOpen(true) : setDeliverDialogOpen(true)} data-testid="button-mark-delivered">
                   <CalendarCheck className="w-4 h-4 mr-1" /> {t("mark_as_delivered")}
                 </Button>
               </>
@@ -662,6 +663,34 @@ export default function OrderDetail() {
               <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>{t("cancel")}</Button>
               <Button onClick={handleMarkDelivered} data-testid="button-confirm-deliver">
                 <CalendarCheck className="w-4 h-4 mr-1" /> {t("confirm_delivery")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={returnedDeliveryConfirmOpen} onOpenChange={setReturnedDeliveryConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-600" />
+              {t("returned_items_warning")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              {t("returned_items_delivery_confirm")}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setReturnedDeliveryConfirmOpen(false)}>{t("cancel")}</Button>
+              <Button
+                onClick={() => {
+                  setReturnedDeliveryConfirmOpen(false);
+                  setDeliverDialogOpen(true);
+                }}
+                data-testid="button-confirm-returned-delivery-warning"
+              >
+                {t("continue_delivery")}
               </Button>
             </div>
           </div>
