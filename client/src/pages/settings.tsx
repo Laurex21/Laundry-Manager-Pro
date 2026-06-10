@@ -246,14 +246,14 @@ function ReceiptLayoutTab({ settings, onSave, saving }: { settings: any; onSave:
       </Card>
 
       <div className="border rounded-lg overflow-hidden">
-        <div className="text-xs p-3 font-bold text-white flex justify-between items-center" style={{ backgroundColor: form.receiptHeaderColor }}>
+        <div className="text-xs p-3 font-bold text-white" style={{ backgroundColor: form.receiptHeaderColor }}>
           <div>
             <div className="text-sm font-bold">{t("business_name")}</div>
             <div className="opacity-80 text-xs">{t("laundry_manager")}</div>
-          </div>
-          <div className="text-right">
-            <div className="opacity-70 text-xs">{t("order_id")}</div>
-            <div className="text-lg font-black">#001</div>
+            <div className="mt-2">
+              <div className="opacity-70 text-xs">{t("order_id")}</div>
+              <div className="text-lg font-black leading-tight">#001</div>
+            </div>
           </div>
         </div>
         <div className="p-3 bg-muted/30">

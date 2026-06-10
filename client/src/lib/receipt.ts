@@ -355,11 +355,10 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
     .print-btn:hover { background: #1d4ed8; }
     .header { background: ${settings.receiptHeaderColor}; color: #fff; padding: 28px 32px; }
-    .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
-    .brand { flex: 1; }
-    .order-id-box { text-align: right; }
-    .order-id-box .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
-    .order-id-box .id { font-size: 28px; font-weight: 800; margin-top: 2px; }
+    .brand { max-width: 100%; }
+    .order-id-inline { margin-top: 12px; }
+    .order-id-inline .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
+    .order-id-inline .id { font-size: 28px; font-weight: 800; margin-top: 2px; }
     .deposit-badge { display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 32px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
     .meta-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 3px; }
@@ -390,12 +389,13 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   <button class="print-btn no-print" onclick="window.print()">${label("Print Receipt", "Imprimer le reçu", lang)}</button>
   <div class="receipt">
     <div class="header">
-      <div class="header-top">
-        <div class="brand">${headerHtml}<div class="deposit-badge">${depositLabel}</div></div>
-        <div class="order-id-box">
+      <div class="brand">
+        ${headerHtml}
+        <div class="order-id-inline">
           <div class="label">${label("Order No.", "N° Commande", lang)}</div>
           <div class="id">#${order.id}</div>
         </div>
+        <div class="deposit-badge">${depositLabel}</div>
       </div>
     </div>
 
@@ -646,11 +646,10 @@ export function generatePaymentReceipt(
     .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
     .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
     .header { background: ${settings.receiptHeaderColor}; color: #fff; padding: 28px 32px; }
-    .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
-    .brand { flex: 1; }
-    .order-id-box { text-align: right; }
-    .order-id-box .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
-    .order-id-box .id { font-size: 28px; font-weight: 800; margin-top: 2px; }
+    .brand { max-width: 100%; }
+    .order-id-inline { margin-top: 12px; }
+    .order-id-inline .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
+    .order-id-inline .id { font-size: 28px; font-weight: 800; margin-top: 2px; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 32px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
     .meta-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 3px; }
     .meta-item .value { font-size: 14px; font-weight: 600; color: #1e293b; }
@@ -676,9 +675,9 @@ export function generatePaymentReceipt(
   <button class="print-btn no-print" onclick="window.print()">${label("Print Receipt", "Imprimer le reçu", lang)}</button>
   <div class="receipt">
     <div class="header">
-      <div class="header-top">
-        <div class="brand">${headerHtml}</div>
-        <div class="order-id-box">
+      <div class="brand">
+        ${headerHtml}
+        <div class="order-id-inline">
           <div class="label">${label("Order No.", "N° Commande", lang)}</div>
           <div class="id">#${orderId}</div>
         </div>
