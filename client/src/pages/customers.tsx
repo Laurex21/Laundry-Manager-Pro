@@ -243,19 +243,6 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="area"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("area_quarter")}</FormLabel>
-              <FormControl>
-                <Input placeholder={t("area_quarter_placeholder")} {...field} value={field.value || ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         <Button type="submit" className="w-full mt-2" disabled={isPending}>
           {isPending ? t("saving") : t("create_customer")}
         </Button>

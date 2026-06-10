@@ -318,7 +318,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
       if (!body.capacityKg) body.capacityKg = "0";
-      const machine = await storage.createMachine({ ...body, userId: (req.session as any).userId, siteId: req.siteId } as any);
+      const machine = await storage.createMachine({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
       res.status(201).json(machine);
     } catch (err) {
       res.status(400).json({ message: "Invalid machine data" });
@@ -348,7 +348,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
       const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
-      const employee = await storage.createEmployee({ ...body, userId: (req.session as any).userId, siteId: req.siteId } as any);
+      const employee = await storage.createEmployee({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
       res.status(201).json(employee);
     } catch (err) {
       res.status(400).json({ message: "Invalid employee data" });
@@ -428,15 +428,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Business Settings (Prompt A) ───────────────────────────────────────────
-
-  app.get("/api/public/support-settings", async (_req, res) => {
-    try {
-      const settings = await storage.getPublicSupportSettings();
-      res.json(settings || {});
-    } catch (err) {
-      res.status(500).json({ message: "Failed to fetch support settings" });
-    }
-  });
 
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {

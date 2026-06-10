@@ -116,10 +116,9 @@ export default function CustomerDetail() {
   }
 
   const orders = customerOrders || [];
-  const statsOrders = orders.filter((o: any) => o.status !== "cancelled");
-  const totalOrders = statsOrders.length;
-  const totalSpent = statsOrders.reduce((sum: number, o: any) => sum + Number(o.totalAmount), 0);
-  const outstandingBalance = statsOrders.reduce((sum: number, o: any) => sum + Number(o.balance || 0), 0);
+  const totalOrders = orders.length;
+  const totalSpent = orders.reduce((sum: number, o: any) => sum + Number(o.totalAmount), 0);
+  const outstandingBalance = orders.reduce((sum: number, o: any) => sum + Number(o.balance || 0), 0);
   const isVIP = totalSpent >= VIP_THRESHOLD;
   const hasNotes = !!customer.notes && customer.notes.trim().length > 0;
 
@@ -309,9 +308,6 @@ export default function CustomerDetail() {
                     <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
                     <p className="text-sm" data-testid="text-address">{customer.address}</p>
                   </div>
-                  {customer.area && (
-                    <p className="text-xs text-muted-foreground mt-1 ml-6" data-testid="text-area">{t("area_quarter")}: {customer.area}</p>
-                  )}
                 </div>
                 <a href={mapsLink} target="_blank" rel="noopener noreferrer">
                   <Button variant="outline" className="mt-2" data-testid="button-view-maps">
@@ -505,7 +501,6 @@ function EditCustomerForm({ customer, onSuccess }: { customer: Customer; onSucce
       address: customer.address,
       notes: customer.notes || "",
       defaultDiscountPct: customer.defaultDiscountPct ?? "0",
-      area: customer.area || "",
     },
   });
 
@@ -569,19 +564,6 @@ function EditCustomerForm({ customer, onSuccess }: { customer: Customer; onSucce
               <FormLabel>{t("address")}</FormLabel>
               <FormControl>
                 <Input {...field} data-testid="input-edit-address" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="area"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("area_quarter")}</FormLabel>
-              <FormControl>
-                <Input {...field} value={field.value || ""} data-testid="input-edit-area" />
               </FormControl>
               <FormMessage />
             </FormItem>

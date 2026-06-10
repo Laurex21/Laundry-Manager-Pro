@@ -47,7 +47,6 @@ const CURRENCIES: { code: Currency; labelKey: string; symbol: string }[] = [
   { code: "FCFA", labelKey: "currency_fcfa", symbol: "FCFA" },
   { code: "NGN", labelKey: "currency_naira", symbol: "₦" },
   { code: "ZAR", labelKey: "currency_rand", symbol: "R" },
-  { code: "MRU", labelKey: "currency_ouguiya", symbol: "UM" },
   { code: "USD", labelKey: "currency_us_dollar", symbol: "$" },
   { code: "EUR", labelKey: "currency_euro", symbol: "€" },
 ];
@@ -249,7 +248,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             <Shirt className="w-5 h-5 text-primary-foreground" strokeWidth={2} />
           </div>
           <div>
-            <h1 className="font-display font-bold text-[15px] tracking-tight leading-tight text-foreground">XpressPro</h1>
+            <h1 className="font-display font-bold text-[15px] tracking-tight leading-tight">XpressPro</h1>
             <p className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">{t("laundry_manager")}</p>
           </div>
         </div>

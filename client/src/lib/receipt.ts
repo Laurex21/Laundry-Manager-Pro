@@ -1,6 +1,5 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
@@ -32,15 +31,6 @@ function paymentReference(reference: string | null | undefined, lang: string): s
   return reference ? ` (${label("Ref:", "Réf :", lang)} ${reference})` : "";
 }
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
 function buildPipelineHtml(currentStatus: string, lang: string): string {
   const currentIdx = PIPELINE_ORDER.indexOf(currentStatus);
   return PIPELINE_ORDER.map((stage, i) => {
@@ -53,7 +43,7 @@ function buildPipelineHtml(currentStatus: string, lang: string): string {
     return `<div style="display:flex;align-items:center;gap:6px;flex:1;">
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
         <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:${border};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${fg};">${i + 1}</div>
-        <span style="font-size:9px;font-weight:600;color:${isCurrent ? '#2563eb' : isPast ? '#16a34a' : '#94a3b8'};text-align:center;line-height:1.2;">${escapeHtml(label(stageLabel.en, stageLabel.fr, lang))}</span>
+        <span style="font-size:9px;font-weight:600;color:${isCurrent ? '#2563eb' : isPast ? '#16a34a' : '#94a3b8'};text-align:center;line-height:1.2;">${label(stageLabel.en, stageLabel.fr, lang)}</span>
       </div>
       ${i < PIPELINE_ORDER.length - 1 ? `<div style="height:2px;flex:1;min-width:12px;background:${isPast ? '#16a34a' : '#e2e8f0'};"></div>` : ''}
     </div>`;
@@ -66,16 +56,16 @@ function buildHeader(businessName: string, subtitle: string, contactLines: strin
     : "";
   return `
     ${logoHtml}
-    <h1 style="font-size:24px;font-weight:700;">${escapeHtml(businessName)}</h1>
-    ${subtitle ? `<p style="font-size:12px;opacity:0.8;margin-top:4px;">${escapeHtml(subtitle)}</p>` : ""}
-    ${contactLines.length > 0 ? `<p style="font-size:11px;opacity:0.75;margin-top:6px;line-height:1.6;">${contactLines.map(escapeHtml).join(" &bull; ")}</p>` : ""}
+    <h1 style="font-size:24px;font-weight:700;">${businessName}</h1>
+    ${subtitle ? `<p style="font-size:12px;opacity:0.8;margin-top:4px;">${subtitle}</p>` : ""}
+    ${contactLines.length > 0 ? `<p style="font-size:11px;opacity:0.75;margin-top:6px;line-height:1.6;">${contactLines.join(" &bull; ")}</p>` : ""}
   `;
 }
 
 function buildTermsHtml(settings: ReceiptSettings, lang: string): string {
   const rawTerms = settings.termsOfService || getDefaultTerms(lang);
   const lines = rawTerms.split("\n").filter(l => l.trim());
-  return `<ol style="padding-left:18px;margin:0;">${lines.map(line => `<li style="font-size:10.5px;color:#64748b;line-height:1.6;margin-bottom:8px;">${escapeHtml(line.trim())}</li>`).join("")}</ol>`;
+  return `<ol style="padding-left:18px;margin:0;">${lines.map(line => `<li style="font-size:10.5px;color:#64748b;line-height:1.6;margin-bottom:8px;">${line.trim()}</li>`).join("")}</ol>`;
 }
 
 function getContactLines(settings: ReceiptSettings): string[] {
@@ -83,7 +73,8 @@ function getContactLines(settings: ReceiptSettings): string[] {
   return [addressPart, settings.country, settings.phone, settings.phone2, settings.email, settings.website].filter(Boolean) as string[];
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
+function downloadHtml(html: string, filename: string): void {
+  const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -92,123 +83,6 @@ function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-type PdfLine = { label?: string; value: string; strong?: boolean };
-type PdfSection = { title: string; lines: PdfLine[] };
-
-function wrapPdfText(text: string, maxChars = 78): string[] {
-  const words = String(text || "").split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
-  words.forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  });
-  if (current) lines.push(current);
-  return lines.length ? lines : [""];
-}
-
-async function downloadReceiptPdf(args: {
-  filename: string;
-  title: string;
-  businessName: string;
-  subtitle?: string;
-  contactLines?: string[];
-  sections: PdfSection[];
-  footer: string;
-}) {
-  const pdf = await PDFDocument.create();
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const margin = 44;
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - margin;
-
-  const ensureSpace = (space: number) => {
-    if (y - space < margin) {
-      page = pdf.addPage([pageWidth, pageHeight]);
-      y = pageHeight - margin;
-    }
-  };
-  const draw = (text: string, x: number, size = 10, font = regular, color = rgb(0.12, 0.16, 0.22)) => {
-    page.drawText(text.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x, y, size, font, color });
-  };
-
-  page.drawRectangle({ x: 0, y: pageHeight - 118, width: pageWidth, height: 118, color: rgb(0.08, 0.22, 0.45) });
-  draw(args.businessName, margin, 22, bold, rgb(1, 1, 1));
-  y -= 26;
-  if (args.subtitle) {
-    draw(args.subtitle, margin, 10, regular, rgb(0.86, 0.91, 0.98));
-    y -= 15;
-  }
-  (args.contactLines || []).slice(0, 3).forEach((line) => {
-    draw(line, margin, 8, regular, rgb(0.86, 0.91, 0.98));
-    y -= 12;
-  });
-  y = pageHeight - 52;
-  draw(args.title, pageWidth - 230, 16, bold, rgb(1, 1, 1));
-  y = pageHeight - 150;
-
-  args.sections.forEach((section) => {
-    ensureSpace(48);
-    draw(section.title.toUpperCase(), margin, 10, bold, rgb(0.37, 0.45, 0.56));
-    y -= 16;
-    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
-    y -= 14;
-
-    section.lines.forEach((line) => {
-      const prefix = line.label ? `${line.label}: ` : "";
-      const wrapped = wrapPdfText(`${prefix}${line.value}`);
-      wrapped.forEach((wrappedLine, idx) => {
-        ensureSpace(18);
-        draw(wrappedLine, margin + (idx > 0 ? 14 : 0), line.strong ? 11 : 10, line.strong ? bold : regular);
-        y -= 15;
-      });
-    });
-    y -= 8;
-  });
-
-  ensureSpace(28);
-  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
-  y -= 18;
-  draw(args.footer, margin, 9, regular, rgb(0.37, 0.45, 0.56));
-
-  const bytes = await pdf.save();
-  downloadBlob(new Blob([bytes], { type: "application/pdf" }), args.filename);
-}
-
-function openPrintWindow(html: string, paperSize: "57mm" | "80mm" = "80mm"): void {
-  const size = paperSize === "57mm" ? "57mm" : "80mm";
-  const printHtml = html.replace(
-    "</style>",
-    `
-    @page { size: ${size} ${size}; margin: 0; }
-    @media print {
-      html, body { width: ${size}; height: ${size}; margin: 0; padding: 0; background: #fff; overflow: hidden; }
-      .receipt { width: ${size}; height: ${size}; max-width: ${size}; overflow: hidden; border-radius: 0; box-shadow: none; }
-      .header, .meta, .pipeline-section, .items-section, .checklist-section, .summary, .payment-section, .section, .terms, .footer { padding-left: 8px !important; padding-right: 8px !important; }
-      .meta { grid-template-columns: 1fr; }
-      .header-top { display: block; }
-      .order-id-box { text-align: left; margin-top: 10px; }
-      .pipeline-section { display: none; }
-    }
-    </style>`
-  );
-  const win = window.open("", "_blank", "noopener,noreferrer,width=420,height=680");
-  if (!win) return;
-  win.document.open();
-  win.document.write(printHtml);
-  win.document.close();
-  win.focus();
-  window.setTimeout(() => win.print(), 250);
 }
 
 export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -232,14 +106,14 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     const price = Number(item.priceAtOrder);
     const lineTotal = qty * price;
     return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(svc.name || label("Service", "Service", lang))}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || label("Service", "Service", lang)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${g.itemName}</td></tr>`
   ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
 
   const pipelineHtml = buildPipelineHtml(order.status || "received", lang);
@@ -247,7 +121,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const paymentsHtml = (order.payments || []).map((p: any) => {
     const ref = paymentReference(p.reference, lang);
     return `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-      <span>${escapeHtml(p.method)}${escapeHtml(ref)}</span>
+      <span>${p.method}${ref}</span>
       <span style="color:#16a34a;font-weight:600;">${symbol}${Number(p.amount).toFixed(2)}</span>
     </div>`;
   }).join("") || `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
@@ -388,95 +262,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 </body>
 </html>`;
 
-  void downloadReceiptPdf({
-    filename: `deposit-receipt-order-${order.id}.pdf`,
-    title: `${depositLabel} #${order.id}`,
-    businessName: settings.businessName,
-    subtitle: tagline,
-    contactLines,
-    footer: `${footerNote} - ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
-    sections: [
-      {
-        title: label("Customer", "Client", lang),
-        lines: [
-          { label: label("Name", "Nom", lang), value: customer.name || emptyValue, strong: true },
-          { label: label("Phone", "Téléphone", lang), value: customer.phone || emptyValue },
-          { label: label("Order Date", "Date de commande", lang), value: entryDate },
-          ...(settings.showPickupDate ? [{ label: label("Expected Pickup", "Retrait prévu", lang), value: pickupDate }] : []),
-        ],
-      },
-      {
-        title: label("Service Summary", "Résumé des services", lang),
-        lines: items.length
-          ? items.map((item: any) => {
-              const svc = item.service || {};
-              const qty = item.quantity;
-              const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
-              const price = Number(item.priceAtOrder);
-              return {
-                value: `${svc.name || label("Service", "Service", lang)} - ${qty} ${unit} - ${symbol}${(qty * price).toFixed(2)}`,
-              };
-            })
-          : [{ value: label("No services recorded", "Aucun service enregistré", lang) }],
-      },
-      ...(settings.showGarmentList
-        ? [{
-            title: label("Garment Checklist", "Checklist des vêtements", lang),
-            lines: garments.length
-              ? garments.map((g: any) => ({ value: `${g.quantity} x ${g.itemName}${g.details ? ` (${g.details})` : ""}` }))
-              : [{ value: label("No garment items recorded", "Aucun vêtement enregistré", lang) }],
-          }]
-        : []),
-      {
-        title: label("Totals", "Totaux", lang),
-        lines: [
-          { label: label("Subtotal", "Sous-total", lang), value: `${symbol}${subtotal.toFixed(2)}` },
-          ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${symbol}${discount.toFixed(2)}` }] : []),
-          { label: label("Total Amount", "Montant total", lang), value: `${symbol}${Number(order.totalAmount).toFixed(2)}`, strong: true },
-          { label: label("Total Paid", "Total payé", lang), value: `${symbol}${totalPaid.toFixed(2)}` },
-          ...(balance > 0 ? [{ label: label("Balance Due", "Solde dû", lang), value: `${symbol}${balance.toFixed(2)}`, strong: true }] : []),
-        ],
-      },
-      ...(settings.showPaymentHistory
-        ? [{
-            title: label("Payment Records", "Historique des paiements", lang),
-            lines: (order.payments || []).length
-              ? (order.payments || []).map((p: any) => ({ value: `${p.method}${paymentReference(p.reference, lang)} - ${symbol}${Number(p.amount).toFixed(2)}` }))
-              : [{ value: label("No payments recorded", "Aucun paiement enregistré", lang) }],
-          }]
-        : []),
-      ...(settings.showTerms
-        ? [{ title: label("Terms & Conditions", "Conditions Générales", lang), lines: (settings.termsOfService || getDefaultTerms(lang)).split("\n").filter(Boolean).map((line) => ({ value: line.trim() })) }]
-        : []),
-    ],
-  });
-}
-
-export function printDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, paperSize: "57mm" | "80mm" = "80mm") {
-  const lang = settings.receiptLanguage || "en";
-  const customer = order.customer || {};
-  const items = order.items || [];
-  const garments = order.garmentItems || [];
-  const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
-  const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
-  const rows = items.map((item: any) => {
-    const svc = item.service || {};
-    const qty = item.quantity;
-    return `<tr><td>${escapeHtml(svc.name || "Service")}</td><td style="text-align:center;">${qty}</td><td style="text-align:right;">${symbol}${(Number(item.priceAtOrder) * qty).toFixed(2)}</td></tr>`;
-  }).join("");
-  const garmentRows = garments.map((g: any) => `<tr><td>${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><small>${escapeHtml(g.details)}</small>` : ""}</td></tr>`).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${order.id}</title><style>
-    body{font-family:Arial,sans-serif;color:#111;background:#fff;padding:16px}.receipt{max-width:360px;margin:auto}.header{text-align:center;border-bottom:1px solid #ddd;padding-bottom:10px;margin-bottom:10px}
-    h1{font-size:18px;margin:0}.muted{color:#555;font-size:11px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;font-size:12px}td{border-bottom:1px solid #eee;padding:5px 0}.total{font-weight:700;font-size:14px}.no-print{display:block;margin:10px auto}
-    @media print{.no-print{display:none}}
-  </style></head><body><button class="no-print" onclick="window.print()">${escapeHtml(label("Print", "Imprimer", lang))}</button><div class="receipt">
-    <div class="header"><h1>${escapeHtml(settings.businessName)}</h1><div class="muted">${escapeHtml(settings.phone || "")}</div><strong>Order #${order.id}</strong></div>
-    <div class="row"><span>Customer</span><strong>${escapeHtml(customer.name || "")}</strong></div><div class="row"><span>Date</span><span>${entryDate}</span></div><div class="row"><span>Pickup</span><span>${pickupDate}</span></div>
-    <h2 style="font-size:13px;">Services</h2><table>${rows}</table>${garmentRows ? `<h2 style="font-size:13px;">Items</h2><table>${garmentRows}</table>` : ""}
-    <div class="row total"><span>Total</span><span>${symbol}${Number(order.totalAmount).toFixed(2)}</span></div>
-    <p class="muted">${escapeHtml(settings.receiptFooterNote || "Thank you")}</p>
-  </div></body></html>`;
-  openPrintWindow(html, paperSize);
+  downloadHtml(html, `deposit-receipt-order-${order.id}.html`);
 }
 
 export function generatePaymentReceipt(
@@ -504,14 +290,14 @@ export function generatePaymentReceipt(
     const price = Number(item.priceAtOrder);
     const lineTotal = qty * price;
     return `<tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(svc.name || label("Service", "Service", lang))}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${svc.name || label("Service", "Service", lang)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${g.itemName}</td></tr>`
   ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
 
   const subtotalAmount = items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * item.quantity), 0);
@@ -523,7 +309,7 @@ export function generatePaymentReceipt(
     ? allPayments.map((p: any) => {
         const ref = paymentReference(p.reference, lang);
         return `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>${formatReceiptDate(p.date || payment.date, "MMM dd", lang)} &bull; ${escapeHtml(p.method)}${escapeHtml(ref)}</span>
+          <span>${formatReceiptDate(p.date || payment.date, "MMM dd", lang)} &bull; ${p.method}${ref}</span>
           <span style="color:#16a34a;font-weight:600;">${symbol}${Number(p.amount).toFixed(2)}</span>
         </div>`;
       }).join("")
@@ -602,7 +388,7 @@ export function generatePaymentReceipt(
       <div class="payment-box">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div style="font-size:12px;color:#64748b;margin-bottom:4px;">${label("Method", "Méthode", lang)}: ${escapeHtml(payment.method)}</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:4px;">${label("Method", "Méthode", lang)}: ${payment.method}</div>
             <div class="payment-amount">${symbol}${Number(payment.amount).toFixed(2)}</div>
           </div>
           <span style="display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;background:${statusBg};color:${statusColor};">${statusLabel}</span>
@@ -656,70 +442,5 @@ export function generatePaymentReceipt(
 </body>
 </html>`;
 
-  void downloadReceiptPdf({
-    filename: `payment-receipt-order-${orderId}.pdf`,
-    title: `${receiptTitle} #${orderId}`,
-    businessName: settings.businessName,
-    subtitle: tagline,
-    contactLines,
-    footer: `${footerNote} - ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
-    sections: [
-      {
-        title: label("Customer", "Client", lang),
-        lines: [
-          { label: label("Name", "Nom", lang), value: customer.name || emptyValue, strong: true },
-          { label: label("Order Date", "Date de commande", lang), value: displayEntryDate },
-          { label: label("Receipt Date", "Date du reçu", lang), value: formatReceiptDate(payment.date, "MMM dd, yyyy", lang) },
-          ...(settings.showPickupDate ? [{ label: label("Expected Pickup", "Retrait prévu", lang), value: displayPickupDate }] : []),
-        ],
-      },
-      {
-        title: label("This Payment", "Ce paiement", lang),
-        lines: [
-          { label: label("Method", "Méthode", lang), value: payment.method },
-          { label: label("Amount", "Montant", lang), value: `${symbol}${Number(payment.amount).toFixed(2)}`, strong: true },
-          { label: label("Status", "Statut", lang), value: statusLabel },
-        ],
-      },
-      {
-        title: label("Service Summary", "Résumé des services", lang),
-        lines: items.length
-          ? items.map((item: any) => {
-              const svc = item.service || {};
-              const qty = item.quantity;
-              const unit = svc.unit === "kg" ? label("Loads", "Charges", lang) : label("Pieces", "Pièces", lang);
-              const price = Number(item.priceAtOrder);
-              return {
-                value: `${svc.name || label("Service", "Service", lang)} - ${qty} ${unit} - ${symbol}${(qty * price).toFixed(2)}`,
-              };
-            })
-          : [{ value: label("No services recorded", "Aucun service enregistré", lang) }],
-      },
-      ...(settings.showGarmentList
-        ? [{
-            title: label("Garment Checklist", "Checklist des vêtements", lang),
-            lines: garments.length
-              ? garments.map((g: any) => ({ value: `${g.quantity} x ${g.itemName}${g.details ? ` (${g.details})` : ""}` }))
-              : [{ value: label("No garment items recorded", "Aucun vêtement enregistré", lang) }],
-          }]
-        : []),
-      {
-        title: label("Totals", "Totaux", lang),
-        lines: [
-          { label: label("Subtotal", "Sous-total", lang), value: `${symbol}${subtotalAmount.toFixed(2)}` },
-          ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${symbol}${discount.toFixed(2)}` }] : []),
-          { label: label("Order Total", "Total commande", lang), value: `${symbol}${(subtotalAmount - discount).toFixed(2)}`, strong: true },
-        ],
-      },
-      ...(paymentsHistoryHtml
-        ? [{
-            title: label("Payment History", "Historique des paiements", lang),
-            lines: allPayments.map((p: any) => ({ value: `${formatReceiptDate(p.date || payment.date, "MMM dd", lang)} - ${p.method}${paymentReference(p.reference, lang)} - ${symbol}${Number(p.amount).toFixed(2)}` })),
-          }]
-        : []),
-      ...(settings.showTerms
-        ? [{ title: label("Terms & Conditions", "Conditions Générales", lang), lines: (settings.termsOfService || getDefaultTerms(lang)).split("\n").filter(Boolean).map((line) => ({ value: line.trim() })) }]
-        : []),
-    ],
-  });
+  downloadHtml(html, `payment-receipt-order-${orderId}.html`);
 }

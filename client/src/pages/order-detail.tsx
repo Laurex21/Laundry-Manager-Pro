@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock, Droplets, Wind, Shirt, Sparkles, Package, Truck,
-  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck, Printer
+  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,14 +22,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
-import { generateDepositReceipt, printDepositReceipt } from "@/lib/receipt";
+import { generateDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 
 const PIPELINE_STAGES = [
@@ -141,21 +138,12 @@ export default function OrderDetail() {
   }
 
   function handleDownloadReceipt() {
-    const mergedSettings = {
+  const mergedSettings = {
     ...DEFAULT_SETTINGS,
     ...(settings || {}),
     receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
+  };
     generateDepositReceipt(order, symbol, mergedSettings);
-  }
-
-  function handlePrintReceipt(size: "57mm" | "80mm") {
-    const mergedSettings = {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
-    printDepositReceipt(order, symbol, mergedSettings, size);
   }
 
   async function handleRequestCancellation() {
@@ -235,17 +223,6 @@ export default function OrderDetail() {
           <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
             <Download className="w-4 h-4 mr-2" /> {t("receipt")}
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="button-print-receipt">
-                <Printer className="w-4 h-4 mr-2" /> {t("print")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handlePrintReceipt("57mm")}>{t("print_size_57")}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handlePrintReceipt("80mm")}>{t("print_size_80")}</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />
         </div>
@@ -421,10 +398,7 @@ export default function OrderDetail() {
                     g.returnedForTreatment && !g.resolvedAt ? "bg-orange-50 dark:bg-orange-950/10 border border-orange-200" : "bg-muted/30"
                   )} data-testid={`garment-item-${g.id}`}>
                     <div className="flex items-center gap-2">
-                      <span>
-                        {g.quantity}x {g.itemName}
-                        {g.details && <span className="block text-xs text-muted-foreground mt-0.5">{g.details}</span>}
-                      </span>
+                      <span>{g.quantity}x {g.itemName}</span>
                       {g.returnedForTreatment && !g.resolvedAt && (
                         <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-600">
                           <RotateCcw className="w-3 h-3 mr-1" /> {t("returned_label")} {g.returnStage}

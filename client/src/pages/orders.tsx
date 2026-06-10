@@ -349,7 +349,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
 
   const customerForm = useForm<z.infer<typeof insertCustomerSchema>>({
     resolver: zodResolver(insertCustomerSchema),
-    defaultValues: { name: "", phone: "", address: "", area: "" }
+    defaultValues: { name: "", phone: "", address: "" }
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -389,6 +389,19 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
 
   const selectedCustomer = customers?.find((c: any) => c.id === Number(watchedCustomerId));
   const customerDiscountPct = Number(selectedCustomer?.defaultDiscountPct || 0);
+
+  const hasKgService = useMemo(() => {
+    return (watchedItems || []).some(item => {
+      const service = services?.find(s => s.id === item.serviceId);
+      return service?.unit === "kg";
+    });
+  }, [watchedItems, services]);
+
+  useEffect(() => {
+    if (!hasKgService && garmentFields.length > 0) {
+      form.setValue("garmentItems", []);
+    }
+  }, [hasKgService]);
 
   const subtotal = useMemo(() => {
     return (watchedItems || []).reduce((acc, item) => {
@@ -432,11 +445,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
         serviceId: Number(item.serviceId),
         quantity: Number(item.quantity)
       })),
-      garmentItems: (data.garmentItems || []).filter(g => g.itemName.trim() !== "").map(g => ({
+      garmentItems: hasKgService ? (data.garmentItems || []).filter(g => g.itemName.trim() !== "").map(g => ({
         itemName: g.itemName.trim(),
         quantity: Number(g.quantity),
-        details: g.details?.trim() || undefined,
-      })),
+      })) : [],
     };
 
     createOrder(formattedData, {
@@ -507,18 +519,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-xs">{t("address")}</FormLabel>
-                <FormControl><Input placeholder={t("street_address_placeholder")} {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-            <FormField
-              control={customerForm.control}
-              name="area"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs">{t("area_quarter")}</FormLabel>
-                  <FormControl><Input placeholder={t("area_quarter_placeholder")} {...field} value={field.value || ""} /></FormControl>
+                  <FormControl><Input placeholder={t("street_address_placeholder")} {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -695,6 +696,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
               })}
             </div>
 
+            {hasKgService && (
               <div className="space-y-4" data-testid="garment-inventory-section">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -702,10 +704,10 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                     <h3 className="text-sm font-medium text-muted-foreground">{t('garment_inventory', 'Garment Inventory')}</h3>
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1 })}>
-                    <Plus className="w-3 h-3 mr-1" /> {t("add_item")}
+                    <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">{t("piece_inventory_hint")}</p>
+                <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
 
                 {garmentFields.map((field, index) => (
                   <div key={field.id} className="flex gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
@@ -717,19 +719,6 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                           <FormLabel className="text-xs">{t('item_name', 'Item Name')}</FormLabel>
                           <FormControl>
                             <Input placeholder={t('garment_placeholder', 'e.g. Shirt, Trousers, Dress')} {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`garmentItems.${index}.details`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel className="text-xs">{t("item_details")}</FormLabel>
-                          <FormControl>
-                            <Input placeholder={t("item_details_placeholder")} {...field} value={field.value || ""} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -766,6 +755,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   </div>
                 ))}
               </div>
+            )}
 
             <div className="border-t pt-4 space-y-3">
               <div className="flex justify-between items-center text-sm">
