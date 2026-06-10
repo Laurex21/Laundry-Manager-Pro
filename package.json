@@ -10,6 +10,7 @@
     "check": "tsc",
     "test:reporting": "tsx server/lib/reporting-date.test.ts",
     "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",
+    "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
