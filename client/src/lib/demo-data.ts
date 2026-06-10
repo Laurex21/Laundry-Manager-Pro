@@ -302,7 +302,7 @@ const DAILY_REVENUE = Array.from({ length: 30 }, (_, i) => ({
 }));
 
 const makeReports = (siteId?: number | null) => {
-  const orders = ordersForSite(siteId);
+  const orders = ordersForSite(siteId).filter((order) => order.status !== "cancelled");
   const expenses = expensesForSite(siteId);
   const revenue = moneySum(orders);
   const expenseTotal = moneySum(expenses);
@@ -420,7 +420,7 @@ export function getDemoFixture(url: string, selectedSiteId: number | null = null
   const customerOrdersMatch = path.match(/^\/api\/customers\/(\d+)\/orders$/);
   if (customerOrdersMatch) {
     const cid = Number(customerOrdersMatch[1]);
-    return ordersForSite(selectedSiteId).filter((o) => o.customerId === cid);
+    return ordersForSite(selectedSiteId).filter((o) => o.customerId === cid && o.status !== "cancelled");
   }
 
   // Services

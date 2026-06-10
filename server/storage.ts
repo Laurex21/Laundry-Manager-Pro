@@ -19,7 +19,7 @@ import {
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
-import { eq, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, ne, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -422,7 +422,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerOrders(customerId: number): Promise<any[]> {
-    const customerOrders = await db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.createdAt));
+    const customerOrders = await db.select().from(orders)
+      .where(and(eq(orders.customerId, customerId), ne(orders.status, "cancelled")))
+      .orderBy(desc(orders.createdAt));
     const result = [];
     for (const order of customerOrders) {
       const orderPayments = await db.select().from(payments).where(eq(payments.orderId, order.id));
