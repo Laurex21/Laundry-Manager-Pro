@@ -450,7 +450,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStats() {
-    const [ordersCount] = await db.select({ count: sql<number>`count(*)` }).from(orders);
+    const [ordersCount] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(ne(orders.status, "cancelled"));
     const [revenueResult] = await db.select({ total: sql<string>`sum(amount)` }).from(payments);
     const totalRevenue = Number(revenueResult?.total || 0);
     const [pendingCount] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "received"));
@@ -500,10 +500,10 @@ export class DatabaseStorage implements IStorage {
   async getStatsBySite(siteId: number | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }> {
     const siteFilter = siteId !== null;
     const [ordersCount] = siteFilter
-      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.siteId, siteId!))
-      : await db.select({ count: sql<number>`count(*)` }).from(orders);
+      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(eq(orders.siteId, siteId!), ne(orders.status, "cancelled")))
+      : await db.select({ count: sql<number>`count(*)` }).from(orders).where(ne(orders.status, "cancelled"));
     const siteOrderIds = siteFilter
-      ? (await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId!))).map(o => o.id)
+      ? (await db.select({ id: orders.id }).from(orders).where(and(eq(orders.siteId, siteId!), ne(orders.status, "cancelled")))).map(o => o.id)
       : null;
     let totalRevenue = 0;
     if (!siteFilter) {
@@ -917,8 +917,8 @@ export class DatabaseStorage implements IStorage {
     const totalRevenue = await this.sumPaymentsInRangeBySite(start, now, siteId);
     const totalExpenses = await this.sumExpensesInRangeBySite(start, now, siteId);
     const ordersWhere = siteId !== null
-      ? and(sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`, eq(orders.siteId, siteId))
-      : and(sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`);
+      ? and(sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`, eq(orders.siteId, siteId), ne(orders.status, "cancelled"))
+      : and(sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`, ne(orders.status, "cancelled"));
     const ordersResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(ordersWhere);
     const totalOrders = Number(ordersResult[0]?.count || 0);
     const profit = totalRevenue - totalExpenses;
