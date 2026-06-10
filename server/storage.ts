@@ -167,9 +167,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getServicesBySite(siteId: number | number[] | null): Promise<Service[]> {
-    const siteFilter = this.siteWhere(services.siteId, siteId);
+    const siteWhere = this.siteWhere(services.siteId, siteId);
     return await db.select().from(services)
-      .where(and(eq(services.active, true), or(isNull(services.siteId), siteFilter)))
+      .where(and(eq(services.active, true), siteWhere))
       .orderBy(services.name);
   }
 
@@ -546,16 +546,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async backfillNullSiteIds(): Promise<void> {
-    try {
-      const nullServices = await db.select({ id: services.id }).from(services).where(isNull(services.siteId)).limit(1);
-      if (nullServices.length === 0) return;
-      const [firstSite] = await db.select({ id: sites.id }).from(sites).orderBy(sites.id).limit(1);
-      if (!firstSite) return;
-      const result = await db.update(services).set({ siteId: firstSite.id }).where(isNull(services.siteId));
-      console.log(`[backfill] Assigned legacy null-siteId services to site ${firstSite.id}`);
-    } catch (err) {
-      console.error("[backfill] Error assigning null-siteId services:", err);
-    }
+    console.warn("[backfill] Disabled: automatic tenant data reassignment is unsafe in multi-tenant production.");
   }
 
   private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {

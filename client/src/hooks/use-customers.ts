@@ -42,11 +42,8 @@ export function useCreateCustomer() {
       });
       
       if (!res.ok) {
-        if (res.status === 400) {
-          const error = await res.json();
-          throw new Error(error.message || "Validation failed");
-        }
-        throw new Error("Failed to create customer");
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.message || "Failed to create customer");
       }
       return api.customers.create.responses[201].parse(await res.json());
     },

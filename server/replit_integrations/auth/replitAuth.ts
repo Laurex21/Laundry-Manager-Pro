@@ -58,6 +58,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     }
 
     let authorizedSiteIds: number[] = [];
+    let organisationSiteIds: number[] = [];
     if (user?.organisationId) {
       const [org] = await db
         .select({ ownerId: organisations.ownerId })
@@ -65,12 +66,14 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         .where(eq(organisations.id, user.organisationId))
         .limit(1);
 
+      organisationSiteIds = (await db
+        .select({ id: sites.id })
+        .from(sites)
+        .where(and(eq(sites.organisationId, user.organisationId), eq(sites.isActive, true))))
+        .map((site) => site.id);
+
       if (org?.ownerId === req.userId) {
-        authorizedSiteIds = (await db
-          .select({ id: sites.id })
-          .from(sites)
-          .where(and(eq(sites.organisationId, user.organisationId), eq(sites.isActive, true))))
-          .map((site) => site.id);
+        authorizedSiteIds = organisationSiteIds;
       } else {
         const memberships = await db
           .select({ siteId: siteMembers.siteId })
@@ -101,7 +104,9 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     req.session.save(() => {});
     req.siteId = currentSiteId ?? null;
     req.authorizedSiteIds = authorizedSiteIds;
+    req.organisationSiteIds = organisationSiteIds.length > 0 ? organisationSiteIds : authorizedSiteIds;
     req.siteScope = currentSiteId === null ? authorizedSiteIds : [Number(currentSiteId)].filter((siteId) => authorizedSiteIds.includes(siteId));
+    req.organisationSiteScope = req.organisationSiteIds;
   } catch (error) {
     console.error("Tenant scope resolution failed:", error);
     return res.status(500).json({ message: "Failed to resolve tenant scope" });

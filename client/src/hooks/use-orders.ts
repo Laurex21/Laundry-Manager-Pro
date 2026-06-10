@@ -42,7 +42,10 @@ export function useCreateOrder() {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error("Failed to create order");
+      if (!res.ok) {
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.message || "Failed to create order");
+      }
       return api.orders.create.responses[201].parse(await res.json());
     },
     onSuccess: () => {

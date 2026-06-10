@@ -30,8 +30,41 @@ function scopedSites(req: any): number[] {
   return Array.isArray(req.siteScope) ? req.siteScope : [];
 }
 
+function orgScopedSites(req: any): number[] {
+  return Array.isArray(req.organisationSiteScope) ? req.organisationSiteScope : scopedSites(req);
+}
+
+function resolveWriteSiteId(req: any): number | null {
+  if (typeof req.siteId === "number" && Number.isInteger(req.siteId)) {
+    return req.siteId;
+  }
+  const authorizedSiteIds = Array.isArray(req.authorizedSiteIds) ? req.authorizedSiteIds : [];
+  return authorizedSiteIds.length === 1 ? authorizedSiteIds[0] : null;
+}
+
+function requireWriteSite(req: any, res: any): number | null {
+  const siteId = resolveWriteSiteId(req);
+  if (siteId === null) {
+    res.status(400).json({
+      message: "Select a specific site before saving. All Sites is read-only for creating records.",
+    });
+    return null;
+  }
+  return siteId;
+}
+
 async function canAccessSite(req: any, siteId: number): Promise<boolean> {
   return Array.isArray(req.authorizedSiteIds) && req.authorizedSiteIds.includes(siteId);
+}
+
+async function canAccessCustomer(req: any, customerId: number): Promise<boolean> {
+  const customer = await storage.getCustomer(customerId);
+  return !!customer && customer.siteId != null && orgScopedSites(req).includes(customer.siteId);
+}
+
+async function canAccessService(req: any, serviceId: number): Promise<boolean> {
+  const service = await storage.getService(serviceId);
+  return !!service && service.siteId != null && orgScopedSites(req).includes(service.siteId);
 }
 
 async function canAccessOrder(req: any, orderId: number): Promise<boolean> {
@@ -69,7 +102,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
   seedDatabase().catch(console.error);
-  storage.backfillNullSiteIds().catch(console.error);
 
   app.get("/api/public/stats", async (_req, res) => {
     try {
@@ -83,21 +115,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
-    const customers = await storage.getCustomersBySite(scopedSites(req));
+    const customers = await storage.getCustomersBySite(orgScopedSites(req));
     res.json(customers);
   });
 
   app.get(api.customers.get.path, isAuthenticated, async (req, res) => {
     const customer = await storage.getCustomer(Number(req.params.id));
     if (!customer) return res.status(404).json({ message: "Customer not found" });
-    if (customer.siteId == null || !(await canAccessSite(req, customer.siteId))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await canAccessCustomer(req, customer.id))) return res.status(403).json({ message: "Forbidden" });
     res.json(customer);
   });
 
   app.post(api.customers.create.path, isAuthenticated, async (req: any, res) => {
     try {
+      const siteId = requireWriteSite(req, res);
+      if (siteId === null) return;
       const input = api.customers.create.input.parse(req.body);
-      const customer = await storage.createCustomer({ ...input, siteId: req.siteId });
+      const customer = await storage.createCustomer({ ...input, siteId });
       res.status(201).json(customer);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -109,7 +143,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const input = api.customers.update.input.parse(req.body);
     const existing = await storage.getCustomer(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Customer not found" });
-    if (existing.siteId == null || !(await canAccessSite(req, existing.siteId))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await canAccessCustomer(req, existing.id))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.updateCustomer(Number(req.params.id), input);
     if (!updated) return res.status(404).json({ message: "Customer not found" });
     res.json(updated);
@@ -118,32 +152,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/customers/:id/orders", isAuthenticated, async (req, res) => {
     const customer = await storage.getCustomer(Number(req.params.id));
     if (!customer) return res.status(404).json({ message: "Customer not found" });
-    if (customer.siteId == null || !(await canAccessSite(req, customer.siteId))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await canAccessCustomer(req, customer.id))) return res.status(403).json({ message: "Forbidden" });
     const customerOrders = await storage.getCustomerOrders(Number(req.params.id));
     res.json(customerOrders);
   });
 
   app.get(api.services.list.path, isAuthenticated, async (req: any, res) => {
-    let svcList = await storage.getServicesBySite(scopedSites(req));
-    // Auto-seed default services for a brand-new site
-    // Use req.siteId if set, otherwise fall back to the user's first authorized site
-    const seedSiteId = req.siteId ?? (scopedSites(req)[0] ?? null);
-    if (svcList.length === 0 && seedSiteId != null) {
-      await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: seedSiteId } as any);
-      await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: seedSiteId } as any);
-      await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: seedSiteId } as any);
-      svcList = await storage.getServicesBySite(scopedSites(req));
+    let svcList = await storage.getServicesBySite(orgScopedSites(req));
+    const writeSiteId = resolveWriteSiteId(req);
+    // Auto-seed default services for a brand-new writable site.
+    if (svcList.length === 0 && writeSiteId != null) {
+      await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: writeSiteId } as any);
+      await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: writeSiteId } as any);
+      await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: writeSiteId } as any);
+      svcList = await storage.getServicesBySite(orgScopedSites(req));
     }
     res.json(svcList);
   });
 
   app.post(api.services.create.path, isAuthenticated, async (req: any, res) => {
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
     const input = api.services.create.input.parse(req.body);
-    const service = await storage.createService({ ...input, siteId: req.siteId } as any);
+    const service = await storage.createService({ ...input, siteId } as any);
     res.status(201).json(service);
   });
 
   app.patch(api.services.update.path, isAuthenticated, async (req: any, res) => {
+    if (!(await canAccessService(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const input = api.services.update.input.parse(req.body);
     const updated = await storage.updateService(Number(req.params.id), input);
     if (!updated) return res.status(404).json({ message: "Service not found" });
@@ -151,6 +187,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete(api.services.delete.path, isAuthenticated, async (req, res) => {
+    if (!(await canAccessService(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const deleted = await storage.deleteService(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Service not found" });
     res.json({ success: true });
@@ -175,15 +212,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post(api.orders.create.path, isAuthenticated, async (req, res) => {
     try {
+      const siteId = requireWriteSite(req, res);
+      if (siteId === null) return;
       const input = api.orders.create.input.parse(req.body);
       const { items, garmentItems: garments, ...orderData } = input;
+      const customer = await storage.getCustomer(orderData.customerId);
+      if (!customer) return res.status(400).json({ message: "Customer not found" });
+      if (!(await canAccessCustomer(req, customer.id))) {
+        return res.status(403).json({ message: "Customer does not belong to this organisation" });
+      }
       let subtotal = 0;
-      const itemsWithPrices = await Promise.all(items.map(async (item) => {
+      for (const item of items) {
         const service = await storage.getService(item.serviceId);
-        if (!service) throw new Error(`Service ${item.serviceId} not found`);
+        if (!service) return res.status(400).json({ message: `Service ${item.serviceId} not found` });
+        if (!(await canAccessService(req, service.id))) {
+          return res.status(403).json({ message: `Service ${item.serviceId} does not belong to this organisation` });
+        }
         subtotal += Number(service.price) * item.quantity;
-        return { ...item, priceAtOrder: service.price };
-      }));
+      }
       const discountAmount = Number(orderData.discount || 0);
       const pickupCostAmount = Number(orderData.pickupCost || 0);
       const advanceAmount = Number(orderData.advancePayment || 0);
@@ -200,7 +246,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         paymentStatus: initialPaymentStatus,
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
-        siteId: (req as any).siteId,
+        siteId,
       } as any, items, garments);
       if (advanceAmount > 0) {
         await storage.createPayment({
@@ -303,11 +349,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post(api.expenditures.create.path, isAuthenticated, async (req: any, res) => {
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
     const input = api.expenditures.create.input.parse(req.body);
     const expenditure = await storage.createExpenditure({
       ...input,
       date: input.date ? new Date(input.date) : new Date(),
-      siteId: req.siteId,
+      siteId,
     });
     res.status(201).json(expenditure);
   });
@@ -354,9 +402,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/machines", isAuthenticated, async (req: any, res) => {
     try {
+      const siteId = requireWriteSite(req, res);
+      if (siteId === null) return;
       const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
       if (!body.capacityKg) body.capacityKg = "0";
-      const input = insertMachineSchema.parse({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
+      const input = insertMachineSchema.parse({ ...body, userId: (req.session as any).userId, siteId });
       const machine = await storage.createMachine(input);
       res.status(201).json(machine);
     } catch (err) {
@@ -386,8 +436,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
+      const siteId = requireWriteSite(req, res);
+      if (siteId === null) return;
       const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
-      const input = insertEmployeeSchema.parse({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
+      const input = insertEmployeeSchema.parse({ ...body, userId: (req.session as any).userId, siteId });
       const employee = await storage.createEmployee(input);
       res.status(201).json(employee);
     } catch (err) {
@@ -630,6 +682,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = (req.session as any).userId;
       const result = await storage.acceptInvitation(req.params.token as string, userId);
       if (!result) return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
+      (req.session as any).currentSiteId = result.siteId;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
       res.json({ success: true, invitation: result });
     } catch (err) {
       res.status(500).json({ message: "Failed to accept invitation" });

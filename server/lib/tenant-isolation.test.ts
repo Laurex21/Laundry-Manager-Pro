@@ -8,21 +8,33 @@ const storage = readFileSync(join(root, "server/storage.ts"), "utf8");
 const auth = readFileSync(join(root, "server/replit_integrations/auth/replitAuth.ts"), "utf8");
 
 assert.match(auth, /req\.authorizedSiteIds = authorizedSiteIds/);
+assert.match(auth, /req\.organisationSiteIds = organisationSiteIds\.length > 0 \? organisationSiteIds : authorizedSiteIds/);
 assert.match(auth, /req\.siteScope = currentSiteId === null \? authorizedSiteIds/);
+assert.match(auth, /req\.organisationSiteScope = req\.organisationSiteIds/);
 assert.match(auth, /!authorizedSiteIds\.includes\(Number\(currentSiteId\)\)/);
 assert.match(auth, /storage\.migrateToMultiSite\(\)/);
 
 assert.match(routes, /function scopedSites/);
+assert.match(routes, /function orgScopedSites/);
+assert.match(routes, /function requireWriteSite/);
+assert.match(routes, /resolveWriteSiteId/);
 assert.match(routes, /storage\.getOrdersBySite\(scopedSites\(req\)\)/);
-assert.match(routes, /storage\.getCustomersBySite\(scopedSites\(req\)\)/);
+assert.match(routes, /storage\.getCustomersBySite\(orgScopedSites\(req\)\)/);
+assert.match(routes, /storage\.getServicesBySite\(orgScopedSites\(req\)\)/);
 assert.match(routes, /storage\.getReportData\(startDate, endDate, scopedSites\(req\)\)/);
 assert.match(routes, /storage\.getDashboardData\(allSites \? scopedSites\(req\)/);
 assert.match(routes, /resolvedSiteId !== null && !\(await canAccessSite\(req, resolvedSiteId\)\)/);
+assert.match(routes, /Select a specific site before saving/);
+assert.match(routes, /\(req\.session as any\)\.currentSiteId = result\.siteId/);
+assert.match(routes, /Customer does not belong to this organisation/);
+assert.match(routes, /Service \$\{item\.serviceId\} does not belong to this organisation/);
 
 assert.doesNotMatch(routes, /storage\.getOrdersBySite\(req\.siteId\)/);
 assert.doesNotMatch(routes, /storage\.getReportData\(startDate, endDate, req\.siteId\)/);
 assert.doesNotMatch(routes, /storage\.getDashboardData\(allSites \? null/);
 assert.doesNotMatch(routes, /backfillNullSiteIds\(\)/);
+assert.doesNotMatch(routes, /storage\.createCustomer\(\{ \.\.\.input, siteId: req\.siteId \}\)/);
+assert.doesNotMatch(routes, /siteId: \(req as any\)\.siteId/);
 
 assert.match(storage, /private siteWhere/);
 assert.match(storage, /return \[\];/);
