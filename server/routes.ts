@@ -49,13 +49,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   seedDatabase().catch(console.error);
   storage.backfillNullSiteIds().catch(console.error);
 
-  async function getOwnerSiteIds(userId: string): Promise<number[]> {
-    const org = await storage.getOrganisationByOwner(userId);
-    if (!org) return [];
-    const siteList = await storage.getSites(org.id);
-    return siteList.map(site => site.id);
-  }
-
   app.get("/api/public/stats", async (_req, res) => {
     try {
       const stats = await storage.getPublicStats();
@@ -68,13 +61,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
-    if (req.siteId === null) {
-      const siteIds = await getOwnerSiteIds((req.session as any).userId);
-      const allCustomers = await storage.getCustomersBySite(null);
-      return res.json(allCustomers.filter((customer: any) => siteIds.includes(customer.siteId)));
-    }
-    const customerList = await storage.getCustomersBySite(req.siteId);
-    res.json(customerList);
+    const customers = await storage.getCustomersBySite(req.siteId);
+    res.json(customers);
   });
 
   app.get(api.customers.get.path, isAuthenticated, async (req, res) => {
@@ -145,13 +133,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.orders.list.path, isAuthenticated, async (req: any, res) => {
-    if (req.siteId === null) {
-      const siteIds = await getOwnerSiteIds((req.session as any).userId);
-      const allOrders = await storage.getOrdersBySite(null);
-      return res.json(allOrders.filter((order: any) => siteIds.includes(order.siteId)));
-    }
-    const orderList = await storage.getOrdersBySite(req.siteId);
-    res.json(orderList);
+    const orders = await storage.getOrdersBySite(req.siteId);
+    res.json(orders);
   });
 
   app.get(api.orders.get.path, isAuthenticated, async (req, res) => {
@@ -277,13 +260,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.expenditures.list.path, isAuthenticated, async (req: any, res) => {
-    if (req.siteId === null) {
-      const siteIds = await getOwnerSiteIds((req.session as any).userId);
-      const allExpenditures = await storage.getExpendituresBySite(null);
-      return res.json(allExpenditures.filter((expenditure: any) => siteIds.includes(expenditure.siteId)));
-    }
-    const expenditureList = await storage.getExpendituresBySite(req.siteId);
-    res.json(expenditureList);
+    const expenditures = await storage.getExpendituresBySite(req.siteId);
+    res.json(expenditures);
   });
 
   app.post(api.expenditures.create.path, isAuthenticated, async (req: any, res) => {
@@ -325,16 +303,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.stats.get.path, isAuthenticated, async (req: any, res) => {
-    if (req.siteId === null) {
-      const siteIds = await getOwnerSiteIds((req.session as any).userId);
-      const siteStats = await Promise.all(siteIds.map(siteId => storage.getStatsBySite(siteId)));
-      return res.json(siteStats.reduce((total, stats) => ({
-        totalOrders: total.totalOrders + stats.totalOrders,
-        totalRevenue: total.totalRevenue + stats.totalRevenue,
-        pendingOrders: total.pendingOrders + stats.pendingOrders,
-        activeCustomers: total.activeCustomers + stats.activeCustomers,
-      }), { totalOrders: 0, totalRevenue: 0, pendingOrders: 0, activeCustomers: 0 }));
-    }
     const stats = await storage.getStatsBySite(req.siteId);
     res.json(stats);
   });
@@ -433,9 +401,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userRow = await db.select({ currentSiteId: users.currentSiteId }).from(users).where(eq(users.id, userId)).limit(1);
       siteId = userRow[0]?.currentSiteId ?? null;
     }
-    const org = await storage.getOrganisationByOwner(userId);
-    const allSites = !!org && (siteId === null || siteId === undefined);
-    const data = await storage.getDashboardData(allSites ? null : (siteId as number), allSites, org?.id ?? null);
+    const allSites = siteId === null || siteId === undefined;
+    const data = await storage.getDashboardData(allSites ? null : (siteId as number), allSites);
     res.json(data);
   });
 
@@ -638,15 +605,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = (req.session as any).userId;
       const { siteId } = req.body;
       const resolvedSiteId = siteId != null ? Number(siteId) : null;
-      const org = await storage.getOrganisationByOwner(userId);
-      if (resolvedSiteId === null) {
-        if (!org) return res.status(403).json({ message: "All Sites is only available to organisation owners" });
-      } else {
-        const site = await storage.getSite(resolvedSiteId);
-        const role = await storage.getUserSiteRole(userId, resolvedSiteId);
-        const ownsSite = !!org && site?.organisationId === org.id;
-        if (!ownsSite && !role) return res.status(403).json({ message: "You do not have access to this site" });
-      }
       await storage.switchSite(userId, resolvedSiteId);
       (req.session as any).currentSiteId = resolvedSiteId;
       res.json({ success: true });
