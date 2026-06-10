@@ -47,6 +47,7 @@ const CURRENCIES: { code: Currency; labelKey: string; symbol: string }[] = [
   { code: "FCFA", labelKey: "currency_fcfa", symbol: "FCFA" },
   { code: "NGN", labelKey: "currency_naira", symbol: "₦" },
   { code: "ZAR", labelKey: "currency_rand", symbol: "R" },
+  { code: "MRU", labelKey: "currency_ouguiya", symbol: "UM" },
   { code: "USD", labelKey: "currency_us_dollar", symbol: "$" },
   { code: "EUR", labelKey: "currency_euro", symbol: "€" },
 ];

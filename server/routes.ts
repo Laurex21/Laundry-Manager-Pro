@@ -7,6 +7,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
+import { insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -318,7 +319,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
       if (!body.capacityKg) body.capacityKg = "0";
-      const machine = await storage.createMachine({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
+      const input = insertMachineSchema.parse({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
+      const machine = await storage.createMachine(input);
       res.status(201).json(machine);
     } catch (err) {
       res.status(400).json({ message: "Invalid machine data" });
@@ -348,7 +350,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
       const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
-      const employee = await storage.createEmployee({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
+      const input = insertEmployeeSchema.parse({ ...body, userId: (req.session as any).userId, siteId: req.siteId });
+      const employee = await storage.createEmployee(input);
       res.status(201).json(employee);
     } catch (err) {
       res.status(400).json({ message: "Invalid employee data" });
