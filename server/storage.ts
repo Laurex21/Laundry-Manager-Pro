@@ -650,9 +650,10 @@ export class DatabaseStorage implements IStorage {
       ? and(sql`${orders.createdAt} >= ${startDate}`, sql`${orders.createdAt} <= ${endDate}`, eq(orders.siteId, siteId))
       : and(sql`${orders.createdAt} >= ${startDate}`, sql`${orders.createdAt} <= ${endDate}`);
     const filteredOrders = await db.select().from(orders).where(siteOrderWhere);
-    const totalOrders = filteredOrders.length;
+    const reportOrders = filteredOrders.filter(order => order.status !== "cancelled");
+    const totalOrders = reportOrders.length;
 
-    const orderIds = filteredOrders.map(o => o.id);
+    const orderIds = reportOrders.map(o => o.id);
     let filteredPayments: any[] = [];
     if (orderIds.length > 0) {
       filteredPayments = await db.select().from(payments)
@@ -688,7 +689,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const customerOrderMap = new Map<number, { orderCount: number; totalSpent: number }>();
-    for (const order of filteredOrders) {
+    for (const order of reportOrders) {
       const existing = customerOrderMap.get(order.customerId) || { orderCount: 0, totalSpent: 0 };
       existing.orderCount++; existing.totalSpent += Number(order.totalAmount);
       customerOrderMap.set(order.customerId, existing);
