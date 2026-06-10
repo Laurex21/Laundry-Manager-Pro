@@ -20,6 +20,7 @@ import {
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
 import { eq, ne, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
+import { formatReportingDay } from "./lib/reporting-date";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -575,9 +576,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {
+    const reportOrderIds = (await db.select({ id: orders.id }).from(orders)
+      .where(and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${end}`, ne(orders.status, "cancelled"))))
+      .map(o => o.id);
+    if (reportOrderIds.length === 0) return 0;
     const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
       .from(payments)
-      .where(and(sql`${payments.date} IS NOT NULL`, sql`${payments.date} >= ${start}`, sql`${payments.date} <= ${end}`));
+      .where(sql`${payments.orderId} IN (${sql.join(reportOrderIds.map(id => sql`${id}`), sql`, `)})`);
     return Number(result?.total || 0);
   }
 
@@ -590,16 +595,17 @@ export class DatabaseStorage implements IStorage {
 
   private async sumPaymentsInRangeBySite(start: Date, end: Date, siteId: number | null): Promise<number> {
     if (siteId === null) return this.sumPaymentsInRange(start, end);
-    const siteOrderIds = (await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId))).map(o => o.id);
+    const siteOrderIds = (await db.select({ id: orders.id }).from(orders)
+      .where(and(
+        eq(orders.siteId, siteId),
+        sql`${orders.entryDate} >= ${start}`,
+        sql`${orders.entryDate} <= ${end}`,
+        ne(orders.status, "cancelled")
+      ))).map(o => o.id);
     if (siteOrderIds.length === 0) return 0;
     const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
       .from(payments)
-      .where(and(
-        sql`${payments.date} IS NOT NULL`,
-        sql`${payments.date} >= ${start}`,
-        sql`${payments.date} <= ${end}`,
-        sql`${payments.orderId} IN (${sql.join(siteOrderIds.map(id => sql`${id}`), sql`, `)})`
-      ));
+      .where(sql`${payments.orderId} IN (${sql.join(siteOrderIds.map(id => sql`${id}`), sql`, `)})`);
     return Number(result?.total || 0);
   }
 
@@ -650,8 +656,8 @@ export class DatabaseStorage implements IStorage {
 
   async getReportData(startDate: Date, endDate: Date, siteId: number | null) {
     const siteOrderWhere = siteId !== null
-      ? and(sql`${orders.createdAt} >= ${startDate}`, sql`${orders.createdAt} <= ${endDate}`, eq(orders.siteId, siteId))
-      : and(sql`${orders.createdAt} >= ${startDate}`, sql`${orders.createdAt} <= ${endDate}`);
+      ? and(sql`${orders.entryDate} >= ${startDate}`, sql`${orders.entryDate} <= ${endDate}`, eq(orders.siteId, siteId))
+      : and(sql`${orders.entryDate} >= ${startDate}`, sql`${orders.entryDate} <= ${endDate}`);
     const filteredOrders = await db.select().from(orders).where(siteOrderWhere);
     const reportOrders = filteredOrders.filter(order => order.status !== "cancelled");
     const totalOrders = reportOrders.length;
@@ -660,11 +666,7 @@ export class DatabaseStorage implements IStorage {
     let filteredPayments: any[] = [];
     if (orderIds.length > 0) {
       filteredPayments = await db.select().from(payments)
-        .where(and(
-          sql`${payments.date} >= ${startDate}`,
-          sql`${payments.date} <= ${endDate}`,
-          sql`${payments.orderId} IN (${sql.join(orderIds.map(id => sql`${id}`), sql`, `)})`
-        ));
+        .where(sql`${payments.orderId} IN (${sql.join(orderIds.map(id => sql`${id}`), sql`, `)})`);
     }
     const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
@@ -675,9 +677,13 @@ export class DatabaseStorage implements IStorage {
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
     const dailyRevenueMap = new Map<string, number>();
-    for (const p of filteredPayments) {
-      const day = p.date ? new Date(p.date).toISOString().split('T')[0] : 'unknown';
-      dailyRevenueMap.set(day, (dailyRevenueMap.get(day) || 0) + Number(p.amount));
+    const paymentsByOrder = new Map<number, number>();
+    for (const payment of filteredPayments) {
+      paymentsByOrder.set(payment.orderId, (paymentsByOrder.get(payment.orderId) || 0) + Number(payment.amount));
+    }
+    for (const order of reportOrders) {
+      const day = formatReportingDay(order.entryDate);
+      dailyRevenueMap.set(day, (dailyRevenueMap.get(day) || 0) + (paymentsByOrder.get(order.id) || 0));
     }
     const dailyRevenue = Array.from(dailyRevenueMap.entries()).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -821,18 +827,18 @@ export class DatabaseStorage implements IStorage {
 
     const todayRevenue = await this.sumPaymentsInRangeBySite(todayStart, todayEnd, siteFilter ? siteId as number : null);
     const todayOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(siteWhere, sql`${orders.createdAt} >= ${todayStart}`, sql`${orders.createdAt} <= ${todayEnd}`));
+      .where(and(siteWhere, sql`${orders.entryDate} >= ${todayStart}`, sql`${orders.entryDate} <= ${todayEnd}`, ne(orders.status, "cancelled")));
     const todayOrders = Number(todayOrdersResult[0]?.count || 0);
 
     const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, now, siteFilter ? siteId as number : null);
     const weekOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(siteWhere, sql`${orders.createdAt} >= ${weekStart}`, sql`${orders.createdAt} <= ${now}`));
+      .where(and(siteWhere, sql`${orders.entryDate} >= ${weekStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
     const weekOrders = Number(weekOrdersResult[0]?.count || 0);
 
     const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
     const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
     const monthOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(siteWhere, sql`${orders.createdAt} >= ${monthStart}`, sql`${orders.createdAt} <= ${now}`));
+      .where(and(siteWhere, sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
     const monthOrders = Number(monthOrdersResult[0]?.count || 0);
 
     const profit = monthRevenue - monthExpenses;
@@ -884,6 +890,12 @@ export class DatabaseStorage implements IStorage {
       sitesOverview = allSiteRows.map(s => ({
         id: s.id, name: s.name, city: s.city, memberCount: countMap[s.id] ?? 0, isActive: s.isActive ?? true,
       }));
+      for (const site of sitesOverview) {
+        const siteOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
+          .where(and(eq(orders.siteId, site.id), sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
+        (site as any).orders = Number(siteOrdersResult[0]?.count || 0);
+        (site as any).revenue = await this.sumPaymentsInRangeBySite(monthStart, now, site.id);
+      }
     }
 
     const readyOrders = await db.select().from(orders).where(and(siteWhere, eq(orders.status, "ready"))).orderBy(desc(orders.updatedAt));
@@ -917,8 +929,8 @@ export class DatabaseStorage implements IStorage {
     const totalRevenue = await this.sumPaymentsInRangeBySite(start, now, siteId);
     const totalExpenses = await this.sumExpensesInRangeBySite(start, now, siteId);
     const ordersWhere = siteId !== null
-      ? and(sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`, eq(orders.siteId, siteId), ne(orders.status, "cancelled"))
-      : and(sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`, ne(orders.status, "cancelled"));
+      ? and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${now}`, eq(orders.siteId, siteId), ne(orders.status, "cancelled"))
+      : and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled"));
     const ordersResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(ordersWhere);
     const totalOrders = Number(ordersResult[0]?.count || 0);
     const profit = totalRevenue - totalExpenses;

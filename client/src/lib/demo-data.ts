@@ -238,6 +238,9 @@ const paymentsForSite = (siteId?: number | null) => {
   return siteId ? DEMO_PAYMENTS.filter((payment) => orderIds.has(payment.orderId)) : DEMO_PAYMENTS;
 };
 
+const orderReportDate = (order: { entryDate?: string; createdAt?: string }) =>
+  new Date(order.entryDate ?? order.createdAt ?? now.toISOString());
+
 const moneySum = (items: { amount?: string; totalAmount?: string }[]) =>
   items.reduce((total, item) => total + Number(item.totalAmount ?? item.amount ?? 0), 0);
 
@@ -262,8 +265,8 @@ const makeDashboard = (siteId?: number | null) => {
   const expenses = expensesForSite(siteId);
   const revenue = moneySum(orders);
   const expensesTotal = moneySum(expenses);
-  const weekOrders = orders.filter((order) => new Date(order.createdAt) >= new Date(now.getTime() - 7 * 86400000));
-  const todayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === now.toDateString());
+  const weekOrders = orders.filter((order) => orderReportDate(order) >= new Date(now.getTime() - 7 * 86400000));
+  const todayOrders = orders.filter((order) => orderReportDate(order).toDateString() === now.toDateString());
 
   return {
     siteCount: DEMO_USER.allSites.length,

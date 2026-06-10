@@ -8,6 +8,7 @@ import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
+import { parseLocalDateParam } from "./lib/reporting-date";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -295,10 +296,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get(api.reports.get.path, isAuthenticated, async (req: any, res) => {
     const { start, end } = req.query;
-    const startDate = start ? new Date(start as string) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const endDate = end ? new Date(end as string) : new Date();
+    const now = new Date();
+    const startDate = parseLocalDateParam(start as string | undefined, new Date(now.getFullYear(), now.getMonth(), 1));
+    const endDate = parseLocalDateParam(end as string | undefined, now, true);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
-    endDate.setHours(23, 59, 59, 999);
     const data = await storage.getReportData(startDate, endDate, req.siteId);
     res.json(data);
   });
