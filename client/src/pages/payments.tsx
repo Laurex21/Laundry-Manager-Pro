@@ -5,12 +5,13 @@ import { usePaymentsByOrder, useCreatePayment } from "@/hooks/use-payments";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-methods";
-import { generatePaymentReceipt } from "@/lib/receipt";
+import { generatePaymentReceipt, generateThermalPaymentReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import {
   CreditCard,
   CheckCircle2,
   Download,
+  Printer,
   Banknote,
   Calendar,
   ClipboardList,
@@ -134,7 +135,7 @@ export default function Payments() {
 
   const [receiptLoading, setReceiptLoading] = useState(false);
 
-  async function handleReceipt(action: "download" | "print") {
+  async function handleReceipt(action: "download" | "thermal") {
     if (!successPayment) return;
     setReceiptLoading(true);
     try {
@@ -161,26 +162,44 @@ export default function Payments() {
       const discount = Number(orderDetails?.discount || 0);
       const pickupCost = Number(orderDetails?.pickupCost || 0);
 
-      generatePaymentReceipt(
-        successPayment.orderId,
-        customer,
-        items,
-        garments,
-        {
-          amount: successPayment.amount,
-          method: successPayment.method,
-          date: successPayment.date,
-          newStatus: successPayment.newStatus,
-        },
-        allPayments,
-        entryDate,
-        pickupDate,
-        discount,
-        symbol,
-        mergedSettings,
-        pickupCost,
-        action
-      );
+      const paymentReceiptData = {
+        amount: successPayment.amount,
+        method: successPayment.method,
+        date: successPayment.date,
+        newStatus: successPayment.newStatus,
+      };
+
+      if (action === "thermal") {
+        generateThermalPaymentReceipt(
+          successPayment.orderId,
+          customer,
+          items,
+          garments,
+          paymentReceiptData,
+          allPayments,
+          entryDate,
+          discount,
+          symbol,
+          mergedSettings,
+          pickupCost
+        );
+      } else {
+        generatePaymentReceipt(
+          successPayment.orderId,
+          customer,
+          items,
+          garments,
+          paymentReceiptData,
+          allPayments,
+          entryDate,
+          pickupDate,
+          discount,
+          symbol,
+          mergedSettings,
+          pickupCost,
+          "download"
+        );
+      }
     } finally {
       setReceiptLoading(false);
     }
@@ -238,6 +257,17 @@ export default function Payments() {
             >
               <Download className="w-3.5 h-3.5" />
               {receiptLoading ? t("preparing") : t("download_receipt")}
+            </Button>
+            <Button
+              onClick={() => handleReceipt("thermal")}
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20"
+              disabled={receiptLoading}
+              data-testid="button-print-thermal-receipt"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              {receiptLoading ? t("preparing") : t("print_thermal_receipt")}
             </Button>
           </div>
         </div>

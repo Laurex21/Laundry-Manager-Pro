@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock, Droplets, Wind, Shirt, Sparkles, Package, Truck,
-  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck
+  AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +26,7 @@ import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
-import { generateDepositReceipt } from "@/lib/receipt";
+import { generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 
 const PIPELINE_STAGES = [
@@ -146,6 +146,15 @@ export default function OrderDetail() {
     generateDepositReceipt(order, symbol, mergedSettings, "download");
   }
 
+  function handlePrintThermalReceipt() {
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(settings || {}),
+      receiptLanguage: settings?.receiptLanguage || i18n.language,
+    };
+    generateThermalDepositReceipt(order, symbol, mergedSettings);
+  }
+
   async function handleRequestCancellation() {
     if (!cancelReason.trim()) return;
     try {
@@ -207,7 +216,7 @@ export default function OrderDetail() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Link href="/orders">
           <Button variant="ghost" size="icon" data-testid="button-back-orders">
             <ArrowLeft className="w-5 h-5" />
@@ -219,9 +228,12 @@ export default function OrderDetail() {
             {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
           <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
             <Download className="w-4 h-4 mr-2" /> {t("download_receipt")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
+            <Printer className="w-4 h-4 mr-2" /> {t("print_thermal_receipt")}
           </Button>
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />

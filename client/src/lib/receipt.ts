@@ -157,6 +157,150 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function thermalMoney(amount: number, symbol: string): string {
+  const currency = symbol.trim();
+  const rounded = Math.round(amount).toLocaleString("fr-FR");
+  return /^[A-Z]{2,5}$/.test(currency) || currency === "UM"
+    ? `${rounded} ${currency}`
+    : `${currency}${amount.toFixed(2)}`;
+}
+
+function thermalLine(labelText: string, value: string, strong = false): string {
+  return `<div class="line${strong ? " strong" : ""}"><span>${escapeHtml(labelText)}</span><span>${escapeHtml(value)}</span></div>`;
+}
+
+function thermalDivider(): string {
+  return `<div class="divider"></div>`;
+}
+
+function buildThermalReceiptHtml(args: {
+  title: string;
+  orderId: number;
+  businessName: string;
+  contactLines: string[];
+  customerName: string;
+  customerPhone?: string;
+  orderDate: string;
+  receiptDate: string;
+  items: any[];
+  garments: any[];
+  subtotal: number;
+  discount: number;
+  pickupCost: number;
+  orderTotal: number;
+  totalPaid: number;
+  balance: number;
+  symbol: string;
+  footerNote: string;
+  lang: string;
+  paymentLine?: string;
+  methodLine?: string;
+}): string {
+  const itemRows = args.items.map((item: any) => {
+    const service = item.service || {};
+    const quantity = Number(item.quantity || 0);
+    const unit = serviceUnitLabel(service.unit, args.lang);
+    const price = Number(item.priceAtOrder || 0);
+    const total = quantity * price;
+    return `<div class="item">
+      <div class="item-name">${escapeHtml(service.name || label("Service", "Service", args.lang))}</div>
+      <div class="item-meta">${escapeHtml(`${quantity} ${unit} x ${thermalMoney(price, args.symbol)}`)}<span>${escapeHtml(thermalMoney(total, args.symbol))}</span></div>
+    </div>`;
+  }).join("");
+
+  const garmentRows = args.garments.length > 0
+    ? args.garments.map((garment: any) => {
+        const name = garment.itemName || garment.name || label("Item", "Article", args.lang);
+        return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}`)}</div>`;
+      }).join("")
+    : "";
+
+  const paidInFull = args.balance <= 0 && args.totalPaid > 0;
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(args.title)} #${args.orderId}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+    body { font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.25; }
+    .toolbar { padding: 10px; text-align: center; background: #f3f4f6; }
+    .toolbar button { border: 1px solid #111; background: #fff; color: #111; padding: 8px 14px; font: 600 13px Arial, sans-serif; cursor: pointer; }
+    .ticket { width: 80mm; max-width: 80mm; padding: 4mm 3mm 5mm; margin: 0 auto; }
+    .center { text-align: center; }
+    .business { font-size: 15px; font-weight: 800; line-height: 1.1; text-transform: uppercase; overflow-wrap: anywhere; }
+    .muted { font-size: 10px; }
+    .title { font-size: 12px; font-weight: 800; margin-top: 4px; text-transform: uppercase; }
+    .divider { border-top: 1px dashed #000; margin: 6px 0; height: 0; }
+    .line { display: flex; justify-content: space-between; gap: 6px; margin: 2px 0; }
+    .line span:first-child { max-width: 44mm; }
+    .line span:last-child { text-align: right; font-weight: 600; }
+    .line.strong { font-weight: 800; font-size: 12px; }
+    .item { margin: 4px 0; }
+    .item-name { font-weight: 700; overflow-wrap: anywhere; }
+    .item-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 10px; }
+    .compact-row { font-size: 10px; margin: 1px 0; overflow-wrap: anywhere; }
+    .paid { text-align: center; font-weight: 900; font-size: 13px; margin: 5px 0 1px; }
+    .footer { text-align: center; font-size: 10px; margin-top: 6px; overflow-wrap: anywhere; }
+    @media print {
+      .toolbar { display: none; }
+      .ticket { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">${escapeHtml(label("Print", "Imprimer", args.lang))}</button></div>
+  <main class="ticket">
+    <section class="center">
+      <div class="business">${escapeHtml(args.businessName)}</div>
+      ${args.contactLines.slice(0, 4).map((line) => `<div class="muted">${escapeHtml(line)}</div>`).join("")}
+      <div class="title">${escapeHtml(args.title)}</div>
+    </section>
+    ${thermalDivider()}
+    ${thermalLine(label("Order No.", "N° Commande", args.lang), `#${args.orderId}`)}
+    ${thermalLine(label("Customer", "Client", args.lang), args.customerName || label("N/A", "N/D", args.lang))}
+    ${args.customerPhone ? thermalLine(label("Phone", "Téléphone", args.lang), args.customerPhone) : ""}
+    ${thermalLine(label("Order Date", "Date de commande", args.lang), args.orderDate)}
+    ${thermalLine(label("Receipt Date", "Date du reçu", args.lang), args.receiptDate)}
+    ${args.methodLine ? thermalLine(label("Method", "Méthode", args.lang), args.methodLine) : ""}
+    ${args.paymentLine ? thermalLine(label("This Payment", "Ce paiement", args.lang), args.paymentLine, true) : ""}
+    ${thermalDivider()}
+    <div class="center strong">${escapeHtml(label("Services", "Services", args.lang).toUpperCase())}</div>
+    ${itemRows || `<div class="compact-row center">${escapeHtml(label("No services recorded", "Aucun service enregistré", args.lang))}</div>`}
+    ${garmentRows ? `${thermalDivider()}<div class="center strong">${escapeHtml(label("Garments", "Vêtements", args.lang).toUpperCase())}</div>${garmentRows}` : ""}
+    ${thermalDivider()}
+    ${thermalLine(label("Subtotal", "Sous-total", args.lang).toUpperCase(), thermalMoney(args.subtotal, args.symbol))}
+    ${args.discount > 0 ? thermalLine(label("Discount", "Réduction", args.lang).toUpperCase(), `-${thermalMoney(args.discount, args.symbol)}`) : ""}
+    ${args.pickupCost > 0 ? thermalLine(label("Transport / Delivery", "Transport / Livraison", args.lang).toUpperCase(), thermalMoney(args.pickupCost, args.symbol)) : ""}
+    ${thermalLine("TOTAL", thermalMoney(args.orderTotal, args.symbol), true)}
+    ${thermalLine("ADVANCE PAID", thermalMoney(args.totalPaid, args.symbol), true)}
+    ${thermalLine("BALANCE DUE", thermalMoney(args.balance, args.symbol), true)}
+    ${paidInFull ? `<div class="paid">PAID IN FULL</div>` : ""}
+    ${thermalDivider()}
+    <div class="footer">${escapeHtml(args.footerNote)}</div>
+  </main>
+  <script>
+    window.addEventListener("load", function () {
+      window.setTimeout(function () { window.print(); }, 250);
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function openThermalReceiptPrintWindow(html: string): void {
+  const win = window.open("", "_blank", "noopener,noreferrer,width=420,height=760");
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+}
+
 type PdfLine = { label?: string; value: string; strong?: boolean };
 type PdfSection = { title: string; lines: PdfLine[] };
 
@@ -263,32 +407,6 @@ async function downloadReceiptPdf(args: {
 
   const bytes = await pdf.save();
   downloadBlob(new Blob([bytes], { type: "application/pdf" }), args.filename);
-}
-
-function openPrintWindow(html: string, paperSize: "57mm" | "80mm" = "80mm"): void {
-  const size = paperSize === "57mm" ? "57mm" : "80mm";
-  const printHtml = html.replace(
-    "</style>",
-    `
-    @page { size: ${size} ${size}; margin: 0; }
-    @media print {
-      html, body { width: ${size}; height: ${size}; margin: 0; padding: 0; background: #fff; overflow: hidden; }
-      .receipt { width: ${size}; height: ${size}; max-width: ${size}; overflow: hidden; border-radius: 0; box-shadow: none; }
-      .header, .meta, .pipeline-section, .items-section, .checklist-section, .summary, .payment-section, .section, .terms, .footer { padding-left: 8px !important; padding-right: 8px !important; }
-      .meta { grid-template-columns: 1fr; }
-      .header-top { display: block; }
-      .order-id-box { text-align: left; margin-top: 10px; }
-      .pipeline-section { display: none; }
-    }
-    </style>`
-  );
-  const win = window.open("", "_blank", "noopener,noreferrer,width=420,height=680");
-  if (!win) return;
-  win.document.open();
-  win.document.write(printHtml);
-  win.document.close();
-  win.focus();
-  window.setTimeout(() => win.print(), 250);
 }
 
 function openReceiptPrintWindow(html: string): void {
@@ -485,46 +603,91 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `deposit-receipt-order-${order.id}.html`);
 }
 
-export function printDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, paperSize: "57mm" | "80mm" = "80mm") {
+export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
   const lang = settings.receiptLanguage || "en";
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
   const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
-  const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
   const subtotal = orderSubtotal(items);
   const discount = Number(order.discount || 0);
   const pickupCost = Number(order.pickupCost || 0);
   const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
   const totalPaid = (order.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
   const balance = Math.max(0, orderTotal - totalPaid);
-  const logoHtml = settings.showLogo && settings.logoBase64
-    ? `<img src="${settings.logoBase64}" style="max-height:42px;max-width:120px;object-fit:contain;margin:0 auto 6px;display:block;" />`
-    : "";
-  const rows = items.map((item: any) => {
-    const svc = item.service || {};
-    const qty = item.quantity;
-    const unit = serviceUnitLabel(svc.unit, lang);
-    return `<tr><td>${escapeHtml(svc.name || "Service")}</td><td style="text-align:center;">${qty} ${unit}</td><td style="text-align:right;">${symbol}${(Number(item.priceAtOrder) * qty).toFixed(2)}</td></tr>`;
-  }).join("");
-  const garmentRows = garments.map((g: any) => `<tr><td>${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><small>${escapeHtml(g.details)}</small>` : ""}</td></tr>`).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${order.id}</title><style>
-    body{font-family:Arial,sans-serif;color:#111;background:#fff;padding:16px}.receipt{max-width:360px;margin:auto}.header{text-align:center;border-bottom:1px solid #ddd;padding-bottom:10px;margin-bottom:10px}
-    h1{font-size:18px;margin:0}.muted{color:#555;font-size:11px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;font-size:12px}td{border-bottom:1px solid #eee;padding:5px 0}.total{font-weight:700;font-size:14px}.no-print{display:block;margin:10px auto}
-    @media print{.no-print{display:none}}
-  </style></head><body><button class="no-print" onclick="window.print()">${escapeHtml(label("Print", "Imprimer", lang))}</button><div class="receipt">
-    <div class="header">${logoHtml}<h1>${escapeHtml(settings.businessName)}</h1><div class="muted">${escapeHtml(settings.phone || "")}</div><strong>Order #${order.id}</strong></div>
-    <div class="row"><span>Customer</span><strong>${escapeHtml(customer.name || "")}</strong></div><div class="row"><span>Date</span><span>${entryDate}</span></div><div class="row"><span>Pickup</span><span>${pickupDate}</span></div>
-    <h2 style="font-size:13px;">Services</h2><table>${rows}</table>${garmentRows ? `<h2 style="font-size:13px;">Items</h2><table>${garmentRows}</table>` : ""}
-    <div class="row"><span>${escapeHtml(label("Subtotal", "Sous-total", lang))}</span><span>${symbol}${subtotal.toFixed(2)}</span></div>
-    ${discount > 0 ? `<div class="row"><span>${escapeHtml(label("Discount", "Réduction", lang))}</span><span>-${symbol}${discount.toFixed(2)}</span></div>` : ""}
-    ${pickupCost > 0 ? `<div class="row"><span>${escapeHtml(label("Transport / Delivery", "Transport / Livraison", lang))}</span><span>+${symbol}${pickupCost.toFixed(2)}</span></div>` : ""}
-    <div class="row total"><span>Total</span><span>${symbol}${orderTotal.toFixed(2)}</span></div>
-    ${totalPaid > 0 ? `<div class="row"><span>${escapeHtml(label("Total Paid", "Total payé", lang))}</span><span>-${symbol}${totalPaid.toFixed(2)}</span></div>` : ""}
-    <div class="row total"><span>${escapeHtml(label("Balance Due", "Solde dû", lang))}</span><span>${balance === 0 ? escapeHtml(label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)) : `${symbol}${balance.toFixed(2)}`}</span></div>
-    <p class="muted">${escapeHtml(settings.receiptFooterNote || "Thank you")}</p>
-  </div></body></html>`;
-  openPrintWindow(html, paperSize);
+  const html = buildThermalReceiptHtml({
+    title: label("Thermal Receipt", "Ticket thermique", lang),
+    orderId: Number(order.id),
+    businessName: settings.businessName,
+    contactLines: getReceiptContactLines(settings, order.id, lang),
+    customerName: customer.name || "",
+    customerPhone: customer.phone || "",
+    orderDate: entryDate,
+    receiptDate: formatReceiptDate(new Date(), "MMM dd, yyyy", lang),
+    items,
+    garments,
+    subtotal,
+    discount,
+    pickupCost,
+    orderTotal,
+    totalPaid,
+    balance,
+    symbol,
+    footerNote: settings.receiptFooterNote || label("Thank you", "Merci", lang),
+    lang,
+  });
+  openThermalReceiptPrintWindow(html);
+}
+
+export function printDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
+  generateThermalDepositReceipt(order, symbol, settings);
+}
+
+export function generateThermalPaymentReceipt(
+  orderId: number,
+  customer: any,
+  items: any[],
+  garments: any[],
+  payment: { amount: string; method: string; date: string; newStatus: string },
+  allPayments: any[],
+  entryDate: string,
+  discount: number,
+  symbol: string,
+  settings: ReceiptSettings = DEFAULT_SETTINGS,
+  pickupCost: number = 0
+) {
+  const lang = settings.receiptLanguage || "en";
+  const subtotal = orderSubtotal(items);
+  const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
+  const currentPaymentAmount = Number(payment.amount || 0);
+  const totalPaid = allPayments.length > 0
+    ? allPayments.reduce((sum: number, paid: any) => sum + Number(paid.amount), 0)
+    : currentPaymentAmount;
+  const balance = Math.max(0, orderTotal - totalPaid);
+  const html = buildThermalReceiptHtml({
+    title: label("Thermal Payment Receipt", "Ticket paiement thermique", lang),
+    orderId,
+    businessName: settings.businessName,
+    contactLines: getReceiptContactLines(settings, orderId, lang),
+    customerName: customer?.name || "",
+    customerPhone: customer?.phone || "",
+    orderDate: formatReceiptDate(entryDate || new Date(), "MMM dd, yyyy", lang),
+    receiptDate: formatReceiptDate(payment.date || new Date(), "MMM dd, yyyy", lang),
+    items,
+    garments,
+    subtotal,
+    discount,
+    pickupCost,
+    orderTotal,
+    totalPaid,
+    balance,
+    symbol,
+    footerNote: settings.receiptFooterNote || label("Thank you", "Merci", lang),
+    lang,
+    paymentLine: thermalMoney(currentPaymentAmount, symbol),
+    methodLine: payment.method,
+  });
+  openThermalReceiptPrintWindow(html);
 }
 
 export function generatePaymentReceipt(
