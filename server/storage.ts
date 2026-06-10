@@ -19,7 +19,7 @@ import {
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
-import { eq, ne, desc, sql, and, gte, lte, isNull, inArray } from "drizzle-orm";
+import { eq, ne, desc, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
 
 export interface IStorage {
@@ -549,49 +549,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async backfillNullSiteIds(): Promise<void> {
-    // Use the earliest registered user's site as the legacy site for all pre-tenancy data
-    const [legacyUser] = await db.select({ currentSiteId: users.currentSiteId })
-      .from(users)
-      .where(sql`${users.currentSiteId} IS NOT NULL`)
-      .orderBy(users.createdAt)
-      .limit(1);
-    if (!legacyUser?.currentSiteId) return;
-    const targetSiteId = legacyUser.currentSiteId;
-
-    // Collect all siteIds currently used by any user (these are "valid" sites)
-    const activeUserSites = new Set(
-      (await db.select({ id: users.currentSiteId }).from(users).where(sql`${users.currentSiteId} IS NOT NULL`))
-        .map(u => u.id as number)
-    );
-
-    // Move null-siteId records to the legacy site
-    await db.update(orders).set({ siteId: targetSiteId }).where(isNull(orders.siteId));
-    await db.update(customers).set({ siteId: targetSiteId }).where(isNull(customers.siteId));
-    await db.update(expenditures).set({ siteId: targetSiteId }).where(isNull(expenditures.siteId));
-
-    // Move records at orphaned sites (site not in any user's currentSiteId) to the legacy site
-    const orderSites = await db.selectDistinct({ siteId: orders.siteId }).from(orders).where(sql`${orders.siteId} IS NOT NULL`);
-    for (const { siteId } of orderSites) {
-      if (siteId !== null && !activeUserSites.has(siteId)) {
-        await db.update(orders).set({ siteId: targetSiteId }).where(eq(orders.siteId, siteId));
-        console.log(`[backfill] Moved orphaned orders from site ${siteId} → site ${targetSiteId}`);
-      }
-    }
-    const customerSites = await db.selectDistinct({ siteId: customers.siteId }).from(customers).where(sql`${customers.siteId} IS NOT NULL`);
-    for (const { siteId } of customerSites) {
-      if (siteId !== null && !activeUserSites.has(siteId)) {
-        await db.update(customers).set({ siteId: targetSiteId }).where(eq(customers.siteId, siteId));
-        console.log(`[backfill] Moved orphaned customers from site ${siteId} → site ${targetSiteId}`);
-      }
-    }
-    const expSites = await db.selectDistinct({ siteId: expenditures.siteId }).from(expenditures).where(sql`${expenditures.siteId} IS NOT NULL`);
-    for (const { siteId } of expSites) {
-      if (siteId !== null && !activeUserSites.has(siteId)) {
-        await db.update(expenditures).set({ siteId: targetSiteId }).where(eq(expenditures.siteId, siteId));
-        console.log(`[backfill] Moved orphaned expenditures from site ${siteId} → site ${targetSiteId}`);
-      }
-    }
-    console.log(`[backfill] Backfill complete. Legacy site: ${targetSiteId}, active sites: ${[...activeUserSites].join(', ')}`);
+    console.warn("[backfill] Disabled: automatic tenant data reassignment is unsafe in multi-tenant production.");
   }
 
   private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {

@@ -69,7 +69,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
   seedDatabase().catch(console.error);
-  storage.backfillNullSiteIds().catch(console.error);
 
   app.get("/api/public/stats", async (_req, res) => {
     try {

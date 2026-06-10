@@ -41,11 +41,21 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     const { organisations, sites, siteMembers } = await import("@shared/schema");
     const { and, eq } = await import("drizzle-orm");
 
-    const [user] = await db
+    let [user] = await db
       .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId })
       .from(users)
       .where(eq(users.id, req.userId))
       .limit(1);
+
+    if (!user?.organisationId) {
+      const { storage } = await import("../../storage");
+      await storage.migrateToMultiSite();
+      [user] = await db
+        .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId })
+        .from(users)
+        .where(eq(users.id, req.userId))
+        .limit(1);
+    }
 
     let authorizedSiteIds: number[] = [];
     if (user?.organisationId) {
