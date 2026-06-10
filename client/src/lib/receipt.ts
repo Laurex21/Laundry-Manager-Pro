@@ -293,7 +293,7 @@ function buildThermalReceiptHtml(args: {
 }
 
 function openThermalReceiptPrintWindow(html: string): void {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=420,height=760");
+  const win = window.open("", "_blank", "width=420,height=760");
   if (!win) return;
   win.document.open();
   win.document.write(html);
@@ -410,7 +410,7 @@ async function downloadReceiptPdf(args: {
 }
 
 function openReceiptPrintWindow(html: string): void {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=820,height=900");
+  const win = window.open("", "_blank", "width=820,height=900");
   if (!win) return;
   win.document.open();
   win.document.write(html);
