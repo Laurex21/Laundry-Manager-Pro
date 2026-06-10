@@ -94,6 +94,58 @@ function getContactLines(settings: ReceiptSettings): string[] {
   return [addressPart, settings.country, settings.phone, settings.phone2, settings.email, settings.website].filter(Boolean) as string[];
 }
 
+function getReceiptContactLines(settings: ReceiptSettings, receiptNumber: number | string, lang: string): string[] {
+  const receiptLine = `${label("Receipt No.", "N° Reçu", lang)} #${receiptNumber}`;
+  const lines = getContactLines(settings);
+  const phoneIndex = lines.findIndex((line) => line === settings.phone);
+  if (phoneIndex >= 0) {
+    return [...lines.slice(0, phoneIndex + 1), receiptLine, ...lines.slice(phoneIndex + 1)];
+  }
+  return [...lines, receiptLine];
+}
+
+function chronologicalPayments(payments: any[]): any[] {
+  return [...payments].sort((a: any, b: any) => {
+    const aTime = new Date(a.date || a.createdAt || 0).getTime();
+    const bTime = new Date(b.date || b.createdAt || 0).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    return Number(a.id || 0) - Number(b.id || 0);
+  });
+}
+
+function buildPaymentHistoryLines(payments: any[], orderTotal: number, symbol: string, lang: string, fallbackDate?: string): string[] {
+  let paidSoFar = 0;
+  return chronologicalPayments(payments).map((payment: any) => {
+    const amount = Number(payment.amount || 0);
+    paidSoFar += amount;
+    const remaining = Math.max(0, orderTotal - paidSoFar);
+    const ref = paymentReference(payment.reference, lang);
+    const paidLabel = label("Paid", "Payé", lang);
+    const remainingLabel = label("Remaining balance", "Solde restant", lang);
+    return `${formatReceiptDate(payment.date || fallbackDate, "MMM dd", lang)} - ${payment.method}${ref} - ${paidLabel}: ${symbol}${amount.toFixed(2)} - ${remainingLabel}: ${remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}`;
+  });
+}
+
+function buildPaymentHistoryHtml(payments: any[], orderTotal: number, symbol: string, lang: string, fallbackDate?: string): string {
+  let paidSoFar = 0;
+  return chronologicalPayments(payments).map((payment: any) => {
+    const amount = Number(payment.amount || 0);
+    paidSoFar += amount;
+    const remaining = Math.max(0, orderTotal - paidSoFar);
+    const ref = paymentReference(payment.reference, lang);
+    return `<div style="padding:8px 0;border-bottom:1px solid rgba(14,165,233,0.18);font-size:12px;color:#475569;">
+      <div style="display:flex;justify-content:space-between;gap:12px;">
+        <span>${formatReceiptDate(payment.date || fallbackDate, "MMM dd", lang)} &bull; ${escapeHtml(payment.method)}${escapeHtml(ref)}</span>
+        <span style="color:#16a34a;font-weight:600;white-space:nowrap;">${symbol}${amount.toFixed(2)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-top:3px;font-size:11px;font-weight:700;color:${remaining > 0 ? "#dc2626" : "#16a34a"};">
+        <span>${label("Remaining balance", "Solde restant", lang)}</span>
+        <span>${remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -274,18 +326,13 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
   const pipelineHtml = buildPipelineHtml(order.status || "received", lang);
 
-  const paymentsHtml = (order.payments || []).map((p: any) => {
-    const ref = paymentReference(p.reference, lang);
-    return `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-      <span>${escapeHtml(p.method)}${escapeHtml(ref)}</span>
-      <span style="color:#16a34a;font-weight:600;">${symbol}${Number(p.amount).toFixed(2)}</span>
-    </div>`;
-  }).join("") || `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
-
   const totalPaid = (order.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
   const balance = Math.max(0, orderTotal - totalPaid);
+  const paymentsHtml = (order.payments || []).length
+    ? buildPaymentHistoryHtml(order.payments || [], orderTotal, symbol, lang, order.entryDate)
+    : `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
 
-  const contactLines = getContactLines(settings);
+  const contactLines = getReceiptContactLines(settings, order.id, lang);
   const tagline = settings.tagline || label("Laundry Service", "Service de Blanchisserie", lang);
   const headerHtml = buildHeader(settings.businessName, tagline, contactLines, settings.receiptHeaderColor, settings.logoBase64, settings.showLogo);
   const termsHtml = settings.showTerms ? buildTermsHtml(settings, lang) : "";
@@ -473,7 +520,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
         ? [{
             title: label("Payment Records", "Historique des paiements", lang),
             lines: (order.payments || []).length
-              ? (order.payments || []).map((p: any) => ({ value: `${p.method}${paymentReference(p.reference, lang)} - ${symbol}${Number(p.amount).toFixed(2)}` }))
+              ? buildPaymentHistoryLines(order.payments || [], orderTotal, symbol, lang, order.entryDate).map((value) => ({ value }))
               : [{ value: label("No payments recorded", "Aucun paiement enregistré", lang) }],
           }]
         : []),
@@ -574,16 +621,10 @@ export function generatePaymentReceipt(
   const statusBg = payment.newStatus === "paid" ? "#dcfce7" : payment.newStatus === "partial" ? "#fef3c7" : "#fee2e2";
 
   const paymentsHistoryHtml = settings.showPaymentHistory && allPayments.length > 0
-    ? allPayments.map((p: any) => {
-        const ref = paymentReference(p.reference, lang);
-        return `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:#475569;">
-          <span>${formatReceiptDate(p.date || payment.date, "MMM dd", lang)} &bull; ${escapeHtml(p.method)}${escapeHtml(ref)}</span>
-          <span style="color:#16a34a;font-weight:600;">${symbol}${Number(p.amount).toFixed(2)}</span>
-        </div>`;
-      }).join("")
+    ? buildPaymentHistoryHtml(allPayments, orderTotal, symbol, lang, payment.date)
     : "";
 
-  const contactLines = getContactLines(settings);
+  const contactLines = getReceiptContactLines(settings, orderId, lang);
   const tagline = settings.tagline || label("Laundry Service", "Service de Blanchisserie", lang);
   const headerHtml = buildHeader(settings.businessName, tagline, contactLines, settings.receiptHeaderColor, settings.logoBase64, settings.showLogo);
   const termsHtml = settings.showTerms ? buildTermsHtml(settings, lang) : "";
@@ -770,7 +811,7 @@ export function generatePaymentReceipt(
       ...(paymentsHistoryHtml
         ? [{
             title: label("Payment History", "Historique des paiements", lang),
-            lines: allPayments.map((p: any) => ({ value: `${formatReceiptDate(p.date || payment.date, "MMM dd", lang)} - ${p.method}${paymentReference(p.reference, lang)} - ${symbol}${Number(p.amount).toFixed(2)}` })),
+            lines: buildPaymentHistoryLines(allPayments, orderTotal, symbol, lang, payment.date).map((value) => ({ value })),
           }]
         : []),
       ...(settings.showTerms
