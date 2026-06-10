@@ -69,6 +69,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
   seedDatabase().catch(console.error);
+  storage.backfillNullSiteIds().catch(console.error);
 
   app.get("/api/public/stats", async (_req, res) => {
     try {
@@ -125,11 +126,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get(api.services.list.path, isAuthenticated, async (req: any, res) => {
     let svcList = await storage.getServicesBySite(scopedSites(req));
     // Auto-seed default services for a brand-new site
-    if (svcList.length === 0 && req.siteId != null) {
-      await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: req.siteId } as any);
-      await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: req.siteId } as any);
-      await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: req.siteId } as any);
-      svcList = await storage.getServicesBySite(req.siteId);
+    // Use req.siteId if set, otherwise fall back to the user's first authorized site
+    const seedSiteId = req.siteId ?? (scopedSites(req)[0] ?? null);
+    if (svcList.length === 0 && seedSiteId != null) {
+      await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: seedSiteId } as any);
+      await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: seedSiteId } as any);
+      await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: seedSiteId } as any);
+      svcList = await storage.getServicesBySite(scopedSites(req));
     }
     res.json(svcList);
   });

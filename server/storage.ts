@@ -19,7 +19,7 @@ import {
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
-import { eq, ne, desc, sql, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, ne, desc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
 
 export interface IStorage {
@@ -167,13 +167,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getServicesBySite(siteId: number | number[] | null): Promise<Service[]> {
-    const siteWhere = this.siteWhere(services.siteId, siteId);
-    if (siteWhere) {
-      return await db.select().from(services)
-        .where(and(eq(services.active, true), siteWhere))
-        .orderBy(services.name);
-    }
-    return await db.select().from(services).where(eq(services.active, true)).orderBy(services.name);
+    const siteFilter = this.siteWhere(services.siteId, siteId);
+    return await db.select().from(services)
+      .where(and(eq(services.active, true), or(isNull(services.siteId), siteFilter)))
+      .orderBy(services.name);
   }
 
   async getService(id: number): Promise<Service | undefined> {
@@ -549,7 +546,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async backfillNullSiteIds(): Promise<void> {
-    console.warn("[backfill] Disabled: automatic tenant data reassignment is unsafe in multi-tenant production.");
+    try {
+      const nullServices = await db.select({ id: services.id }).from(services).where(isNull(services.siteId)).limit(1);
+      if (nullServices.length === 0) return;
+      const [firstSite] = await db.select({ id: sites.id }).from(sites).orderBy(sites.id).limit(1);
+      if (!firstSite) return;
+      const result = await db.update(services).set({ siteId: firstSite.id }).where(isNull(services.siteId));
+      console.log(`[backfill] Assigned legacy null-siteId services to site ${firstSite.id}`);
+    } catch (err) {
+      console.error("[backfill] Error assigning null-siteId services:", err);
+    }
   }
 
   private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {
