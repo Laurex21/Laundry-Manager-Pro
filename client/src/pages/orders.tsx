@@ -448,7 +448,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
               ...DEFAULT_SETTINGS,
               ...(settings || {}),
               receiptLanguage: settings?.receiptLanguage || i18n.language,
-            });
+            }, "download");
           }
         } catch {}
         form.reset();

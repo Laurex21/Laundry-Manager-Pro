@@ -143,7 +143,7 @@ export default function OrderDetail() {
       ...(settings || {}),
       receiptLanguage: settings?.receiptLanguage || i18n.language,
     };
-    generateDepositReceipt(order, symbol, mergedSettings);
+    generateDepositReceipt(order, symbol, mergedSettings, "download");
   }
 
   function handlePrintReceipt() {
@@ -230,7 +230,7 @@ export default function OrderDetail() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
-            <Download className="w-4 h-4 mr-2" /> {t("receipt")}
+            <Download className="w-4 h-4 mr-2" /> {t("download_receipt")}
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrintReceipt} data-testid="button-print-deposit-receipt">
             <Printer className="w-4 h-4 mr-2" /> {t("print_receipt")}
