@@ -215,6 +215,7 @@ export const api = {
           dailyRevenue: z.array(z.object({ date: z.string(), revenue: z.number() })),
           serviceDistribution: z.array(z.object({ name: z.string(), count: z.number() })),
           topCustomers: z.array(z.object({ name: z.string(), orderCount: z.number(), totalSpent: z.number() })),
+          customerAreas: z.array(z.object({ area: z.string(), customerCount: z.number(), orderCount: z.number(), totalSpent: z.number() })),
         }),
       },
     },

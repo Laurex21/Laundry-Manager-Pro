@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
   Activity,
   CheckCircle2,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +78,7 @@ type ReportData = {
   dailyRevenue: { date: string; revenue: number }[];
   serviceDistribution: { name: string; count: number }[];
   topCustomers: { name: string; orderCount: number; totalSpent: number }[];
+  customerAreas: { area: string; customerCount: number; orderCount: number; totalSpent: number }[];
 };
 
 type PerformanceData = {
@@ -173,6 +175,12 @@ export default function Reports() {
     lines.push(`${t("name")} | ${t("order_count")} | ${t("total_spent")}`);
     for (const c of data.topCustomers) {
       lines.push(`${c.name} | ${c.orderCount} | ${symbol}${c.totalSpent.toFixed(2)}`);
+    }
+    lines.push("");
+    lines.push(`--- ${t("customers_by_area")} ---`);
+    lines.push(`${t("area")} | ${t("customers")} | ${t("order_count")} | ${t("total_spent")}`);
+    for (const area of data.customerAreas || []) {
+      lines.push(`${area.area} | ${area.customerCount} | ${area.orderCount} | ${symbol}${area.totalSpent.toFixed(2)}`);
     }
 
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -535,6 +543,59 @@ export default function Reports() {
                       </TableCell>
                       <TableCell className="text-right font-mono" data-testid={`text-customer-spent-${idx}`}>
                         {symbol}{c.totalSpent.toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-customer-areas">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary" />
+            {t("customers_by_area")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-md" />
+              ))}
+            </div>
+          ) : !data?.customerAreas?.length ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              {t("no_data_for_period")}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("area")}</TableHead>
+                    <TableHead className="text-center">{t("customers")}</TableHead>
+                    <TableHead className="text-center">{t("order_count")}</TableHead>
+                    <TableHead className="text-right">{t("total_spent")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.customerAreas.map((area, idx) => (
+                    <TableRow key={area.area} data-testid={`row-customer-area-${idx}`}>
+                      <TableCell className="font-medium max-w-[280px] truncate" title={area.area} data-testid={`text-customer-area-${idx}`}>
+                        {area.area}
+                      </TableCell>
+                      <TableCell className="text-center" data-testid={`text-area-customers-${idx}`}>
+                        {area.customerCount}
+                      </TableCell>
+                      <TableCell className="text-center" data-testid={`text-area-orders-${idx}`}>
+                        {area.orderCount}
+                      </TableCell>
+                      <TableCell className="text-right font-mono" data-testid={`text-area-spent-${idx}`}>
+                        {symbol}{area.totalSpent.toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}

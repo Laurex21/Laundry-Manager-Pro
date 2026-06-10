@@ -67,6 +67,7 @@ export interface IStorage {
     dailyRevenue: { date: string; revenue: number }[];
     serviceDistribution: { name: string; count: number }[];
     topCustomers: { name: string; orderCount: number; totalSpent: number }[];
+    customerAreas: { area: string; customerCount: number; orderCount: number; totalSpent: number }[];
   }>;
 
   getMachines(siteId: number | null, userId: string): Promise<Machine[]>;
@@ -702,7 +703,27 @@ export class DatabaseStorage implements IStorage {
       .map(([customerId, data]) => ({ name: customerMap.get(customerId)?.name || 'Unknown', ...data }))
       .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 10);
 
-    return { totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses, totalOrders, dailyRevenue, serviceDistribution, topCustomers };
+    const customerAreaMap = new Map<string, { area: string; customerIds: Set<number>; orderCount: number; totalSpent: number }>();
+    for (const order of reportOrders) {
+      const customer = customerMap.get(order.customerId);
+      const area = (customer?.address || "").trim() || "Unknown area";
+      const key = area.toLowerCase();
+      const existing = customerAreaMap.get(key) || { area, customerIds: new Set<number>(), orderCount: 0, totalSpent: 0 };
+      existing.customerIds.add(order.customerId);
+      existing.orderCount++;
+      existing.totalSpent += Number(order.totalAmount);
+      customerAreaMap.set(key, existing);
+    }
+    const customerAreas = Array.from(customerAreaMap.values())
+      .map((area) => ({
+        area: area.area,
+        customerCount: area.customerIds.size,
+        orderCount: area.orderCount,
+        totalSpent: area.totalSpent,
+      }))
+      .sort((a, b) => b.orderCount - a.orderCount || b.totalSpent - a.totalSpent);
+
+    return { totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses, totalOrders, dailyRevenue, serviceDistribution, topCustomers, customerAreas };
   }
 
   async getMachines(siteId: number | null, userId: string): Promise<Machine[]> {
