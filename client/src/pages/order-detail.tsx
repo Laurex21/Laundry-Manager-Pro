@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock, Droplets, Wind, Shirt, Sparkles, Package, Truck,
-  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck, Printer
+  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -146,15 +146,6 @@ export default function OrderDetail() {
     generateDepositReceipt(order, symbol, mergedSettings, "download");
   }
 
-  function handlePrintReceipt() {
-    const mergedSettings = {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
-    generateDepositReceipt(order, symbol, mergedSettings, "print");
-  }
-
   async function handleRequestCancellation() {
     if (!cancelReason.trim()) return;
     try {
@@ -231,9 +222,6 @@ export default function OrderDetail() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
             <Download className="w-4 h-4 mr-2" /> {t("download_receipt")}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handlePrintReceipt} data-testid="button-print-deposit-receipt">
-            <Printer className="w-4 h-4 mr-2" /> {t("print_receipt")}
           </Button>
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />
