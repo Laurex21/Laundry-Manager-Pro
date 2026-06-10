@@ -35,18 +35,66 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   }
   req.userId = (req.session as any).userId;
 
-  if ((req.session as any).currentSiteId === undefined) {
-    try {
-      const { db } = await import("../../db");
-      const { users } = await import("@shared/models/auth");
-      const { eq } = await import("drizzle-orm");
-      const [row] = await db.select({ currentSiteId: users.currentSiteId }).from(users).where(eq(users.id, req.userId)).limit(1);
-      const siteId = row?.currentSiteId ?? null;
-      (req.session as any).currentSiteId = siteId;
-      req.session.save(() => {});
-    } catch (_) {}
-  }
+  try {
+    const { db } = await import("../../db");
+    const { users } = await import("@shared/models/auth");
+    const { organisations, sites, siteMembers } = await import("@shared/schema");
+    const { and, eq } = await import("drizzle-orm");
 
-  req.siteId = (req.session as any).currentSiteId ?? null;
+    const [user] = await db
+      .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId })
+      .from(users)
+      .where(eq(users.id, req.userId))
+      .limit(1);
+
+    let authorizedSiteIds: number[] = [];
+    if (user?.organisationId) {
+      const [org] = await db
+        .select({ ownerId: organisations.ownerId })
+        .from(organisations)
+        .where(eq(organisations.id, user.organisationId))
+        .limit(1);
+
+      if (org?.ownerId === req.userId) {
+        authorizedSiteIds = (await db
+          .select({ id: sites.id })
+          .from(sites)
+          .where(and(eq(sites.organisationId, user.organisationId), eq(sites.isActive, true))))
+          .map((site) => site.id);
+      } else {
+        const memberships = await db
+          .select({ siteId: siteMembers.siteId })
+          .from(siteMembers)
+          .innerJoin(sites, eq(siteMembers.siteId, sites.id))
+          .where(and(eq(siteMembers.userId, req.userId), eq(sites.isActive, true)));
+        authorizedSiteIds = memberships.map((membership) => membership.siteId);
+      }
+    }
+
+    if (authorizedSiteIds.length === 0) {
+      const memberships = await db
+        .select({ siteId: siteMembers.siteId })
+        .from(siteMembers)
+        .innerJoin(sites, eq(siteMembers.siteId, sites.id))
+        .where(and(eq(siteMembers.userId, req.userId), eq(sites.isActive, true)));
+      authorizedSiteIds = memberships.map((membership) => membership.siteId);
+    }
+
+    let currentSiteId = (req.session as any).currentSiteId;
+    if (currentSiteId === undefined) currentSiteId = user?.currentSiteId ?? null;
+    if (currentSiteId !== null && !authorizedSiteIds.includes(Number(currentSiteId))) {
+      currentSiteId = null;
+      await db.update(users).set({ currentSiteId: null }).where(eq(users.id, req.userId));
+    }
+
+    (req.session as any).currentSiteId = currentSiteId;
+    req.session.save(() => {});
+    req.siteId = currentSiteId ?? null;
+    req.authorizedSiteIds = authorizedSiteIds;
+    req.siteScope = currentSiteId === null ? authorizedSiteIds : [Number(currentSiteId)].filter((siteId) => authorizedSiteIds.includes(siteId));
+  } catch (error) {
+    console.error("Tenant scope resolution failed:", error);
+    return res.status(500).json({ message: "Failed to resolve tenant scope" });
+  }
   return next();
 };

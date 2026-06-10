@@ -19,7 +19,7 @@ import {
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
-import { eq, ne, desc, sql, and, gte, lte, isNull } from "drizzle-orm";
+import { eq, ne, desc, sql, and, gte, lte, isNull, inArray } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
 
 export interface IStorage {
@@ -29,7 +29,7 @@ export interface IStorage {
   updateCustomer(id: number, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
 
   getServices(): Promise<Service[]>;
-  getServicesBySite(siteId: number | null): Promise<Service[]>;
+  getServicesBySite(siteId: number | number[] | null): Promise<Service[]>;
   getService(id: number): Promise<Service | undefined>;
   createService(service: InsertService): Promise<Service>;
   updateService(id: number, service: Partial<InsertService>): Promise<Service | undefined>;
@@ -56,14 +56,14 @@ export interface IStorage {
   getPublicStats(): Promise<{ totalOrders: number; totalCustomers: number; totalTransactions: number; totalLaundries: number; totalGarments: number }>;
   getStats(): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
 
-  getPerformanceData(siteId: number | null): Promise<{
+  getPerformanceData(siteId: number | number[] | null): Promise<{
     currentMonthRevenue: number; currentMonthExpenses: number; currentMonthProfit: number;
     last30Revenue: number; prev30Revenue: number; last30Expenses: number; prev30Expenses: number;
     last30Profit: number; prev30Profit: number;
     monthlyComparison: { month: string; income: number; expenses: number }[];
   }>;
 
-  getReportData(startDate: Date, endDate: Date, siteId: number | null): Promise<{
+  getReportData(startDate: Date, endDate: Date, siteId: number | number[] | null): Promise<{
     totalRevenue: number; totalExpenses: number; netProfit: number; totalOrders: number;
     dailyRevenue: { date: string; revenue: number }[];
     serviceDistribution: { name: string; count: number }[];
@@ -71,12 +71,12 @@ export interface IStorage {
     customerAreas: { area: string; customerCount: number; orderCount: number; totalSpent: number }[];
   }>;
 
-  getMachines(siteId: number | null, userId: string): Promise<Machine[]>;
+  getMachines(siteId: number | number[] | null, userId: string): Promise<Machine[]>;
   createMachine(machine: InsertMachine): Promise<Machine>;
   updateMachine(id: number, data: Partial<InsertMachine>): Promise<Machine | undefined>;
   deleteMachine(id: number): Promise<boolean>;
 
-  getEmployees(siteId: number | null, userId: string): Promise<Employee[]>;
+  getEmployees(siteId: number | number[] | null, userId: string): Promise<Employee[]>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
   deleteEmployee(id: number): Promise<boolean>;
@@ -91,20 +91,20 @@ export interface IStorage {
   requestCancellation(id: number, reason: string, requestedBy: string): Promise<Order | undefined>;
   approveCancellation(id: number, reviewedBy: string): Promise<Order | undefined>;
   rejectCancellation(id: number, reviewedBy: string, note: string): Promise<Order | undefined>;
-  getPendingCancellations(siteId: number | null): Promise<any[]>;
+  getPendingCancellations(siteId: number | number[] | null): Promise<any[]>;
   markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined>;
-  getProductionDelays(siteId: number | null): Promise<any[]>;
+  getProductionDelays(siteId: number | number[] | null): Promise<any[]>;
 
-  getOrdersBySite(siteId: number | null): Promise<any[]>;
-  getCustomersBySite(siteId: number | null): Promise<Customer[]>;
-  getExpendituresBySite(siteId: number | null): Promise<Expenditure[]>;
-  getStatsBySite(siteId: number | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
+  getOrdersBySite(siteId: number | number[] | null): Promise<any[]>;
+  getCustomersBySite(siteId: number | number[] | null): Promise<Customer[]>;
+  getExpendituresBySite(siteId: number | number[] | null): Promise<Expenditure[]>;
+  getStatsBySite(siteId: number | number[] | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
   backfillNullSiteIds(): Promise<void>;
 
-  getDashboardData(siteId?: number | null, allSites?: boolean): Promise<any>;
-  getAnalyticsKpis(period: string, siteId: number | null): Promise<any>;
-  getWasteAlerts(siteId: number | null): Promise<any[]>;
-  getPerformanceScore(siteId: number | null): Promise<any>;
+  getDashboardData(siteId?: number | number[] | null, allSites?: boolean): Promise<any>;
+  getAnalyticsKpis(period: string, siteId: number | number[] | null): Promise<any>;
+  getWasteAlerts(siteId: number | number[] | null): Promise<any[]>;
+  getPerformanceScore(siteId: number | number[] | null): Promise<any>;
 
   getSettings(userId: string): Promise<BusinessSettings>;
   upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings>;
@@ -131,6 +131,18 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private siteIds(scope: number | number[] | null | undefined): number[] {
+    if (Array.isArray(scope)) return scope.filter((siteId) => Number.isInteger(siteId));
+    if (typeof scope === "number") return [scope];
+    return [];
+  }
+
+  private siteWhere(column: any, scope: number | number[] | null | undefined) {
+    const siteIds = this.siteIds(scope);
+    if (siteIds.length === 0) return sql`false`;
+    return inArray(column, siteIds);
+  }
+
   async getCustomers(): Promise<Customer[]> {
     return await db.select().from(customers).orderBy(desc(customers.createdAt));
   }
@@ -154,10 +166,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(services).where(eq(services.active, true)).orderBy(services.name);
   }
 
-  async getServicesBySite(siteId: number | null): Promise<Service[]> {
-    if (siteId !== null) {
+  async getServicesBySite(siteId: number | number[] | null): Promise<Service[]> {
+    const siteWhere = this.siteWhere(services.siteId, siteId);
+    if (siteWhere) {
       return await db.select().from(services)
-        .where(and(eq(services.active, true), eq(services.siteId, siteId)))
+        .where(and(eq(services.active, true), siteWhere))
         .orderBy(services.name);
     }
     return await db.select().from(services).where(eq(services.active, true)).orderBy(services.name);
@@ -316,12 +329,12 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getPendingCancellations(siteId: number | null): Promise<any[]> {
-    const siteWhere = siteId !== null ? eq(orders.siteId, siteId) : undefined;
+  async getPendingCancellations(siteId: number | number[] | null): Promise<any[]> {
+    const siteWhere = this.siteWhere(orders.siteId, siteId);
     const pendingOrders = await db.select().from(orders)
       .where(siteWhere ? and(eq(orders.status, "cancellation_requested"), siteWhere) : eq(orders.status, "cancellation_requested"))
       .orderBy(desc(orders.updatedAt));
-    const allCustomers = await db.select().from(customers);
+    const allCustomers = siteWhere ? await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId)!) : await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     return pendingOrders.map(o => ({ ...o, customer: customerMap.get(o.customerId) || null }));
   }
@@ -359,12 +372,13 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getProductionDelays(siteId: number | null): Promise<any[]> {
+  async getProductionDelays(siteId: number | number[] | null): Promise<any[]> {
     const activeStatuses = ["received", "washing", "stain_treatment", "drying", "ironing"];
     const statusFilter = sql`${orders.status} = ANY(${sql`ARRAY[${sql.join(activeStatuses.map(s => sql`${s}`), sql`, `)}]`})`;
+    const siteWhere = this.siteWhere(orders.siteId, siteId);
     const activeOrders = await db.select().from(orders)
-      .where(siteId !== null ? and(statusFilter, eq(orders.siteId, siteId)) : statusFilter);
-    const allCustomers = await db.select().from(customers);
+      .where(siteWhere ? and(statusFilter, siteWhere) : statusFilter);
+    const allCustomers = siteWhere ? await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId)!) : await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const now = new Date();
     const delays: any[] = [];
@@ -464,11 +478,12 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getOrdersBySite(siteId: number | null): Promise<any[]> {
-    const allOrders = siteId !== null
-      ? await db.select().from(orders).where(eq(orders.siteId, siteId)).orderBy(desc(orders.createdAt))
+  async getOrdersBySite(siteId: number | number[] | null): Promise<any[]> {
+    const siteWhere = this.siteWhere(orders.siteId, siteId);
+    const allOrders = siteWhere
+      ? await db.select().from(orders).where(siteWhere).orderBy(desc(orders.createdAt))
       : await db.select().from(orders).orderBy(desc(orders.createdAt));
-    const allCustomers = await db.select().from(customers);
+    const allCustomers = siteWhere ? await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId)!) : await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const allGarments = await db.select().from(garmentItems);
     const garmentsByOrder = new Map<number, typeof allGarments>();
@@ -484,27 +499,31 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getCustomersBySite(siteId: number | null): Promise<Customer[]> {
-    if (siteId !== null) {
-      return await db.select().from(customers).where(eq(customers.siteId, siteId)).orderBy(desc(customers.createdAt));
+  async getCustomersBySite(siteId: number | number[] | null): Promise<Customer[]> {
+    const siteWhere = this.siteWhere(customers.siteId, siteId);
+    if (siteWhere) {
+      return await db.select().from(customers).where(siteWhere).orderBy(desc(customers.createdAt));
     }
     return await db.select().from(customers).orderBy(desc(customers.createdAt));
   }
 
-  async getExpendituresBySite(siteId: number | null): Promise<Expenditure[]> {
-    if (siteId !== null) {
-      return await db.select().from(expenditures).where(eq(expenditures.siteId, siteId)).orderBy(desc(expenditures.date));
+  async getExpendituresBySite(siteId: number | number[] | null): Promise<Expenditure[]> {
+    const siteWhere = this.siteWhere(expenditures.siteId, siteId);
+    if (siteWhere) {
+      return await db.select().from(expenditures).where(siteWhere).orderBy(desc(expenditures.date));
     }
     return await db.select().from(expenditures).orderBy(desc(expenditures.date));
   }
 
-  async getStatsBySite(siteId: number | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }> {
-    const siteFilter = siteId !== null;
+  async getStatsBySite(siteId: number | number[] | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }> {
+    const orderSiteWhere = this.siteWhere(orders.siteId, siteId);
+    const customerSiteWhere = this.siteWhere(customers.siteId, siteId);
+    const siteFilter = !!orderSiteWhere;
     const [ordersCount] = siteFilter
-      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(eq(orders.siteId, siteId!), ne(orders.status, "cancelled")))
+      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(orderSiteWhere!, ne(orders.status, "cancelled")))
       : await db.select({ count: sql<number>`count(*)` }).from(orders).where(ne(orders.status, "cancelled"));
     const siteOrderIds = siteFilter
-      ? (await db.select({ id: orders.id }).from(orders).where(and(eq(orders.siteId, siteId!), ne(orders.status, "cancelled")))).map(o => o.id)
+      ? (await db.select({ id: orders.id }).from(orders).where(and(orderSiteWhere!, ne(orders.status, "cancelled")))).map(o => o.id)
       : null;
     let totalRevenue = 0;
     if (!siteFilter) {
@@ -516,10 +535,10 @@ export class DatabaseStorage implements IStorage {
       totalRevenue = Number(revenueResult?.total || 0);
     }
     const [pendingCount] = siteFilter
-      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(eq(orders.siteId, siteId!), eq(orders.status, "received")))
+      ? await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(orderSiteWhere!, eq(orders.status, "received")))
       : await db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.status, "received"));
     const [customersCount] = siteFilter
-      ? await db.select({ count: sql<number>`count(*)` }).from(customers).where(eq(customers.siteId, siteId!))
+      ? await db.select({ count: sql<number>`count(*)` }).from(customers).where(customerSiteWhere!)
       : await db.select({ count: sql<number>`count(*)` }).from(customers);
     return {
       totalOrders: Number(ordersCount?.count || 0),
@@ -593,11 +612,12 @@ export class DatabaseStorage implements IStorage {
     return Number(result?.total || 0);
   }
 
-  private async sumPaymentsInRangeBySite(start: Date, end: Date, siteId: number | null): Promise<number> {
-    if (siteId === null) return this.sumPaymentsInRange(start, end);
+  private async sumPaymentsInRangeBySite(start: Date, end: Date, siteId: number | number[] | null): Promise<number> {
+    const siteWhere = this.siteWhere(orders.siteId, siteId);
+    if (!siteWhere) return this.sumPaymentsInRange(start, end);
     const siteOrderIds = (await db.select({ id: orders.id }).from(orders)
       .where(and(
-        eq(orders.siteId, siteId),
+        siteWhere,
         sql`${orders.entryDate} >= ${start}`,
         sql`${orders.entryDate} <= ${end}`,
         ne(orders.status, "cancelled")
@@ -609,20 +629,21 @@ export class DatabaseStorage implements IStorage {
     return Number(result?.total || 0);
   }
 
-  private async sumExpensesInRangeBySite(start: Date, end: Date, siteId: number | null): Promise<number> {
-    if (siteId === null) return this.sumExpensesInRange(start, end);
+  private async sumExpensesInRangeBySite(start: Date, end: Date, siteId: number | number[] | null): Promise<number> {
+    const siteWhere = this.siteWhere(expenditures.siteId, siteId);
+    if (!siteWhere) return this.sumExpensesInRange(start, end);
     const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
       .from(expenditures)
       .where(and(
         sql`${expenditures.date} IS NOT NULL`,
         sql`${expenditures.date} >= ${start}`,
         sql`${expenditures.date} <= ${end}`,
-        eq(expenditures.siteId, siteId)
+        siteWhere
       ));
     return Number(result?.total || 0);
   }
 
-  async getPerformanceData(siteId: number | null) {
+  async getPerformanceData(siteId: number | number[] | null) {
     const now = new Date();
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -654,9 +675,11 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getReportData(startDate: Date, endDate: Date, siteId: number | null) {
-    const siteOrderWhere = siteId !== null
-      ? and(sql`${orders.entryDate} >= ${startDate}`, sql`${orders.entryDate} <= ${endDate}`, eq(orders.siteId, siteId))
+  async getReportData(startDate: Date, endDate: Date, siteId: number | number[] | null) {
+    const orderSiteWhere = this.siteWhere(orders.siteId, siteId);
+    const expenseSiteWhere = this.siteWhere(expenditures.siteId, siteId);
+    const siteOrderWhere = orderSiteWhere
+      ? and(sql`${orders.entryDate} >= ${startDate}`, sql`${orders.entryDate} <= ${endDate}`, orderSiteWhere)
       : and(sql`${orders.entryDate} >= ${startDate}`, sql`${orders.entryDate} <= ${endDate}`);
     const filteredOrders = await db.select().from(orders).where(siteOrderWhere);
     const reportOrders = filteredOrders.filter(order => order.status !== "cancelled");
@@ -670,8 +693,8 @@ export class DatabaseStorage implements IStorage {
     }
     const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
-    const siteExpenseWhere = siteId !== null
-      ? and(sql`${expenditures.date} >= ${startDate}`, sql`${expenditures.date} <= ${endDate}`, eq(expenditures.siteId, siteId))
+    const siteExpenseWhere = expenseSiteWhere
+      ? and(sql`${expenditures.date} >= ${startDate}`, sql`${expenditures.date} <= ${endDate}`, expenseSiteWhere)
       : and(sql`${expenditures.date} >= ${startDate}`, sql`${expenditures.date} <= ${endDate}`);
     const filteredExpenses = await db.select().from(expenditures).where(siteExpenseWhere);
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -703,7 +726,8 @@ export class DatabaseStorage implements IStorage {
       existing.orderCount++; existing.totalSpent += Number(order.totalAmount);
       customerOrderMap.set(order.customerId, existing);
     }
-    const allCustomers = await db.select().from(customers);
+    const customerSiteWhere = this.siteWhere(customers.siteId, siteId);
+    const allCustomers = customerSiteWhere ? await db.select().from(customers).where(customerSiteWhere) : await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const topCustomers = Array.from(customerOrderMap.entries())
       .map(([customerId, data]) => ({ name: customerMap.get(customerId)?.name || 'Unknown', ...data }))
@@ -732,8 +756,8 @@ export class DatabaseStorage implements IStorage {
     return { totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses, totalOrders, dailyRevenue, serviceDistribution, topCustomers, customerAreas };
   }
 
-  async getMachines(siteId: number | null, userId: string): Promise<Machine[]> {
-    const where = siteId !== null ? eq(machines.siteId, siteId) : eq(machines.userId, userId);
+  async getMachines(siteId: number | number[] | null, userId: string): Promise<Machine[]> {
+    const where = this.siteWhere(machines.siteId, siteId) ?? eq(machines.userId, userId);
     return await db.select().from(machines).where(where).orderBy(desc(machines.createdAt));
   }
 
@@ -752,8 +776,8 @@ export class DatabaseStorage implements IStorage {
     return !!deleted;
   }
 
-  async getEmployees(siteId: number | null, userId: string): Promise<Employee[]> {
-    const where = siteId !== null ? eq(employees.siteId, siteId) : eq(employees.userId, userId);
+  async getEmployees(siteId: number | number[] | null, userId: string): Promise<Employee[]> {
+    const where = this.siteWhere(employees.siteId, siteId) ?? eq(employees.userId, userId);
     return await db.select().from(employees).where(where).orderBy(desc(employees.createdAt));
   }
 
@@ -813,7 +837,8 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getDashboardData(siteId?: number | null, allSites?: boolean) {
+  async getDashboardData(siteId?: number | number[] | null, allSites?: boolean) {
+    const scope = siteId ?? null;
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
@@ -821,22 +846,23 @@ export class DatabaseStorage implements IStorage {
 
     const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0);
 
-    const siteFilter = siteId !== null && siteId !== undefined && !allSites;
-    const siteWhere = siteFilter ? eq(orders.siteId, siteId as number) : sql`1=1`;
-    const expSiteWhere = siteFilter ? eq(expenditures.siteId, siteId as number) : sql`1=1`;
+    const siteWhere = this.siteWhere(orders.siteId, scope) ?? sql`1=1`;
+    const expSiteWhere = this.siteWhere(expenditures.siteId, scope) ?? sql`1=1`;
+    const customerSiteWhere = this.siteWhere(customers.siteId, scope);
+    const scopedSiteIds = this.siteIds(scope);
 
-    const todayRevenue = await this.sumPaymentsInRangeBySite(todayStart, todayEnd, siteFilter ? siteId as number : null);
+    const todayRevenue = await this.sumPaymentsInRangeBySite(todayStart, todayEnd, scope);
     const todayOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(siteWhere, sql`${orders.entryDate} >= ${todayStart}`, sql`${orders.entryDate} <= ${todayEnd}`, ne(orders.status, "cancelled")));
     const todayOrders = Number(todayOrdersResult[0]?.count || 0);
 
-    const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, now, siteFilter ? siteId as number : null);
+    const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, now, scope);
     const weekOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(siteWhere, sql`${orders.entryDate} >= ${weekStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
     const weekOrders = Number(weekOrdersResult[0]?.count || 0);
 
-    const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
-    const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteFilter ? siteId as number : null);
+    const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, scope);
+    const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, scope);
     const monthOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
       .where(and(siteWhere, sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
     const monthOrders = Number(monthOrdersResult[0]?.count || 0);
@@ -860,7 +886,7 @@ export class DatabaseStorage implements IStorage {
       const dayStart = new Date(now); dayStart.setDate(dayStart.getDate() - i); dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(dayStart); dayEnd.setHours(23, 59, 59, 999);
       const dateStr = dayStart.toISOString().split('T')[0];
-      const rev = await this.sumPaymentsInRangeBySite(dayStart, dayEnd, siteFilter ? siteId as number : null);
+      const rev = await this.sumPaymentsInRangeBySite(dayStart, dayEnd, scope);
       revenueByDay.push({ date: dateStr, value: rev });
       kgByDay.push({ date: dateStr, value: 0 });
     }
@@ -882,9 +908,13 @@ export class DatabaseStorage implements IStorage {
     // Build site overview for All Sites mode
     let sitesOverview: { id: number; name: string; city?: string | null; memberCount: number; isActive: boolean }[] = [];
     if (allSites) {
-      const allSiteRows = await db.select().from(sites).where(eq(sites.isActive, true));
+      const allSiteRows = scopedSiteIds.length > 0
+        ? await db.select().from(sites).where(and(eq(sites.isActive, true), inArray(sites.id, scopedSiteIds)))
+        : [];
       const memberCounts = await db.select({ siteId: siteMembers.siteId, count: sql<number>`count(*)` })
-        .from(siteMembers).groupBy(siteMembers.siteId);
+        .from(siteMembers)
+        .where(scopedSiteIds.length > 0 ? inArray(siteMembers.siteId, scopedSiteIds) : sql`false`)
+        .groupBy(siteMembers.siteId);
       const countMap: Record<number, number> = {};
       for (const mc of memberCounts) countMap[mc.siteId] = Number(mc.count);
       sitesOverview = allSiteRows.map(s => ({
@@ -899,8 +929,8 @@ export class DatabaseStorage implements IStorage {
     }
 
     const readyOrders = await db.select().from(orders).where(and(siteWhere, eq(orders.status, "ready"))).orderBy(desc(orders.updatedAt));
-    const readyCustomers = siteFilter
-      ? await db.select().from(customers).where(eq(customers.siteId, siteId as number))
+    const readyCustomers = customerSiteWhere
+      ? await db.select().from(customers).where(customerSiteWhere)
       : await db.select().from(customers);
     const readyCustMap = new Map(readyCustomers.map(c => [c.id, c]));
     const readyForPickup = readyOrders.map(o => ({ ...o, customer: readyCustMap.get(o.customerId) || null }));
@@ -918,7 +948,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getAnalyticsKpis(period: string, siteId: number | null) {
+  async getAnalyticsKpis(period: string, siteId: number | number[] | null) {
     const now = new Date();
     let start: Date;
     if (period === "day") { start = new Date(now); start.setHours(0, 0, 0, 0); }
@@ -928,19 +958,20 @@ export class DatabaseStorage implements IStorage {
 
     const totalRevenue = await this.sumPaymentsInRangeBySite(start, now, siteId);
     const totalExpenses = await this.sumExpensesInRangeBySite(start, now, siteId);
-    const ordersWhere = siteId !== null
-      ? and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${now}`, eq(orders.siteId, siteId), ne(orders.status, "cancelled"))
+    const orderSiteWhere = this.siteWhere(orders.siteId, siteId);
+    const ordersWhere = orderSiteWhere
+      ? and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${now}`, orderSiteWhere, ne(orders.status, "cancelled"))
       : and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled"));
     const ordersResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(ordersWhere);
     const totalOrders = Number(ordersResult[0]?.count || 0);
     const profit = totalRevenue - totalExpenses;
 
-    const machineWhere = siteId !== null ? eq(machines.siteId, siteId) : undefined;
+    const machineWhere = this.siteWhere(machines.siteId, siteId);
     const allMachines = machineWhere ? await db.select().from(machines).where(machineWhere) : await db.select().from(machines);
     const machineUtilization = allMachines.length > 0
       ? allMachines.reduce((sum, m) => sum + Number(m.utilizationRate), 0) / allMachines.length : 0;
 
-    const employeeWhere = siteId !== null ? eq(employees.siteId, siteId) : undefined;
+    const employeeWhere = this.siteWhere(employees.siteId, siteId);
     const allEmployees = employeeWhere ? await db.select().from(employees).where(employeeWhere) : await db.select().from(employees);
     const employeeProductivity = allEmployees.length > 0
       ? allEmployees.reduce((sum, e) => sum + Number(e.kgProcessed), 0) / allEmployees.length : 0;
@@ -956,7 +987,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getWasteAlerts(siteId: number | null): Promise<any[]> {
+  async getWasteAlerts(siteId: number | number[] | null): Promise<any[]> {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteId);
@@ -967,8 +998,9 @@ export class DatabaseStorage implements IStorage {
       alerts.push({ category: "Cost", severity: "high", type: "costs_high" });
     }
 
-    const expenseCatWhere = siteId !== null
-      ? and(sql`${expenditures.date} >= ${monthStart}`, sql`${expenditures.date} <= ${now}`, eq(expenditures.siteId, siteId))
+    const expenseSiteWhere = this.siteWhere(expenditures.siteId, siteId);
+    const expenseCatWhere = expenseSiteWhere
+      ? and(sql`${expenditures.date} >= ${monthStart}`, sql`${expenditures.date} <= ${now}`, expenseSiteWhere)
       : and(sql`${expenditures.date} >= ${monthStart}`, sql`${expenditures.date} <= ${now}`);
     const expensesByCategory = await db.select({ category: expenditures.category, total: sql<string>`SUM(amount)` })
       .from(expenditures).where(expenseCatWhere)
@@ -984,8 +1016,8 @@ export class DatabaseStorage implements IStorage {
     return alerts;
   }
 
-  async getPerformanceScore(siteId: number | null) {
-    const machineWhere = siteId !== null ? eq(machines.siteId, siteId) : undefined;
+  async getPerformanceScore(siteId: number | number[] | null) {
+    const machineWhere = this.siteWhere(machines.siteId, siteId);
     const allMachines = machineWhere ? await db.select().from(machines).where(machineWhere) : await db.select().from(machines);
     const machineUsage = allMachines.length > 0
       ? allMachines.reduce((sum, m) => sum + Number(m.utilizationRate), 0) / allMachines.length : 50;
@@ -996,7 +1028,7 @@ export class DatabaseStorage implements IStorage {
     const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, siteId);
     const costEfficiency = monthRevenue > 0 ? Math.min(100, Math.max(0, ((monthRevenue - monthExpenses) / monthRevenue) * 100)) : 50;
 
-    const employeeWhere = siteId !== null ? eq(employees.siteId, siteId) : undefined;
+    const employeeWhere = this.siteWhere(employees.siteId, siteId);
     const allEmployees = employeeWhere ? await db.select().from(employees).where(employeeWhere) : await db.select().from(employees);
     const productivity = allEmployees.length > 0
       ? Math.min(100, allEmployees.reduce((sum, e) => sum + Number(e.kgProcessed), 0) / (allEmployees.length * 10)) : 50;
@@ -1072,8 +1104,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
-    const [site] = await db.insert(sites).values({ organisationId, ...data }).returning();
-    return site;
+    return await db.transaction(async (tx) => {
+      const [site] = await tx.insert(sites).values({ organisationId, ...data }).returning();
+      const [org] = await tx.select().from(organisations).where(eq(organisations.id, organisationId));
+      if (org?.ownerId) {
+        await tx.insert(siteMembers).values({ siteId: site.id, userId: org.ownerId, role: "owner" });
+      }
+      return site;
+    });
   }
 
   async updateSite(id: number, data: Partial<InsertSite>): Promise<Site | undefined> {

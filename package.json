@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:reporting": "tsx server/lib/reporting-date.test.ts",
+    "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
