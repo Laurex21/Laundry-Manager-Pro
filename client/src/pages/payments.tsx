@@ -11,6 +11,7 @@ import {
   CreditCard,
   CheckCircle2,
   Download,
+  Printer,
   Banknote,
   Calendar,
   ClipboardList,
@@ -134,7 +135,7 @@ export default function Payments() {
 
   const [receiptLoading, setReceiptLoading] = useState(false);
 
-  async function downloadReceipt() {
+  async function handleReceipt(action: "download" | "print") {
     if (!successPayment) return;
     setReceiptLoading(true);
     try {
@@ -178,7 +179,8 @@ export default function Payments() {
         discount,
         symbol,
         mergedSettings,
-        pickupCost
+        pickupCost,
+        action
       );
     } finally {
       setReceiptLoading(false);
@@ -226,17 +228,30 @@ export default function Payments() {
               </Badge>
             </p>
           </div>
-          <Button
-            onClick={downloadReceipt}
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20"
-            disabled={receiptLoading}
-            data-testid="button-download-receipt"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {receiptLoading ? t("preparing") : t("download_receipt")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => handleReceipt("download")}
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20"
+              disabled={receiptLoading}
+              data-testid="button-download-receipt"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {receiptLoading ? t("preparing") : t("download_receipt")}
+            </Button>
+            <Button
+              onClick={() => handleReceipt("print")}
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20"
+              disabled={receiptLoading}
+              data-testid="button-print-receipt"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              {receiptLoading ? t("preparing") : t("print_receipt")}
+            </Button>
+          </div>
         </div>
       )}
 

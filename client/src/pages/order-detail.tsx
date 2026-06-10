@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock, Droplets, Wind, Shirt, Sparkles, Package, Truck,
-  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck
+  AlertTriangle, RotateCcw, Download, XCircle, CalendarCheck, Printer
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -138,12 +138,21 @@ export default function OrderDetail() {
   }
 
   function handleDownloadReceipt() {
-  const mergedSettings = {
-    ...DEFAULT_SETTINGS,
-    ...(settings || {}),
-    receiptLanguage: settings?.receiptLanguage || i18n.language,
-  };
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(settings || {}),
+      receiptLanguage: settings?.receiptLanguage || i18n.language,
+    };
     generateDepositReceipt(order, symbol, mergedSettings);
+  }
+
+  function handlePrintReceipt() {
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(settings || {}),
+      receiptLanguage: settings?.receiptLanguage || i18n.language,
+    };
+    generateDepositReceipt(order, symbol, mergedSettings, "print");
   }
 
   async function handleRequestCancellation() {
@@ -222,6 +231,9 @@ export default function OrderDetail() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
             <Download className="w-4 h-4 mr-2" /> {t("receipt")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handlePrintReceipt} data-testid="button-print-deposit-receipt">
+            <Printer className="w-4 h-4 mr-2" /> {t("print_receipt")}
           </Button>
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />

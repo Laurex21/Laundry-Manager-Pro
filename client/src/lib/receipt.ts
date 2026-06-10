@@ -291,7 +291,19 @@ function openPrintWindow(html: string, paperSize: "57mm" | "80mm" = "80mm"): voi
   window.setTimeout(() => win.print(), 250);
 }
 
-export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
+function openReceiptPrintWindow(html: string): void {
+  const win = window.open("", "_blank", "noopener,noreferrer,width=820,height=900");
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  window.setTimeout(() => win.print(), 250);
+}
+
+type ReceiptAction = "download" | "print";
+
+export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
   const customer = order.customer || {};
   const items = order.items || [];
@@ -465,6 +477,11 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 </body>
 </html>`;
 
+  if (action === "print") {
+    openReceiptPrintWindow(html);
+    return;
+  }
+
   void downloadReceiptPdf({
     filename: `deposit-receipt-order-${order.id}.pdf`,
     title: `${depositLabel} #${order.id}`,
@@ -585,7 +602,8 @@ export function generatePaymentReceipt(
   discount: number,
   symbol: string,
   settings: ReceiptSettings = DEFAULT_SETTINGS,
-  pickupCost: number = 0
+  pickupCost: number = 0,
+  action: ReceiptAction = "download"
 ) {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = formatReceiptDate(entryDate, "MMM dd, yyyy", lang);
@@ -746,6 +764,11 @@ export function generatePaymentReceipt(
   </div>
 </body>
 </html>`;
+
+  if (action === "print") {
+    openReceiptPrintWindow(html);
+    return;
+  }
 
   void downloadReceiptPdf({
     filename: `payment-receipt-order-${orderId}.pdf`,
