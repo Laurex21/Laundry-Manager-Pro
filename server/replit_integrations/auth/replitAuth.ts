@@ -25,8 +25,17 @@ export function getSession() {
 }
 
 export async function setupAuth(app: Express) {
+  await ensureAuthSchema();
   app.set("trust proxy", 1);
   app.use(getSession());
+}
+
+async function ensureAuthSchema() {
+  const { pool } = await import("../../db");
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
+  `);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

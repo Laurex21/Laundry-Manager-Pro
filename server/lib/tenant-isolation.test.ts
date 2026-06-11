@@ -16,6 +16,8 @@ assert.match(auth, /req\.organisationSiteScope = req\.organisationSiteIds/);
 assert.match(auth, /!authorizedSiteIds\.includes\(Number\(currentSiteId\)\)/);
 assert.match(auth, /storage\.migrateToMultiSite\(\)/);
 assert.match(auth, /user\?\.userType !== "staff"/);
+assert.match(auth, /function ensureAuthSchema/);
+assert.match(auth, /ADD COLUMN IF NOT EXISTS user_type/);
 
 assert.match(authModel, /userType: varchar\("user_type"/);
 assert.match(authRoutes, /\/api\/staff\/onboard\/:token/);
