@@ -15,6 +15,7 @@ const NotFound          = lazy(() => import("@/pages/not-found"));
 const LandingPage       = lazy(() => import("@/pages/landing"));
 const Dashboard         = lazy(() => import("@/pages/dashboard"));
 const AuthPage          = lazy(() => import("@/pages/auth-page"));
+const StaffLogin        = lazy(() => import("@/pages/staff-login"));
 const CalculatorPage    = lazy(() => import("@/pages/calculator"));
 const DiagnosticPage    = lazy(() => import("@/pages/diagnostic"));
 const RentabilitePage   = lazy(() => import("@/pages/rentabilite"));
@@ -144,6 +145,7 @@ function Router() {
         <Route path="/calculator" component={CalculatorRedirect} />
         <Route path="/rapport/:leadId" component={PublicReportPage} />
         <Route path="/auth" component={AuthPage} />
+        <Route path="/staff-login" component={StaffLogin} />
         <Route path="/join/:token" component={AcceptInvitation} />
 
         <Route path="/">

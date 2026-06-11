@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Building2, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
 
@@ -17,6 +19,10 @@ export default function AcceptInvitation() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [accepted, setAccepted] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [credential, setCredential] = useState("");
+  const [password, setPassword] = useState("");
 
   // Store token in sessionStorage so after login we can redirect back
   useEffect(() => {
@@ -64,6 +70,37 @@ export default function AcceptInvitation() {
       qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({ title: t("welcome_to_team"), description: t("joined_site", { name: invitation?.siteName }) });
       setTimeout(() => setLocation("/"), 2500);
+    },
+    onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
+  });
+
+  const onboardMut = useMutation({
+    mutationFn: async () => {
+      const identifier = credential.trim();
+      const isEmail = identifier.includes("@");
+      const res = await fetch(`/api/staff/onboard/${token}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          password,
+          email: isEmail ? identifier : undefined,
+          phone: isEmail ? undefined : identifier,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || t("failed_accept_invitation"));
+      return data;
+    },
+    onSuccess: (data) => {
+      sessionStorage.removeItem("pendingInviteToken");
+      setAccepted(true);
+      queryClient.setQueryData(["/api/auth/user"], data);
+      qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({ title: t("welcome_to_team"), description: t("joined_site", { name: invitation?.siteName }) });
+      setTimeout(() => setLocation("/dashboard"), 1200);
     },
     onError: (e: any) => toast({ title: t("error"), description: e.message, variant: "destructive" }),
   });
@@ -149,13 +186,46 @@ export default function AcceptInvitation() {
 
           {!user ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center">{t("sign_in_to_accept_invitation")}</p>
+              <p className="text-sm text-muted-foreground text-center">Create your staff login for this site. This does not create a subscriber account.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">{t("first_name")}</label>
+                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="input-staff-first-name" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">{t("last_name")}</label>
+                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} data-testid="input-staff-last-name" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">{t("email_or_phone")}</label>
+                <Input
+                  value={credential}
+                  onChange={(e) => setCredential(e.target.value)}
+                  placeholder={invitation.identifier}
+                  data-testid="input-staff-credential"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">{t("password")}</label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={6}
+                  data-testid="input-staff-password"
+                />
+              </div>
               <Button
                 className="w-full"
-                onClick={() => setLocation("/auth")}
-                data-testid="button-sign-in-to-accept"
+                onClick={() => onboardMut.mutate()}
+                disabled={onboardMut.isPending || !credential.trim() || password.length < 6}
+                data-testid="button-create-staff-account"
               >
-                {t("sign_in_register")}
+                {onboardMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("joining")}</> : "Create staff login"}
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setLocation("/staff-login")} data-testid="button-existing-staff-login">
+                Already have staff credentials?
               </Button>
             </div>
           ) : (

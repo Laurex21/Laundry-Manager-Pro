@@ -42,16 +42,16 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     const { and, eq } = await import("drizzle-orm");
 
     let [user] = await db
-      .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId })
+      .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId, userType: users.userType })
       .from(users)
       .where(eq(users.id, req.userId))
       .limit(1);
 
-    if (!user?.organisationId) {
+    if (!user?.organisationId && user?.userType !== "staff") {
       const { storage } = await import("../../storage");
       await storage.migrateToMultiSite();
       [user] = await db
-        .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId })
+        .select({ currentSiteId: users.currentSiteId, organisationId: users.organisationId, userType: users.userType })
         .from(users)
         .where(eq(users.id, req.userId))
         .limit(1);

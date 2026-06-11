@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   phone: varchar("phone"),
   passwordHash: varchar("password_hash"),
   businessName: varchar("business_name"),
+  userType: varchar("user_type", { length: 20 }).notNull().default("owner"),
   role: varchar("role").default("owner"),
   organisationId: integer("organisation_id"),
   currentSiteId: integer("current_site_id"),

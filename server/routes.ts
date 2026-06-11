@@ -79,6 +79,16 @@ async function canManageSite(req: any, siteId: number): Promise<boolean> {
   return !!org && !!site && site.organisationId === org.id;
 }
 
+async function requireOwnerOrganisation(req: any, res: any) {
+  const userId = (req.session as any).userId;
+  const org = await storage.getOrganisationByOwner(userId);
+  if (!org) {
+    res.status(403).json({ message: "Only organisation owners can access this resource" });
+    return null;
+  }
+  return org;
+}
+
 async function seedDatabase() {
   const servicesList = await storage.getServices();
   if (servicesList.length === 0) {
@@ -466,11 +476,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/subscriptions/current", isAuthenticated, async (req, res) => {
+    if (!(await requireOwnerOrganisation(req, res))) return;
     const sub = await storage.getUserSubscription((req.session as any).userId);
     res.json(sub);
   });
 
   app.post("/api/subscriptions/pay", isAuthenticated, async (req, res) => {
+    if (!(await requireOwnerOrganisation(req, res))) return;
     const { planId, method } = req.body;
     if (!planId || !method) return res.status(400).json({ message: "planId and method are required" });
     try {
@@ -523,6 +535,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
+      if (!(await requireOwnerOrganisation(req, res))) return;
       const userId = (req.session as any).userId;
       const settings = await storage.getSettings(userId);
       res.json(settings);
@@ -533,6 +546,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/settings", isAuthenticated, async (req, res) => {
     try {
+      if (!(await requireOwnerOrganisation(req, res))) return;
       const userId = (req.session as any).userId;
       const settings = await storage.upsertSettings(userId, req.body);
       res.json(settings);
@@ -560,9 +574,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = (req.session as any).userId;
       let org = await storage.getOrganisationByOwner(userId);
       if (!org) {
-        const { organisation } = await storage.createOrganisationWithSite(userId, req.body.name, req.body.name);
-        org = organisation;
-        return res.status(201).json(org);
+        return res.status(403).json({ message: "Only organisation owners can create sites" });
       }
       const site = await storage.createSite(org.id, req.body);
       res.status(201).json(site);
@@ -633,8 +645,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/invitations", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const org = await storage.getOrganisationByOwner(userId);
-      if (!org) return res.status(400).json({ message: "No organisation found" });
+      const org = await requireOwnerOrganisation(req, res);
+      if (!org) return;
       const { siteId, identifier, role } = req.body;
       if (!siteId || !identifier || !role) return res.status(400).json({ message: "siteId, identifier and role are required" });
       if (!(await canManageSite(req, Number(siteId)))) return res.status(403).json({ message: "Forbidden" });
@@ -649,8 +661,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/invitations/pending", isAuthenticated, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const org = await storage.getOrganisationByOwner(userId);
-      if (!org) return res.json([]);
+      const org = await requireOwnerOrganisation(req, res);
+      if (!org) return;
       const invitations = await storage.getPendingInvitations(org.id);
       res.json(invitations);
     } catch (err) {
@@ -660,6 +672,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/invitations/:id", isAuthenticated, async (req, res) => {
     try {
+      if (!(await requireOwnerOrganisation(req, res))) return;
       await storage.revokeInvitation(Number(req.params.id));
       res.json({ success: true });
     } catch (err) {

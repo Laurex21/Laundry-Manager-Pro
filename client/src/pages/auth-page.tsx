@@ -224,6 +224,18 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           </>
         )}
       </p>
+      {tab === "login" && (
+        <p className="text-xs text-muted-foreground text-center">
+          Staff member?{" "}
+          <button
+            type="button"
+            className="text-primary font-semibold hover:underline"
+            onClick={() => setLocation("/staff-login")}
+          >
+            Use staff login
+          </button>
+        </p>
+      )}
     </div>
   );
 }

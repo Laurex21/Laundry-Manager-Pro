@@ -18,7 +18,7 @@ import {
   type BusinessSettings, type InsertBusinessSettings,
   type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
 } from "@shared/schema";
-import { users } from "@shared/models/auth";
+import { users, type User } from "@shared/models/auth";
 import { eq, ne, desc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
 
@@ -122,6 +122,7 @@ export interface IStorage {
   updateSiteMemberRole(siteId: number, userId: string, role: string): Promise<SiteMember | undefined>;
   createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }): Promise<SiteInvitation>;
   getInvitationByToken(token: string): Promise<(SiteInvitation & { siteName: string; organisationName: string; inviterName: string }) | null>;
+  createStaffFromInvitation(token: string, data: { email?: string | null; phone?: string | null; passwordHash: string; firstName?: string | null; lastName?: string | null }): Promise<User | null>;
   acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null>;
   getPendingInvitations(organisationId: number): Promise<(SiteInvitation & { siteName: string })[]>;
   revokeInvitation(id: number): Promise<boolean>;
@@ -1132,6 +1133,43 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async createStaffFromInvitation(
+    token: string,
+    data: { email?: string | null; phone?: string | null; passwordHash: string; firstName?: string | null; lastName?: string | null }
+  ): Promise<User | null> {
+    const [inv] = await db.select().from(siteInvitations).where(eq(siteInvitations.token, token));
+    if (!inv || inv.status !== "pending" || inv.expiresAt < new Date()) return null;
+
+    const normalisedIdentifier = inv.identifier.trim().toLowerCase();
+    const candidateIdentifiers = [data.email, data.phone]
+      .filter((value): value is string => !!value)
+      .map((value) => value.trim().toLowerCase());
+    if (candidateIdentifiers.length === 0 || !candidateIdentifiers.includes(normalisedIdentifier)) {
+      return null;
+    }
+
+    return await db.transaction(async (tx) => {
+      const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
+      if (!site || site.organisationId !== inv.organisationId) return null;
+
+      const [staffUser] = await tx.insert(users).values({
+        email: data.email || null,
+        phone: data.phone || null,
+        firstName: data.firstName || null,
+        lastName: data.lastName || null,
+        passwordHash: data.passwordHash,
+        userType: "staff",
+        role: inv.role,
+        organisationId: inv.organisationId,
+        currentSiteId: inv.siteId,
+      }).returning();
+
+      await tx.insert(siteMembers).values({ siteId: inv.siteId, userId: staffUser.id, role: inv.role });
+      await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id));
+      return staffUser;
+    });
+  }
+
   async acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null> {
     const [inv] = await db.select().from(siteInvitations).where(eq(siteInvitations.token, token));
     if (!inv || inv.status !== "pending" || inv.expiresAt < new Date()) return null;
@@ -1141,7 +1179,7 @@ export class DatabaseStorage implements IStorage {
         await tx.insert(siteMembers).values({ siteId: inv.siteId, userId, role: inv.role });
       }
       const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
-      await tx.update(users).set({ currentSiteId: inv.siteId, organisationId: site?.organisationId }).where(eq(users.id, userId));
+      await tx.update(users).set({ currentSiteId: inv.siteId, organisationId: site?.organisationId, userType: "staff", role: inv.role }).where(eq(users.id, userId));
       const [updated] = await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id)).returning();
       return updated;
     });
@@ -1180,12 +1218,16 @@ export class DatabaseStorage implements IStorage {
       db.select({ count: sql<number>`count(*)::int` }).from(payments),
       db.select({ total: sql<number>`coalesce(sum(${orderItems.quantity}),0)::int` }).from(orderItems),
     ]);
-    const laundries = await db.selectDistinct({ uid: siteMembers.userId }).from(siteMembers).where(eq(siteMembers.role, "owner"));
+    const laundries = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(organisations)
+      .innerJoin(users, eq(organisations.ownerId, users.id))
+      .where(ne(users.userType, "staff"));
     return {
       totalOrders: o?.count || 0,
       totalCustomers: c?.count || 0,
       totalTransactions: p?.count || 0,
-      totalLaundries: laundries.length || 0,
+      totalLaundries: laundries[0]?.count || 0,
       totalGarments: g?.total || 0,
     };
   }
@@ -1194,6 +1236,7 @@ export class DatabaseStorage implements IStorage {
     const allUsers = await db.select().from(users);
     for (const user of allUsers) {
       if (user.organisationId) continue;
+      if (user.userType === "staff") continue;
       try {
         const orgName = user.businessName || `${user.firstName || 'My'} Business`;
         const siteName = user.businessName || "Main Site";
