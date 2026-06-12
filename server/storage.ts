@@ -20,7 +20,7 @@ import {
   type Subscription, type SubscriptionWithPlan,
   type OrderWithDetails, type OrderStatusHistoryEntry,
   type BusinessSettings, type InsertBusinessSettings,
-  type Organisation, type Site, type InsertSite, type SiteMember, type SiteInvitation
+  type Organisation, type Site, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users, type User } from "@shared/models/auth";
 import { eq, ne, desc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
@@ -125,7 +125,7 @@ export interface IStorage {
   getSites(organisationId: number): Promise<(Site & { memberCount: number })[]>;
   getSite(siteId: number): Promise<Site | null>;
   createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site>;
-  updateSite(id: number, data: Partial<InsertSite>): Promise<Site | undefined>;
+  updateSite(id: number, data: { name: string; address: string; city: string; phone: string }): Promise<Site | undefined>;
   deleteSite(id: number): Promise<boolean>;
   getSiteMembers(siteId: number): Promise<(SiteMember & { name: string; email: string | null; phone: string | null })[]>;
   addSiteMember(siteId: number, userId: string, role: string): Promise<SiteMember>;
@@ -1344,8 +1344,11 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async updateSite(id: number, data: Partial<InsertSite>): Promise<Site | undefined> {
-    const [updated] = await db.update(sites).set(data).where(eq(sites.id, id)).returning();
+  async updateSite(id: number, data: { name: string; address: string; city: string; phone: string }): Promise<Site | undefined> {
+    const [updated] = await db.update(sites)
+      .set({ name: data.name, address: data.address, city: data.city, phone: data.phone })
+      .where(eq(sites.id, id))
+      .returning();
     return updated;
   }
 

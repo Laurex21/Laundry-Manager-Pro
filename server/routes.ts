@@ -788,14 +788,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/sites/:id", isAuthenticated, async (req, res) => {
     try {
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-      const data = pickSiteUpdate(req.body);
-      if (!data.name?.trim()) return res.status(400).json({ message: "Site name is required" });
+      const raw = pickSiteUpdate(req.body);
+      if (!raw.name?.trim()) return res.status(400).json({ message: "Site name is required" });
+      const data = {
+        name: raw.name.trim(),
+        address: raw.address ?? "",
+        city: raw.city ?? "",
+        phone: raw.phone ?? "",
+      };
       const updated = await storage.updateSite(Number(req.params.id), data);
       if (!updated) return res.status(404).json({ message: "Site not found" });
       res.json(updated);
     } catch (err: any) {
-      console.error("Failed to update site:", err);
-      res.status(500).json({ message: err?.message || "Failed to update site" });
+      const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Failed to update site";
+      console.error("Failed to update site:", msg, err?.stack ?? "");
+      res.status(500).json({ message: msg });
     }
   });
 
