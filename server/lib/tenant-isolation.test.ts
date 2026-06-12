@@ -30,6 +30,7 @@ assert.match(authRoutes, /storage\.getUserSubscription\(subscriptionOwnerId\)/);
 assert.match(routes, /function scopedSites/);
 assert.match(routes, /function orgScopedSites/);
 assert.match(routes, /function requireWriteSite/);
+assert.match(routes, /function pickSiteUpdate/);
 assert.match(routes, /resolveWriteSiteId/);
 assert.match(routes, /storage\.getOrdersBySite\(scopedSites\(req\)\)/);
 assert.match(routes, /storage\.getCustomersBySite\(orgScopedSites\(req\)\)/);
@@ -41,6 +42,7 @@ assert.match(routes, /Select a specific site before saving/);
 assert.match(routes, /\(req\.session as any\)\.currentSiteId = result\.siteId/);
 assert.match(routes, /Only organisation owners can access this resource/);
 assert.match(routes, /Only organisation owners can create sites/);
+assert.match(routes, /Site name is required/);
 assert.match(routes, /Customer does not belong to this organisation/);
 assert.match(routes, /Service \$\{item\.serviceId\} does not belong to this organisation/);
 

@@ -381,13 +381,22 @@ function TeamTab() {
 
   const updateSiteMut = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const payload = {
+        name: data.name,
+        address: data.address || "",
+        city: data.city || "",
+        phone: data.phone || "",
+      };
       const res = await fetch(`/api/sites/${id}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const error = await res.json().catch(async () => ({ message: await res.text() }));
+        throw new Error(error.message || t("failed_update_site"));
+      }
       return res.json();
     },
     onSuccess: () => {

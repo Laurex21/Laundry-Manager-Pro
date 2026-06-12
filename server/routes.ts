@@ -53,6 +53,14 @@ function requireWriteSite(req: any, res: any): number | null {
   return siteId;
 }
 
+function pickSiteUpdate(data: Record<string, any>) {
+  const out: Record<string, string> = {};
+  for (const key of ["name", "address", "city", "phone"]) {
+    if (typeof data[key] === "string") out[key] = data[key];
+  }
+  return out;
+}
+
 async function canAccessSite(req: any, siteId: number): Promise<boolean> {
   return Array.isArray(req.authorizedSiteIds) && req.authorizedSiteIds.includes(siteId);
 }
@@ -586,11 +594,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/sites/:id", isAuthenticated, async (req, res) => {
     try {
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-      const updated = await storage.updateSite(Number(req.params.id), req.body);
+      const data = pickSiteUpdate(req.body);
+      if (!data.name?.trim()) return res.status(400).json({ message: "Site name is required" });
+      const updated = await storage.updateSite(Number(req.params.id), data);
       if (!updated) return res.status(404).json({ message: "Site not found" });
       res.json(updated);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to update site" });
+    } catch (err: any) {
+      console.error("Failed to update site:", err);
+      res.status(500).json({ message: err?.message || "Failed to update site" });
     }
   });
 
