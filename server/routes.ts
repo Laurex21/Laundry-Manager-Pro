@@ -26,6 +26,38 @@ function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<str
   return out;
 }
 
+function sanitizeInteger(obj: Record<string, any>, fields: string[]): Record<string, any> {
+  const out = { ...obj };
+  for (const f of fields) {
+    if (f in out) {
+      const v = out[f];
+      if (v === "" || v === null || v === undefined) {
+        out[f] = null;
+      } else {
+        const n = Number(v);
+        out[f] = Number.isInteger(n) ? n : null;
+      }
+    }
+  }
+  return out;
+}
+
+function sanitizeDates(obj: Record<string, any>, fields: string[]): Record<string, any> {
+  const out = { ...obj };
+  for (const f of fields) {
+    if (f in out) {
+      const v = out[f];
+      if (v === "" || v === null || v === undefined) {
+        out[f] = null;
+      } else if (typeof v === "string" || v instanceof Date) {
+        const date = new Date(v);
+        out[f] = Number.isNaN(date.getTime()) ? null : date;
+      }
+    }
+  }
+  return out;
+}
+
 function scopedSites(req: any): number[] {
   return Array.isArray(req.siteScope) ? req.siteScope : [];
 }
@@ -558,28 +590,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   const MACHINE_NUMERIC = ["capacityKg", "utilizationRate", "cycleCount", "totalKgProcessed", "maintenanceIntervalHours", "maintenanceCost"];
+  const MACHINE_INTEGER = ["maintenanceIntervalDays"];
+  const MACHINE_DATES = ["purchaseDate", "lastMaintenanceDate"];
 
   app.post("/api/machines", isAuthenticated, async (req: any, res) => {
     try {
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
-      const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
+      let body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
+      body = sanitizeInteger(body, MACHINE_INTEGER);
+      body = sanitizeDates(body, MACHINE_DATES);
       if (!body.capacityKg) body.capacityKg = "0";
-      if (body.purchaseDate) body.purchaseDate = new Date(body.purchaseDate);
-      if (body.lastMaintenanceDate) body.lastMaintenanceDate = new Date(body.lastMaintenanceDate);
       const input = insertMachineSchema.parse({ ...body, userId: (req.session as any).userId, siteId });
       const machine = await storage.createMachine(input);
       res.status(201).json(machine);
     } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      console.error("Machine save failed:", err);
       res.status(400).json({ message: "Invalid machine data" });
     }
   });
 
   app.patch("/api/machines/:id", isAuthenticated, async (req, res) => {
     if (!(await canAccessMachine(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-    const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
-    if (body.purchaseDate) body.purchaseDate = new Date(body.purchaseDate);
-    if (body.lastMaintenanceDate) body.lastMaintenanceDate = new Date(body.lastMaintenanceDate);
+    let body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
+    body = sanitizeInteger(body, MACHINE_INTEGER);
+    body = sanitizeDates(body, MACHINE_DATES);
     const updated = await storage.updateMachine(Number(req.params.id), body);
     if (!updated) return res.status(404).json({ message: "Machine not found" });
     res.json(updated);
@@ -615,25 +651,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   const EMPLOYEE_NUMERIC = ["salary", "kgProcessed", "ordersHandled"];
+  const EMPLOYEE_INTEGER = ["ordersHandled"];
+  const EMPLOYEE_DATES = ["dateHired"];
 
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
-      const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
-      if (body.dateHired) body.dateHired = new Date(body.dateHired);
+      let body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
+      body = sanitizeInteger(body, EMPLOYEE_INTEGER);
+      body = sanitizeDates(body, EMPLOYEE_DATES);
       const input = insertEmployeeSchema.parse({ ...body, userId: (req.session as any).userId, siteId });
       const employee = await storage.createEmployee(input);
       res.status(201).json(employee);
     } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      console.error("Employee save failed:", err);
       res.status(400).json({ message: "Invalid employee data" });
     }
   });
 
   app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
     if (!(await canAccessEmployee(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-    const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
-    if (body.dateHired) body.dateHired = new Date(body.dateHired);
+    let body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
+    body = sanitizeInteger(body, EMPLOYEE_INTEGER);
+    body = sanitizeDates(body, EMPLOYEE_DATES);
     const updated = await storage.updateEmployee(Number(req.params.id), body);
     if (!updated) return res.status(404).json({ message: "Employee not found" });
     res.json(updated);
