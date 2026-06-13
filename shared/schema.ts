@@ -44,6 +44,7 @@ export const services = pgTable("services", {
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull().references(() => customers.id),
+  createdByEmployeeId: integer("created_by_employee_id"),
   status: text("status").notNull().default("received"),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentStatus: text("payment_status").notNull().default("unpaid"),
@@ -86,6 +87,7 @@ export const orderStatusHistory = pgTable("order_status_history", {
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => orders.id),
+  collectedByEmployeeId: integer("collected_by_employee_id"),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   method: varchar("method", { length: 50 }).notNull(),
   reference: varchar("reference", { length: 255 }),
@@ -119,11 +121,18 @@ export const machines = pgTable("machines", {
   userId: varchar("user_id").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   type: varchar("type", { length: 50 }).notNull().default("washer"),
+  brand: varchar("brand", { length: 100 }),
+  model: varchar("model", { length: 100 }),
   capacityKg: decimal("capacity_kg", { precision: 8, scale: 2 }).notNull(),
+  purchaseDate: timestamp("purchase_date"),
   status: varchar("status", { length: 50 }).notNull().default("active"),
   cycleCount: integer("cycle_count").notNull().default(0),
   totalKgProcessed: decimal("total_kg_processed", { precision: 10, scale: 2 }).notNull().default("0"),
   utilizationRate: decimal("utilization_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  lastMaintenanceDate: timestamp("last_maintenance_date"),
+  maintenanceIntervalDays: integer("maintenance_interval_days"),
+  maintenanceIntervalHours: decimal("maintenance_interval_hours", { precision: 10, scale: 2 }),
+  maintenanceCost: decimal("maintenance_cost", { precision: 10, scale: 2 }).default("0"),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -131,15 +140,57 @@ export const machines = pgTable("machines", {
 export const employees = pgTable("employees", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull(),
+  authUserId: varchar("auth_user_id"),
+  employeeCode: varchar("employee_code", { length: 100 }),
   name: varchar("name", { length: 255 }).notNull(),
+  photoUrl: text("photo_url"),
   role: varchar("role", { length: 100 }).notNull(),
+  position: varchar("position", { length: 100 }),
   phone: varchar("phone", { length: 50 }),
   email: varchar("email", { length: 255 }),
   salary: decimal("salary", { precision: 10, scale: 2 }),
+  dateHired: timestamp("date_hired"),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
   kgProcessed: decimal("kg_processed", { precision: 10, scale: 2 }).notNull().default("0"),
   ordersHandled: integer("orders_handled").notNull().default(0),
   productivityScore: decimal("productivity_score", { precision: 5, scale: 2 }).notNull().default("0"),
   siteId: integer("site_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const employeeActivities = pgTable("employee_activities", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  actorUserId: varchar("actor_user_id"),
+  siteId: integer("site_id").notNull(),
+  actionDate: timestamp("action_date").defaultNow(),
+  actionType: varchar("action_type", { length: 60 }).notNull(),
+  orderId: integer("order_id").references(() => orders.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }),
+  weightKg: decimal("weight_kg", { precision: 10, scale: 2 }),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const employeeAttendance = pgTable("employee_attendance", {
+  id: serial("id").primaryKey(),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  siteId: integer("site_id").notNull(),
+  workDate: timestamp("work_date").defaultNow(),
+  checkInAt: timestamp("check_in_at"),
+  checkOutAt: timestamp("check_out_at"),
+  status: varchar("status", { length: 30 }).notNull().default("present"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const machineUsage = pgTable("machine_usage", {
+  id: serial("id").primaryKey(),
+  machineId: integer("machine_id").notNull().references(() => machines.id),
+  orderId: integer("order_id").references(() => orders.id),
+  siteId: integer("site_id").notNull(),
+  usageDate: timestamp("usage_date").defaultNow(),
+  weightProcessed: decimal("weight_processed", { precision: 10, scale: 2 }).default("0"),
+  cycleDurationMinutes: integer("cycle_duration_minutes").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -325,6 +376,9 @@ export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ i
 export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true });
 export const insertMachineSchema = createInsertSchema(machines).omit({ id: true, createdAt: true, cycleCount: true, totalKgProcessed: true, utilizationRate: true });
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true, productivityScore: true });
+export const insertEmployeeActivitySchema = createInsertSchema(employeeActivities).omit({ id: true, createdAt: true });
+export const insertEmployeeAttendanceSchema = createInsertSchema(employeeAttendance).omit({ id: true, createdAt: true });
+export const insertMachineUsageSchema = createInsertSchema(machineUsage).omit({ id: true, createdAt: true });
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, ordersUsed: true });
 export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).omit({ id: true, changedAt: true });
@@ -360,6 +414,15 @@ export type InsertMachine = z.infer<typeof insertMachineSchema>;
 
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+
+export type EmployeeActivity = typeof employeeActivities.$inferSelect;
+export type InsertEmployeeActivity = z.infer<typeof insertEmployeeActivitySchema>;
+
+export type EmployeeAttendance = typeof employeeAttendance.$inferSelect;
+export type InsertEmployeeAttendance = z.infer<typeof insertEmployeeAttendanceSchema>;
+
+export type MachineUsage = typeof machineUsage.$inferSelect;
+export type InsertMachineUsage = z.infer<typeof insertMachineUsageSchema>;
 
 export type Plan = typeof plans.$inferSelect;
 export type InsertPlan = z.infer<typeof insertPlanSchema>;

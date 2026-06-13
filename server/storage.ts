@@ -1,7 +1,8 @@
 import { db } from "./db";
 import { 
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
-  machines, employees, plans, subscriptions, subscriptionPayments, orderStatusHistory,
+  machines, employees, employeeActivities, employeeAttendance, machineUsage,
+  plans, subscriptions, subscriptionPayments, orderStatusHistory,
   businessSettings, organisations, sites, siteMembers, siteInvitations,
   type Customer, type InsertCustomer,
   type Service, type InsertService,
@@ -12,6 +13,9 @@ import {
   type Expenditure, type InsertExpenditure,
   type Machine, type InsertMachine,
   type Employee, type InsertEmployee,
+  type InsertEmployeeActivity,
+  type InsertEmployeeAttendance,
+  type InsertMachineUsage,
   type Plan,
   type Subscription, type SubscriptionWithPlan,
   type OrderWithDetails, type OrderStatusHistoryEntry,
@@ -72,14 +76,20 @@ export interface IStorage {
   }>;
 
   getMachines(siteId: number | number[] | null, userId: string): Promise<Machine[]>;
+  getMachine(id: number): Promise<Machine | undefined>;
   createMachine(machine: InsertMachine): Promise<Machine>;
   updateMachine(id: number, data: Partial<InsertMachine>): Promise<Machine | undefined>;
   deleteMachine(id: number): Promise<boolean>;
+  createMachineUsage(data: InsertMachineUsage): Promise<any>;
 
   getEmployees(siteId: number | number[] | null, userId: string): Promise<Employee[]>;
+  getEmployee(id: number): Promise<Employee | undefined>;
+  getOrCreateActorEmployee(actorUserId: string, siteId: number): Promise<Employee>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
   deleteEmployee(id: number): Promise<boolean>;
+  createEmployeeActivity(activity: InsertEmployeeActivity): Promise<any>;
+  createEmployeeAttendance(attendance: InsertEmployeeAttendance): Promise<any>;
 
   getPlans(): Promise<Plan[]>;
   getPlan(id: number): Promise<Plan | undefined>;
@@ -105,6 +115,7 @@ export interface IStorage {
   getAnalyticsKpis(period: string, siteId: number | number[] | null): Promise<any>;
   getWasteAlerts(siteId: number | number[] | null): Promise<any[]>;
   getPerformanceScore(siteId: number | number[] | null): Promise<any>;
+  getAdvancedAnalytics(period: string, siteId: number | number[] | null, planSlug?: string): Promise<any>;
 
   getSettings(userId: string): Promise<BusinessSettings>;
   upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings>;
@@ -717,6 +728,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(machines).where(where).orderBy(desc(machines.createdAt));
   }
 
+  async getMachine(id: number): Promise<Machine | undefined> {
+    const [machine] = await db.select().from(machines).where(eq(machines.id, id));
+    return machine;
+  }
+
   async createMachine(machine: InsertMachine): Promise<Machine> {
     const [created] = await db.insert(machines).values(machine).returning();
     return created;
@@ -732,9 +748,53 @@ export class DatabaseStorage implements IStorage {
     return !!deleted;
   }
 
+  async createMachineUsage(data: InsertMachineUsage): Promise<any> {
+    return await db.transaction(async (tx) => {
+      const [usage] = await tx.insert(machineUsage).values(data).returning();
+      await tx.update(machines).set({
+        cycleCount: sql`${machines.cycleCount} + 1`,
+        totalKgProcessed: sql`${machines.totalKgProcessed} + ${data.weightProcessed ?? "0"}`,
+      }).where(eq(machines.id, data.machineId));
+      return usage;
+    });
+  }
+
   async getEmployees(siteId: number | number[] | null, userId: string): Promise<Employee[]> {
     const where = this.siteWhere(employees.siteId, siteId) ?? eq(employees.userId, userId);
     return await db.select().from(employees).where(where).orderBy(desc(employees.createdAt));
+  }
+
+  async getEmployee(id: number): Promise<Employee | undefined> {
+    const [employee] = await db.select().from(employees).where(eq(employees.id, id));
+    return employee;
+  }
+
+  async getOrCreateActorEmployee(actorUserId: string, siteId: number): Promise<Employee> {
+    const [existing] = await db.select().from(employees)
+      .where(and(eq(employees.authUserId, actorUserId), eq(employees.siteId, siteId)))
+      .limit(1);
+    if (existing) return existing;
+
+    const [user] = await db.select().from(users).where(eq(users.id, actorUserId)).limit(1);
+    const [site] = await db.select().from(sites).where(eq(sites.id, siteId)).limit(1);
+    const [org] = site?.organisationId
+      ? await db.select().from(organisations).where(eq(organisations.id, site.organisationId)).limit(1)
+      : [undefined as any];
+    const name = `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || user?.email || user?.phone || "Employee";
+    const role = user?.role || await this.getUserSiteRole(actorUserId, siteId) || "operator";
+    const [created] = await db.insert(employees).values({
+      userId: org?.ownerId || actorUserId,
+      authUserId: actorUserId,
+      employeeCode: `EMP-${actorUserId.slice(0, 8)}`,
+      name,
+      role,
+      position: role,
+      phone: user?.phone || null,
+      email: user?.email || null,
+      status: "active",
+      siteId,
+    } as any).returning();
+    return created;
   }
 
   async createEmployee(employee: InsertEmployee): Promise<Employee> {
@@ -752,6 +812,22 @@ export class DatabaseStorage implements IStorage {
     return !!deleted;
   }
 
+  async createEmployeeActivity(activity: InsertEmployeeActivity): Promise<any> {
+    const [created] = await db.insert(employeeActivities).values(activity).returning();
+    if (["order_created", "order_processed", "order_delivered"].includes(activity.actionType)) {
+      await db.update(employees).set({
+        ordersHandled: sql`${employees.ordersHandled} + 1`,
+        kgProcessed: activity.weightKg != null ? sql`${employees.kgProcessed} + ${activity.weightKg}` : employees.kgProcessed,
+      }).where(eq(employees.id, activity.employeeId));
+    }
+    return created;
+  }
+
+  async createEmployeeAttendance(attendance: InsertEmployeeAttendance): Promise<any> {
+    const [created] = await db.insert(employeeAttendance).values(attendance).returning();
+    return created;
+  }
+
   async getPlans(): Promise<Plan[]> {
     return await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.price);
   }
@@ -763,13 +839,24 @@ export class DatabaseStorage implements IStorage {
 
   async seedPlans(): Promise<void> {
     const existing = await db.select().from(plans);
-    if (existing.length > 0) return;
+    if (existing.length > 0) {
+      const featureUpdates: Record<string, string[]> = {
+        starter: ["Client management", "Order tracking", "Basic dashboard", "Basic Employee Module", "Basic Machine Module"],
+        pro: ["Everything in Starter", "Employee Analytics", "Machine Analytics", "Reports"],
+        business: ["Everything in Pro", "Advanced Analytics", "Smart Recommendations", "Performance Scores", "Waste detection"],
+        enterprise: ["Everything in Business", "Full Analytics", "Predictive Maintenance", "Multi-Site Benchmarking", "Advanced Intelligence", "Custom API access"],
+      };
+      for (const [slug, features] of Object.entries(featureUpdates)) {
+        await db.update(plans).set({ features }).where(eq(plans.slug, slug));
+      }
+      return;
+    }
 
     await db.insert(plans).values([
-      { name: "Starter", slug: "starter", price: "6000", maxOrders: 100, maxUsers: 1, features: ["Client management", "Order tracking", "Basic dashboard"] },
-      { name: "Pro", slug: "pro", price: "15000", maxOrders: 500, maxUsers: 3, features: ["Everything in Starter", "Analytics & KPIs", "Break-even analysis", "Employee management", "Machine management"] },
-      { name: "Business", slug: "business", price: "30000", maxOrders: 2000, maxUsers: 10, features: ["Everything in Pro", "Waste detection", "Performance score", "Smart alerts", "Financial forecasts"] },
-      { name: "Enterprise", slug: "enterprise", price: "50000", maxOrders: null, maxUsers: null, features: ["Everything in Business", "Unlimited orders & users", "Custom API access", "Priority support 24/7"] },
+      { name: "Starter", slug: "starter", price: "6000", maxOrders: 100, maxUsers: 1, features: ["Client management", "Order tracking", "Basic dashboard", "Basic Employee Module", "Basic Machine Module"] },
+      { name: "Pro", slug: "pro", price: "15000", maxOrders: 500, maxUsers: 3, features: ["Everything in Starter", "Employee Analytics", "Machine Analytics", "Reports"] },
+      { name: "Business", slug: "business", price: "30000", maxOrders: 2000, maxUsers: 10, features: ["Everything in Pro", "Advanced Analytics", "Smart Recommendations", "Performance Scores", "Waste detection"] },
+      { name: "Enterprise", slug: "enterprise", price: "50000", maxOrders: null, maxUsers: null, features: ["Everything in Business", "Full Analytics", "Predictive Maintenance", "Multi-Site Benchmarking", "Advanced Intelligence", "Custom API access"] },
     ]);
   }
 
@@ -997,6 +1084,193 @@ export class DatabaseStorage implements IStorage {
     if (total >= 90) grade = "A"; else if (total >= 80) grade = "B"; else if (total >= 70) grade = "C"; else if (total >= 60) grade = "D";
 
     return { total, machineUsage: Math.round(machineUsage), costEfficiency: Math.round(costEfficiency), productivity: Math.round(productivity), wasteLevel: Math.round(wasteLevel), grade };
+  }
+
+  async getAdvancedAnalytics(period: string, siteId: number | number[] | null, planSlug = "starter") {
+    const now = new Date();
+    const start = period === "year"
+      ? new Date(now.getFullYear(), 0, 1)
+      : period === "week"
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+        : period === "day"
+          ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          : new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const siteFilter = this.siteWhere(employeeActivities.siteId, siteId);
+    const machineSiteFilter = this.siteWhere(machineUsage.siteId, siteId);
+    const orderSiteFilter = this.siteWhere(orders.siteId, siteId);
+    const scopedEmployees = await db.select().from(employees).where(this.siteWhere(employees.siteId, siteId)).orderBy(employees.name);
+    const employeeMap = new Map(scopedEmployees.map((employee) => [employee.id, employee]));
+
+    const activityRows = await db.select().from(employeeActivities)
+      .where(and(siteFilter, sql`${employeeActivities.actionDate} >= ${start}`, sql`${employeeActivities.actionDate} <= ${now}`));
+    const paymentRows = await db.select().from(payments)
+      .innerJoin(orders, eq(payments.orderId, orders.id))
+      .where(and(orderSiteFilter, sql`${payments.date} >= ${start}`, sql`${payments.date} <= ${now}`));
+    const machineRows = await db.select().from(machines).where(this.siteWhere(machines.siteId, siteId)).orderBy(machines.name);
+    const usageRows = await db.select().from(machineUsage)
+      .where(and(machineSiteFilter, sql`${machineUsage.usageDate} >= ${start}`, sql`${machineUsage.usageDate} <= ${now}`));
+
+    const days = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / 86400000));
+    const employeeStats = new Map<number, any>();
+    for (const employee of scopedEmployees) {
+      employeeStats.set(employee.id, {
+        id: employee.id,
+        name: employee.name,
+        employeeCode: employee.employeeCode,
+        role: employee.position || employee.role,
+        status: employee.status,
+        totalOrdersHandled: 0,
+        totalRevenueHandled: 0,
+        totalPaymentsCollected: 0,
+        totalWeightProcessed: 0,
+        activityCount: 0,
+        deletions: 0,
+        cancellations: 0,
+        discounts: 0,
+        paymentModifications: 0,
+      });
+    }
+
+    for (const activity of activityRows) {
+      const stat = employeeStats.get(activity.employeeId);
+      if (!stat) continue;
+      stat.activityCount += 1;
+      if (["order_created", "order_processed", "order_delivered"].includes(activity.actionType)) stat.totalOrdersHandled += 1;
+      if (activity.actionType === "payment_collected") stat.totalPaymentsCollected += Number(activity.amount || 0);
+      if (activity.actionType === "order_deleted") stat.deletions += 1;
+      if (activity.actionType === "order_cancelled") stat.cancellations += 1;
+      if (activity.actionType === "discount_applied") stat.discounts += Number(activity.amount || 0);
+      if (activity.actionType === "payment_modified") stat.paymentModifications += 1;
+      stat.totalRevenueHandled += Number(activity.amount || 0);
+      stat.totalWeightProcessed += Number(activity.weightKg || 0);
+    }
+
+    for (const paymentJoin of paymentRows as any[]) {
+      const employeeId = paymentJoin.payments?.collectedByEmployeeId;
+      const stat = employeeId ? employeeStats.get(employeeId) : null;
+      if (stat) stat.totalPaymentsCollected += Number(paymentJoin.payments.amount || 0);
+    }
+
+    const employeesRanked = Array.from(employeeStats.values()).map((stat) => ({
+      ...stat,
+      averageOrdersPerDay: stat.totalOrdersHandled / days,
+      averageRevenuePerDay: stat.totalRevenueHandled / days,
+    }));
+    const topBy = (key: string) => [...employeesRanked].sort((a, b) => Number(b[key] || 0) - Number(a[key] || 0))[0] || null;
+
+    const machineStats = machineRows.map((machine) => {
+      const rows = usageRows.filter((usage) => usage.machineId === machine.id);
+      const totalCycles = rows.length;
+      const totalOperatingHours = rows.reduce((sum, usage) => sum + Number(usage.cycleDurationMinutes || 0) / 60, 0);
+      const totalWeightProcessed = rows.reduce((sum, usage) => sum + Number(usage.weightProcessed || 0), 0);
+      const expectedCapacity = Math.max(1, Number(machine.capacityKg || 0) * days);
+      const utilizationScore = Math.round(Math.min(100, (totalWeightProcessed / expectedCapacity) * 100));
+      const maintenanceDays = machine.lastMaintenanceDate && machine.maintenanceIntervalDays
+        ? Math.ceil((new Date(machine.lastMaintenanceDate).getTime() + machine.maintenanceIntervalDays * 86400000 - now.getTime()) / 86400000)
+        : null;
+      const maintenanceHours = machine.maintenanceIntervalHours
+        ? Number(machine.maintenanceIntervalHours) - totalOperatingHours
+        : null;
+      return {
+        id: machine.id,
+        name: machine.name,
+        type: machine.type,
+        brand: machine.brand,
+        model: machine.model,
+        status: machine.status,
+        totalCycles,
+        totalOperatingHours,
+        totalWeightProcessed,
+        averageDailyUsage: totalCycles / days,
+        utilizationScore,
+        utilizationLabel: utilizationScore >= 80 ? "excellent" : utilizationScore >= 55 ? "good" : utilizationScore >= 25 ? "underutilized" : "critical",
+        daysUntilNextMaintenance: maintenanceDays,
+        hoursUntilNextMaintenance: maintenanceHours,
+        maintenanceCost: Number(machine.maintenanceCost || 0),
+      };
+    });
+    type MachineMetricKey = keyof (typeof machineStats)[number];
+    const machineTopBy = (key: MachineMetricKey, asc = false) => [...machineStats].sort((a, b) => {
+      const av = Number(a[key] || 0);
+      const bv = Number(b[key] || 0);
+      return asc ? av - bv : bv - av;
+    })[0] || null;
+
+    const alerts: any[] = [];
+    for (const employee of employeesRanked) {
+      if (employee.deletions >= 3) alerts.push({ type: "employee_risk", severity: "high", message: `${employee.name} has a high number of order deletions.` });
+      if (employee.cancellations >= 5) alerts.push({ type: "employee_risk", severity: "medium", message: `${employee.name} has frequent order cancellations.` });
+      if (employee.discounts >= 100) alerts.push({ type: "employee_risk", severity: "medium", message: `${employee.name} applied unusual discounts.` });
+      if (employee.paymentModifications >= 3) alerts.push({ type: "employee_risk", severity: "high", message: `${employee.name} has frequent payment modifications.` });
+    }
+    for (const machine of machineStats) {
+      if (machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance < 0) alerts.push({ type: "maintenance", severity: "high", message: `${machine.name} maintenance is overdue.` });
+      else if (machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance <= 14) alerts.push({ type: "maintenance", severity: "medium", message: `${machine.name} requires maintenance within ${machine.daysUntilNextMaintenance} days.` });
+      if (machine.maintenanceCost > 0 && machine.totalWeightProcessed > 0 && machine.maintenanceCost / machine.totalWeightProcessed > 50) alerts.push({ type: "maintenance_cost", severity: "medium", message: `${machine.name} has high maintenance cost per kg.` });
+    }
+
+    const serviceRows = await db.select({
+      name: services.name,
+      revenue: sql<string>`COALESCE(SUM(${orderItems.quantity} * ${orderItems.priceAtOrder}), 0)`,
+      quantity: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)`,
+    }).from(orderItems)
+      .innerJoin(services, eq(orderItems.serviceId, services.id))
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(and(orderSiteFilter, sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${now}`))
+      .groupBy(services.name);
+    const servicesRanked = serviceRows.map((row) => ({ name: row.name, revenue: Number(row.revenue || 0), quantity: Number(row.quantity || 0) }));
+    const mostProfitableService = [...servicesRanked].sort((a, b) => b.revenue - a.revenue)[0] || null;
+    const leastProfitableService = [...servicesRanked].sort((a, b) => a.revenue - b.revenue)[0] || null;
+
+    const recommendations = [];
+    const avgOrders = employeesRanked.length ? employeesRanked.reduce((sum, e) => sum + e.totalOrdersHandled, 0) / employeesRanked.length : 0;
+    const mostProductive = topBy("totalOrdersHandled");
+    if (mostProductive && avgOrders > 0) recommendations.push(`${mostProductive.name} processed ${Math.round(((mostProductive.totalOrdersHandled - avgOrders) / avgOrders) * 100)}% more orders than average this period.`);
+    const underused = machineStats.find((machine) => machine.utilizationLabel === "critical" || machine.utilizationLabel === "underutilized");
+    if (underused) recommendations.push(`${underused.name} is underutilized and should be reviewed for scheduling or maintenance issues.`);
+    const maintenanceSoon = machineStats.find((machine) => machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance <= 14);
+    if (maintenanceSoon) recommendations.push(`${maintenanceSoon.name} will require maintenance within ${maintenanceSoon.daysUntilNextMaintenance} days.`);
+    if (mostProfitableService) recommendations.push(`${mostProfitableService.name} generated the highest service revenue this period.`);
+
+    const orderCount = employeesRanked.reduce((sum, employee) => sum + employee.totalOrdersHandled, 0);
+    const revenue = await this.sumPaymentsInRangeBySite(start, now, siteId);
+    return {
+      period,
+      planSlug,
+      summary: {
+        totalOrdersHandled: orderCount,
+        totalRevenueHandled: revenue,
+        totalPaymentsCollected: employeesRanked.reduce((sum, employee) => sum + employee.totalPaymentsCollected, 0),
+        totalWeightProcessed: machineStats.reduce((sum, machine) => sum + machine.totalWeightProcessed, 0),
+        averageOrdersPerDay: orderCount / days,
+        averageRevenuePerDay: revenue / days,
+        revenuePerEmployee: scopedEmployees.length ? revenue / scopedEmployees.length : 0,
+        revenuePerMachine: machineRows.length ? revenue / machineRows.length : 0,
+      },
+      employeeInsights: {
+        employees: employeesRanked,
+        mostProductiveEmployee: mostProductive,
+        highestRevenueEmployee: topBy("totalRevenueHandled"),
+        highestWeightProcessed: topBy("totalWeightProcessed"),
+        mostActiveEmployee: topBy("activityCount"),
+      },
+      machineInsights: {
+        machines: machineStats,
+        mostUsedMachine: machineTopBy("totalCycles"),
+        leastUsedMachine: machineTopBy("totalCycles", true),
+        highestVolumeMachine: machineTopBy("totalWeightProcessed"),
+        underutilizedMachine: machineStats.find((machine) => machine.utilizationLabel === "critical" || machine.utilizationLabel === "underutilized") || null,
+      },
+      operationalInsights: {
+        mostProfitableService,
+        leastProfitableService,
+        averageOrderProcessingTimeHours: 0,
+        ordersDeliveredLate: 0,
+      },
+      alerts,
+      recommendations,
+    };
   }
 
   // ─── Business Settings (Prompt A) ───────────────────────────────────────────

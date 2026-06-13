@@ -80,6 +80,44 @@ async function canAccessOrder(req: any, orderId: number): Promise<boolean> {
   return !!order && order.siteId != null && (await canAccessSite(req, order.siteId));
 }
 
+async function canAccessMachine(req: any, machineId: number): Promise<boolean> {
+  const machine = await storage.getMachine(machineId);
+  return !!machine && machine.siteId != null && (await canAccessSite(req, machine.siteId));
+}
+
+async function canAccessEmployee(req: any, employeeId: number): Promise<boolean> {
+  const employee = await storage.getEmployee(employeeId);
+  return !!employee && employee.siteId != null && (await canAccessSite(req, employee.siteId));
+}
+
+async function actorEmployee(req: any, siteId: number) {
+  const userId = (req.session as any)?.userId as string | undefined;
+  if (!userId) return null;
+  return storage.getOrCreateActorEmployee(userId, siteId);
+}
+
+async function trackEmployeeActivity(req: any, data: {
+  siteId: number;
+  actionType: string;
+  orderId?: number | null;
+  amount?: string | number | null;
+  weightKg?: string | number | null;
+  metadata?: Record<string, any>;
+}) {
+  const employee = await actorEmployee(req, data.siteId);
+  if (!employee) return;
+  await storage.createEmployeeActivity({
+    employeeId: employee.id,
+    actorUserId: (req.session as any).userId,
+    siteId: data.siteId,
+    actionType: data.actionType,
+    orderId: data.orderId ?? null,
+    amount: data.amount == null ? null : String(data.amount),
+    weightKg: data.weightKg == null ? null : String(data.weightKg),
+    metadata: data.metadata ?? {},
+  } as any);
+}
+
 async function canManageSite(req: any, siteId: number): Promise<boolean> {
   const userId = (req.session as any).userId;
   const org = await storage.getOrganisationByOwner(userId);
@@ -95,6 +133,22 @@ async function requireOwnerOrganisation(req: any, res: any) {
     return null;
   }
   return org;
+}
+
+async function effectivePlanSlug(req: any): Promise<string> {
+  const userId = (req.session as any).userId as string;
+  const { db } = await import("./db");
+  const { users } = await import("@shared/models/auth");
+  const { organisations } = await import("@shared/schema");
+  const { eq } = await import("drizzle-orm");
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  let subscriptionOwnerId = userId;
+  if (user?.organisationId) {
+    const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId)).limit(1);
+    subscriptionOwnerId = org?.ownerId || userId;
+  }
+  const sub = await storage.getUserSubscription(subscriptionOwnerId);
+  return sub?.plan?.slug || "starter";
 }
 
 async function seedDatabase() {
@@ -233,7 +287,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
       const input = api.orders.create.input.parse(req.body);
-      const { items, garmentItems: garments, ...orderData } = input;
+      const { items, garmentItems: garments, machineUsages, ...orderData } = input;
       const customer = await storage.getCustomer(orderData.customerId);
       if (!customer) return res.status(400).json({ message: "Customer not found" });
       if (!(await canAccessCustomer(req, customer.id))) {
@@ -253,8 +307,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const advanceAmount = Number(orderData.advancePayment || 0);
       const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
       const initialPaymentStatus = advanceAmount >= totalAmount ? "paid" : advanceAmount > 0 ? "partial" : "unpaid";
+      const employee = await actorEmployee(req, siteId);
       const order = await storage.createOrder({
         ...orderData,
+        createdByEmployeeId: employee?.id ?? null,
         status: "received",
         totalAmount: totalAmount.toString(),
         originalPrice: subtotal.toString(),
@@ -266,13 +322,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
         siteId,
       } as any, items, garments);
+      await trackEmployeeActivity(req, {
+        siteId,
+        actionType: "order_created",
+        orderId: order.id,
+        amount: totalAmount,
+        weightKg: items.reduce((sum, item) => sum + item.quantity, 0),
+        metadata: { itemCount: items.length, garmentCount: garments?.length ?? 0 },
+      });
+      if (discountAmount > 0) {
+        await trackEmployeeActivity(req, {
+          siteId,
+          actionType: "discount_applied",
+          orderId: order.id,
+          amount: discountAmount,
+          metadata: { subtotal, totalAmount },
+        });
+      }
+      for (const usage of machineUsages ?? []) {
+        const machine = await storage.getMachine(usage.machineId);
+        if (!machine || machine.siteId !== siteId) continue;
+        await storage.createMachineUsage({
+          machineId: usage.machineId,
+          orderId: order.id,
+          siteId,
+          weightProcessed: usage.weightProcessed || "0",
+          cycleDurationMinutes: usage.cycleDurationMinutes || 0,
+        } as any);
+      }
       if (advanceAmount > 0) {
         await storage.createPayment({
           orderId: order.id,
+          collectedByEmployeeId: employee?.id ?? null,
           amount: advanceAmount.toString(),
           method: orderData.advancePaymentMethod || "Cash",
           isAdvance: true,
         } as any);
+        await trackEmployeeActivity(req, {
+          siteId,
+          actionType: "payment_collected",
+          orderId: order.id,
+          amount: advanceAmount,
+          metadata: { method: orderData.advancePaymentMethod || "Cash", isAdvance: true },
+        });
       }
       res.status(201).json(order);
     } catch (err) {
@@ -290,6 +382,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.updateOrderStatus(Number(req.params.id), input.status, input.paymentStatus, userId);
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    if (updated.siteId != null) {
+      const actionType = input.status === "delivered"
+        ? "order_delivered"
+        : input.status === "cancelled"
+          ? "order_cancelled"
+          : "order_processed";
+      await trackEmployeeActivity(req, {
+        siteId: updated.siteId,
+        actionType,
+        orderId: updated.id,
+        amount: updated.totalAmount,
+        metadata: { status: input.status, paymentStatus: input.paymentStatus },
+      });
+    }
     res.json(updated);
   });
 
@@ -319,6 +425,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.requestCancellation(Number(req.params.id), reason, userId);
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    if (updated.siteId != null) {
+      await trackEmployeeActivity(req, {
+        siteId: updated.siteId,
+        actionType: "order_cancelled",
+        orderId: updated.id,
+        amount: updated.totalAmount,
+        metadata: { reason, requested: true },
+      });
+    }
     res.json(updated);
   });
 
@@ -327,6 +442,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.approveCancellation(Number(req.params.id), userId);
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    if (updated.siteId != null) {
+      await trackEmployeeActivity(req, {
+        siteId: updated.siteId,
+        actionType: "order_cancelled",
+        orderId: updated.id,
+        amount: updated.totalAmount,
+        metadata: { approved: true },
+      });
+    }
     res.json(updated);
   });
 
@@ -345,13 +469,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.markDelivered(Number(req.params.id), date);
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    if (updated.siteId != null) {
+      await trackEmployeeActivity(req, {
+        siteId: updated.siteId,
+        actionType: "order_delivered",
+        orderId: updated.id,
+        amount: updated.totalAmount,
+      });
+    }
     res.json(updated);
   });
 
   app.post(api.payments.create.path, isAuthenticated, async (req, res) => {
     const input = api.payments.create.input.parse(req.body);
-    if (!(await canAccessOrder(req, input.orderId))) return res.status(403).json({ message: "Forbidden" });
-    const payment = await storage.createPayment(input);
+    const order = await storage.getOrder(input.orderId);
+    if (!order || order.siteId == null || !(await canAccessSite(req, order.siteId))) return res.status(403).json({ message: "Forbidden" });
+    const employee = await actorEmployee(req, order.siteId);
+    const payment = await storage.createPayment({ ...input, collectedByEmployeeId: employee?.id ?? null } as any);
+    await trackEmployeeActivity(req, {
+      siteId: order.siteId,
+      actionType: "payment_collected",
+      orderId: input.orderId,
+      amount: input.amount,
+      metadata: { method: input.method, isAdvance: input.isAdvance ?? false },
+    });
     res.status(201).json(payment);
   });
 
@@ -416,7 +557,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(machines);
   });
 
-  const MACHINE_NUMERIC = ["capacityKg", "utilizationRate", "cycleCount", "totalKgProcessed"];
+  const MACHINE_NUMERIC = ["capacityKg", "utilizationRate", "cycleCount", "totalKgProcessed", "maintenanceIntervalHours", "maintenanceCost"];
 
   app.post("/api/machines", isAuthenticated, async (req: any, res) => {
     try {
@@ -424,6 +565,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (siteId === null) return;
       const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
       if (!body.capacityKg) body.capacityKg = "0";
+      if (body.purchaseDate) body.purchaseDate = new Date(body.purchaseDate);
+      if (body.lastMaintenanceDate) body.lastMaintenanceDate = new Date(body.lastMaintenanceDate);
       const input = insertMachineSchema.parse({ ...body, userId: (req.session as any).userId, siteId });
       const machine = await storage.createMachine(input);
       res.status(201).json(machine);
@@ -433,16 +576,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/machines/:id", isAuthenticated, async (req, res) => {
+    if (!(await canAccessMachine(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
+    if (body.purchaseDate) body.purchaseDate = new Date(body.purchaseDate);
+    if (body.lastMaintenanceDate) body.lastMaintenanceDate = new Date(body.lastMaintenanceDate);
     const updated = await storage.updateMachine(Number(req.params.id), body);
     if (!updated) return res.status(404).json({ message: "Machine not found" });
     res.json(updated);
   });
 
   app.delete("/api/machines/:id", isAuthenticated, async (req, res) => {
+    if (!(await canAccessMachine(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const deleted = await storage.deleteMachine(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Machine not found" });
     res.json({ success: true });
+  });
+
+  app.post("/api/machines/:id/usage", isAuthenticated, async (req: any, res) => {
+    const machineId = Number(req.params.id);
+    if (!(await canAccessMachine(req, machineId))) return res.status(403).json({ message: "Forbidden" });
+    const machine = await storage.getMachine(machineId);
+    if (!machine?.siteId) return res.status(404).json({ message: "Machine not found" });
+    const body = sanitizeNumeric(req.body, ["weightProcessed"]);
+    const usage = await storage.createMachineUsage({
+      machineId,
+      orderId: body.orderId ? Number(body.orderId) : null,
+      siteId: machine.siteId,
+      usageDate: body.usageDate ? new Date(body.usageDate) : new Date(),
+      weightProcessed: body.weightProcessed || "0",
+      cycleDurationMinutes: Number(body.cycleDurationMinutes || 0),
+    } as any);
+    res.status(201).json(usage);
   });
 
   app.get("/api/employees", isAuthenticated, async (req: any, res) => {
@@ -457,6 +621,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
       const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
+      if (body.dateHired) body.dateHired = new Date(body.dateHired);
       const input = insertEmployeeSchema.parse({ ...body, userId: (req.session as any).userId, siteId });
       const employee = await storage.createEmployee(input);
       res.status(201).json(employee);
@@ -466,16 +631,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
+    if (!(await canAccessEmployee(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
+    if (body.dateHired) body.dateHired = new Date(body.dateHired);
     const updated = await storage.updateEmployee(Number(req.params.id), body);
     if (!updated) return res.status(404).json({ message: "Employee not found" });
     res.json(updated);
   });
 
   app.delete("/api/employees/:id", isAuthenticated, async (req, res) => {
+    if (!(await canAccessEmployee(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const deleted = await storage.deleteEmployee(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Employee not found" });
     res.json({ success: true });
+  });
+
+  app.post("/api/employees/:id/attendance", isAuthenticated, async (req, res) => {
+    const employeeId = Number(req.params.id);
+    if (!(await canAccessEmployee(req, employeeId))) return res.status(403).json({ message: "Forbidden" });
+    const employee = await storage.getEmployee(employeeId);
+    if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    const attendance = await storage.createEmployeeAttendance({
+      employeeId,
+      siteId: employee.siteId,
+      workDate: req.body.workDate ? new Date(req.body.workDate) : new Date(),
+      checkInAt: req.body.checkInAt ? new Date(req.body.checkInAt) : null,
+      checkOutAt: req.body.checkOutAt ? new Date(req.body.checkOutAt) : null,
+      status: req.body.status || "present",
+    } as any);
+    res.status(201).json(attendance);
   });
 
   app.get("/api/plans", async (req, res) => {
@@ -537,6 +721,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/analytics/production-delays", isAuthenticated, async (req: any, res) => {
     const delays = await storage.getProductionDelays(scopedSites(req));
     res.json(delays);
+  });
+
+  app.get("/api/analytics/advanced", isAuthenticated, async (req: any, res) => {
+    const planSlug = await effectivePlanSlug(req);
+    if (!["business", "enterprise"].includes(planSlug)) {
+      return res.status(403).json({ message: "Business plan required for advanced analytics" });
+    }
+    const period = (req.query.period as string) || "month";
+    const data = await storage.getAdvancedAnalytics(period, scopedSites(req), planSlug);
+    res.json(data);
   });
 
   // ─── Business Settings (Prompt A) ───────────────────────────────────────────

@@ -66,10 +66,15 @@ export function useAuth() {
   const hasFeature = (feature: string): boolean => {
     const featureMap: Record<string, string[]> = {
       analytics:   ["pro", "business", "enterprise"],
+      employeeAnalytics: ["pro", "business", "enterprise"],
+      machineAnalytics: ["pro", "business", "enterprise"],
+      advancedAnalytics: ["business", "enterprise"],
+      predictiveMaintenance: ["enterprise"],
+      multiSiteBenchmarking: ["enterprise"],
       waste:       ["business", "enterprise"],
       performance: ["business", "enterprise"],
-      machines:    ["pro", "business", "enterprise"],
-      employees:   ["pro", "business", "enterprise"],
+      machines:    ["starter", "pro", "business", "enterprise"],
+      employees:   ["starter", "pro", "business", "enterprise"],
       reports:     ["pro", "business", "enterprise"],
       api:         ["enterprise"],
     };

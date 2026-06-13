@@ -44,6 +44,11 @@ export const createOrderWithItemsSchema = z.object({
     itemName: z.string(),
     quantity: z.number(),
   })).optional().default([]),
+  machineUsages: z.array(z.object({
+    machineId: z.number().min(1),
+    weightProcessed: z.string().optional().default("0"),
+    cycleDurationMinutes: z.number().optional().default(0),
+  })).optional().default([]),
 });
 
 export const api = {

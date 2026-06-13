@@ -36,6 +36,76 @@ async function ensureAuthSchema() {
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
   `);
+  await pool.query(`
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS created_by_employee_id integer
+  `);
+  await pool.query(`
+    ALTER TABLE payments
+    ADD COLUMN IF NOT EXISTS collected_by_employee_id integer
+  `);
+  await pool.query(`
+    ALTER TABLE employees
+    ADD COLUMN IF NOT EXISTS auth_user_id varchar,
+    ADD COLUMN IF NOT EXISTS employee_code varchar(100),
+    ADD COLUMN IF NOT EXISTS photo_url text,
+    ADD COLUMN IF NOT EXISTS position varchar(100),
+    ADD COLUMN IF NOT EXISTS date_hired timestamp,
+    ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'active'
+  `);
+  await pool.query(`
+    ALTER TABLE machines
+    ADD COLUMN IF NOT EXISTS brand varchar(100),
+    ADD COLUMN IF NOT EXISTS model varchar(100),
+    ADD COLUMN IF NOT EXISTS purchase_date timestamp,
+    ADD COLUMN IF NOT EXISTS last_maintenance_date timestamp,
+    ADD COLUMN IF NOT EXISTS maintenance_interval_days integer,
+    ADD COLUMN IF NOT EXISTS maintenance_interval_hours numeric(10, 2),
+    ADD COLUMN IF NOT EXISTS maintenance_cost numeric(10, 2) DEFAULT 0
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS employee_activities (
+      id serial PRIMARY KEY,
+      employee_id integer NOT NULL REFERENCES employees(id),
+      actor_user_id varchar,
+      site_id integer NOT NULL,
+      action_date timestamp DEFAULT now(),
+      action_type varchar(60) NOT NULL,
+      order_id integer REFERENCES orders(id),
+      amount numeric(10, 2),
+      weight_kg numeric(10, 2),
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamp DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS employee_attendance (
+      id serial PRIMARY KEY,
+      employee_id integer NOT NULL REFERENCES employees(id),
+      site_id integer NOT NULL,
+      work_date timestamp DEFAULT now(),
+      check_in_at timestamp,
+      check_out_at timestamp,
+      status varchar(30) NOT NULL DEFAULT 'present',
+      created_at timestamp DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS machine_usage (
+      id serial PRIMARY KEY,
+      machine_id integer NOT NULL REFERENCES machines(id),
+      order_id integer REFERENCES orders(id),
+      site_id integer NOT NULL,
+      usage_date timestamp DEFAULT now(),
+      weight_processed numeric(10, 2) DEFAULT 0,
+      cycle_duration_minutes integer DEFAULT 0,
+      created_at timestamp DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_employee_activities_site_date ON employee_activities(site_id, action_date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_employee_activities_employee_date ON employee_activities(employee_id, action_date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_machine_usage_site_date ON machine_usage(site_id, usage_date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_machine_usage_machine_date ON machine_usage(machine_id, usage_date)`);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

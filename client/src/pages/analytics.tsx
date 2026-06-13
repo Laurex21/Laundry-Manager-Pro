@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +106,7 @@ function AnalyticsContent() {
       <WasteSection />
       <PerformanceScoreSection />
       <ProductionDelaysSection />
+      <AdvancedAnalyticsSection period={period} />
     </div>
   );
 }
@@ -208,6 +209,129 @@ function PerformanceScoreSection() {
   }
 
   return <PerformanceScore />;
+}
+
+function AdvancedAnalyticsSection({ period }: { period: string }) {
+  const { t } = useTranslation();
+  const { hasFeature } = useAuth();
+
+  if (!hasFeature("advancedAnalytics")) {
+    return (
+      <Card className="shadow-sm" data-testid="card-advanced-analytics-locked">
+        <CardHeader><CardTitle>{t("advanced_analytics", "Advanced Analytics")}</CardTitle></CardHeader>
+        <CardContent className="text-center py-6">
+          <p className="text-muted-foreground mb-4">{t("business_plan_required")}</p>
+          <Link href="/subscriptions"><Button variant="outline">{t("upgrade")}</Button></Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <AdvancedAnalytics period={period} />;
+}
+
+function AdvancedAnalytics({ period }: { period: string }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/analytics/advanced", period],
+    queryFn: () => fetch(`/api/analytics/advanced?period=${period}`, { credentials: "include" }).then(r => {
+      if (!r.ok) throw new Error("Failed to load advanced analytics");
+      return r.json();
+    }),
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-96 rounded-xl" />;
+  }
+
+  const summary = data?.summary || {};
+  const employee = data?.employeeInsights || {};
+  const machine = data?.machineInsights || {};
+  const operations = data?.operationalInsights || {};
+
+  return (
+    <div className="space-y-6" data-testid="section-advanced-analytics">
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            {t("advanced_analytics", "Advanced Analytics")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard label={t("total_orders_handled", "Orders Handled")} value={summary.totalOrdersHandled || 0} />
+            <KpiCard label={t("payments_collected", "Payments Collected")} value={`${symbol}${Number(summary.totalPaymentsCollected || 0).toFixed(0)}`} />
+            <KpiCard label={t("weight_processed", "Weight Processed")} value={`${Number(summary.totalWeightProcessed || 0).toFixed(1)} kg`} />
+            <KpiCard label={t("revenue_per_employee", "Revenue / Employee")} value={`${symbol}${Number(summary.revenuePerEmployee || 0).toFixed(0)}`} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <InsightPanel icon={<Users className="w-4 h-4" />} title={t("employee_insights", "Employee Insights")} items={[
+              [t("most_productive_employee", "Most Productive"), employee.mostProductiveEmployee?.name],
+              [t("highest_revenue_employee", "Highest Revenue"), employee.highestRevenueEmployee?.name],
+              [t("highest_weight_processed", "Highest Weight"), employee.highestWeightProcessed?.name],
+              [t("most_active_employee", "Most Active"), employee.mostActiveEmployee?.name],
+            ]} />
+            <InsightPanel icon={<Cog className="w-4 h-4" />} title={t("machine_insights", "Machine Insights")} items={[
+              [t("most_used_machine", "Most Used"), machine.mostUsedMachine?.name],
+              [t("least_used_machine", "Least Used"), machine.leastUsedMachine?.name],
+              [t("highest_volume_machine", "Highest Volume"), machine.highestVolumeMachine?.name],
+              [t("underutilized_machine", "Underutilized"), machine.underutilizedMachine?.name],
+            ]} />
+            <InsightPanel icon={<Target className="w-4 h-4" />} title={t("operational_insights", "Operational Insights")} items={[
+              [t("most_profitable_service", "Most Profitable"), operations.mostProfitableService?.name],
+              [t("least_profitable_service", "Least Profitable"), operations.leastProfitableService?.name],
+              [t("revenue_per_machine", "Revenue / Machine"), `${symbol}${Number(summary.revenuePerMachine || 0).toFixed(0)}`],
+              [t("avg_orders_day", "Avg Orders / Day"), Number(summary.averageOrdersPerDay || 0).toFixed(1)],
+            ]} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="border-muted">
+              <CardHeader><CardTitle className="text-base">{t("alerts", "Alerts")}</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {data?.alerts?.length ? data.alerts.map((alert: any, i: number) => (
+                  <div key={i} className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950/20">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <span>{alert.message}</span>
+                  </div>
+                )) : <p className="text-sm text-muted-foreground">{t("no_alerts", "No alerts detected.")}</p>}
+              </CardContent>
+            </Card>
+            <Card className="border-muted">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2"><Lightbulb className="w-4 h-4" />{t("smart_recommendations", "Smart Recommendations")}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {data?.recommendations?.length ? data.recommendations.map((rec: string, i: number) => (
+                  <div key={i} className="rounded-md border bg-muted/30 p-3 text-sm">{rec}</div>
+                )) : <p className="text-sm text-muted-foreground">{t("not_enough_data_recommendations", "Not enough activity data yet for recommendations.")}</p>}
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function InsightPanel({ icon, title, items }: { icon: React.ReactNode; title: string; items: [string, any][] }) {
+  return (
+    <Card className="border-muted">
+      <CardHeader><CardTitle className="text-base flex items-center gap-2">{icon}{title}</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        {items.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-medium text-right truncate max-w-[160px]">{value || "-"}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
 }
 
 function ProductionDelaysSection() {

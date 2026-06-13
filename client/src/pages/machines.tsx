@@ -135,7 +135,10 @@ function MachineList({ onEdit, onDelete }: { onEdit: (m: Machine) => void; onDel
 
         return (
           <div key={machine.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-x-4 gap-y-1 px-4 py-3 items-center hover:bg-muted/20 transition-colors" data-testid={`card-machine-${machine.id}`}>
-            <span className="font-medium text-sm">{machine.name}</span>
+            <div className="min-w-0">
+              <span className="font-medium text-sm block truncate">{machine.name}</span>
+              {(machine.brand || machine.model) && <span className="text-xs text-muted-foreground truncate block">{[machine.brand, machine.model].filter(Boolean).join(" ")}</span>}
+            </div>
             <span className="text-sm text-muted-foreground">{typeLabel}</span>
             <span>
               <Badge variant={statusVariant(machine.status) as any} className="text-xs" data-testid={`badge-status-${machine.id}`}>
@@ -176,8 +179,15 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
     defaultValues: {
       name: machine?.name || "",
       type: machine?.type || "washer",
+      brand: machine?.brand || "",
+      model: machine?.model || "",
       capacityKg: machine?.capacityKg || "0",
+      purchaseDate: machine?.purchaseDate ? String(machine.purchaseDate).slice(0, 10) : "",
       status: machine?.status || "active",
+      lastMaintenanceDate: machine?.lastMaintenanceDate ? String(machine.lastMaintenanceDate).slice(0, 10) : "",
+      maintenanceIntervalDays: machine?.maintenanceIntervalDays || "",
+      maintenanceIntervalHours: machine?.maintenanceIntervalHours || "",
+      maintenanceCost: machine?.maintenanceCost || "",
     },
   });
 
@@ -196,7 +206,19 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
   });
 
   if (open && machine && form.getValues("name") !== machine.name) {
-    form.reset({ name: machine.name, type: machine.type, capacityKg: machine.capacityKg, status: machine.status });
+    form.reset({
+      name: machine.name,
+      type: machine.type,
+      brand: machine.brand || "",
+      model: machine.model || "",
+      capacityKg: machine.capacityKg,
+      purchaseDate: machine.purchaseDate ? String(machine.purchaseDate).slice(0, 10) : "",
+      status: machine.status,
+      lastMaintenanceDate: machine.lastMaintenanceDate ? String(machine.lastMaintenanceDate).slice(0, 10) : "",
+      maintenanceIntervalDays: machine.maintenanceIntervalDays || "",
+      maintenanceIntervalHours: machine.maintenanceIntervalHours || "",
+      maintenanceCost: machine.maintenanceCost || "",
+    });
   }
 
   return (
@@ -222,20 +244,44 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
                   <SelectContent>
                     <SelectItem value="washer">{t("machine_type_washer")}</SelectItem>
                     <SelectItem value="dryer">{t("machine_type_dryer")}</SelectItem>
+                    <SelectItem value="boiler_iron">{t("machine_type_boiler_iron", "Boiler Iron")}</SelectItem>
                     <SelectItem value="press">{t("machine_type_press")}</SelectItem>
+                    <SelectItem value="packaging">{t("machine_type_packaging", "Packaging Machine")}</SelectItem>
                     <SelectItem value="other">{t("machine_type_other")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )} />
-            <FormField control={form.control} name="capacityKg" render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("capacity_kg")}</FormLabel>
-                <FormControl><Input type="number" step="0.01" {...field} data-testid="input-machine-capacity" /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="brand" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("machine_brand", "Brand")}</FormLabel>
+                  <FormControl><Input {...field} data-testid="input-machine-brand" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="model" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("machine_model", "Model")}</FormLabel>
+                  <FormControl><Input {...field} data-testid="input-machine-model" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="capacityKg" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("capacity_kg")}</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} data-testid="input-machine-capacity" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="purchaseDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("purchase_date", "Purchase Date")}</FormLabel>
+                  <FormControl><Input type="date" {...field} data-testid="input-machine-purchase-date" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
             <FormField control={form.control} name="status" render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("machine_status")}</FormLabel>
@@ -250,6 +296,34 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
                 <FormMessage />
               </FormItem>
             )} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="lastMaintenanceDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("last_maintenance_date", "Last Maintenance Date")}</FormLabel>
+                  <FormControl><Input type="date" {...field} data-testid="input-machine-last-maintenance" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="maintenanceCost" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("maintenance_cost", "Maintenance Cost")}</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} data-testid="input-machine-maintenance-cost" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="maintenanceIntervalDays" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("maintenance_interval_days", "Maintenance Interval (Days)")}</FormLabel>
+                  <FormControl><Input type="number" {...field} data-testid="input-machine-maintenance-days" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="maintenanceIntervalHours" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("maintenance_interval_hours", "Maintenance Interval (Hours)")}</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} data-testid="input-machine-maintenance-hours" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
             <Button type="submit" className="w-full" disabled={mutation.isPending} data-testid="button-save-machine">
               {mutation.isPending ? t("saving") : isEdit ? t("save_changes") : t("add_machine")}
             </Button>

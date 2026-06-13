@@ -5,10 +5,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useForm } from "react-hook-form";
-import { UserCheck, Plus, Pencil, Trash2, Phone, Mail } from "lucide-react";
+import { UserCheck, Plus, Pencil, Trash2, Phone, Mail, IdCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -19,6 +20,9 @@ import {
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import type { Employee } from "@shared/schema";
 
@@ -110,7 +114,7 @@ function EmployeeList({ onEdit, onDelete }: { onEdit: (e: Employee) => void; onD
     <div className="border rounded-lg overflow-hidden divide-y divide-border">
       <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         <span>{t("employee_name")}</span>
-        <span>{t("employee_role")}</span>
+        <span>{t("employee_position", "Position")}</span>
         <span>{t("phone")} / {t("email")}</span>
         <span>{t("kg_processed")}</span>
         <span>{t("orders_handled")}</span>
@@ -129,8 +133,16 @@ function EmployeeList({ onEdit, onDelete }: { onEdit: (e: Employee) => void; onD
               </div>
               <span className="font-medium text-sm truncate">{emp.name}</span>
             </div>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded w-fit">{emp.role}</span>
+            <div className="flex flex-col gap-1 items-start">
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded w-fit">{emp.position || emp.role}</span>
+              <Badge variant={emp.status === "inactive" ? "outline" : "default"} className="text-[10px]">{t(`employee_status_${emp.status}`, emp.status)}</Badge>
+            </div>
             <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-w-0">
+              {emp.employeeCode && (
+                <span className="flex items-center gap-1 truncate">
+                  <IdCard className="w-3 h-3 shrink-0" />{emp.employeeCode}
+                </span>
+              )}
               {emp.phone && (
                 <span className="flex items-center gap-1 truncate">
                   <Phone className="w-3 h-3 shrink-0" />{emp.phone}
@@ -170,10 +182,15 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
   const form = useForm({
     defaultValues: {
       name: employee?.name || "",
+      photoUrl: employee?.photoUrl || "",
+      employeeCode: employee?.employeeCode || "",
       role: employee?.role || "",
+      position: employee?.position || employee?.role || "",
       phone: employee?.phone || "",
       email: employee?.email || "",
       salary: employee?.salary || "",
+      dateHired: employee?.dateHired ? String(employee.dateHired).slice(0, 10) : "",
+      status: employee?.status || "active",
       kgProcessed: employee?.kgProcessed || "0",
       ordersHandled: employee?.ordersHandled || 0,
     },
@@ -192,7 +209,20 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
   });
 
   if (open && employee && form.getValues("name") !== employee.name) {
-    form.reset({ name: employee.name, role: employee.role, phone: employee.phone || "", email: employee.email || "", salary: employee.salary || "", kgProcessed: employee.kgProcessed, ordersHandled: employee.ordersHandled });
+    form.reset({
+      name: employee.name,
+      photoUrl: employee.photoUrl || "",
+      employeeCode: employee.employeeCode || "",
+      role: employee.role,
+      position: employee.position || employee.role,
+      phone: employee.phone || "",
+      email: employee.email || "",
+      salary: employee.salary || "",
+      dateHired: employee.dateHired ? String(employee.dateHired).slice(0, 10) : "",
+      status: employee.status || "active",
+      kgProcessed: employee.kgProcessed,
+      ordersHandled: employee.ordersHandled,
+    });
   }
 
   return (
@@ -205,18 +235,40 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
             <FormField control={form.control} name="name" rules={{ required: true }} render={({ field }) => (
               <FormItem>
-                <FormLabel>{t("employee_name")}</FormLabel>
+                <FormLabel>{t("employee_full_name", "Full Name")}</FormLabel>
                 <FormControl><Input {...field} data-testid="input-employee-name" /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
-            <FormField control={form.control} name="role" rules={{ required: true }} render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("employee_role")}</FormLabel>
-                <FormControl><Input {...field} placeholder={t("role_placeholder")} data-testid="input-employee-role" /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="employeeCode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("employee_id", "Employee ID")}</FormLabel>
+                  <FormControl><Input {...field} data-testid="input-employee-code" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="photoUrl" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("employee_photo", "Photo")}</FormLabel>
+                  <FormControl><Input {...field} placeholder="https://..." data-testid="input-employee-photo" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="role" rules={{ required: true }} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("employee_role")}</FormLabel>
+                  <FormControl><Input {...field} placeholder={t("role_placeholder")} data-testid="input-employee-role" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="position" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("employee_position", "Job Position")}</FormLabel>
+                  <FormControl><Input {...field} data-testid="input-employee-position" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="phone" render={({ field }) => (
                 <FormItem>
@@ -231,7 +283,7 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
                 </FormItem>
               )} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <FormField control={form.control} name="salary" render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("monthly_salary")}</FormLabel>
@@ -248,6 +300,26 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
                 <FormItem>
                   <FormLabel>{t("orders_handled")}</FormLabel>
                   <FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 0)} data-testid="input-employee-orders" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="dateHired" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("date_hired", "Date Hired")}</FormLabel>
+                  <FormControl><Input type="date" {...field} data-testid="input-employee-date-hired" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("status")}</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger data-testid="select-employee-status"><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="active">{t("employee_status_active", "Active")}</SelectItem>
+                      <SelectItem value="inactive">{t("employee_status_inactive", "Inactive")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </FormItem>
               )} />
             </div>
