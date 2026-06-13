@@ -24,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Employee } from "@shared/schema";
 
 export default function Employees() {
@@ -196,6 +197,7 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
     },
   });
 
+  const { toast } = useToast();
   const mutation = useMutation({
     mutationFn: (data: any) => {
       if (isEdit) return apiRequest("PATCH", `/api/employees/${employee!.id}`, data);
@@ -205,6 +207,9 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       onOpenChange(false);
       form.reset();
+    },
+    onError: (err: any) => {
+      toast({ title: t("error"), description: err?.message || t("error"), variant: "destructive" });
     },
   });
 

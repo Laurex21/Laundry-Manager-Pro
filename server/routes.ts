@@ -71,7 +71,10 @@ function resolveWriteSiteId(req: any): number | null {
     return req.siteId;
   }
   const authorizedSiteIds = Array.isArray(req.authorizedSiteIds) ? req.authorizedSiteIds : [];
-  return authorizedSiteIds.length === 1 ? authorizedSiteIds[0] : null;
+  if (authorizedSiteIds.length === 1) return authorizedSiteIds[0];
+  // "All Sites" mode with multiple sites — fall back to first authorized site
+  if (authorizedSiteIds.length > 1) return authorizedSiteIds[0];
+  return null;
 }
 
 function requireWriteSite(req: any, res: any): number | null {

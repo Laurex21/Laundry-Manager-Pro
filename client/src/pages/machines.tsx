@@ -23,6 +23,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Machine } from "@shared/schema";
 
 export default function Machines() {
@@ -193,6 +194,7 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
 
   const isEdit = !!machine;
 
+  const { toast } = useToast();
   const mutation = useMutation({
     mutationFn: (data: any) => {
       if (isEdit) return apiRequest("PATCH", `/api/machines/${machine!.id}`, data);
@@ -202,6 +204,9 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
       queryClient.invalidateQueries({ queryKey: ["/api/machines"] });
       onOpenChange(false);
       form.reset();
+    },
+    onError: (err: any) => {
+      toast({ title: t("error"), description: err?.message || t("error"), variant: "destructive" });
     },
   });
 
