@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useForm } from "react-hook-form";
-import { Cog, Plus, Pencil, Trash2 } from "lucide-react";
+import { Activity, Cog, Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,7 @@ export default function Machines() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Machine | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
+  const [usageTarget, setUsageTarget] = useState<Machine | null>(null);
 
   if (!hasFeature("machines")) {
     return <UpgradePrompt title={t("machines")} description="Track your machine fleet, utilization rates and maintenance." requiredPlan="Pro" />;
@@ -51,9 +52,15 @@ export default function Machines() {
       <MachineList
         onEdit={(m) => { setEditing(m); setOpen(true); }}
         onDelete={setDeleteTarget}
+        onUsage={setUsageTarget}
       />
 
       <MachineDialog open={open} onOpenChange={setOpen} machine={editing} />
+      <MachineUsageDialog
+        open={!!usageTarget}
+        onOpenChange={(v) => { if (!v) setUsageTarget(null); }}
+        machine={usageTarget}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
@@ -98,7 +105,7 @@ function statusVariant(status: string) {
   return "outline";
 }
 
-function MachineList({ onEdit, onDelete }: { onEdit: (m: Machine) => void; onDelete: (m: Machine) => void }) {
+function MachineList({ onEdit, onDelete, onUsage }: { onEdit: (m: Machine) => void; onDelete: (m: Machine) => void; onUsage: (m: Machine) => void }) {
   const { t } = useTranslation();
   const { data: machines, isLoading } = useQuery<Machine[]>({ queryKey: ["/api/machines"] });
 
@@ -158,6 +165,9 @@ function MachineList({ onEdit, onDelete }: { onEdit: (m: Machine) => void; onDel
               <span>{machine.totalKgProcessed} kg</span>
             </div>
             <div className="flex gap-1 justify-end">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onUsage(machine)} title={t("machine_usage", "Utilisation")} data-testid={`button-machine-usage-${machine.id}`}>
+                <Activity className="w-3.5 h-3.5" />
+              </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(machine)} data-testid={`button-edit-machine-${machine.id}`}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
@@ -169,6 +179,88 @@ function MachineList({ onEdit, onDelete }: { onEdit: (m: Machine) => void; onDel
         );
       })}
     </div>
+  );
+}
+
+function todayDate() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 10);
+}
+
+function MachineUsageDialog({ open, onOpenChange, machine }: { open: boolean; onOpenChange: (v: boolean) => void; machine: Machine | null }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const form = useForm({
+    defaultValues: {
+      machineId: machine?.id || 0,
+      usageDate: todayDate(),
+      orderId: "",
+      weightProcessed: "",
+      cycleDurationMinutes: "",
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/machines/${machine!.id}/usage`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/machines"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/advanced"] });
+      onOpenChange(false);
+      form.reset({ machineId: machine?.id || 0, usageDate: todayDate(), orderId: "", weightProcessed: "", cycleDurationMinutes: "" });
+    },
+  });
+
+  if (open && machine && form.getValues("machineId") !== machine.id) {
+    form.reset({ machineId: machine.id, usageDate: todayDate(), orderId: "", weightProcessed: "", cycleDurationMinutes: "" });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("log_machine_usage", "Saisir l'utilisation")} - {machine?.name}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="usageDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("usage_date", "Date")}</FormLabel>
+                  <FormControl><Input type="date" {...field} data-testid="input-machine-usage-date" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="orderId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("order_id_optional", "Commande (optionnel)")}</FormLabel>
+                  <FormControl><Input type="number" {...field} data-testid="input-machine-usage-order" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="weightProcessed" rules={{ required: true }} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("weight_processed_kg", "Poids traité (kg)")}</FormLabel>
+                  <FormControl><Input type="number" step="0.01" min="0" {...field} data-testid="input-machine-usage-weight" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="cycleDurationMinutes" rules={{ required: true }} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("cycle_duration_minutes", "Durée du cycle (min)")}</FormLabel>
+                  <FormControl><Input type="number" min="0" {...field} data-testid="input-machine-usage-duration" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <Button type="submit" className="w-full" disabled={mutation.isPending || !machine} data-testid="button-save-machine-usage">
+              {mutation.isPending ? t("saving") : t("save_machine_usage", "Enregistrer l'utilisation")}
+            </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

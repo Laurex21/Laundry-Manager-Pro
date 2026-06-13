@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useForm } from "react-hook-form";
-import { UserCheck, Plus, Pencil, Trash2, Phone, Mail, IdCard } from "lucide-react";
+import { UserCheck, Plus, Pencil, Trash2, Phone, Mail, IdCard, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +33,7 @@ export default function Employees() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
+  const [attendanceTarget, setAttendanceTarget] = useState<Employee | null>(null);
 
   if (!hasFeature("employees")) {
     return <UpgradePrompt title={t("employees")} description="Track staff productivity, kg processed and salaries." requiredPlan="Pro" />;
@@ -49,9 +50,14 @@ export default function Employees() {
         </Button>
       </div>
 
-      <EmployeeList onEdit={(e) => { setEditing(e); setOpen(true); }} onDelete={setDeleteTarget} />
+      <EmployeeList onEdit={(e) => { setEditing(e); setOpen(true); }} onDelete={setDeleteTarget} onAttendance={setAttendanceTarget} />
 
       <EmployeeDialog open={open} onOpenChange={setOpen} employee={editing} />
+      <AttendanceDialog
+        open={!!attendanceTarget}
+        onOpenChange={(v) => { if (!v) setAttendanceTarget(null); }}
+        employee={attendanceTarget}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
@@ -92,7 +98,7 @@ function DeleteEmployeeAction({ employee, onDone }: { employee: Employee | null;
 
 const AVATAR_COLORS = ["bg-blue-500", "bg-green-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
 
-function EmployeeList({ onEdit, onDelete }: { onEdit: (e: Employee) => void; onDelete: (e: Employee) => void }) {
+function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee) => void; onDelete: (e: Employee) => void; onAttendance: (e: Employee) => void }) {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
@@ -161,6 +167,9 @@ function EmployeeList({ onEdit, onDelete }: { onEdit: (e: Employee) => void; onD
               {emp.salary ? `${symbol}${Number(emp.salary).toFixed(0)}` : "-"}
             </span>
             <div className="flex gap-1 justify-end">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} data-testid={`button-attendance-employee-${emp.id}`}>
+                <Clock className="w-3.5 h-3.5" />
+              </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(emp)} data-testid={`button-edit-employee-${emp.id}`}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
@@ -172,6 +181,92 @@ function EmployeeList({ onEdit, onDelete }: { onEdit: (e: Employee) => void; onD
         );
       })}
     </div>
+  );
+}
+
+function todayDate() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 10);
+}
+
+function AttendanceDialog({ open, onOpenChange, employee }: { open: boolean; onOpenChange: (v: boolean) => void; employee: Employee | null }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const form = useForm({
+    defaultValues: {
+      employeeId: employee?.id || 0,
+      workDate: todayDate(),
+      status: "present",
+      checkInAt: "",
+      checkOutAt: "",
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/employees/${employee!.id}/attendance`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/advanced"] });
+      onOpenChange(false);
+      form.reset({ employeeId: employee?.id || 0, workDate: todayDate(), status: "present", checkInAt: "", checkOutAt: "" });
+    },
+  });
+
+  if (open && employee && form.getValues("employeeId") !== employee.id) {
+    form.reset({ employeeId: employee.id, workDate: todayDate(), status: "present", checkInAt: "", checkOutAt: "" });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("attendance_for_employee", "Pointage")} - {employee?.name}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="workDate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("work_date", "Date")}</FormLabel>
+                  <FormControl><Input type="date" {...field} data-testid="input-attendance-date" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("status")}</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl><SelectTrigger data-testid="select-attendance-status"><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="present">{t("attendance_present", "Présent")}</SelectItem>
+                      <SelectItem value="late">{t("attendance_late", "En retard")}</SelectItem>
+                      <SelectItem value="absent">{t("attendance_absent", "Absent")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField control={form.control} name="checkInAt" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("check_in_time", "Heure d'arrivée")}</FormLabel>
+                  <FormControl><Input type="datetime-local" {...field} data-testid="input-check-in" /></FormControl>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="checkOutAt" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("check_out_time", "Heure de départ")}</FormLabel>
+                  <FormControl><Input type="datetime-local" {...field} data-testid="input-check-out" /></FormControl>
+                </FormItem>
+              )} />
+            </div>
+            <Button type="submit" className="w-full" disabled={mutation.isPending || !employee} data-testid="button-save-attendance">
+              {mutation.isPending ? t("saving") : t("save_attendance", "Enregistrer le pointage")}
+            </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
