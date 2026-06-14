@@ -73,7 +73,87 @@ function buildBaseUrl(req: any) {
   return process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function passwordResetEmailHtml(resetLink: string) {
+  const safeResetLink = escapeHtml(resetLink);
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827">
+      <h2 style="margin:0 0 12px">Réinitialisation de votre mot de passe XPRESSPRO</h2>
+      <p>Utilisez le bouton ci-dessous pour créer un nouveau mot de passe.</p>
+      <p>
+        <a href="${safeResetLink}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600">
+          Réinitialiser mon mot de passe
+        </a>
+      </p>
+      <p style="font-size:13px;color:#4b5563">Ce lien expire dans 30 minutes. Si vous n'avez pas demandé cette action, ignorez cet email.</p>
+      <p style="font-size:12px;color:#6b7280">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur:<br>${safeResetLink}</p>
+    </div>
+  `;
+}
+
+async function sendPasswordResetEmail(user: { email: string | null }, resetLink: string): Promise<boolean> {
+  if (!user.email) return false;
+  const from = process.env.PASSWORD_RESET_EMAIL_FROM || process.env.EMAIL_FROM || "XPRESSPRO <noreply@xpresspro.app>";
+
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to: user.email,
+          subject: "Réinitialisation de votre mot de passe XPRESSPRO",
+          html: passwordResetEmailHtml(resetLink),
+        }),
+      });
+      if (response.ok) return true;
+      console.error("Password reset Resend delivery failed:", await response.text());
+    } catch (error) {
+      console.error("Password reset Resend delivery error:", error);
+    }
+  }
+
+  if (process.env.SENDGRID_API_KEY) {
+    try {
+      const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.SENDGRID_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: user.email }] }],
+          from: { email: process.env.SENDGRID_FROM_EMAIL || "noreply@xpresspro.app", name: process.env.SENDGRID_FROM_NAME || "XPRESSPRO" },
+          subject: "Réinitialisation de votre mot de passe XPRESSPRO",
+          content: [{ type: "text/html", value: passwordResetEmailHtml(resetLink) }],
+        }),
+      });
+      if (response.ok) return true;
+      console.error("Password reset SendGrid delivery failed:", await response.text());
+    } catch (error) {
+      console.error("Password reset SendGrid delivery error:", error);
+    }
+  }
+
+  return false;
+}
+
 async function sendPasswordResetLink(user: { phone: string | null; email: string | null }, resetLink: string): Promise<boolean> {
+  const emailDelivered = await sendPasswordResetEmail(user, resetLink);
+  if (emailDelivered) return true;
+
   const hasTwilio = !!(
     process.env.TWILIO_ACCOUNT_SID &&
     process.env.TWILIO_AUTH_TOKEN &&
@@ -304,7 +384,7 @@ export function registerAuthRoutes(app: Express): void {
           const delivered = await sendPasswordResetLink(user, resetLink);
           return res.json({
             ...genericResponse,
-            ...(process.env.NODE_ENV !== "production" ? { resetLink, delivery: delivered ? "whatsapp" : "manual" } : {}),
+            ...(process.env.NODE_ENV !== "production" ? { resetLink, delivery: delivered ? "configured" : "manual" } : {}),
           });
         }
       }
