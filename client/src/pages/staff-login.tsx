@@ -88,6 +88,16 @@ export default function StaffLogin() {
                 data-testid="input-staff-login-password"
               />
             </div>
+            <div className="text-right -mt-2">
+              <button
+                type="button"
+                className="text-xs text-primary font-semibold hover:underline"
+                onClick={() => setLocation("/reset-password?account=staff")}
+                data-testid="button-forgot-staff-password"
+              >
+                {t("forgot_password", "Mot de passe oublié ?")}
+              </button>
+            </div>
             <Button className="w-full" type="submit" disabled={submitting} data-testid="button-staff-login-submit">
               {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("please_wait")}</> : "Log in as staff"}
             </Button>

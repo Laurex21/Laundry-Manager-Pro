@@ -180,6 +180,19 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           </div>
         </div>
 
+        {tab === "login" && (
+          <div className="text-right -mt-2">
+            <button
+              type="button"
+              className="text-xs text-primary font-semibold hover:underline"
+              onClick={() => setLocation("/reset-password?account=owner")}
+              data-testid="button-forgot-owner-password"
+            >
+              {t("forgot_password", "Mot de passe oublié ?")}
+            </button>
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full h-11 font-semibold text-sm mt-1"

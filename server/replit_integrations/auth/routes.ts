@@ -6,6 +6,7 @@ import { db } from "../../db";
 import { organisations, siteMembers } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
   if (!organisationId) return null;
@@ -62,6 +63,50 @@ async function ensureUserOrganisation(userId: string) {
   if (!user || user.organisationId) return;
   if (user.userType === "staff") return;
   await storage.migrateToMultiSite();
+}
+
+function hashResetToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function buildBaseUrl(req: any) {
+  return process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+}
+
+async function sendPasswordResetLink(user: { phone: string | null; email: string | null }, resetLink: string): Promise<boolean> {
+  const hasTwilio = !!(
+    process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    process.env.TWILIO_WHATSAPP_FROM &&
+    user.phone
+  );
+
+  if (hasTwilio) {
+    try {
+      const twilioModule: any = await import("twilio");
+      const twilio = twilioModule.default ?? twilioModule;
+      const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
+      await client.messages.create({
+        from: process.env.TWILIO_WHATSAPP_FROM!,
+        to: `whatsapp:${user.phone}`,
+        body:
+          `Réinitialisation XPRESSPRO\n\n` +
+          `Utilisez ce lien pour créer un nouveau mot de passe. Il expire dans 30 minutes:\n${resetLink}\n\n` +
+          `Si vous n'avez pas demandé cela, ignorez ce message.`,
+      });
+      return true;
+    } catch (error) {
+      console.error("Password reset WhatsApp delivery failed:", error);
+    }
+  }
+
+  console.info("Password reset link generated:", {
+    email: user.email,
+    phone: user.phone,
+    resetLink,
+    deliveryConfigured: false,
+  });
+  return false;
 }
 
 export function registerAuthRoutes(app: Express): void {
@@ -229,6 +274,83 @@ export function registerAuthRoutes(app: Express): void {
     } catch (error) {
       console.error("Staff onboarding error:", error);
       res.status(500).json({ message: "Staff onboarding failed" });
+    }
+  });
+
+  app.post("/api/auth/password-reset/request", async (req, res) => {
+    try {
+      const identifier = String(req.body.identifier || req.body.email || "").trim();
+      const requestedAccountType = req.body.accountType === "staff" ? "staff" : "owner";
+      const genericResponse = {
+        message: "If an account exists, a password reset link has been sent.",
+      };
+
+      if (!identifier) {
+        return res.status(200).json(genericResponse);
+      }
+
+      let user = await authStorage.getUserByEmail(identifier);
+      if (!user) user = await authStorage.getUserByPhone(identifier);
+
+      if (user) {
+        const isOwner = await isOrganisationOwnerUser(user);
+        const accountType = isOwner ? "owner" : "staff";
+        if (accountType === requestedAccountType) {
+          const token = crypto.randomBytes(32).toString("hex");
+          const tokenHash = hashResetToken(token);
+          const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+          await authStorage.createPasswordResetToken({ userId: user.id, tokenHash, accountType, expiresAt });
+          const resetLink = `${buildBaseUrl(req)}/reset-password/${token}`;
+          const delivered = await sendPasswordResetLink(user, resetLink);
+          return res.json({
+            ...genericResponse,
+            ...(process.env.NODE_ENV !== "production" ? { resetLink, delivery: delivered ? "whatsapp" : "manual" } : {}),
+          });
+        }
+      }
+
+      res.json(genericResponse);
+    } catch (error) {
+      console.error("Password reset request error:", error);
+      res.status(200).json({ message: "If an account exists, a password reset link has been sent." });
+    }
+  });
+
+  app.post("/api/auth/password-reset/confirm", async (req, res) => {
+    try {
+      const token = String(req.body.token || "").trim();
+      const password = String(req.body.password || "");
+      if (!token || !password) {
+        return res.status(400).json({ message: "Reset token and new password are required" });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const resetToken = await authStorage.getValidPasswordResetToken(hashResetToken(token));
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+
+      const user = await authStorage.getUser(resetToken.userId);
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+
+      const isOwner = await isOrganisationOwnerUser(user);
+      const accountType = isOwner ? "owner" : "staff";
+      if (accountType !== resetToken.accountType) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await authStorage.updatePassword(user.id, passwordHash);
+      await authStorage.markPasswordResetTokenUsed(resetToken.id);
+
+      res.json({ message: "Password updated successfully", accountType });
+    } catch (error) {
+      console.error("Password reset confirm error:", error);
+      res.status(500).json({ message: "Password reset failed" });
     }
   });
 
