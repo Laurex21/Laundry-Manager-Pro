@@ -944,7 +944,8 @@ export class DatabaseStorage implements IStorage {
     if (monthExpenses > monthRevenue && monthRevenue > 0) alerts.push({ type: "danger", message: "Expenses exceed revenue this month", detail: "Review your expenditure logs" });
 
     const returnedGarments = await db.select({ count: sql<number>`count(*)` }).from(garmentItems)
-      .where(and(eq(garmentItems.returnedForTreatment, true), sql`${garmentItems.resolvedAt} IS NULL`));
+      .innerJoin(orders, eq(garmentItems.orderId, orders.id))
+      .where(and(siteWhere, eq(garmentItems.returnedForTreatment, true), sql`${garmentItems.resolvedAt} IS NULL`));
     const returnedCount = Number(returnedGarments[0]?.count || 0);
     if (returnedCount > 0) alerts.push({ type: "warning", message: `${returnedCount} garment(s) returned for treatment`, detail: "Check orders with returned items" });
 

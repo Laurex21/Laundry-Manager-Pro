@@ -56,6 +56,8 @@ assert.doesNotMatch(routes, /siteId: \(req as any\)\.siteId/);
 assert.match(storage, /private siteWhere/);
 assert.match(storage, /return \[\];/);
 assert.match(storage, /inArray\(sites\.id, scopedSiteIds\)/);
+assert.match(storage, /innerJoin\(orders, eq\(garmentItems\.orderId, orders\.id\)\)/);
+assert.match(storage, /and\(siteWhere, eq\(garmentItems\.returnedForTreatment, true\)/);
 assert.match(storage, /scopedSiteIds\.length > 0/);
 assert.doesNotMatch(storage, /from\(sites\)\.where\(eq\(sites\.isActive, true\)\)/);
 assert.match(storage, /automatic tenant data reassignment is unsafe/);
