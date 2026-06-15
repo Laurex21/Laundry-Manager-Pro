@@ -1,12 +1,13 @@
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
+import { pool } from "../../db";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
+    pool,
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",
@@ -31,7 +32,6 @@ export async function setupAuth(app: Express) {
 }
 
 async function ensureAuthSchema() {
-  const { pool } = await import("../../db");
   await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
