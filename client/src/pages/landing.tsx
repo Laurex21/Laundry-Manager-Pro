@@ -7,9 +7,16 @@ import {
   Shirt, Package, Users, CreditCard, BarChart3, FileText,
   TrendingUp, CheckCircle, Building2, Activity, Layers,
   ChevronRight, Star, Globe, PieChart, Zap, RefreshCw,
-  Clock, Package2, ArrowRight, Menu, X
+  Clock, Package2, ArrowRight, Menu, X, Play
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
@@ -58,6 +65,35 @@ const CONNECTIONS: [string, string][] = [
   ["ng", "cd"], ["cm", "cd"], ["cd", "ke"], ["ke", "tz"],
   ["cd", "ao"], ["ao", "za"], ["tz", "za"],
 ];
+
+function getDemoVideoEmbedUrl() {
+  const configuredUrl = import.meta.env.VITE_DEMO_VIDEO_URL?.trim();
+  if (!configuredUrl) return "";
+
+  try {
+    const url = new URL(configuredUrl);
+    const host = url.hostname.replace(/^www\./, "");
+    let videoId = "";
+
+    if (host === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] || "";
+    } else if (host === "youtube.com" || host === "m.youtube.com") {
+      if (url.pathname.startsWith("/embed/")) {
+        videoId = url.pathname.split("/").filter(Boolean)[1] || "";
+      } else if (url.pathname.startsWith("/shorts/")) {
+        videoId = url.pathname.split("/").filter(Boolean)[1] || "";
+      } else {
+        videoId = url.searchParams.get("v") || "";
+      }
+    }
+
+    if (!videoId || !/^[\w-]{6,}$/.test(videoId)) return "";
+
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+  } catch {
+    return "";
+  }
+}
 
 function getNode(id: string) {
   return AFRICA_NODES.find((n) => n.id === id);
@@ -155,6 +191,8 @@ export default function LandingPage() {
   const [, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [demoVideoOpen, setDemoVideoOpen] = useState(false);
+  const demoVideoUrl = getDemoVideoEmbedUrl();
 
   const { data: publicStats } = useQuery<{
     totalOrders: number; totalCustomers: number; totalTransactions: number;
@@ -261,9 +299,10 @@ export default function LandingPage() {
                 data-testid="hero-cta-primary">
                 {t("landing_cta_primary")} <ArrowRight className="w-4 h-4" />
               </Button>
-              <Button size="lg" variant="outline" onClick={() => setLocation("/auth")}
+              <Button size="lg" variant="outline" onClick={() => setDemoVideoOpen(true)}
                 className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white h-12 px-6 text-sm font-semibold"
                 data-testid="hero-cta-secondary">
+                <Play className="w-4 h-4 mr-2" />
                 {t("landing_cta_secondary")}
               </Button>
             </motion.div>
@@ -324,6 +363,38 @@ export default function LandingPage() {
           </motion.div>
         </div>
       </section>
+
+      <Dialog open={demoVideoOpen} onOpenChange={setDemoVideoOpen}>
+        <DialogContent className="max-w-4xl border-slate-800 bg-slate-950 p-0 text-white sm:rounded-xl">
+          <DialogHeader className="px-5 pt-5 text-left">
+            <DialogTitle className="text-white">{t("landing_demo_video_title")}</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {t("landing_demo_video_description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-5 pb-5">
+            {demoVideoUrl ? (
+              <div className="aspect-video overflow-hidden rounded-lg bg-black">
+                <iframe
+                  key={demoVideoUrl}
+                  className="h-full w-full"
+                  src={demoVideoUrl}
+                  title={t("landing_demo_video_title")}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <div className="flex aspect-video flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-900 px-6 text-center">
+                <Play className="mb-4 h-10 w-10 text-blue-400" />
+                <p className="max-w-md text-sm font-medium text-slate-200">
+                  {t("landing_demo_video_missing")}
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── STATS BAR ────────────────────────────────────────────────── */}
       <section className="bg-white border-y border-slate-100 py-12">
