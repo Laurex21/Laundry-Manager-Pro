@@ -66,8 +66,20 @@ const CONNECTIONS: [string, string][] = [
   ["cd", "ao"], ["ao", "za"], ["tz", "za"],
 ];
 
-function getDemoVideoEmbedUrl() {
-  const configuredUrl = import.meta.env.VITE_DEMO_VIDEO_URL?.trim();
+function getDemoVideoEmbedUrl(language: string) {
+  const languageCode = language.split("-")[0]?.toLowerCase();
+  const localizedUrl =
+    languageCode === "fr"
+      ? import.meta.env.VITE_DEMO_VIDEO_URL_FR
+      : languageCode === "en"
+        ? import.meta.env.VITE_DEMO_VIDEO_URL_EN
+        : undefined;
+  const configuredUrl = (
+    localizedUrl ||
+    import.meta.env.VITE_DEMO_VIDEO_URL_EN ||
+    import.meta.env.VITE_DEMO_VIDEO_URL_FR ||
+    import.meta.env.VITE_DEMO_VIDEO_URL
+  )?.trim();
   if (!configuredUrl) return "";
 
   try {
@@ -192,7 +204,7 @@ export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [demoVideoOpen, setDemoVideoOpen] = useState(false);
-  const demoVideoUrl = getDemoVideoEmbedUrl();
+  const demoVideoUrl = getDemoVideoEmbedUrl(i18n.language);
 
   const { data: publicStats } = useQuery<{
     totalOrders: number; totalCustomers: number; totalTransactions: number;
