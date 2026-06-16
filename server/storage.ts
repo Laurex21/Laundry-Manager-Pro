@@ -382,7 +382,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductionDelays(siteId: number | number[] | null): Promise<any[]> {
-    const activeStatuses = ["received", "washing", "stain_treatment", "drying", "ironing"];
+    const activeStatuses = ["received", "sorting", "stain_treatment", "washing", "drying", "ironing", "packaging"];
     const statusFilter = sql`${orders.status} = ANY(${sql`ARRAY[${sql.join(activeStatuses.map(s => sql`${s}`), sql`, `)}]`})`;
     const siteWhere = this.siteWhere(orders.siteId, siteId);
     const activeOrders = await db.select().from(orders)

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Analytics() {
   const { t } = useTranslation();
@@ -268,26 +269,84 @@ function AdvancedAnalytics({ period }: { period: string }) {
             <KpiCard label={t("revenue_per_employee", "Revenue / Employee")} value={`${symbol}${Number(summary.revenuePerEmployee || 0).toFixed(0)}`} />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <InsightPanel icon={<Users className="w-4 h-4" />} title={t("employee_insights", "Employee Insights")} items={[
-              [t("most_productive_employee", "Most Productive"), employee.mostProductiveEmployee?.name],
-              [t("highest_revenue_employee", "Highest Revenue"), employee.highestRevenueEmployee?.name],
-              [t("highest_weight_processed", "Highest Weight"), employee.highestWeightProcessed?.name],
-              [t("most_active_employee", "Most Active"), employee.mostActiveEmployee?.name],
-            ]} />
-            <InsightPanel icon={<Cog className="w-4 h-4" />} title={t("machine_insights", "Machine Insights")} items={[
-              [t("most_used_machine", "Most Used"), machine.mostUsedMachine?.name],
-              [t("least_used_machine", "Least Used"), machine.leastUsedMachine?.name],
-              [t("highest_volume_machine", "Highest Volume"), machine.highestVolumeMachine?.name],
-              [t("underutilized_machine", "Underutilized"), machine.underutilizedMachine?.name],
-            ]} />
-            <InsightPanel icon={<Target className="w-4 h-4" />} title={t("operational_insights", "Operational Insights")} items={[
-              [t("most_profitable_service", "Most Profitable"), operations.mostProfitableService?.name],
-              [t("least_profitable_service", "Least Profitable"), operations.leastProfitableService?.name],
-              [t("revenue_per_machine", "Revenue / Machine"), `${symbol}${Number(summary.revenuePerMachine || 0).toFixed(0)}`],
-              [t("avg_orders_day", "Avg Orders / Day"), Number(summary.averageOrdersPerDay || 0).toFixed(1)],
-            ]} />
-          </div>
+          <Tabs defaultValue="employees" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto">
+              <TabsTrigger value="employees" className="min-h-11">{t("employees")}</TabsTrigger>
+              <TabsTrigger value="machines" className="min-h-11">{t("machines")}</TabsTrigger>
+              <TabsTrigger value="operations" className="min-h-11">{t("operations", "Operations")}</TabsTrigger>
+              <TabsTrigger value="financial" className="min-h-11">{t("financial_intelligence", "Financial Intelligence")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="employees" className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightPanel icon={<Users className="w-4 h-4" />} title={t("employee_insights", "Employee Insights")} items={[
+                  [t("most_productive_employee", "Most Productive"), employee.mostProductiveEmployee?.name],
+                  [t("highest_revenue_employee", "Highest Revenue"), employee.highestRevenueEmployee?.name],
+                  [t("highest_weight_processed", "Highest Weight"), employee.highestWeightProcessed?.name],
+                  [t("most_active_employee", "Most Active"), employee.mostActiveEmployee?.name],
+                ]} />
+                <RankingPanel
+                  title={t("productivity_ranking", "Productivity Ranking")}
+                  rows={(employee.employees || []).slice(0, 5).map((row: any) => ({
+                    label: row.name,
+                    value: `${row.totalOrdersHandled || 0} ${t("orders", "orders")}`,
+                    meta: `${symbol}${Number(row.totalRevenueHandled || 0).toFixed(0)}`,
+                  }))}
+                />
+              </div>
+            </TabsContent>
+            <TabsContent value="machines" className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightPanel icon={<Cog className="w-4 h-4" />} title={t("machine_insights", "Machine Insights")} items={[
+                  [t("most_used_machine", "Most Used"), machine.mostUsedMachine?.name],
+                  [t("least_used_machine", "Least Used"), machine.leastUsedMachine?.name],
+                  [t("highest_volume_machine", "Highest Volume"), machine.highestVolumeMachine?.name],
+                  [t("underutilized_machine", "Underutilized"), machine.underutilizedMachine?.name],
+                ]} />
+                <RankingPanel
+                  title={t("machine_utilization", "Machine Utilization")}
+                  rows={(machine.machines || []).slice(0, 5).map((row: any) => ({
+                    label: row.name,
+                    value: `${row.utilizationScore || 0}%`,
+                    meta: `${Number(row.totalWeightProcessed || 0).toFixed(1)} kg`,
+                  }))}
+                />
+              </div>
+            </TabsContent>
+            <TabsContent value="operations" className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightPanel icon={<Target className="w-4 h-4" />} title={t("operational_insights", "Operational Insights")} items={[
+                  [t("avg_processing_time", "Average Processing Time"), `${Number(operations.averageOrderProcessingTimeHours || 0).toFixed(1)}h`],
+                  [t("delayed_orders", "Delayed Orders"), operations.ordersDeliveredLate || 0],
+                  [t("avg_orders_day", "Avg Orders / Day"), Number(summary.averageOrdersPerDay || 0).toFixed(1)],
+                  [t("weight_processed", "Weight Processed"), `${Number(summary.totalWeightProcessed || 0).toFixed(1)} kg`],
+                ]} />
+                <Card className="border-muted">
+                  <CardHeader><CardTitle className="text-base">{t("what_should_owner_do", "What should the owner do next?")}</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {data?.recommendations?.length ? data.recommendations.slice(0, 4).map((rec: string, i: number) => (
+                      <div key={i} className="rounded-md border bg-muted/30 p-3 text-sm">{rec}</div>
+                    )) : <p className="text-sm text-muted-foreground">{t("not_enough_data_recommendations", "Not enough activity data yet for recommendations.")}</p>}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+            <TabsContent value="financial" className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightPanel icon={<TrendingUp className="w-4 h-4" />} title={t("financial_intelligence", "Financial Intelligence")} items={[
+                  [t("revenue_forecast", "Revenue Forecast"), `${symbol}${(Number(summary.averageRevenuePerDay || 0) * 30).toFixed(0)}`],
+                  [t("revenue_per_employee", "Revenue / Employee"), `${symbol}${Number(summary.revenuePerEmployee || 0).toFixed(0)}`],
+                  [t("revenue_per_machine", "Revenue / Machine"), `${symbol}${Number(summary.revenuePerMachine || 0).toFixed(0)}`],
+                  [t("payments_collected", "Payments Collected"), `${symbol}${Number(summary.totalPaymentsCollected || 0).toFixed(0)}`],
+                ]} />
+                <InsightPanel icon={<Target className="w-4 h-4" />} title={t("service_profitability", "Service Profitability")} items={[
+                  [t("most_profitable_service", "Most Profitable"), operations.mostProfitableService?.name],
+                  [t("least_profitable_service", "Least Profitable"), operations.leastProfitableService?.name],
+                  [t("most_profitable_service", "Top Service Revenue"), `${symbol}${Number(operations.mostProfitableService?.revenue || 0).toFixed(0)}`],
+                  [t("least_profitable_service", "Lowest Service Revenue"), `${symbol}${Number(operations.leastProfitableService?.revenue || 0).toFixed(0)}`],
+                ]} />
+              </div>
+            </TabsContent>
+          </Tabs>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card className="border-muted">
@@ -329,6 +388,25 @@ function InsightPanel({ icon, title, items }: { icon: React.ReactNode; title: st
             <span className="font-medium text-right truncate max-w-[160px]">{value || "-"}</span>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RankingPanel({ title, rows }: { title: string; rows: { label: string; value: string; meta?: string }[] }) {
+  return (
+    <Card className="border-muted">
+      <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+      <CardContent className="space-y-2">
+        {rows.length ? rows.map((row, index) => (
+          <div key={`${row.label}-${index}`} className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
+            <div className="min-w-0">
+              <p className="font-medium truncate">{index + 1}. {row.label}</p>
+              {row.meta && <p className="text-xs text-muted-foreground">{row.meta}</p>}
+            </div>
+            <span className="font-mono font-semibold shrink-0">{row.value}</span>
+          </div>
+        )) : <p className="text-sm text-muted-foreground">-</p>}
       </CardContent>
     </Card>
   );

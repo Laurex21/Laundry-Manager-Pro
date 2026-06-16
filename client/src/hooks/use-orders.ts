@@ -64,12 +64,26 @@ export function useUpdateOrderStatus() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, status, paymentStatus }: { id: number; status: string; paymentStatus?: string }) => {
+    mutationFn: async ({
+      id,
+      status,
+      paymentStatus,
+      machineId,
+      weightProcessed,
+      cycleDurationMinutes,
+    }: {
+      id: number;
+      status: string;
+      paymentStatus?: string;
+      machineId?: number;
+      weightProcessed?: string;
+      cycleDurationMinutes?: number;
+    }) => {
       const url = buildUrl(api.orders.updateStatus.path, { id });
       const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, paymentStatus }),
+        body: JSON.stringify({ status, paymentStatus, machineId, weightProcessed, cycleDurationMinutes }),
         credentials: "include",
       });
 

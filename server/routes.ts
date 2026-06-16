@@ -219,7 +219,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  const VALID_PIPELINE_STATUSES = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered", "cancelled", "cancellation_requested"];
+  const VALID_PIPELINE_STATUSES = ["received", "sorting", "washing", "drying", "ironing", "packaging", "ready", "delivered", "cancelled", "cancellation_requested"];
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
     const customers = await storage.getCustomersBySite(orgScopedSites(req));
@@ -428,8 +428,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         actionType,
         orderId: updated.id,
         amount: updated.totalAmount,
+        weightKg: input.weightProcessed ?? null,
         metadata: { status: input.status, paymentStatus: input.paymentStatus },
       });
+      if (input.machineId && ["washing", "drying", "ironing"].includes(input.status)) {
+        const machine = await storage.getMachine(input.machineId);
+        if (machine?.siteId === updated.siteId) {
+          await storage.createMachineUsage({
+            machineId: input.machineId,
+            orderId: updated.id,
+            siteId: updated.siteId,
+            weightProcessed: input.weightProcessed || "0",
+            cycleDurationMinutes: input.cycleDurationMinutes || 0,
+          } as any);
+        }
+      }
     }
     res.json(updated);
   });

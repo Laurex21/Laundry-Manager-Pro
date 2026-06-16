@@ -22,8 +22,7 @@ import {
   Check,
   Shirt,
   AlertTriangle,
-  PackageOpen,
-  Cog
+  PackageOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,7 +68,7 @@ import { cn } from "@/lib/utils";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
-const ACTIVE_STATUSES = new Set(["pending", "washing", "drying", "ironing", "stain_treatment", "received"]);
+const ACTIVE_STATUSES = new Set(["pending", "received", "sorting", "washing", "drying", "ironing", "packaging", "stain_treatment"]);
 
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
@@ -326,7 +325,6 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { data: customers } = useCustomers();
   const { data: services } = useServices();
-  const { data: machines } = useSettingsQuery<any[]>({ queryKey: ["/api/machines"] });
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
 
@@ -363,11 +361,6 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
   const { fields: garmentFields, append: appendGarment, remove: removeGarment } = useFieldArray({
     control: form.control,
     name: "garmentItems"
-  });
-
-  const { fields: machineUsageFields, append: appendMachineUsage, remove: removeMachineUsage } = useFieldArray({
-    control: form.control,
-    name: "machineUsages"
   });
 
   const watchedItems = useWatch({
@@ -694,77 +687,6 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                   </div>
                 );
               })}
-            </div>
-
-            <div className="space-y-4" data-testid="machine-usage-section">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Cog className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-sm font-medium text-muted-foreground">{t("machine_usage", "Machine Usage")}</h3>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => appendMachineUsage({ machineId: 0, weightProcessed: "0", cycleDurationMinutes: 0 })}>
-                  <Plus className="w-3 h-3 mr-1" /> {t("add_machine", "Add Machine")}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{t("machine_usage_hint", "Optional: link this order to machines used for production.")}</p>
-
-              {machineUsageFields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-1 sm:grid-cols-[1fr_110px_110px_40px] gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
-                  <FormField
-                    control={form.control}
-                    name={`machineUsages.${index}.machineId`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">{t("machine_name")}</FormLabel>
-                        <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value > 0 ? String(field.value) : ""}>
-                          <FormControl>
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder={t("select_machine", "Select machine")} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {machines?.filter((machine: any) => machine.status !== "inactive").map((machine: any) => (
-                              <SelectItem key={machine.id} value={String(machine.id)}>
-                                {machine.name} ({machine.capacityKg} kg)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`machineUsages.${index}.weightProcessed`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">{t("weight_kg", "Weight (kg)")}</FormLabel>
-                        <FormControl><Input type="number" step="0.01" min="0" className="h-9" {...field} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`machineUsages.${index}.cycleDurationMinutes`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs">{t("cycle_minutes", "Cycle min")}</FormLabel>
-                        <FormControl><Input type="number" min="0" className="h-9" {...field} onChange={e => field.onChange(Number(e.target.value))} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => removeMachineUsage(index)}
-                    data-testid={`button-remove-machine-usage-${index}`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
             </div>
 
             <div className="space-y-4" data-testid="garment-inventory-section">

@@ -4,15 +4,17 @@ import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
   received: { en: "Received", fr: "Reçu" },
+  sorting: { en: "Sorting", fr: "Tri" },
   washing: { en: "Washing", fr: "Lavage" },
   stain_treatment: { en: "Stain Treatment", fr: "Traitement des taches" },
   drying: { en: "Drying", fr: "Séchage" },
   ironing: { en: "Ironing", fr: "Repassage" },
+  packaging: { en: "Packaging", fr: "Emballage" },
   ready: { en: "Ready for Pickup", fr: "Prêt à récupérer" },
   delivered: { en: "Delivered", fr: "Livré" },
 };
 
-const PIPELINE_ORDER = ["received", "washing", "stain_treatment", "drying", "ironing", "ready", "delivered"];
+const PIPELINE_ORDER = ["received", "sorting", "washing", "drying", "ironing", "packaging", "ready", "delivered"];
 
 function dateLocaleFor(lang: string) {
   if (lang.startsWith("fr") || lang === "both" || lang === "all") return fr;
@@ -53,7 +55,8 @@ function escapeHtml(value: unknown): string {
 }
 
 function buildPipelineHtml(currentStatus: string, lang: string): string {
-  const currentIdx = PIPELINE_ORDER.indexOf(currentStatus);
+  const normalizedStatus = currentStatus === "stain_treatment" ? "sorting" : currentStatus;
+  const currentIdx = PIPELINE_ORDER.indexOf(normalizedStatus);
   return PIPELINE_ORDER.map((stage, i) => {
     const isPast = i < currentIdx;
     const isCurrent = i === currentIdx;

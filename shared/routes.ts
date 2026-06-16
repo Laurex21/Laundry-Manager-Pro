@@ -147,7 +147,13 @@ export const api = {
     updateStatus: {
       method: 'PATCH' as const,
       path: '/api/orders/:id/status',
-      input: z.object({ status: z.string(), paymentStatus: z.string().optional() }),
+      input: z.object({
+        status: z.string(),
+        paymentStatus: z.string().optional(),
+        machineId: z.number().optional(),
+        weightProcessed: z.string().optional(),
+        cycleDurationMinutes: z.number().optional(),
+      }),
       responses: {
         200: z.custom<typeof orders.$inferSelect>(),
       },

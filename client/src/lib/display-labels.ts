@@ -24,11 +24,13 @@ const CATEGORY_KEYS: Record<string, string> = {
 const STATUS_KEYS: Record<string, string> = {
   received: "stage_received",
   pending: "stage_received",
+  sorting: "stage_sorting",
   washing: "stage_washing",
   processing: "stage_washing",
   stain_treatment: "stage_stain_treatment",
   drying: "stage_drying",
   ironing: "stage_ironing",
+  packaging: "stage_packaging",
   ready: "stage_ready",
   delivered: "stage_delivered",
   cancelled: "cancelled",

@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  ArrowLeft, CheckCircle2, Clock, Droplets, Wind, Shirt, Sparkles, Package, Truck,
+  ArrowLeft, CheckCircle2, Clock,
   AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,16 +28,9 @@ import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
 
-const PIPELINE_STAGES = [
-  { key: "received", icon: Package, color: "text-yellow-600" },
-  { key: "washing", icon: Droplets, color: "text-blue-600" },
-  { key: "stain_treatment", icon: Sparkles, color: "text-amber-600" },
-  { key: "drying", icon: Wind, color: "text-cyan-600" },
-  { key: "ironing", icon: Shirt, color: "text-violet-600" },
-  { key: "ready", icon: CheckCircle2, color: "text-indigo-600" },
-  { key: "delivered", icon: Truck, color: "text-green-600" },
-];
+const PIPELINE_STAGES = PRODUCTION_STAGES;
 
 const dateLocaleFor = (language: string) => {
   if (language.startsWith("fr")) return fr;
@@ -46,7 +39,8 @@ const dateLocaleFor = (language: string) => {
 };
 
 function getStageIndex(status: string): number {
-  const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
+  const normalizedStatus = normalizeProductionStatus(status);
+  const idx = PIPELINE_STAGES.findIndex(s => s.key === normalizedStatus);
   return idx >= 0 ? idx : 0;
 }
 
@@ -60,6 +54,7 @@ export default function OrderDetail() {
   const symbol = getSymbol();
   const { toast } = useToast();
   const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
+  const { data: machines } = useQuery<any[]>({ queryKey: ["/api/machines"] });
   const { isOwner, userRole } = useAuth();
   const isManager = userRole === "manager" || isOwner;
 
@@ -73,6 +68,9 @@ export default function OrderDetail() {
   const [rejectionNote, setRejectionNote] = useState("");
   const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
   const [deliverDate, setDeliverDate] = useState(new Date().toISOString().split('T')[0]);
+  const [stageMachineId, setStageMachineId] = useState("");
+  const [stageWeightKg, setStageWeightKg] = useState("");
+  const [stageDurationMinutes, setStageDurationMinutes] = useState("");
   const formatLocalDate = (date: Date | string, pattern: string) =>
     format(new Date(date), pattern, { locale: dateLocaleFor(i18n.language) });
 
@@ -90,12 +88,20 @@ export default function OrderDetail() {
   }
 
   const currentStageIndex = getStageIndex(order.status);
+  const nextPipelineStage = PIPELINE_STAGES[currentStageIndex + 1];
+  const activeMachines = machines?.filter((machine: any) => machine.status !== "inactive") ?? [];
+  const shouldShowMachineAssignment = !!nextPipelineStage && isMachineStage(nextPipelineStage.key) && activeMachines.length > 0;
   const hasReturnedItems = order.garmentItems?.some((g: any) => g.returnedForTreatment && !g.resolvedAt);
 
   function handleAdvanceStatus() {
-    const nextStage = PIPELINE_STAGES[currentStageIndex + 1];
-    if (!nextStage) return;
-    updateStatus({ id: orderId, status: nextStage.key });
+    if (!nextPipelineStage) return;
+    updateStatus({
+      id: orderId,
+      status: nextPipelineStage.key,
+      machineId: stageMachineId ? Number(stageMachineId) : undefined,
+      weightProcessed: stageWeightKg || undefined,
+      cycleDurationMinutes: stageDurationMinutes ? Number(stageDurationMinutes) : undefined,
+    });
   }
 
   function handleSetStatus(status: string) {
@@ -361,6 +367,48 @@ export default function OrderDetail() {
               </Select>
             )}
           </div>
+          {shouldShowMachineAssignment && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_1fr] gap-3 rounded-lg border bg-muted/20 p-3" data-testid="stage-machine-assignment">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="stage-machine-select">{t("machine_name")}</label>
+                <Select value={stageMachineId} onValueChange={setStageMachineId}>
+                  <SelectTrigger id="stage-machine-select" className="h-9" data-testid="select-stage-machine">
+                    <SelectValue placeholder={t("select_machine", "Select machine")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeMachines.map((machine: any) => (
+                      <SelectItem key={machine.id} value={String(machine.id)}>
+                        {machine.name} ({machine.capacityKg} kg)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="stage-weight-kg">{t("weight_kg", "Weight (kg)")}</label>
+                <Input
+                  id="stage-weight-kg"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={stageWeightKg}
+                  onChange={(event) => setStageWeightKg(event.target.value)}
+                  data-testid="input-stage-weight"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="stage-duration-minutes">{t("cycle_minutes", "Cycle min")}</label>
+                <Input
+                  id="stage-duration-minutes"
+                  type="number"
+                  min="0"
+                  value={stageDurationMinutes}
+                  onChange={(event) => setStageDurationMinutes(event.target.value)}
+                  data-testid="input-stage-duration"
+                />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
