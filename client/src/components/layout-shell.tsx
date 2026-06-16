@@ -8,6 +8,7 @@ import {
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight,
 } from "lucide-react";
+import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -51,6 +52,8 @@ const CURRENCIES: { code: Currency; labelKey: string; symbol: string }[] = [
   { code: "USD", labelKey: "currency_us_dollar", symbol: "$" },
   { code: "EUR", labelKey: "currency_euro", symbol: "€" },
 ];
+
+const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "dashboard",
@@ -226,6 +229,24 @@ function DemoBanner() {
   );
 }
 
+function WhatsAppContactButton() {
+  const { t } = useTranslation();
+
+  return (
+    <a
+      href={WHATSAPP_SUPPORT_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="fixed bottom-20 right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 lg:bottom-6 lg:right-6"
+      aria-label={t("whatsapp_contact_support")}
+      data-testid="button-whatsapp-support"
+    >
+      <FaWhatsapp className="h-5 w-5" aria-hidden="true" />
+      <span className="hidden sm:inline">{t("whatsapp_contact_support")}</span>
+    </a>
+  );
+}
+
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout, planSlug, canAccess } = useAuth();
@@ -375,6 +396,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           {children}
         </div>
       </main>
+
+      <WhatsAppContactButton />
 
       {/* Mobile bottom nav */}
       <nav
