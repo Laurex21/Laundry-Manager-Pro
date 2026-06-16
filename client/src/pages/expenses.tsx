@@ -46,6 +46,31 @@ const EXPENSE_TYPE_KEYS = [
   { key: "other", labelKey: "cat_other", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
 ];
 
+const DEFAULT_EXPENSE_CATEGORIES = [
+  "supplies",
+  "water",
+  "electricity",
+  "detergent",
+  "rent",
+  "salary",
+  "utilities",
+  "maintenance",
+  "transportation",
+  "other",
+] as const;
+
+function categorySelectValue(category?: string | null) {
+  const value = category?.trim();
+  if (!value) return "supplies";
+
+  const normalized = value.toLowerCase();
+  if (DEFAULT_EXPENSE_CATEGORIES.includes(normalized as typeof DEFAULT_EXPENSE_CATEGORIES[number])) {
+    return normalized;
+  }
+
+  return value;
+}
+
 export default function Expenses() {
   const { data: expenditures, isLoading } = useExpenditures();
   const [open, setOpen] = useState(false);
@@ -89,6 +114,26 @@ export default function Expenses() {
 
   const totalFilteredExpenses = filteredExpenditures.reduce((sum, item) => sum + Number(item.amount), 0);
 
+  const expenseCategoryOptions = useMemo(() => {
+    const categories = new Map<string, string>();
+
+    DEFAULT_EXPENSE_CATEGORIES.forEach((category) => {
+      categories.set(category.toLowerCase(), category);
+    });
+
+    expenditures?.forEach((expense) => {
+      const category = expense.category?.trim();
+      if (category) {
+        const key = category.toLowerCase();
+        if (!categories.has(key)) {
+          categories.set(key, category);
+        }
+      }
+    });
+
+    return Array.from(categories.values());
+  }, [expenditures]);
+
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -106,7 +151,11 @@ export default function Expenses() {
             <DialogHeader>
               <DialogTitle>{editingExpense ? t("edit_expense") : t("log_new_expense")}</DialogTitle>
             </DialogHeader>
-            <ExpenseForm onSuccess={() => { setOpen(false); setEditingExpense(null); }} expense={editingExpense} />
+            <ExpenseForm
+              onSuccess={() => { setOpen(false); setEditingExpense(null); }}
+              expense={editingExpense}
+              categoryOptions={expenseCategoryOptions}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -258,7 +307,15 @@ const expenseFormSchema = insertExpenditureSchema.extend({
 });
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
 
-function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: Expenditure | null }) {
+function ExpenseForm({
+  onSuccess,
+  expense,
+  categoryOptions,
+}: {
+  onSuccess: () => void;
+  expense?: Expenditure | null;
+  categoryOptions: string[];
+}) {
   const { t } = useTranslation();
   const { mutate: createMutate, isPending: createPending } = useCreateExpenditure();
   const queryClient = useQueryClient();
@@ -271,13 +328,13 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
     resolver: zodResolver(expenseFormSchema),
     defaultValues: {
       amount: expense ? expense.amount : "0",
-      category: expense ? expense.category : "Supplies",
+      category: expense ? categorySelectValue(expense.category) : "supplies",
       description: expense ? expense.description : "",
       date: expense?.date ? format(new Date(expense.date as any), "yyyy-MM-dd") : todayStr,
     },
     values: expense ? {
       amount: expense.amount,
-      category: expense.category,
+      category: categorySelectValue(expense.category),
       description: expense.description,
       date: expense.date ? format(new Date(expense.date as any), "yyyy-MM-dd") : todayStr,
     } : undefined,
@@ -298,7 +355,7 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
     } else {
       createMutate(data as any, {
         onSuccess: () => {
-          form.reset({ amount: "0", category: "Supplies", description: "", date: todayStr });
+          form.reset({ amount: "0", category: "supplies", description: "", date: todayStr });
           setCustomCategory(false);
           onSuccess();
         },
@@ -334,22 +391,17 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
               {customCategory ? (
                 <div className="flex gap-2">
                   <FormControl><Input placeholder={t("enter_category")} {...field} autoFocus data-testid="input-expense-category-custom" /></FormControl>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => { setCustomCategory(false); field.onChange("Supplies"); }}>{t("cancel")}</Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setCustomCategory(false); field.onChange("supplies"); }}>{t("cancel")}</Button>
                 </div>
               ) : (
-                <Select onValueChange={(value) => { if (value === "custom") { setCustomCategory(true); field.onChange(""); } else { field.onChange(value); } }} defaultValue={field.value}>
+                <Select value={field.value} onValueChange={(value) => { if (value === "custom") { setCustomCategory(true); field.onChange(""); } else { field.onChange(value); } }}>
                   <FormControl><SelectTrigger data-testid="select-expense-category"><SelectValue placeholder={t("select_category_placeholder")} /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="supplies">{t("cat_supplies")}</SelectItem>
-                    <SelectItem value="water">{t("cat_water")}</SelectItem>
-                    <SelectItem value="electricity">{t("cat_electricity")}</SelectItem>
-                    <SelectItem value="detergent">{t("cat_detergent")}</SelectItem>
-                    <SelectItem value="rent">{t("cat_rent")}</SelectItem>
-                    <SelectItem value="salary">{t("cat_salary")}</SelectItem>
-                    <SelectItem value="utilities">{t("cat_utilities")}</SelectItem>
-                    <SelectItem value="maintenance">{t("cat_maintenance")}</SelectItem>
-                    <SelectItem value="transportation">{t("cat_transportation")}</SelectItem>
-                    <SelectItem value="other">{t("cat_other")}</SelectItem>
+                    {categoryOptions.map((category) => (
+                      <SelectItem key={category.toLowerCase()} value={category}>
+                        {labelForCategory(category, t)}
+                      </SelectItem>
+                    ))}
                     <SelectItem value="custom">{t("add_new_category")}</SelectItem>
                   </SelectContent>
                 </Select>
