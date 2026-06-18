@@ -46,6 +46,8 @@ const EXPENSE_TYPE_KEYS = [
   { key: "other", labelKey: "cat_other", color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
 ];
 
+const CUSTOM_CATEGORY_COLOR = "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+
 const DEFAULT_EXPENSE_CATEGORIES = [
   "supplies",
   "water",
@@ -69,6 +71,21 @@ function categorySelectValue(category?: string | null) {
   }
 
   return value;
+}
+
+function normalizedCategory(category?: string | null) {
+  return category?.trim().toLowerCase() || "uncategorized";
+}
+
+function getCategoryDisplay(category: string, t: ReturnType<typeof useTranslation>["t"]) {
+  const key = normalizedCategory(category);
+  const typeInfo = EXPENSE_TYPE_KEYS.find((et) => et.key === key);
+
+  return {
+    key,
+    label: typeInfo ? t(typeInfo.labelKey) : labelForCategory(category, t),
+    color: typeInfo?.color || CUSTOM_CATEGORY_COLOR,
+  };
 }
 
 export default function Expenses() {
@@ -96,13 +113,19 @@ export default function Expenses() {
 
   const typeBreakdown = useMemo(() => {
     if (!expenditures) return [];
-    const map: Record<string, number> = {};
+    const map: Record<string, { category: string; total: number }> = {};
     expenditures.forEach((exp) => {
-      const key = exp.category.toLowerCase();
-      map[key] = (map[key] || 0) + Number(exp.amount);
+      const category = exp.category?.trim() || t("uncategorized");
+      const key = normalizedCategory(category);
+      map[key] = {
+        category: map[key]?.category || category,
+        total: (map[key]?.total || 0) + Number(exp.amount),
+      };
     });
-    return Object.entries(map).map(([key, total]) => ({ key, total }));
-  }, [expenditures]);
+    return Object.entries(map)
+      .map(([key, value]) => ({ key, category: value.category, total: value.total }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenditures, t]);
 
   const chartData = useMemo(() => {
     const categories: Record<string, number> = {};
@@ -196,17 +219,17 @@ export default function Expenses() {
 
       {typeBreakdown.length > 0 && (
         <div className="flex gap-2 flex-wrap" data-testid="expense-type-breakdown">
-          {typeBreakdown.map(({ key, total }) => {
-            const typeInfo = EXPENSE_TYPE_KEYS.find((et) => et.key === key) || EXPENSE_TYPE_KEYS[5];
+          {typeBreakdown.map(({ key, category, total }) => {
+            const categoryDisplay = getCategoryDisplay(category, t);
             const active = typeFilter === key;
             return (
               <button
                 key={key}
                 onClick={() => setTypeFilter(active ? "all" : key)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? "ring-2 ring-primary ring-offset-1" : "hover:opacity-80"} ${typeInfo.color}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${active ? "ring-2 ring-primary ring-offset-1" : "hover:opacity-80"} ${categoryDisplay.color}`}
                 data-testid={`card-type-${key}`}
               >
-                <span>{t(typeInfo.labelKey)}</span>
+                <span>{categoryDisplay.label}</span>
                 <span className="font-mono">{symbol}{total.toFixed(0)}</span>
               </button>
             );
@@ -231,11 +254,11 @@ export default function Expenses() {
           ) : (
             <div className="divide-y divide-border border rounded-lg overflow-hidden">
               {filteredExpenditures.map((item) => {
-                const typeInfo = EXPENSE_TYPE_KEYS.find((et) => et.key === item.category.toLowerCase()) || EXPENSE_TYPE_KEYS[5];
+                const categoryDisplay = getCategoryDisplay(item.category, t);
                 return (
                   <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 bg-background hover:bg-muted/30 transition-colors" data-testid={`row-expense-${item.id}`}>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${typeInfo.color}`}>
-                      {labelForCategory(item.category, t)}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${categoryDisplay.color}`}>
+                      {categoryDisplay.label}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-muted-foreground truncate">{item.description}</p>
