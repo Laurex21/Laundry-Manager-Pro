@@ -196,6 +196,8 @@ function buildThermalReceiptHtml(args: {
   symbol: string;
   footerNote: string;
   lang: string;
+  logoBase64?: string | null;
+  showLogo?: boolean;
   paymentLine?: string;
   methodLine?: string;
 }): string {
@@ -219,6 +221,9 @@ function buildThermalReceiptHtml(args: {
     : "";
 
   const paidInFull = args.balance <= 0 && args.totalPaid > 0;
+  const logoHtml = args.showLogo && args.logoBase64
+    ? `<img class="logo" src="${escapeHtml(args.logoBase64)}" alt="${escapeHtml(args.businessName)} logo" />`
+    : "";
 
   return `<!doctype html>
 <html>
@@ -230,11 +235,13 @@ function buildThermalReceiptHtml(args: {
     @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: #fff; color: #000; }
-    body { font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.25; }
+    body { font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.25; font-weight: 700; }
+    body * { font-weight: 700 !important; }
     .toolbar { padding: 10px; text-align: center; background: #f3f4f6; }
     .toolbar button { border: 1px solid #111; background: #fff; color: #111; padding: 8px 14px; font: 600 13px Arial, sans-serif; cursor: pointer; }
     .ticket { width: 80mm; max-width: 80mm; padding: 4mm 3mm 5mm; margin: 0 auto; }
     .center { text-align: center; }
+    .logo { display: block; max-width: 38mm; max-height: 18mm; object-fit: contain; margin: 0 auto 3mm; }
     .business { font-size: 15px; font-weight: 800; line-height: 1.1; text-transform: uppercase; overflow-wrap: anywhere; }
     .muted { font-size: 10px; }
     .title { font-size: 12px; font-weight: 800; margin-top: 4px; text-transform: uppercase; }
@@ -259,6 +266,7 @@ function buildThermalReceiptHtml(args: {
   <div class="toolbar"><button onclick="window.print()">${escapeHtml(label("Print", "Imprimer", args.lang))}</button></div>
   <main class="ticket">
     <section class="center">
+      ${logoHtml}
       <div class="business">${escapeHtml(args.businessName)}</div>
       ${args.contactLines.slice(0, 4).map((line) => `<div class="muted">${escapeHtml(line)}</div>`).join("")}
       <div class="title">${escapeHtml(args.title)}</div>
@@ -288,7 +296,17 @@ function buildThermalReceiptHtml(args: {
   </main>
   <script>
     window.addEventListener("load", function () {
-      window.setTimeout(function () { window.print(); }, 250);
+      var images = Array.prototype.slice.call(document.images || []);
+      var waitForImages = images.map(function (img) {
+        if (img.complete) return Promise.resolve();
+        return new Promise(function (resolve) {
+          img.addEventListener("load", resolve, { once: true });
+          img.addEventListener("error", resolve, { once: true });
+        });
+      });
+      Promise.all(waitForImages).then(function () {
+        window.setTimeout(function () { window.print(); }, 250);
+      });
     });
   </script>
 </body>
@@ -638,6 +656,8 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
     symbol,
     footerNote: settings.receiptFooterNote || label("Thank you", "Merci", lang),
     lang,
+    logoBase64: settings.logoBase64,
+    showLogo: settings.showLogo,
   });
   openThermalReceiptPrintWindow(html);
 }
@@ -687,6 +707,8 @@ export function generateThermalPaymentReceipt(
     symbol,
     footerNote: settings.receiptFooterNote || label("Thank you", "Merci", lang),
     lang,
+    logoBase64: settings.logoBase64,
+    showLogo: settings.showLogo,
     paymentLine: thermalMoney(currentPaymentAmount, symbol),
     methodLine: payment.method,
   });
