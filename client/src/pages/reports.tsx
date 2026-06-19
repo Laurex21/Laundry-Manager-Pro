@@ -373,9 +373,16 @@ export default function Reports() {
                 <h4 className="text-sm font-semibold mb-1">{t("income_vs_expenses")}</h4>
                 <p className="text-xs text-muted-foreground mb-3">{t("income_vs_expenses_subtitle")}</p>
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={perfData.monthlyComparison} barGap={4}>
+                  <BarChart data={perfData.monthlyComparison} barGap={4} margin={{ top: 8, right: 6, left: 0, bottom: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
+                    <XAxis
+                      dataKey="month"
+                      interval={0}
+                      minTickGap={0}
+                      tick={{ fontSize: 10 }}
+                      tickMargin={8}
+                      className="fill-muted-foreground"
+                    />
                     <YAxis tick={{ fontSize: 12 }} className="fill-muted-foreground" tickFormatter={(v) => `${symbol}${v}`} />
                     <Tooltip
                       contentStyle={{
