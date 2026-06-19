@@ -170,6 +170,20 @@ async function requireOwnerOrganisation(req: any, res: any) {
   return org;
 }
 
+async function effectiveSettingsOwnerId(req: any): Promise<string> {
+  const userId = (req.session as any).userId as string;
+  const { db } = await import("./db");
+  const { users } = await import("@shared/models/auth");
+  const { organisations } = await import("@shared/schema");
+  const { eq } = await import("drizzle-orm");
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (user?.organisationId) {
+    const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId)).limit(1);
+    return org?.ownerId || userId;
+  }
+  return userId;
+}
+
 async function effectivePlanSlug(req: any): Promise<string> {
   const userId = (req.session as any).userId as string;
   const { db } = await import("./db");
@@ -795,9 +809,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
-      if (!(await requireOwnerOrganisation(req, res))) return;
-      const userId = (req.session as any).userId;
-      const settings = await storage.getSettings(userId);
+      const settingsOwnerId = await effectiveSettingsOwnerId(req);
+      const settings = await storage.getSettings(settingsOwnerId);
       res.json(settings);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch settings" });
