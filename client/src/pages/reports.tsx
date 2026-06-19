@@ -114,7 +114,7 @@ export default function Reports() {
   });
 
   const { data: perfData, isLoading: perfLoading } = useQuery<PerformanceData>({
-    queryKey: ["/api/reports/performance"],
+    queryKey: [`/api/reports/performance?start=${queryParams.start}&end=${queryParams.end}`],
   });
 
   const alerts = useMemo(() => {
@@ -313,7 +313,7 @@ export default function Reports() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">{t("current_month_profit")}</p>
+                  <p className="text-sm text-muted-foreground">{t("selected_period_profit")}</p>
                   <p
                     className={cn(
                       "text-3xl font-bold font-mono",
@@ -332,7 +332,7 @@ export default function Reports() {
               {(alerts.length > 0 || (!perfLoading && perfData)) && (
                 <div>
                   <h4 className="text-sm font-semibold mb-2">{t("smart_trend_notifications")}</h4>
-                  <p className="text-xs text-muted-foreground mb-3">{t("vs_previous_30_days")}</p>
+                  <p className="text-xs text-muted-foreground mb-3">{t("vs_previous_period")}</p>
                   <div className="space-y-2">
                     {alerts.length === 0 ? (
                       <div className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-muted/40" data-testid="card-alert-0">

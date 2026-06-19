@@ -595,7 +595,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.performance.get.path, isAuthenticated, async (req: any, res) => {
-    const data = await storage.getPerformanceData(scopedSites(req));
+    const { start, end } = req.query;
+    const now = new Date();
+    const startDate = parseLocalDateParam(start as string | undefined, new Date(now.getFullYear(), now.getMonth(), 1));
+    const endDate = parseLocalDateParam(end as string | undefined, now, true);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
+    const data = await storage.getPerformanceData(scopedSites(req), startDate, endDate);
     res.json(data);
   });
 

@@ -60,7 +60,7 @@ export interface IStorage {
   getPublicStats(): Promise<{ totalOrders: number; totalCustomers: number; totalTransactions: number; totalLaundries: number; totalGarments: number }>;
   getStats(): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
 
-  getPerformanceData(siteId: number | number[] | null): Promise<{
+  getPerformanceData(siteId: number | number[] | null, startDate?: Date, endDate?: Date): Promise<{
     currentMonthRevenue: number; currentMonthExpenses: number; currentMonthProfit: number;
     last30Revenue: number; prev30Revenue: number; last30Expenses: number; prev30Expenses: number;
     last30Profit: number; prev30Profit: number;
@@ -610,20 +610,21 @@ export class DatabaseStorage implements IStorage {
     return Number(result?.total || 0);
   }
 
-  async getPerformanceData(siteId: number | number[] | null) {
+  async getPerformanceData(siteId: number | number[] | null, startDate?: Date, endDate?: Date) {
     const now = new Date();
-    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    const last30Start = new Date(now); last30Start.setDate(last30Start.getDate() - 30);
-    const prev30Start = new Date(last30Start); prev30Start.setDate(prev30Start.getDate() - 30);
+    const selectedStart = startDate ?? new Date(now.getFullYear(), now.getMonth(), 1);
+    const selectedEnd = endDate ?? now;
+    const periodMs = Math.max(0, selectedEnd.getTime() - selectedStart.getTime());
+    const previousEnd = new Date(selectedStart.getTime() - 1);
+    const previousStart = new Date(previousEnd.getTime() - periodMs);
 
-    const currentMonthRevenue = await this.sumPaymentsInRangeBySite(currentMonthStart, currentMonthEnd, siteId);
-    const currentMonthExpenses = await this.sumExpensesInRangeBySite(currentMonthStart, currentMonthEnd, siteId);
+    const currentMonthRevenue = await this.sumPaymentsInRangeBySite(selectedStart, selectedEnd, siteId);
+    const currentMonthExpenses = await this.sumExpensesInRangeBySite(selectedStart, selectedEnd, siteId);
     const currentMonthProfit = currentMonthRevenue - currentMonthExpenses;
-    const last30Revenue = await this.sumPaymentsInRangeBySite(last30Start, now, siteId);
-    const prev30Revenue = await this.sumPaymentsInRangeBySite(prev30Start, last30Start, siteId);
-    const last30Expenses = await this.sumExpensesInRangeBySite(last30Start, now, siteId);
-    const prev30Expenses = await this.sumExpensesInRangeBySite(prev30Start, last30Start, siteId);
+    const last30Revenue = currentMonthRevenue;
+    const prev30Revenue = await this.sumPaymentsInRangeBySite(previousStart, previousEnd, siteId);
+    const last30Expenses = currentMonthExpenses;
+    const prev30Expenses = await this.sumExpensesInRangeBySite(previousStart, previousEnd, siteId);
 
     const monthlyComparison: { month: string; income: number; expenses: number }[] = [];
     for (let i = 5; i >= 0; i--) {
