@@ -346,113 +346,27 @@ function openThermalReceiptPrintWindow(html: string): void {
   win.focus();
 }
 
-type PdfLine = { label?: string; value: string; strong?: boolean };
-type PdfSection = { title: string; lines: PdfLine[] };
+async function downloadHtmlReceiptPdf(html: string, filename: string): Promise<void> {
+  const html2pdf = (await import("html2pdf.js")).default;
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  wrapper.querySelectorAll(".no-print, script").forEach((node) => node.remove());
+  const receipt = wrapper.querySelector(".receipt") as HTMLElement | null;
+  const element = receipt || wrapper;
+  element.style.margin = "0";
 
-function wrapPdfText(text: string, maxChars = 78): string[] {
-  const words = String(text || "").split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
-  words.forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  });
-  if (current) lines.push(current);
-  return lines.length ? lines : [""];
+  await html2pdf()
+    .set({
+      margin: 0,
+      filename,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
+    })
+    .from(element)
+    .save();
 }
 
-async function downloadReceiptPdf(args: {
-  filename: string;
-  title: string;
-  businessName: string;
-  subtitle?: string;
-  contactLines?: string[];
-  logoBase64?: string | null;
-  sections: PdfSection[];
-  footer: string;
-}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
-  const pdf = await PDFDocument.create();
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const margin = 44;
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - margin;
-
-  const ensureSpace = (space: number) => {
-    if (y - space < margin) {
-      page = pdf.addPage([pageWidth, pageHeight]);
-      y = pageHeight - margin;
-    }
-  };
-  const draw = (text: string, x: number, size = 10, font = regular, color = rgb(0.12, 0.16, 0.22)) => {
-    page.drawText(text.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x, y, size, font, color });
-  };
-
-  page.drawRectangle({ x: 0, y: pageHeight - 118, width: pageWidth, height: 118, color: rgb(0.08, 0.22, 0.45) });
-  let brandX = margin;
-  if (args.logoBase64) {
-    try {
-      const [meta, data] = args.logoBase64.split(",");
-      const bytes = Uint8Array.from(atob(data || meta), c => c.charCodeAt(0));
-      const image = meta?.includes("image/jpeg") || meta?.includes("image/jpg")
-        ? await pdf.embedJpg(bytes)
-        : await pdf.embedPng(bytes);
-      const scale = Math.min(56 / image.width, 42 / image.height);
-      page.drawImage(image, { x: margin, y: pageHeight - 86, width: image.width * scale, height: image.height * scale });
-      brandX = margin + image.width * scale + 14;
-    } catch {
-      brandX = margin;
-    }
-  }
-  page.drawText(args.businessName.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 22, font: bold, color: rgb(1, 1, 1) });
-  y -= 26;
-  if (args.subtitle) {
-    page.drawText(args.subtitle.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 10, font: regular, color: rgb(0.86, 0.91, 0.98) });
-    y -= 15;
-  }
-  (args.contactLines || []).slice(0, 3).forEach((line) => {
-    page.drawText(line.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 8, font: regular, color: rgb(0.86, 0.91, 0.98) });
-    y -= 12;
-  });
-  y = pageHeight - 52;
-  draw(args.title, pageWidth - 230, 16, bold, rgb(1, 1, 1));
-  y = pageHeight - 150;
-
-  args.sections.forEach((section) => {
-    ensureSpace(48);
-    draw(section.title.toUpperCase(), margin, 10, bold, rgb(0.37, 0.45, 0.56));
-    y -= 16;
-    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
-    y -= 14;
-
-    section.lines.forEach((line) => {
-      const prefix = line.label ? `${line.label}: ` : "";
-      const wrapped = wrapPdfText(`${prefix}${line.value}`);
-      wrapped.forEach((wrappedLine, idx) => {
-        ensureSpace(18);
-        draw(wrappedLine, margin + (idx > 0 ? 14 : 0), line.strong ? 11 : 10, line.strong ? bold : regular);
-        y -= 15;
-      });
-    });
-    y -= 8;
-  });
-
-  ensureSpace(28);
-  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
-  y -= 18;
-  draw(args.footer, margin, 9, regular, rgb(0.37, 0.45, 0.56));
-
-  const bytes = await pdf.save();
-  downloadBlob(new Blob([bytes], { type: "application/pdf" }), args.filename);
-}
 
 function openReceiptPrintWindow(html: string): void {
   const win = window.open("", "_blank", "width=820,height=900");
@@ -645,68 +559,7 @@ export async function generateDepositReceipt(order: any, symbol: string, setting
     return;
   }
 
-  const pdfSections: PdfSection[] = [
-    {
-      title: label("Customer", "Client", lang),
-      lines: [
-        { label: label("Order No.", "N° Commande", lang), value: `#${orderDisplayId(order)}`, strong: true },
-        { label: label("Customer", "Client", lang), value: customer.name || emptyValue },
-        { label: label("Phone", "Téléphone", lang), value: customer.phone || emptyValue },
-        { label: label("Order Date", "Date de commande", lang), value: entryDate },
-        ...(settings.showPickupDate ? [{ label: label("Expected Pickup", "Retrait prévu", lang), value: pickupDate }] : []),
-      ],
-    },
-    {
-      title: label("Service Summary", "Résumé des services", lang),
-      lines: items.length
-        ? items.map((item: any) => {
-            const svc = item.service || {};
-            const qty = Number(item.quantity || 0);
-            const price = Number(item.priceAtOrder || 0);
-            const unit = serviceUnitLabel(svc.unit, lang);
-            return { value: `${svc.name || label("Service", "Service", lang)} — ${qty} ${unit} x ${moneyText(symbol, price)} = ${moneyText(symbol, qty * price)}` };
-          })
-        : [{ value: label("No services recorded", "Aucun service enregistré", lang) }],
-    },
-    ...(settings.showGarmentList ? [{
-      title: label("Garment Checklist", "Checklist des vêtements", lang),
-      lines: garments.length
-        ? garments.map((g: any) => ({ value: `${g.quantity || 1} x ${g.itemName || label("Item", "Article", lang)}${g.details ? ` — ${g.details}` : ""}` }))
-        : [{ value: label("No garment items recorded", "Aucun vêtement enregistré", lang) }],
-    }] : []),
-    {
-      title: label("Totals", "Totaux", lang),
-      lines: [
-        { label: label("Subtotal", "Sous-total", lang), value: moneyText(symbol, subtotal) },
-        ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${moneyText(symbol, discount)}` }] : []),
-        ...(pickupCost > 0 ? [{ label: label("Transport / Delivery", "Transport / Livraison", lang), value: moneyText(symbol, pickupCost) }] : []),
-        { label: label("Total Amount", "Montant total", lang), value: moneyText(symbol, orderTotal), strong: true },
-        { label: label("Advance Payment", "Acompte versé", lang), value: moneyText(symbol, totalPaid), strong: true },
-        { label: label("Balance Due", "Solde dû", lang), value: balance > 0 ? moneyText(symbol, balance) : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang), strong: true },
-      ],
-    },
-    ...(settings.showPaymentHistory ? [{
-      title: label("Payment Records", "Historique des paiements", lang),
-      lines: (order.payments || []).length
-        ? buildPaymentHistoryLines(order.payments || [], orderTotal, symbol, lang, order.entryDate).map((value) => ({ value }))
-        : [{ value: label("No payments recorded", "Aucun paiement enregistré", lang) }],
-    }] : []),
-    ...(settings.showTerms ? [{
-      title: label("Terms & Conditions", "Conditions Générales", lang),
-      lines: (settings.termsOfService || getDefaultTerms(lang)).split("\n").filter(Boolean).map((value) => ({ value })),
-    }] : []),
-  ];
-
-  await downloadReceiptPdf({
-    filename: localizedReceiptFilename("deposit", orderDisplayId(order), lang),
-    title: depositLabel,
-    businessName: settings.businessName,
-    subtitle: tagline,
-    contactLines,
-    logoBase64: settings.showLogo ? settings.logoBase64 : null,
-    sections: pdfSections,
-    footer: `${footerNote} · ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
-  });
+  await downloadHtmlReceiptPdf(html, localizedReceiptFilename("deposit", orderDisplayId(order), lang));
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -980,69 +833,5 @@ export async function generatePaymentReceipt(
     return;
   }
 
-  const pdfSections: PdfSection[] = [
-    {
-      title: label("This Payment", "Ce paiement", lang),
-      lines: [
-        { label: label("Order No.", "N° Commande", lang), value: `#${orderId}`, strong: true },
-        { label: label("Customer", "Client", lang), value: customer.name || emptyValue },
-        { label: label("Order Date", "Date de commande", lang), value: displayEntryDate },
-        ...(settings.showPickupDate ? [{ label: label("Expected Pickup", "Retrait prévu", lang), value: displayPickupDate }] : []),
-        { label: label("Receipt Date", "Date du reçu", lang), value: formatReceiptDate(payment.date, "MMM dd, yyyy", lang) },
-        { label: label("Method", "Méthode", lang), value: payment.method },
-        { label: label("This Payment", "Ce paiement", lang), value: moneyText(symbol, currentPaymentAmount), strong: true },
-      ],
-    },
-    {
-      title: label("Service Summary", "Résumé des services", lang),
-      lines: items.length
-        ? items.map((item: any) => {
-            const svc = item.service || {};
-            const qty = Number(item.quantity || 0);
-            const price = Number(item.priceAtOrder || 0);
-            const unit = serviceUnitLabel(svc.unit, lang);
-            return { value: `${svc.name || label("Service", "Service", lang)} — ${qty} ${unit} x ${moneyText(symbol, price)} = ${moneyText(symbol, qty * price)}` };
-          })
-        : [{ value: label("No services recorded", "Aucun service enregistré", lang) }],
-    },
-    ...(settings.showGarmentList ? [{
-      title: label("Garment Checklist", "Checklist des vêtements", lang),
-      lines: garments.length
-        ? garments.map((g: any) => ({ value: `${g.quantity || 1} x ${g.itemName || label("Item", "Article", lang)}${g.details ? ` — ${g.details}` : ""}` }))
-        : [{ value: label("No garment items recorded", "Aucun vêtement enregistré", lang) }],
-    }] : []),
-    {
-      title: label("Totals", "Totaux", lang),
-      lines: [
-        { label: label("Subtotal", "Sous-total", lang), value: moneyText(symbol, subtotalAmount) },
-        ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${moneyText(symbol, discount)}` }] : []),
-        ...(pickupCost > 0 ? [{ label: label("Transport / Delivery", "Transport / Livraison", lang), value: moneyText(symbol, pickupCost) }] : []),
-        { label: label("Order Total", "Total commande", lang), value: moneyText(symbol, orderTotal), strong: true },
-        ...(previousPaid > 0 ? [{ label: label("Previously Paid", "Déjà payé", lang), value: moneyText(symbol, previousPaid) }] : []),
-        { label: label("This Payment", "Ce paiement", lang), value: moneyText(symbol, currentPaymentAmount), strong: true },
-        { label: label("Balance Due", "Solde dû", lang), value: remaining > 0 ? moneyText(symbol, remaining) : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang), strong: true },
-      ],
-    },
-    ...(settings.showPaymentHistory ? [{
-      title: label("Payment History", "Historique des paiements", lang),
-      lines: allPayments.length
-        ? buildPaymentHistoryLines(allPayments, orderTotal, symbol, lang, payment.date).map((value) => ({ value }))
-        : [{ value: label("No payments recorded", "Aucun paiement enregistré", lang) }],
-    }] : []),
-    ...(settings.showTerms ? [{
-      title: label("Terms & Conditions", "Conditions Générales", lang),
-      lines: (settings.termsOfService || getDefaultTerms(lang)).split("\n").filter(Boolean).map((value) => ({ value })),
-    }] : []),
-  ];
-
-  await downloadReceiptPdf({
-    filename: localizedReceiptFilename("payment", orderId, lang),
-    title: receiptTitle,
-    businessName: settings.businessName,
-    subtitle: tagline,
-    contactLines,
-    logoBase64: settings.showLogo ? settings.logoBase64 : null,
-    sections: pdfSections,
-    footer: `${footerNote} · ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
-  });
+  await downloadHtmlReceiptPdf(html, localizedReceiptFilename("payment", orderId, lang));
 }
