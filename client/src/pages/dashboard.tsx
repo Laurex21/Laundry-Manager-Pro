@@ -53,7 +53,7 @@ export default function Dashboard() {
   const ordersByStatus = dashData?.ordersByStatus;
 
   return (
-    <div className="w-full min-w-0 space-y-4 animate-in fade-in duration-300">
+    <div className="space-y-4 animate-in fade-in duration-300">
 
       {/* Header */}
       <div className="flex items-center justify-between min-h-[2rem]">
@@ -152,12 +152,12 @@ export default function Dashboard() {
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
             {t('order_pipeline')}
           </p>
-          <div className="grid min-w-0 grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {QUEUE_STAGES.map(({ key, colorCls }) => (
-              <Link href="/orders" key={key} className="min-w-0">
-                <div className={`rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow min-w-0 overflow-hidden ${colorCls}`}>
+              <Link href="/orders" key={key}>
+                <div className={`rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow min-w-0 ${colorCls}`}>
                   <p className="text-xl font-bold tabular-nums leading-none">{ordersByStatus[key] ?? 0}</p>
-                  <p className="text-[11px] mt-1 font-medium leading-tight opacity-75 break-words">{t(`stage_${key}` as any)}</p>
+                  <p className="text-[11px] mt-1 font-medium opacity-75">{t(`stage_${key}` as any)}</p>
                 </div>
               </Link>
             ))}
@@ -172,7 +172,7 @@ export default function Dashboard() {
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
             <CalendarDays className="w-3 h-3" />{t('today')}
           </p>
-          <div className="grid min-w-0 grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <MetricCard label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
             <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
             <MetricCard label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
@@ -185,7 +185,7 @@ export default function Dashboard() {
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
             <TrendingUp className="w-3 h-3" />{t('this_week')}
           </p>
-          <div className="grid min-w-0 grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <MetricCard label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
             <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
           </div>
@@ -196,7 +196,7 @@ export default function Dashboard() {
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
             <CalendarDays className="w-3 h-3" />{t('this_month')}
           </p>
-          <div className="grid min-w-0 grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <MetricCard label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
             <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
             <MetricCard label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
@@ -390,12 +390,12 @@ function MetricCard({ label, value, icon: Icon, color, ...props }: any) {
     indigo:  "text-indigo-600 dark:text-indigo-400",
   };
   return (
-    <div className="rounded-lg border border-border/50 bg-card p-3 min-w-0 overflow-hidden" {...props}>
+    <div className="rounded-lg border border-border/50 bg-card p-3 min-w-0" {...props}>
       <div className="flex items-center justify-between mb-1">
-        <p className="min-w-0 pr-1 text-[11px] text-muted-foreground leading-tight break-words">{label}</p>
+        <p className="text-[11px] text-muted-foreground leading-tight truncate">{label}</p>
         <Icon className={`w-3 h-3 flex-shrink-0 ${iconCls[color] ?? iconCls.neutral}`} />
       </div>
-      <p className="max-w-full whitespace-normal break-words text-[clamp(1rem,4.8vw,1.125rem)] font-semibold tabular-nums leading-tight">{value}</p>
+      <p className="text-lg font-semibold tabular-nums leading-none">{value}</p>
     </div>
   );
 }

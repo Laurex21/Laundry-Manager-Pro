@@ -237,7 +237,7 @@ function WhatsAppContactButton() {
       href={WHATSAPP_SUPPORT_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 sm:h-auto sm:w-auto sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-semibold lg:bottom-6 lg:right-6"
+      className="fixed bottom-20 right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 lg:bottom-6 lg:right-6"
       aria-label={t("whatsapp_contact_support")}
       data-testid="button-whatsapp-support"
     >
@@ -350,7 +350,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="min-h-screen bg-muted/30 flex w-full overflow-x-clip">
+    <div className="min-h-screen bg-muted/30 flex overflow-x-hidden w-full">
       {/* Desktop sidebar */}
       <aside className="hidden lg:block w-60 bg-card border-r border-border fixed inset-y-0 z-30">
         <NavContent />
@@ -363,7 +363,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 lg:ml-60 min-h-screen flex flex-col min-w-0 overflow-x-clip">
+      <main className="flex-1 lg:ml-60 min-h-screen flex flex-col min-w-0 overflow-x-hidden">
         {/* Top header */}
         <header
           className="h-14 bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 sm:px-5 sticky top-0 z-20"
@@ -392,7 +392,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         <DemoBanner />
 
         {/* Page content */}
-        <div className="flex-1 p-4 max-[380px]:px-3 md:p-6 lg:p-8 max-w-7xl mx-auto w-full pb-28 lg:pb-8 min-w-0 overflow-x-clip">
+        <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full pb-24 lg:pb-8 min-w-0 overflow-x-hidden">
           {children}
         </div>
       </main>
@@ -401,33 +401,33 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
       {/* Mobile bottom nav */}
       <nav
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border grid grid-cols-5 items-stretch pb-[env(safe-area-inset-bottom)]"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border flex items-stretch"
         data-testid="bottom-nav"
       >
         {bottomNavItems.map((item) => {
           const isActive = location === item.href;
           return (
-            <Link key={item.href} href={item.href} className="min-w-0">
+            <Link key={item.href} href={item.href} className="flex-1">
               <div
                 className={cn(
-                  "flex min-w-0 flex-col items-center justify-center gap-1 px-0.5 py-2.5 transition-colors",
+                  "flex flex-col items-center justify-center gap-1 py-3 transition-colors",
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}
                 data-testid={`bottom-nav-${item.page}`}
               >
-                <item.icon className={cn("h-[18px] w-[18px] shrink-0", isActive && "stroke-[2.5]")} />
-                <span className="max-w-full text-center text-[10px] font-semibold leading-[0.95] break-words hyphens-auto">{t(item.labelKey)}</span>
+                <item.icon className={cn("w-4.5 h-4.5", isActive && "stroke-[2.5]")} />
+                <span className="text-[10px] font-semibold leading-none">{t(item.labelKey)}</span>
               </div>
             </Link>
           );
         })}
         <button
-          className="min-w-0 flex flex-col items-center justify-center gap-1 px-0.5 py-2.5 text-muted-foreground"
+          className="flex-1 flex flex-col items-center justify-center gap-1 py-3 text-muted-foreground"
           onClick={() => setMobileOpen(true)}
           data-testid="bottom-nav-more"
         >
-          <MoreHorizontal className="h-[18px] w-[18px] shrink-0" />
-          <span className="max-w-full text-center text-[10px] font-semibold leading-[0.95] break-words hyphens-auto">{t("more")}</span>
+          <MoreHorizontal className="w-4.5 h-4.5" />
+          <span className="text-[10px] font-semibold leading-none">{t("more")}</span>
         </button>
       </nav>
     </div>

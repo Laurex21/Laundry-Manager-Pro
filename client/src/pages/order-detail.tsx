@@ -143,13 +143,13 @@ export default function OrderDetail() {
     }
   }
 
-  async function handleDownloadReceipt() {
+  function handleDownloadReceipt() {
     const mergedSettings = {
       ...DEFAULT_SETTINGS,
       ...(settings || {}),
       receiptLanguage: settings?.receiptLanguage || i18n.language,
     };
-    await generateDepositReceipt(order, symbol, mergedSettings, "download");
+    generateDepositReceipt(order, symbol, mergedSettings, "download");
   }
 
   function handlePrintThermalReceipt() {

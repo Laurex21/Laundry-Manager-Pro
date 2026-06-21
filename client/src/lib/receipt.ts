@@ -164,26 +164,6 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function localizedReceiptFilename(kind: "deposit" | "payment", orderId: number | string, lang: string): string {
-  const names: Record<string, Record<"deposit" | "payment", string>> = {
-    en: { deposit: "deposit-receipt", payment: "payment-receipt" },
-    fr: { deposit: "recu-de-depot", payment: "recu-de-paiement" },
-    pt: { deposit: "recibo-de-deposito", payment: "recibo-de-pagamento" },
-  };
-  const orderNames: Record<string, string> = {
-    en: "order",
-    fr: "commande",
-    pt: "pedido",
-  };
-  const language = lang.startsWith("fr") ? "fr" : lang.startsWith("pt") ? "pt" : "en";
-  const safeOrderId = String(orderId).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "order";
-  return `${names[language][kind]}-${orderNames[language]}-${safeOrderId}.pdf`;
-}
-
-function moneyText(symbol: string, amount: number): string {
-  return `${symbol}${Number(amount || 0).toFixed(2)}`;
-}
-
 function thermalMoney(amount: number, symbol: string): string {
   const currency = symbol.trim();
   const rounded = Math.round(amount).toLocaleString("fr-FR");
@@ -346,65 +326,113 @@ function openThermalReceiptPrintWindow(html: string): void {
   win.focus();
 }
 
-async function downloadHtmlReceiptPdf(html: string, filename: string): Promise<void> {
-  const html2pdf = (await import("html2pdf.js")).default;
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.left = "-10000px";
-  iframe.style.top = "0";
-  iframe.style.width = "820px";
-  iframe.style.height = "1200px";
-  iframe.style.opacity = "0";
-  iframe.setAttribute("aria-hidden", "true");
-  document.body.appendChild(iframe);
+type PdfLine = { label?: string; value: string; strong?: boolean };
+type PdfSection = { title: string; lines: PdfLine[] };
 
-  try {
-    const doc = iframe.contentDocument;
-    if (!doc) throw new Error("Unable to create receipt PDF document");
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    doc.querySelectorAll(".no-print, script").forEach((node) => node.remove());
-    const receipt = doc.querySelector(".receipt") as HTMLElement | null;
-    if (!receipt) throw new Error("Receipt layout not found");
-
-    const page = doc.createElement("div");
-    page.style.background = "#f1f5f9";
-    page.style.padding = "24px";
-    page.style.width = "728px";
-    page.style.minHeight = "1000px";
-    page.style.boxSizing = "border-box";
-    page.style.margin = "0 auto";
-    page.appendChild(receipt);
-    doc.body.innerHTML = "";
-    doc.body.style.margin = "0";
-    doc.body.style.padding = "0";
-    doc.body.style.background = "#f1f5f9";
-    doc.body.appendChild(page);
-
-    const images = Array.from(doc.images || []);
-    await Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
-      img.addEventListener("load", () => resolve(), { once: true });
-      img.addEventListener("error", () => resolve(), { once: true });
-    })));
-    await doc.fonts?.ready;
-
-    await html2pdf()
-      .set({
-        margin: 0,
-        filename,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#f1f5f9", windowWidth: 728 },
-        jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
-      })
-      .from(page)
-      .save();
-  } finally {
-    iframe.remove();
-  }
+function wrapPdfText(text: string, maxChars = 78): string[] {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  });
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
+async function downloadReceiptPdf(args: {
+  filename: string;
+  title: string;
+  businessName: string;
+  subtitle?: string;
+  contactLines?: string[];
+  logoBase64?: string | null;
+  sections: PdfSection[];
+  footer: string;
+}) {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const pdf = await PDFDocument.create();
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const margin = 44;
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  let page = pdf.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - margin;
+
+  const ensureSpace = (space: number) => {
+    if (y - space < margin) {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      y = pageHeight - margin;
+    }
+  };
+  const draw = (text: string, x: number, size = 10, font = regular, color = rgb(0.12, 0.16, 0.22)) => {
+    page.drawText(text.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x, y, size, font, color });
+  };
+
+  page.drawRectangle({ x: 0, y: pageHeight - 118, width: pageWidth, height: 118, color: rgb(0.08, 0.22, 0.45) });
+  let brandX = margin;
+  if (args.logoBase64) {
+    try {
+      const [meta, data] = args.logoBase64.split(",");
+      const bytes = Uint8Array.from(atob(data || meta), c => c.charCodeAt(0));
+      const image = meta?.includes("image/jpeg") || meta?.includes("image/jpg")
+        ? await pdf.embedJpg(bytes)
+        : await pdf.embedPng(bytes);
+      const scale = Math.min(56 / image.width, 42 / image.height);
+      page.drawImage(image, { x: margin, y: pageHeight - 86, width: image.width * scale, height: image.height * scale });
+      brandX = margin + image.width * scale + 14;
+    } catch {
+      brandX = margin;
+    }
+  }
+  page.drawText(args.businessName.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 22, font: bold, color: rgb(1, 1, 1) });
+  y -= 26;
+  if (args.subtitle) {
+    page.drawText(args.subtitle.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 10, font: regular, color: rgb(0.86, 0.91, 0.98) });
+    y -= 15;
+  }
+  (args.contactLines || []).slice(0, 3).forEach((line) => {
+    page.drawText(line.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 8, font: regular, color: rgb(0.86, 0.91, 0.98) });
+    y -= 12;
+  });
+  y = pageHeight - 52;
+  draw(args.title, pageWidth - 230, 16, bold, rgb(1, 1, 1));
+  y = pageHeight - 150;
+
+  args.sections.forEach((section) => {
+    ensureSpace(48);
+    draw(section.title.toUpperCase(), margin, 10, bold, rgb(0.37, 0.45, 0.56));
+    y -= 16;
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
+    y -= 14;
+
+    section.lines.forEach((line) => {
+      const prefix = line.label ? `${line.label}: ` : "";
+      const wrapped = wrapPdfText(`${prefix}${line.value}`);
+      wrapped.forEach((wrappedLine, idx) => {
+        ensureSpace(18);
+        draw(wrappedLine, margin + (idx > 0 ? 14 : 0), line.strong ? 11 : 10, line.strong ? bold : regular);
+        y -= 15;
+      });
+    });
+    y -= 8;
+  });
+
+  ensureSpace(28);
+  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
+  y -= 18;
+  draw(args.footer, margin, 9, regular, rgb(0.37, 0.45, 0.56));
+
+  const bytes = await pdf.save();
+  downloadBlob(new Blob([bytes], { type: "application/pdf" }), args.filename);
+}
 
 function openReceiptPrintWindow(html: string): void {
   const win = window.open("", "_blank", "width=820,height=900");
@@ -418,7 +446,7 @@ function openReceiptPrintWindow(html: string): void {
 
 type ReceiptAction = "download" | "print";
 
-export async function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
+export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
   const customer = order.customer || {};
   const items = order.items || [];
@@ -459,7 +487,7 @@ export async function generateDepositReceipt(order: any, symbol: string, setting
     ? buildPaymentHistoryHtml(order.payments || [], orderTotal, symbol, lang, order.entryDate)
     : `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
 
-  const contactLines = getReceiptContactLines(settings, orderDisplayId(order), lang);
+  const contactLines = getReceiptContactLines(settings, order.id, lang);
   const tagline = settings.tagline || label("Laundry Service", "Service de Blanchisserie", lang);
   const headerHtml = buildHeader(settings.businessName, tagline, contactLines, settings.receiptHeaderColor, settings.logoBase64, settings.showLogo);
   const termsHtml = settings.showTerms ? buildTermsHtml(settings, lang) : "";
@@ -597,7 +625,7 @@ export async function generateDepositReceipt(order: any, symbol: string, setting
     return;
   }
 
-  await downloadHtmlReceiptPdf(html, localizedReceiptFilename("deposit", orderDisplayId(order), lang));
+  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `deposit-receipt-order-${order.id}.html`);
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -691,7 +719,7 @@ export function generateThermalPaymentReceipt(
   openThermalReceiptPrintWindow(html);
 }
 
-export async function generatePaymentReceipt(
+export function generatePaymentReceipt(
   orderId: number | string,
   customer: any,
   items: any[],
@@ -871,5 +899,5 @@ export async function generatePaymentReceipt(
     return;
   }
 
-  await downloadHtmlReceiptPdf(html, localizedReceiptFilename("payment", orderId, lang));
+  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `payment-receipt-order-${orderId}.html`);
 }
