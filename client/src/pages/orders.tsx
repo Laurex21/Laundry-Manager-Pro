@@ -450,7 +450,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
             const orderDetails = await res.json();
-            generateDepositReceipt(orderDetails, symbol, {
+            await generateDepositReceipt(orderDetails, symbol, {
               ...DEFAULT_SETTINGS,
               ...(settings || {}),
               receiptLanguage: settings?.receiptLanguage || i18n.language,

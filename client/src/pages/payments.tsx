@@ -185,7 +185,7 @@ export default function Payments() {
           pickupCost
         );
       } else {
-        generatePaymentReceipt(
+        await generatePaymentReceipt(
           displayOrderId,
           customer,
           items,

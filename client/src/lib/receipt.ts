@@ -164,6 +164,26 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function localizedReceiptFilename(kind: "deposit" | "payment", orderId: number | string, lang: string): string {
+  const names: Record<string, Record<"deposit" | "payment", string>> = {
+    en: { deposit: "deposit-receipt", payment: "payment-receipt" },
+    fr: { deposit: "recu-de-depot", payment: "recu-de-paiement" },
+    pt: { deposit: "recibo-de-deposito", payment: "recibo-de-pagamento" },
+  };
+  const orderNames: Record<string, string> = {
+    en: "order",
+    fr: "commande",
+    pt: "pedido",
+  };
+  const language = lang.startsWith("fr") ? "fr" : lang.startsWith("pt") ? "pt" : "en";
+  const safeOrderId = String(orderId).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "order";
+  return `${names[language][kind]}-${orderNames[language]}-${safeOrderId}.pdf`;
+}
+
+function moneyText(symbol: string, amount: number): string {
+  return `${symbol}${Number(amount || 0).toFixed(2)}`;
+}
+
 function thermalMoney(amount: number, symbol: string): string {
   const currency = symbol.trim();
   const rounded = Math.round(amount).toLocaleString("fr-FR");
@@ -446,7 +466,7 @@ function openReceiptPrintWindow(html: string): void {
 
 type ReceiptAction = "download" | "print";
 
-export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
+export async function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
   const customer = order.customer || {};
   const items = order.items || [];
@@ -487,7 +507,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     ? buildPaymentHistoryHtml(order.payments || [], orderTotal, symbol, lang, order.entryDate)
     : `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
 
-  const contactLines = getReceiptContactLines(settings, order.id, lang);
+  const contactLines = getReceiptContactLines(settings, orderDisplayId(order), lang);
   const tagline = settings.tagline || label("Laundry Service", "Service de Blanchisserie", lang);
   const headerHtml = buildHeader(settings.businessName, tagline, contactLines, settings.receiptHeaderColor, settings.logoBase64, settings.showLogo);
   const termsHtml = settings.showTerms ? buildTermsHtml(settings, lang) : "";
@@ -625,7 +645,68 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `deposit-receipt-order-${order.id}.html`);
+  const pdfSections: PdfSection[] = [
+    {
+      title: label("Customer", "Client", lang),
+      lines: [
+        { label: label("Order No.", "N° Commande", lang), value: `#${orderDisplayId(order)}`, strong: true },
+        { label: label("Customer", "Client", lang), value: customer.name || emptyValue },
+        { label: label("Phone", "Téléphone", lang), value: customer.phone || emptyValue },
+        { label: label("Order Date", "Date de commande", lang), value: entryDate },
+        ...(settings.showPickupDate ? [{ label: label("Expected Pickup", "Retrait prévu", lang), value: pickupDate }] : []),
+      ],
+    },
+    {
+      title: label("Service Summary", "Résumé des services", lang),
+      lines: items.length
+        ? items.map((item: any) => {
+            const svc = item.service || {};
+            const qty = Number(item.quantity || 0);
+            const price = Number(item.priceAtOrder || 0);
+            const unit = serviceUnitLabel(svc.unit, lang);
+            return { value: `${svc.name || label("Service", "Service", lang)} — ${qty} ${unit} x ${moneyText(symbol, price)} = ${moneyText(symbol, qty * price)}` };
+          })
+        : [{ value: label("No services recorded", "Aucun service enregistré", lang) }],
+    },
+    ...(settings.showGarmentList ? [{
+      title: label("Garment Checklist", "Checklist des vêtements", lang),
+      lines: garments.length
+        ? garments.map((g: any) => ({ value: `${g.quantity || 1} x ${g.itemName || label("Item", "Article", lang)}${g.details ? ` — ${g.details}` : ""}` }))
+        : [{ value: label("No garment items recorded", "Aucun vêtement enregistré", lang) }],
+    }] : []),
+    {
+      title: label("Totals", "Totaux", lang),
+      lines: [
+        { label: label("Subtotal", "Sous-total", lang), value: moneyText(symbol, subtotal) },
+        ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${moneyText(symbol, discount)}` }] : []),
+        ...(pickupCost > 0 ? [{ label: label("Transport / Delivery", "Transport / Livraison", lang), value: moneyText(symbol, pickupCost) }] : []),
+        { label: label("Total Amount", "Montant total", lang), value: moneyText(symbol, orderTotal), strong: true },
+        { label: label("Advance Payment", "Acompte versé", lang), value: moneyText(symbol, totalPaid), strong: true },
+        { label: label("Balance Due", "Solde dû", lang), value: balance > 0 ? moneyText(symbol, balance) : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang), strong: true },
+      ],
+    },
+    ...(settings.showPaymentHistory ? [{
+      title: label("Payment Records", "Historique des paiements", lang),
+      lines: (order.payments || []).length
+        ? buildPaymentHistoryLines(order.payments || [], orderTotal, symbol, lang, order.entryDate).map((value) => ({ value }))
+        : [{ value: label("No payments recorded", "Aucun paiement enregistré", lang) }],
+    }] : []),
+    ...(settings.showTerms ? [{
+      title: label("Terms & Conditions", "Conditions Générales", lang),
+      lines: (settings.termsOfService || getDefaultTerms(lang)).split("\n").filter(Boolean).map((value) => ({ value })),
+    }] : []),
+  ];
+
+  await downloadReceiptPdf({
+    filename: localizedReceiptFilename("deposit", orderDisplayId(order), lang),
+    title: depositLabel,
+    businessName: settings.businessName,
+    subtitle: tagline,
+    contactLines,
+    logoBase64: settings.showLogo ? settings.logoBase64 : null,
+    sections: pdfSections,
+    footer: `${footerNote} · ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
+  });
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -719,7 +800,7 @@ export function generateThermalPaymentReceipt(
   openThermalReceiptPrintWindow(html);
 }
 
-export function generatePaymentReceipt(
+export async function generatePaymentReceipt(
   orderId: number | string,
   customer: any,
   items: any[],
@@ -899,5 +980,69 @@ export function generatePaymentReceipt(
     return;
   }
 
-  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `payment-receipt-order-${orderId}.html`);
+  const pdfSections: PdfSection[] = [
+    {
+      title: label("This Payment", "Ce paiement", lang),
+      lines: [
+        { label: label("Order No.", "N° Commande", lang), value: `#${orderId}`, strong: true },
+        { label: label("Customer", "Client", lang), value: customer.name || emptyValue },
+        { label: label("Order Date", "Date de commande", lang), value: displayEntryDate },
+        ...(settings.showPickupDate ? [{ label: label("Expected Pickup", "Retrait prévu", lang), value: displayPickupDate }] : []),
+        { label: label("Receipt Date", "Date du reçu", lang), value: formatReceiptDate(payment.date, "MMM dd, yyyy", lang) },
+        { label: label("Method", "Méthode", lang), value: payment.method },
+        { label: label("This Payment", "Ce paiement", lang), value: moneyText(symbol, currentPaymentAmount), strong: true },
+      ],
+    },
+    {
+      title: label("Service Summary", "Résumé des services", lang),
+      lines: items.length
+        ? items.map((item: any) => {
+            const svc = item.service || {};
+            const qty = Number(item.quantity || 0);
+            const price = Number(item.priceAtOrder || 0);
+            const unit = serviceUnitLabel(svc.unit, lang);
+            return { value: `${svc.name || label("Service", "Service", lang)} — ${qty} ${unit} x ${moneyText(symbol, price)} = ${moneyText(symbol, qty * price)}` };
+          })
+        : [{ value: label("No services recorded", "Aucun service enregistré", lang) }],
+    },
+    ...(settings.showGarmentList ? [{
+      title: label("Garment Checklist", "Checklist des vêtements", lang),
+      lines: garments.length
+        ? garments.map((g: any) => ({ value: `${g.quantity || 1} x ${g.itemName || label("Item", "Article", lang)}${g.details ? ` — ${g.details}` : ""}` }))
+        : [{ value: label("No garment items recorded", "Aucun vêtement enregistré", lang) }],
+    }] : []),
+    {
+      title: label("Totals", "Totaux", lang),
+      lines: [
+        { label: label("Subtotal", "Sous-total", lang), value: moneyText(symbol, subtotalAmount) },
+        ...(discount > 0 ? [{ label: label("Discount", "Réduction", lang), value: `-${moneyText(symbol, discount)}` }] : []),
+        ...(pickupCost > 0 ? [{ label: label("Transport / Delivery", "Transport / Livraison", lang), value: moneyText(symbol, pickupCost) }] : []),
+        { label: label("Order Total", "Total commande", lang), value: moneyText(symbol, orderTotal), strong: true },
+        ...(previousPaid > 0 ? [{ label: label("Previously Paid", "Déjà payé", lang), value: moneyText(symbol, previousPaid) }] : []),
+        { label: label("This Payment", "Ce paiement", lang), value: moneyText(symbol, currentPaymentAmount), strong: true },
+        { label: label("Balance Due", "Solde dû", lang), value: remaining > 0 ? moneyText(symbol, remaining) : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang), strong: true },
+      ],
+    },
+    ...(settings.showPaymentHistory ? [{
+      title: label("Payment History", "Historique des paiements", lang),
+      lines: allPayments.length
+        ? buildPaymentHistoryLines(allPayments, orderTotal, symbol, lang, payment.date).map((value) => ({ value }))
+        : [{ value: label("No payments recorded", "Aucun paiement enregistré", lang) }],
+    }] : []),
+    ...(settings.showTerms ? [{
+      title: label("Terms & Conditions", "Conditions Générales", lang),
+      lines: (settings.termsOfService || getDefaultTerms(lang)).split("\n").filter(Boolean).map((value) => ({ value })),
+    }] : []),
+  ];
+
+  await downloadReceiptPdf({
+    filename: localizedReceiptFilename("payment", orderId, lang),
+    title: receiptTitle,
+    businessName: settings.businessName,
+    subtitle: tagline,
+    contactLines,
+    logoBase64: settings.showLogo ? settings.logoBase64 : null,
+    sections: pdfSections,
+    footer: `${footerNote} · ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}`,
+  });
 }
