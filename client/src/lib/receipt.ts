@@ -348,23 +348,61 @@ function openThermalReceiptPrintWindow(html: string): void {
 
 async function downloadHtmlReceiptPdf(html: string, filename: string): Promise<void> {
   const html2pdf = (await import("html2pdf.js")).default;
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = html;
-  wrapper.querySelectorAll(".no-print, script").forEach((node) => node.remove());
-  const receipt = wrapper.querySelector(".receipt") as HTMLElement | null;
-  const element = receipt || wrapper;
-  element.style.margin = "0";
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "820px";
+  iframe.style.height = "1200px";
+  iframe.style.opacity = "0";
+  iframe.setAttribute("aria-hidden", "true");
+  document.body.appendChild(iframe);
 
-  await html2pdf()
-    .set({
-      margin: 0,
-      filename,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-      jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
-    })
-    .from(element)
-    .save();
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) throw new Error("Unable to create receipt PDF document");
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    doc.querySelectorAll(".no-print, script").forEach((node) => node.remove());
+    const receipt = doc.querySelector(".receipt") as HTMLElement | null;
+    if (!receipt) throw new Error("Receipt layout not found");
+
+    const page = doc.createElement("div");
+    page.style.background = "#f1f5f9";
+    page.style.padding = "24px";
+    page.style.width = "728px";
+    page.style.minHeight = "1000px";
+    page.style.boxSizing = "border-box";
+    page.style.margin = "0 auto";
+    page.appendChild(receipt);
+    doc.body.innerHTML = "";
+    doc.body.style.margin = "0";
+    doc.body.style.padding = "0";
+    doc.body.style.background = "#f1f5f9";
+    doc.body.appendChild(page);
+
+    const images = Array.from(doc.images || []);
+    await Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+      img.addEventListener("load", () => resolve(), { once: true });
+      img.addEventListener("error", () => resolve(), { once: true });
+    })));
+    await doc.fonts?.ready;
+
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#f1f5f9", windowWidth: 728 },
+        jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
+      })
+      .from(page)
+      .save();
+  } finally {
+    iframe.remove();
+  }
 }
 
 
