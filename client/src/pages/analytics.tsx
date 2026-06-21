@@ -433,7 +433,7 @@ function ProductionDelaysSection() {
           {delays.map((order: any) => (
             <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900">
               <div>
-                <p className="font-medium text-sm">{t("order_number", { id: order.id })} — {order.customer?.name || t("unknown")}</p>
+                <p className="font-medium text-sm">{t("order_number", { id: order.orderNumber ?? order.id })} — {order.customer?.name || t("unknown")}</p>
                 <p className="text-xs text-muted-foreground capitalize">{t("status")}: {t("stage_" + order.status, { defaultValue: order.status.replace(/_/g, " ") })}</p>
               </div>
               <div className="text-right">

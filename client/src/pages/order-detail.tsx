@@ -229,7 +229,7 @@ export default function OrderDetail() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: order.id })}</h1>
+          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: order.orderNumber ?? order.id })}</h1>
           <p className="text-muted-foreground text-sm">
             {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>

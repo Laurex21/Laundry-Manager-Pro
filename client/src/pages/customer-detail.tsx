@@ -362,7 +362,7 @@ export default function CustomerDetail() {
                     <tbody>
                       {orders.map((order: any) => (
                         <tr key={order.id} className="border-b last:border-0 hover-elevate" data-testid={`row-order-${order.id}`}>
-                          <td className="p-3 font-medium" data-testid={`text-order-id-${order.id}`}>#{order.id}</td>
+                          <td className="p-3 font-medium" data-testid={`text-order-id-${order.id}`}>#{order.orderNumber ?? order.id}</td>
                           <td className="p-3 text-muted-foreground">
                             {order.createdAt ? format(new Date(order.createdAt), "MMM dd, yyyy", { locale: dateLocaleFor(i18n.language) }) : "-"}
                           </td>

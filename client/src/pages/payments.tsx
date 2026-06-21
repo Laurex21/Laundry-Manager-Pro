@@ -121,7 +121,7 @@ export default function Payments() {
             amount: paidAmount.toFixed(2),
             method,
             date: paymentDate,
-            customerName: (selectedOrder as any)?.customer?.name || t("order_number", { id: selectedOrderId }),
+            customerName: (selectedOrder as any)?.customer?.name || t("order_number", { id: (selectedOrder as any)?.orderNumber ?? selectedOrderId }),
             totalAmount: totalAmount.toFixed(2),
             newStatus,
           });
@@ -152,6 +152,7 @@ export default function Payments() {
       const customer = orderDetails?.customer || {};
       const pickupDate = orderDetails?.pickupDate || "";
       const entryDate = orderDetails?.entryDate || successPayment.date;
+      const displayOrderId = orderDetails?.orderNumber ?? successPayment.orderId;
 
       const mergedSettings = {
         ...DEFAULT_SETTINGS,
@@ -171,7 +172,7 @@ export default function Payments() {
 
       if (action === "thermal") {
         generateThermalPaymentReceipt(
-          successPayment.orderId,
+          displayOrderId,
           customer,
           items,
           garments,
@@ -185,7 +186,7 @@ export default function Payments() {
         );
       } else {
         generatePaymentReceipt(
-          successPayment.orderId,
+          displayOrderId,
           customer,
           items,
           garments,
@@ -302,7 +303,7 @@ export default function Payments() {
               <div className="flex items-center justify-between gap-3 p-3 rounded-md bg-muted/40 border border-border">
                 <div>
                   <p className="text-sm font-semibold">
-                    {t("order_number", { id: selectedOrder.id })}
+                    {t("order_number", { id: selectedOrder.orderNumber ?? selectedOrder.id })}
                     {(selectedOrder as any)?.customer?.name && (
                       <span className="font-normal text-muted-foreground"> - {(selectedOrder as any).customer.name}</span>
                     )}
@@ -544,7 +545,7 @@ export default function Payments() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium leading-snug">
-                        #{order.id}
+                        #{order.orderNumber ?? order.id}
                         {order.customer?.name && (
                           <span className="font-normal text-muted-foreground"> - {order.customer.name}</span>
                         )}

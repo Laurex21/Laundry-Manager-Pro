@@ -23,7 +23,7 @@ import {
   type Organisation, type Site, type SiteMember, type SiteInvitation
 } from "@shared/schema";
 import { users, type User } from "@shared/models/auth";
-import { eq, ne, desc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
+import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
 
 export interface IStorage {
@@ -155,6 +155,24 @@ export class DatabaseStorage implements IStorage {
     return inArray(column, siteIds);
   }
 
+  private async withSiteOrderNumbers<T extends { id: number; siteId: number | null; orderNumber?: number | null }>(rows: T[]): Promise<(T & { orderNumber: number })[]> {
+    const scopes = Array.from(new Set(rows.map((row) => row.siteId).filter((siteId): siteId is number => typeof siteId === "number")));
+    const fallbackNumbers = new Map<number, number>();
+
+    for (const siteId of scopes) {
+      const siteRows = await db.select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.siteId, siteId))
+        .orderBy(asc(orders.createdAt), asc(orders.id));
+      siteRows.forEach((row, index) => fallbackNumbers.set(row.id, index + 1));
+    }
+
+    return rows.map((row) => ({
+      ...row,
+      orderNumber: fallbackNumbers.get(row.id) ?? row.id,
+    }));
+  }
+
   async getCustomers(): Promise<Customer[]> {
     return await db.select().from(customers).orderBy(desc(customers.createdAt));
   }
@@ -206,7 +224,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrders(): Promise<any[]> {
-    const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    const allOrders = await this.withSiteOrderNumbers(await db.select().from(orders).orderBy(desc(orders.createdAt)));
     const allCustomers = await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const allGarments = await db.select().from(garmentItems);
@@ -230,6 +248,7 @@ export class DatabaseStorage implements IStorage {
   async getOrder(id: number): Promise<OrderWithDetails | undefined> {
     const [order] = await db.select().from(orders).where(eq(orders.id, id));
     if (!order) return undefined;
+    const [orderWithNumber] = await this.withSiteOrderNumbers([order]);
 
     const [customer] = await db.select().from(customers).where(eq(customers.id, order.customerId));
     const items = await db.select({
@@ -248,12 +267,21 @@ export class DatabaseStorage implements IStorage {
     const orderGarments = await db.select().from(garmentItems).where(eq(garmentItems.orderId, id));
     const history = await db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, id)).orderBy(orderStatusHistory.changedAt);
 
-    return { ...order, customer, items, payments: orderPayments, garmentItems: orderGarments, statusHistory: history };
+    return { ...orderWithNumber, customer, items, payments: orderPayments, garmentItems: orderGarments, statusHistory: history };
   }
 
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
+      let orderWithNumber = { ...order, orderNumber: order.id };
+      if (typeof order.siteId === "number") {
+        const siteRows = await tx.select({ id: orders.id })
+          .from(orders)
+          .where(eq(orders.siteId, order.siteId))
+          .orderBy(asc(orders.createdAt), asc(orders.id));
+        const index = siteRows.findIndex((row) => row.id === order.id);
+        orderWithNumber = { ...order, orderNumber: index >= 0 ? index + 1 : order.id };
+      }
 
       await tx.insert(orderStatusHistory).values({
         orderId: order.id,
@@ -275,7 +303,7 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      return order;
+      return orderWithNumber;
     });
   }
 
@@ -447,9 +475,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerOrders(customerId: number): Promise<any[]> {
-    const customerOrders = await db.select().from(orders)
+    const customerOrders = await this.withSiteOrderNumbers(await db.select().from(orders)
       .where(and(eq(orders.customerId, customerId), ne(orders.status, "cancelled")))
-      .orderBy(desc(orders.createdAt));
+      .orderBy(desc(orders.createdAt)));
     const result = [];
     for (const order of customerOrders) {
       const orderPayments = await db.select().from(payments).where(eq(payments.orderId, order.id));
@@ -489,9 +517,9 @@ export class DatabaseStorage implements IStorage {
 
   async getOrdersBySite(siteId: number | number[] | null): Promise<any[]> {
     const siteWhere = this.siteWhere(orders.siteId, siteId);
-    const allOrders = siteWhere
+    const allOrders = await this.withSiteOrderNumbers(siteWhere
       ? await db.select().from(orders).where(siteWhere).orderBy(desc(orders.createdAt))
-      : await db.select().from(orders).orderBy(desc(orders.createdAt));
+      : await db.select().from(orders).orderBy(desc(orders.createdAt)));
     const allCustomers = siteWhere ? await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId)!) : await db.select().from(customers);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const allGarments = await db.select().from(garmentItems);

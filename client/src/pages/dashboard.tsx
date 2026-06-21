@@ -281,7 +281,7 @@ export default function Dashboard() {
                 {latestOrders.map((order: any) => (
                   <div key={order.id} className="group flex items-center justify-between py-2.5 hover:bg-muted/30 px-1 rounded transition-colors" data-testid={`row-order-${order.id}`}>
                     <div className="flex flex-col">
-                      <span className="text-sm font-medium text-foreground leading-tight">{order.customer?.name || `#${order.id}`}</span>
+                      <span className="text-sm font-medium text-foreground leading-tight">{order.customer?.name || `#${order.orderNumber ?? order.id}`}</span>
                       <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d", { locale: dateLocaleFor(i18n.language) })}</span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -333,7 +333,7 @@ export default function Dashboard() {
                   {readyForPickup.slice(0, 5).map((order: any) => (
                     <div key={order.id} className="flex items-center justify-between py-2" data-testid={`row-ready-${order.id}`}>
                       <div>
-                        <p className="text-sm font-medium leading-tight">{order.customer?.name || `#${order.id}`}</p>
+                        <p className="text-sm font-medium leading-tight">{order.customer?.name || `#${order.orderNumber ?? order.id}`}</p>
                         <p className="text-xs text-muted-foreground">{symbol}{Number(order.totalAmount).toFixed(2)}</p>
                       </div>
                       <Link href={`/orders/${order.id}`}>

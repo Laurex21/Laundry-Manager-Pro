@@ -54,6 +54,10 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#039;");
 }
 
+function orderDisplayId(order: any): number | string {
+  return order?.orderNumber ?? order?.id ?? "";
+}
+
 function buildPipelineHtml(currentStatus: string, lang: string): string {
   const normalizedStatus = currentStatus === "stain_treatment" ? "sorting" : currentStatus;
   const currentIdx = PIPELINE_ORDER.indexOf(normalizedStatus);
@@ -178,7 +182,7 @@ function thermalDivider(): string {
 
 function buildThermalReceiptHtml(args: {
   title: string;
-  orderId: number;
+  orderId: number | string;
   businessName: string;
   contactLines: string[];
   customerName: string;
@@ -497,7 +501,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${depositLabel} - ${orderTitle} ${order.id}</title>
+  <title>${depositLabel} - ${orderTitle} ${orderDisplayId(order)}</title>
   <style>
     @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -544,7 +548,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
         ${headerHtml}
         <div class="order-id-inline">
           <div class="label">${label("Order No.", "N° Commande", lang)}</div>
-          <div class="id">#${order.id}</div>
+          <div class="id">#${orderDisplayId(order)}</div>
         </div>
         <div class="deposit-badge">${depositLabel}</div>
       </div>
@@ -638,7 +642,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
   const balance = Math.max(0, orderTotal - totalPaid);
   const html = buildThermalReceiptHtml({
     title: label("Thermal Receipt", "Ticket thermique", lang),
-    orderId: Number(order.id),
+    orderId: orderDisplayId(order),
     businessName: settings.businessName,
     contactLines: getReceiptContactLines(settings, order.id, lang),
     customerName: customer.name || "",
@@ -667,7 +671,7 @@ export function printDepositReceipt(order: any, symbol: string, settings: Receip
 }
 
 export function generateThermalPaymentReceipt(
-  orderId: number,
+  orderId: number | string,
   customer: any,
   items: any[],
   garments: any[],
@@ -716,7 +720,7 @@ export function generateThermalPaymentReceipt(
 }
 
 export function generatePaymentReceipt(
-  orderId: number,
+  orderId: number | string,
   customer: any,
   items: any[],
   garments: any[],
