@@ -448,6 +448,7 @@ type ReceiptAction = "download" | "print";
 
 export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
+  const displayOrderId = orderDisplayId(order);
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
@@ -487,7 +488,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     ? buildPaymentHistoryHtml(order.payments || [], orderTotal, symbol, lang, order.entryDate)
     : `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
 
-  const contactLines = getReceiptContactLines(settings, order.id, lang);
+  const contactLines = getReceiptContactLines(settings, displayOrderId, lang);
   const tagline = settings.tagline || label("Laundry Service", "Service de Blanchisserie", lang);
   const headerHtml = buildHeader(settings.businessName, tagline, contactLines, settings.receiptHeaderColor, settings.logoBase64, settings.showLogo);
   const termsHtml = settings.showTerms ? buildTermsHtml(settings, lang) : "";
@@ -625,11 +626,12 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `deposit-receipt-order-${order.id}.html`);
+  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `deposit-receipt-order-${displayOrderId}.html`);
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
   const lang = settings.receiptLanguage || "en";
+  const displayOrderId = orderDisplayId(order);
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
@@ -642,9 +644,9 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
   const balance = Math.max(0, orderTotal - totalPaid);
   const html = buildThermalReceiptHtml({
     title: label("Thermal Receipt", "Ticket thermique", lang),
-    orderId: orderDisplayId(order),
+    orderId: displayOrderId,
     businessName: settings.businessName,
-    contactLines: getReceiptContactLines(settings, order.id, lang),
+    contactLines: getReceiptContactLines(settings, displayOrderId, lang),
     customerName: customer.name || "",
     customerPhone: customer.phone || "",
     orderDate: entryDate,
