@@ -234,6 +234,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   const VALID_PIPELINE_STATUSES = ["received", "sorting", "washing", "drying", "ironing", "packaging", "ready", "delivered", "cancelled", "cancellation_requested"];
+  const NON_PAYABLE_ORDER_STATUSES = new Set(["cancelled", "cancellation_requested"]);
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
     const customers = await storage.getCustomersBySite(orgScopedSites(req));
@@ -546,6 +547,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const input = api.payments.create.input.parse(req.body);
     const order = await storage.getOrder(input.orderId);
     if (!order || order.siteId == null || !(await canAccessSite(req, order.siteId))) return res.status(403).json({ message: "Forbidden" });
+    if (NON_PAYABLE_ORDER_STATUSES.has(order.status)) {
+      return res.status(400).json({ message: "Payments cannot be registered for cancelled orders" });
+    }
     const employee = await actorEmployee(req, order.siteId);
     const payment = await storage.createPayment({ ...input, collectedByEmployeeId: employee?.id ?? null } as any);
     await trackEmployeeActivity(req, {

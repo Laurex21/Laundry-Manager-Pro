@@ -37,6 +37,8 @@ function dateLocaleFor(language: string) {
   return enUS;
 }
 
+const NON_PAYABLE_ORDER_STATUSES = new Set(["cancelled", "cancellation_requested"]);
+
 export default function Payments() {
   const { data: allOrders, isLoading: ordersLoading } = useOrders();
   const { t, i18n } = useTranslation();
@@ -67,7 +69,7 @@ export default function Payments() {
     if (!allOrders) return [];
     const q = orderSearch.trim().toLowerCase();
     return allOrders
-      .filter((o: any) => o.paymentStatus !== "paid")
+      .filter((o: any) => o.paymentStatus !== "paid" && !NON_PAYABLE_ORDER_STATUSES.has(o.status))
       .filter((o: any) => {
         if (!q) return true;
         return (
@@ -106,7 +108,7 @@ export default function Payments() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedOrderId || amountError || !amount) return;
+    if (!selectedOrderId || !selectedOrder || NON_PAYABLE_ORDER_STATUSES.has(selectedOrder.status) || amountError || !amount) return;
 
     const paidAmount = Number(amount);
     const newTotalPaid = totalPaid + paidAmount;
