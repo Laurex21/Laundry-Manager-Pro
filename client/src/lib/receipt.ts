@@ -58,6 +58,13 @@ function orderDisplayId(order: any): number | string {
   return order?.orderNumber ?? order?.id ?? "";
 }
 
+function agentFirstName(agent: any, fallback = "Staff"): string {
+  const rawName = typeof agent === "string"
+    ? agent
+    : agent?.name || agent?.firstName || agent?.email || "";
+  return String(rawName).trim().split(/\s+/)[0] || fallback;
+}
+
 function buildPipelineHtml(currentStatus: string, lang: string): string {
   const normalizedStatus = currentStatus === "stain_treatment" ? "sorting" : currentStatus;
   const currentIdx = PIPELINE_ORDER.indexOf(normalizedStatus);
@@ -204,6 +211,8 @@ function buildThermalReceiptHtml(args: {
   showLogo?: boolean;
   paymentLine?: string;
   methodLine?: string;
+  agentName?: string;
+  agentLabel?: string;
 }): string {
   const itemRows = args.items.map((item: any) => {
     const service = item.service || {};
@@ -281,6 +290,7 @@ function buildThermalReceiptHtml(args: {
     ${args.customerPhone ? thermalLine(label("Phone", "Téléphone", args.lang), args.customerPhone) : ""}
     ${thermalLine(label("Order Date", "Date de commande", args.lang), args.orderDate)}
     ${thermalLine(label("Receipt Date", "Date du reçu", args.lang), args.receiptDate)}
+    ${args.agentName ? thermalLine(args.agentLabel || label("Agent", "Agent", args.lang), args.agentName) : ""}
     ${args.methodLine ? thermalLine(label("Method", "Méthode", args.lang), args.methodLine) : ""}
     ${args.paymentLine ? thermalLine(label("This Payment", "Ce paiement", args.lang), args.paymentLine, true) : ""}
     ${thermalDivider()}
@@ -454,6 +464,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const garments = order.garmentItems || [];
   const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
   const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
+  const registeredBy = agentFirstName(order.createdByEmployee);
   const discount = Number(order.discount || 0);
   const subtotal = orderSubtotal(items);
   const pickupCost = Number(order.pickupCost || 0);
@@ -559,6 +570,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
       <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || emptyValue}</div></div>
       <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${entryDate}</div></div>
       <div class="meta-item"><div class="label">${label("Phone", "Téléphone", lang)}</div><div class="value">${customer.phone || emptyValue}</div></div>
+      <div class="meta-item"><div class="label">${label("Registered by", "Enregistré par", lang)}</div><div class="value">${escapeHtml(registeredBy)}</div></div>
       ${settings.showPickupDate ? `<div class="meta-item"><div class="label">${label("Expected Pickup", "Retrait prévu", lang)}</div><div class="value">${pickupDate}</div></div>` : ""}
     </div>
 
@@ -664,6 +676,8 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
     lang,
     logoBase64: settings.logoBase64,
     showLogo: settings.showLogo,
+    agentName: agentFirstName(order.createdByEmployee),
+    agentLabel: label("Agent", "Agent", lang),
   });
   openThermalReceiptPrintWindow(html);
 }
@@ -677,7 +691,7 @@ export function generateThermalPaymentReceipt(
   customer: any,
   items: any[],
   garments: any[],
-  payment: { amount: string; method: string; date: string; newStatus: string },
+  payment: { amount: string; method: string; date: string; newStatus: string; agentName?: string },
   allPayments: any[],
   entryDate: string,
   discount: number,
@@ -717,6 +731,8 @@ export function generateThermalPaymentReceipt(
     showLogo: settings.showLogo,
     paymentLine: thermalMoney(currentPaymentAmount, symbol),
     methodLine: payment.method,
+    agentName: agentFirstName(payment.agentName),
+    agentLabel: label("Agent", "Agent", lang),
   });
   openThermalReceiptPrintWindow(html);
 }
@@ -726,7 +742,7 @@ export function generatePaymentReceipt(
   customer: any,
   items: any[],
   garments: any[],
-  payment: { amount: string; method: string; date: string; newStatus: string },
+  payment: { amount: string; method: string; date: string; newStatus: string; agentName?: string },
   allPayments: any[],
   entryDate: string,
   pickupDate: string,
@@ -739,6 +755,7 @@ export function generatePaymentReceipt(
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = formatReceiptDate(entryDate, "MMM dd, yyyy", lang);
   const displayPickupDate = formatReceiptDate(pickupDate, "MMM dd, yyyy", lang);
+  const receivedBy = agentFirstName(payment.agentName);
 
   const itemsHtml = items.map((item: any) => {
     const svc = item.service || {};
@@ -837,6 +854,7 @@ export function generatePaymentReceipt(
       <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || emptyValue}</div></div>
       <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${displayEntryDate}</div></div>
       <div class="meta-item"><div class="label">${label("Receipt Date", "Date du reçu", lang)}</div><div class="value">${formatReceiptDate(payment.date, "MMM dd, yyyy", lang)}</div></div>
+      <div class="meta-item"><div class="label">${label("Payment received by", "Paiement reçu par", lang)}</div><div class="value">${escapeHtml(receivedBy)}</div></div>
       ${settings.showPickupDate ? `<div class="meta-item"><div class="label">${label("Expected Pickup", "Retrait prévu", lang)}</div><div class="value">${displayPickupDate}</div></div>` : ""}
     </div>
 

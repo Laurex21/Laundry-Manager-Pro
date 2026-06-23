@@ -444,7 +444,8 @@ export type SiteInvitation = typeof siteInvitations.$inferSelect;
 export type InsertSite = z.infer<typeof insertSiteSchema>;
 
 export type OrderWithCustomer = Order & { customer: Customer };
-export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: Payment[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[] };
+export type PaymentWithEmployee = Payment & { collectedByEmployee?: Employee | null };
+export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: PaymentWithEmployee[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[], createdByEmployee?: Employee | null };
 export type SubscriptionWithPlan = Subscription & { plan: Plan };
 
 export const calculatorLeads = pgTable("calculator_leads", {

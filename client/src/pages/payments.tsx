@@ -54,6 +54,7 @@ export default function Payments() {
   const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
+    paymentId?: number;
     amount: string;
     method: string;
     date: string;
@@ -117,9 +118,10 @@ export default function Payments() {
     createPayment(
       { orderId: selectedOrderId, amount, method, reference: reference || undefined },
       {
-        onSuccess: () => {
+        onSuccess: (createdPayment: any) => {
           setSuccessPayment({
             orderId: selectedOrderId,
+            paymentId: createdPayment?.id,
             amount: paidAmount.toFixed(2),
             method,
             date: paymentDate,
@@ -162,6 +164,9 @@ export default function Payments() {
         receiptLanguage: settings?.receiptLanguage || i18n.language,
       };
       const allPayments = orderDetails?.payments || [];
+      const currentPayment = successPayment.paymentId
+        ? allPayments.find((p: any) => p.id === successPayment.paymentId)
+        : null;
       const discount = Number(orderDetails?.discount || 0);
       const pickupCost = Number(orderDetails?.pickupCost || 0);
 
@@ -170,6 +175,7 @@ export default function Payments() {
         method: successPayment.method,
         date: successPayment.date,
         newStatus: successPayment.newStatus,
+        agentName: currentPayment?.collectedByEmployee?.name,
       };
 
       if (action === "thermal") {

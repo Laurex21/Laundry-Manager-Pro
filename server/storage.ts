@@ -264,10 +264,31 @@ export class DatabaseStorage implements IStorage {
     .where(eq(orderItems.orderId, id));
 
     const orderPayments = await db.select().from(payments).where(eq(payments.orderId, id));
+    const employeeIds = new Set<number>();
+    if (order.createdByEmployeeId) employeeIds.add(order.createdByEmployeeId);
+    for (const payment of orderPayments) {
+      if (payment.collectedByEmployeeId) employeeIds.add(payment.collectedByEmployeeId);
+    }
+    const orderEmployees = employeeIds.size > 0
+      ? await db.select().from(employees).where(inArray(employees.id, Array.from(employeeIds)))
+      : [];
+    const employeeMap = new Map(orderEmployees.map((employee) => [employee.id, employee]));
+    const paymentsWithEmployees = orderPayments.map((payment) => ({
+      ...payment,
+      collectedByEmployee: payment.collectedByEmployeeId ? employeeMap.get(payment.collectedByEmployeeId) || null : null,
+    }));
     const orderGarments = await db.select().from(garmentItems).where(eq(garmentItems.orderId, id));
     const history = await db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, id)).orderBy(orderStatusHistory.changedAt);
 
-    return { ...orderWithNumber, customer, items, payments: orderPayments, garmentItems: orderGarments, statusHistory: history };
+    return {
+      ...orderWithNumber,
+      customer,
+      items,
+      payments: paymentsWithEmployees,
+      garmentItems: orderGarments,
+      statusHistory: history,
+      createdByEmployee: order.createdByEmployeeId ? employeeMap.get(order.createdByEmployeeId) || null : null,
+    };
   }
 
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
