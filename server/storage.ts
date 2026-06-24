@@ -158,6 +158,12 @@ export class DatabaseStorage implements IStorage {
     return inArray(column, siteIds);
   }
 
+  private async customersForScopedOrders(orderRows: { customerId: number }[]): Promise<Customer[]> {
+    const customerIds = Array.from(new Set(orderRows.map((order) => order.customerId).filter((id) => Number.isInteger(id))));
+    if (customerIds.length === 0) return [];
+    return await db.select().from(customers).where(inArray(customers.id, customerIds));
+  }
+
   private async withSiteOrderNumbers<T extends { id: number; siteId: number | null; orderNumber?: number | null }>(rows: T[]): Promise<(T & { orderNumber: number })[]> {
     const scopes = Array.from(new Set(rows.map((row) => row.siteId).filter((siteId): siteId is number => typeof siteId === "number")));
     const fallbackNumbers = new Map<number, number>();
@@ -452,7 +458,7 @@ export class DatabaseStorage implements IStorage {
     const siteWhere = this.siteWhere(orders.siteId, siteId);
     const activeOrders = await db.select().from(orders)
       .where(siteWhere ? and(statusFilter, siteWhere) : statusFilter);
-    const allCustomers = siteWhere ? await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId)!) : await db.select().from(customers);
+    const allCustomers = await this.customersForScopedOrders(activeOrders);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const now = new Date();
     const delays: any[] = [];
@@ -522,7 +528,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(siteWhere, eq(orders.status, "ready"), sql`COALESCE(${orders.readyAt}, ${orders.updatedAt}, ${orders.createdAt}) < ${new Date(now.getTime() - 3 * 86400000)}`))
       .orderBy(asc(orders.readyAt), asc(orders.updatedAt));
     if (!readyRows.length) return [];
-    const scopedCustomers = await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId));
+    const scopedCustomers = await this.customersForScopedOrders(readyRows);
     const customerMap = new Map(scopedCustomers.map((customer) => [customer.id, customer]));
     return readyRows.map((order) => {
       const customer = customerMap.get(order.customerId) || null;
@@ -557,7 +563,9 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(orders, eq(payments.orderId, orders.id))
       .where(and(siteWhere, sql`${payments.date} >= ${start}`, sql`${payments.date} <= ${now}`, ne(orders.status, "cancelled")));
 
-    const scopedCustomers = await db.select().from(customers).where(customerSiteWhere);
+    const customersBySite = await db.select().from(customers).where(customerSiteWhere);
+    const customersByOrder = await this.customersForScopedOrders([...orderRows, ...deliveredRows]);
+    const scopedCustomers = Array.from(new Map([...customersBySite, ...customersByOrder].map((customer) => [customer.id, customer])).values());
     const depositDates = orderRows
       .map((order) => order.createdAt ? new Date(order.createdAt) : null)
       .filter((date): date is Date => !!date && !Number.isNaN(date.getTime()));
@@ -720,7 +728,7 @@ export class DatabaseStorage implements IStorage {
     const allOrders = await this.withSiteOrderNumbers(siteWhere
       ? await db.select().from(orders).where(siteWhere).orderBy(desc(orders.createdAt))
       : await db.select().from(orders).orderBy(desc(orders.createdAt)));
-    const allCustomers = siteWhere ? await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId)!) : await db.select().from(customers);
+    const allCustomers = await this.customersForScopedOrders(allOrders);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const allGarments = await db.select().from(garmentItems);
     const garmentsByOrder = new Map<number, typeof allGarments>();
@@ -926,8 +934,7 @@ export class DatabaseStorage implements IStorage {
       existing.orderCount++; existing.totalSpent += Number(order.totalAmount);
       customerOrderMap.set(order.customerId, existing);
     }
-    const customerSiteWhere = this.siteWhere(customers.siteId, siteId);
-    const allCustomers = customerSiteWhere ? await db.select().from(customers).where(customerSiteWhere) : await db.select().from(customers);
+    const allCustomers = await this.customersForScopedOrders(reportOrders);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
     const topCustomers = Array.from(customerOrderMap.entries())
       .map(([customerId, data]) => ({ name: customerMap.get(customerId)?.name || 'Unknown', ...data }))
