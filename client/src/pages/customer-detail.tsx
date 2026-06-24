@@ -33,6 +33,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { orderDisplayId } from "@/lib/order-display";
+import { formatBusinessDateTime } from "@/lib/date-time";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -121,6 +123,12 @@ export default function CustomerDetail() {
   const outstandingBalance = orders.reduce((sum: number, o: any) => sum + Number(o.balance || 0), 0);
   const isVIP = totalSpent >= VIP_THRESHOLD;
   const hasNotes = !!customer.notes && customer.notes.trim().length > 0;
+  const lastVisitAt = customer.lastVisitAt ? new Date(customer.lastVisitAt) : null;
+  const daysSinceLastVisit = lastVisitAt && !Number.isNaN(lastVisitAt.getTime())
+    ? Math.max(0, Math.floor((Date.now() - lastVisitAt.getTime()) / 86400000))
+    : null;
+  const normalCycleDays = customer.avgDaysBetweenVisits ? Math.round(Number(customer.avgDaysBetweenVisits)) : null;
+  const shouldShowChurnWarning = (customer.segment === "at_risk" || customer.segment === "lost") && daysSinceLastVisit != null && normalCycleDays != null;
 
   const whatsappLink = `https://wa.me/${customer.phone.replace(/[^0-9+]/g, "")}`;
   const callLink = `tel:${customer.phone}`;
@@ -239,6 +247,18 @@ export default function CustomerDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {shouldShowChurnWarning && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-orange-800 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300" data-testid="banner-client-churn-risk">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium">Ce client n'a pas visité depuis {daysSinceLastVisit} jours.</p>
+              <p className="text-xs opacity-85">Cycle habituel : {normalCycleDays} jours. Dernière visite : {formatBusinessDateTime(customer.lastVisitAt)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delivery Punctuality Card */}
       {customer.totalDeliveries > 0 && (
@@ -362,7 +382,7 @@ export default function CustomerDetail() {
                     <tbody>
                       {orders.map((order: any) => (
                         <tr key={order.id} className="border-b last:border-0 hover-elevate" data-testid={`row-order-${order.id}`}>
-                          <td className="p-3 font-medium" data-testid={`text-order-id-${order.id}`}>#{order.orderNumber ?? order.id}</td>
+                          <td className="p-3 font-medium" data-testid={`text-order-id-${order.id}`}>#{orderDisplayId(order)}</td>
                           <td className="p-3 text-muted-foreground">
                             {order.createdAt ? format(new Date(order.createdAt), "MMM dd, yyyy", { locale: dateLocaleFor(i18n.language) }) : "-"}
                           </td>

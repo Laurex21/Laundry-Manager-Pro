@@ -11,6 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { orderDisplayId } from "@/lib/order-display";
+import { formatBusinessDateTime } from "@/lib/date-time";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 export default function Analytics() {
   const { t } = useTranslation();
@@ -105,9 +108,156 @@ function AnalyticsContent() {
       </Card>
 
       <WasteSection />
+      <CustomerBehaviorSection period={period} />
       <PerformanceScoreSection />
       <ProductionDelaysSection />
       <AdvancedAnalyticsSection period={period} />
+    </div>
+  );
+}
+
+function bucketOpacity(intensity: string): string {
+  if (intensity === "full") return "1";
+  if (intensity === "medium") return "0.6";
+  if (intensity === "low") return "0.3";
+  return "0.14";
+}
+
+function riskLabel(score: number | null | undefined): string {
+  const value = Number(score ?? 0);
+  if (value <= 15) return "Healthy";
+  if (value <= 35) return "Monitor";
+  if (value <= 55) return "Attention";
+  if (value <= 85) return "High Risk";
+  return "Critical";
+}
+
+function CustomerBehaviorSection({ period }: { period: string }) {
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ["/api/analytics/customer-behavior", period],
+    queryFn: () => fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }).then((res) => res.json()),
+  });
+
+  if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
+  if (!data) return null;
+
+  const depositData = (data.depositActivityByHour || []).map((row: any) => ({ ...row, label: `${row.hour}h` }));
+  const pickupData = (data.pickupActivityByHour || []).map((row: any) => ({ ...row, label: `${row.hour}h` }));
+  const dayData = data.activityByDayOfWeek || [];
+  const churn = data.churn || {};
+  const metrics = data.metrics || {};
+
+  return (
+    <div className="space-y-4" data-testid="section-customer-behavior">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="shadow-sm">
+          <CardHeader><CardTitle className="text-base">Peak Deposit Hours</CardTitle></CardHeader>
+          <CardContent className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={depositData}>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {depositData.map((entry: any) => <Cell key={entry.hour} fill="#2563eb" fillOpacity={Number(bucketOpacity(entry.intensity))} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader><CardTitle className="text-base">Peak Pickup Hours</CardTitle></CardHeader>
+          <CardContent className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={pickupData}>
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={2} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {pickupData.map((entry: any) => <Cell key={entry.hour} fill="#16a34a" fillOpacity={Number(bucketOpacity(entry.intensity))} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader><CardTitle className="text-base">Activity by Day</CardTitle></CardHeader>
+          <CardContent className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dayData}>
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {dayData.map((entry: any) => <Cell key={entry.day} fill="#7c3aed" fillOpacity={Number(bucketOpacity(entry.intensity))} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="shadow-sm lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              Churn Risk
+              <Badge variant={Number(churn.atRiskCount || 0) > 0 ? "destructive" : "secondary"}>{churn.atRiskCount || 0}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">At-risk customers</p>
+                <p className="text-2xl font-bold">{churn.atRiskCount || 0}</p>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">Revenue at risk</p>
+                <p className="text-2xl font-bold">{symbol}{Number(churn.revenueAtRisk || 0).toFixed(0)}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {(churn.customers || []).slice(0, 6).map((customer: any) => (
+                <div key={customer.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{customer.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Last visit: {formatBusinessDateTime(customer.lastVisitAt)} · Cycle: {customer.avgDaysBetweenVisits ? `${Math.round(customer.avgDaysBetweenVisits)} days` : "-"}
+                    </p>
+                  </div>
+                  <Badge variant={Number(customer.churnRiskScore || 0) >= 86 ? "destructive" : "secondary"}>{riskLabel(customer.churnRiskScore)}</Badge>
+                </div>
+              ))}
+              {!(churn.customers || []).length && <p className="text-sm text-muted-foreground">No churn risk detected.</p>}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader><CardTitle className="text-base">Customer Behavior</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <MetricLine label="Average return frequency" value={`${Number(metrics.averageReturnFrequency || 0).toFixed(1)} days`} />
+            <MetricLine label="Deposit-to-pickup delay" value={`${Number(metrics.depositToPickupDelayDays || 0).toFixed(1)} days`} />
+            <MetricLine label="Average storage time" value={`${Number(metrics.averageStorageTimeDays || 0).toFixed(1)} days`} />
+            <MetricLine label="Time-to-payment" value={`${Number(metrics.timeToPaymentHours || 0).toFixed(1)}h`} />
+            <div className="pt-2 space-y-2">
+              {(data.insights || []).map((insight: string) => (
+                <div key={insight} className="rounded-md bg-muted/50 px-3 py-2">{insight}</div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function MetricLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold text-right">{value}</span>
     </div>
   );
 }
@@ -433,7 +583,7 @@ function ProductionDelaysSection() {
           {delays.map((order: any) => (
             <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900">
               <div>
-                <p className="font-medium text-sm">{t("order_number", { id: order.orderNumber ?? order.id })} — {order.customer?.name || t("unknown")}</p>
+                <p className="font-medium text-sm">{t("order_number", { id: orderDisplayId(order) })} — {order.customer?.name || t("unknown")}</p>
                 <p className="text-xs text-muted-foreground capitalize">{t("status")}: {t("stage_" + order.status, { defaultValue: order.status.replace(/_/g, " ") })}</p>
               </div>
               <div className="text-right">

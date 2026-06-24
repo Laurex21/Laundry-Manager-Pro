@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { orderDisplayId } from "@/lib/order-display";
+import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
 
 const PIPELINE_STAGES = PRODUCTION_STAGES;
@@ -67,7 +69,6 @@ export default function OrderDetail() {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectionNote, setRejectionNote] = useState("");
   const [deliverDialogOpen, setDeliverDialogOpen] = useState(false);
-  const [deliverDate, setDeliverDate] = useState(new Date().toISOString().split('T')[0]);
   const [stageMachineId, setStageMachineId] = useState("");
   const [stageWeightKg, setStageWeightKg] = useState("");
   const [stageDurationMinutes, setStageDurationMinutes] = useState("");
@@ -209,10 +210,10 @@ export default function OrderDetail() {
     try {
       const res = await fetch(`/api/orders/${orderId}/deliver`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliveredAt: deliverDate }), credentials: "include",
+        credentials: "include",
       });
       if (res.ok) {
-        toast({ title: t("mark_as_delivered"), description: t("order_delivered_on", { date: deliverDate }) });
+        toast({ title: t("mark_as_delivered"), description: t("order_delivered_on", { date: formatBusinessDateTime(new Date()) }) });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
         setDeliverDialogOpen(false);
@@ -229,7 +230,7 @@ export default function OrderDetail() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: order.orderNumber ?? order.id })}</h1>
+          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: orderDisplayId(order) })}</h1>
           <p className="text-muted-foreground text-sm">
             {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>
@@ -267,7 +268,7 @@ export default function OrderDetail() {
       {order.status === "delivered" && order.deliveredAt && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/10 border border-green-200 dark:border-green-900 text-green-800 dark:text-green-400 text-sm">
           <CalendarCheck className="w-4 h-4 flex-shrink-0" />
-          <span>{t("delivered_at")}: <strong>{formatLocalDate(order.deliveredAt, "MMM d, yyyy")}</strong></span>
+          <span>{t("delivered_at")}: <strong>{formatBusinessDateTime(order.deliveredAt)}</strong></span>
         </div>
       )}
 
@@ -528,7 +529,7 @@ export default function OrderDetail() {
                 <div key={entry.id} className="flex items-center gap-3 text-sm p-2 bg-muted/20 rounded">
                   <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                   <StatusBadge status={entry.status} />
-                  <span className="text-muted-foreground">{entry.changedAt ? formatLocalDate(entry.changedAt, "MMM d, yyyy h:mm a") : ""}</span>
+                  <span className="text-muted-foreground">{entry.changedAt ? formatBusinessDateTime(entry.changedAt) : ""}</span>
                   {entry.notes && <span className="text-muted-foreground italic">- {entry.notes}</span>}
                 </div>
               ))}
@@ -659,38 +660,14 @@ export default function OrderDetail() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("mark_as_delivered")}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">{t("select_actual_delivery_date")}</p>
+            <p className="text-sm text-muted-foreground">La livraison sera enregistrée automatiquement avec l'heure actuelle du serveur.</p>
 
             {order.pickupDate && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                 <CalendarCheck className="w-4 h-4 flex-shrink-0" />
-                <span>{t("expected_by")}: <strong>{formatLocalDate(order.pickupDate, "MMM d, yyyy")}</strong></span>
+                <span>{t("expected_by")}: <strong>{formatBusinessDateTime(order.pickupDate)}</strong></span>
               </div>
             )}
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("delivered_at")}</label>
-              <Input
-                type="date"
-                value={deliverDate}
-                onChange={e => setDeliverDate(e.target.value)}
-                data-testid="input-deliver-date"
-              />
-            </div>
-
-            {(() => {
-              if (!order.pickupDate) return null;
-              const delivered = new Date(deliverDate);
-              const pickup = new Date(order.pickupDate);
-              delivered.setHours(0, 0, 0, 0);
-              pickup.setHours(0, 0, 0, 0);
-              const isOnTime = delivered <= pickup;
-              return (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${isOnTime ? "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800" : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"}`} data-testid="indicator-punctuality">
-                  {isOnTime ? t("on_time") : t("late_delivery")}
-                </div>
-              );
-            })()}
 
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>{t("cancel")}</Button>

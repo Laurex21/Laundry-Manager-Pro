@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
+import { orderDisplayId } from "@/lib/order-display";
+import { formatBusinessDateTime } from "@/lib/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
@@ -35,6 +37,8 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
+  const { data: behaviorData } = useQuery<any>({ queryKey: ["/api/analytics/customer-behavior", "month"], queryFn: () => fetch("/api/analytics/customer-behavior?period=month", { credentials: "include" }).then((res) => res.json()) });
+  const { data: storageWaiting } = useQuery<any[]>({ queryKey: ["/api/analytics/storage-occupancy"] });
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
@@ -45,6 +49,7 @@ export default function Dashboard() {
   const siteCount = dashData?.siteCount ?? allSites.length;
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 6) || [];
   const readyForPickup: any[] = dashData?.readyForPickup ?? [];
+  const churnCount = behaviorData?.churn?.atRiskCount ?? 0;
 
   if (statsLoading) return <DashboardSkeleton />;
 
@@ -144,6 +149,16 @@ export default function Dashboard() {
             );
           })}
         </div>
+      )}
+
+      {churnCount > 0 && (
+        <Link href="/analytics">
+          <div className="flex items-center gap-3 px-3.5 py-2 rounded-lg border bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-950/30 dark:border-orange-900 dark:text-orange-300 cursor-pointer" data-testid="banner-churn-risk">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium">{churnCount} clients à risque de perte</span>
+            <ChevronRight className="w-4 h-4 ml-auto" />
+          </div>
+        </Link>
       )}
 
       {/* Workflow queue strip */}
@@ -281,7 +296,7 @@ export default function Dashboard() {
                 {latestOrders.map((order: any) => (
                   <div key={order.id} className="group flex items-center justify-between py-2.5 hover:bg-muted/30 px-1 rounded transition-colors" data-testid={`row-order-${order.id}`}>
                     <div className="flex flex-col">
-                      <span className="text-sm font-medium text-foreground leading-tight">{order.customer?.name || `#${order.orderNumber ?? order.id}`}</span>
+                      <span className="text-sm font-medium text-foreground leading-tight">{order.customer?.name || `#${orderDisplayId(order)}`}</span>
                       <span className="text-xs text-muted-foreground">{format(new Date(order.createdAt), "MMM d", { locale: dateLocaleFor(i18n.language) })}</span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -302,6 +317,39 @@ export default function Dashboard() {
 
         {/* Sidebar */}
         <div className="space-y-4">
+
+          {/* Ready for Pickup */}
+          {storageWaiting && storageWaiting.length > 0 && (
+            <Card className="border-orange-200 dark:border-orange-900/60" data-testid="card-storage-waiting">
+              <CardHeader className="pb-2 pt-4 px-4">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                  Vêtements en attente
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1">{storageWaiting.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="divide-y divide-border/30">
+                  {storageWaiting.slice(0, 5).map((order: any) => (
+                    <div key={order.id} className="py-2.5" data-testid={`row-storage-waiting-${order.id}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium leading-tight truncate">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
+                          <p className="text-xs text-muted-foreground">{order.customer?.phone || "-"} · {order.daysWaiting} jours</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{formatBusinessDateTime(order.readyDate)}</p>
+                        </div>
+                        {order.whatsappUrl && (
+                          <a href={order.whatsappUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs">WhatsApp</Button>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Ready for Pickup */}
           <Card className="border-border/50" data-testid="card-ready-for-pickup">
@@ -333,7 +381,7 @@ export default function Dashboard() {
                   {readyForPickup.slice(0, 5).map((order: any) => (
                     <div key={order.id} className="flex items-center justify-between py-2" data-testid={`row-ready-${order.id}`}>
                       <div>
-                        <p className="text-sm font-medium leading-tight">{order.customer?.name || `#${order.orderNumber ?? order.id}`}</p>
+                        <p className="text-sm font-medium leading-tight">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
                         <p className="text-xs text-muted-foreground">{symbol}{Number(order.totalAmount).toFixed(2)}</p>
                       </div>
                       <Link href={`/orders/${order.id}`}>

@@ -25,6 +25,7 @@ import {
 import { users, type User } from "@shared/models/auth";
 import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
+import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -116,6 +117,8 @@ export interface IStorage {
   getWasteAlerts(siteId: number | number[] | null): Promise<any[]>;
   getPerformanceScore(siteId: number | number[] | null): Promise<any>;
   getAdvancedAnalytics(period: string, siteId: number | number[] | null, planSlug?: string): Promise<any>;
+  getCustomerBehaviorAnalytics(period: string, siteId: number | number[] | null): Promise<any>;
+  getStorageOccupancyAlerts(siteId: number | number[] | null): Promise<any[]>;
 
   getSettings(userId: string): Promise<BusinessSettings>;
   upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings>;
@@ -292,7 +295,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
-    return await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
       let orderWithNumber = { ...order, orderNumber: order.id };
       if (typeof order.siteId === "number") {
@@ -326,11 +329,19 @@ export class DatabaseStorage implements IStorage {
 
       return orderWithNumber;
     });
+    await refreshCustomerAnalyticsFromHistory(created.customerId);
+    return created;
   }
 
   async updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined> {
+    const [existing] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    if (!existing) return undefined;
+    const now = new Date();
     const updates: any = { status, updatedAt: new Date() };
     if (paymentStatus) updates.paymentStatus = paymentStatus;
+    if (status === "ready" && !existing.readyAt) updates.readyAt = now;
+    if (status === "delivered" && !existing.deliveredAt) updates.deliveredAt = now;
+    if (status === "cancelled" && !existing.cancelledAt) updates.cancelledAt = now;
     const [updated] = await db.update(orders).set(updates).where(eq(orders.id, id)).returning();
     if (updated) {
       await db.insert(orderStatusHistory).values({
@@ -338,6 +349,7 @@ export class DatabaseStorage implements IStorage {
         status,
         changedBy: changedBy || null,
       });
+      if (status === "cancelled") await refreshCustomerAnalyticsFromHistory(updated.customerId);
     }
     return updated;
   }
@@ -363,12 +375,14 @@ export class DatabaseStorage implements IStorage {
   async approveCancellation(id: number, reviewedBy: string): Promise<Order | undefined> {
     const [updated] = await db.update(orders).set({
       status: "cancelled",
+      cancelledAt: new Date(),
       cancellationReviewedBy: reviewedBy,
       cancellationReviewedAt: new Date(),
       updatedAt: new Date(),
     }).where(eq(orders.id, id)).returning();
     if (updated) {
       await db.insert(orderStatusHistory).values({ orderId: id, status: "cancelled", changedBy: reviewedBy, notes: "Cancellation approved" });
+      await refreshCustomerAnalyticsFromHistory(updated.customerId);
     }
     return updated;
   }
@@ -400,10 +414,11 @@ export class DatabaseStorage implements IStorage {
   async markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined> {
     const [order] = await db.select().from(orders).where(eq(orders.id, id));
     if (!order) return undefined;
+    const serverDeliveredAt = new Date();
 
     const [updated] = await db.update(orders).set({
       status: "delivered",
-      deliveredAt,
+      deliveredAt: order.deliveredAt ?? serverDeliveredAt,
       updatedAt: new Date(),
     }).where(eq(orders.id, id)).returning();
 
@@ -414,7 +429,8 @@ export class DatabaseStorage implements IStorage {
         notes: `Delivered on ${deliveredAt.toISOString().split('T')[0]}`,
       });
 
-      const isOnTime = !order.pickupDate || deliveredAt <= new Date(order.pickupDate);
+      const effectiveDeliveredAt = updated.deliveredAt ? new Date(updated.deliveredAt) : serverDeliveredAt;
+      const isOnTime = !order.pickupDate || effectiveDeliveredAt <= new Date(order.pickupDate);
       await db.update(customers)
         .set({
           totalDeliveries: sql`${customers.totalDeliveries} + 1`,
@@ -457,6 +473,169 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return delays.sort((a, b) => b.daysOverdue - a.daysOverdue);
+  }
+
+  private analyticsStart(period: string): Date {
+    const now = new Date();
+    if (period === "day") return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (period === "week") return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    if (period === "year") return new Date(now.getFullYear(), 0, 1);
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  private hourlyBuckets(rows: Date[]): { hour: number; count: number; intensity: string }[] {
+    const counts = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0, intensity: "muted" }));
+    for (const date of rows) counts[date.getHours()].count += 1;
+    const sorted = counts.map((row) => row.count).sort((a, b) => a - b);
+    const percentile = (p: number) => sorted[Math.floor((sorted.length - 1) * p)] ?? 0;
+    const p25 = percentile(0.25);
+    const p50 = percentile(0.5);
+    const p75 = percentile(0.75);
+    return counts.map((row) => ({
+      ...row,
+      intensity: row.count >= p75 && row.count > 0 ? "full" : row.count >= p50 && row.count > 0 ? "medium" : row.count >= p25 && row.count > 0 ? "low" : "muted",
+    }));
+  }
+
+  private dayBuckets(rows: Date[]): { day: string; count: number; intensity: string }[] {
+    const names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const counts = names.map((day) => ({ day, count: 0, intensity: "muted" }));
+    for (const date of rows) {
+      const index = (date.getDay() + 6) % 7;
+      counts[index].count += 1;
+    }
+    const sorted = counts.map((row) => row.count).sort((a, b) => a - b);
+    const percentile = (p: number) => sorted[Math.floor((sorted.length - 1) * p)] ?? 0;
+    const p25 = percentile(0.25);
+    const p50 = percentile(0.5);
+    const p75 = percentile(0.75);
+    return counts.map((row) => ({
+      ...row,
+      intensity: row.count >= p75 && row.count > 0 ? "full" : row.count >= p50 && row.count > 0 ? "medium" : row.count >= p25 && row.count > 0 ? "low" : "muted",
+    }));
+  }
+
+  async getStorageOccupancyAlerts(siteId: number | number[] | null): Promise<any[]> {
+    const siteWhere = this.siteWhere(orders.siteId, siteId);
+    const now = new Date();
+    const readyRows = await db.select().from(orders)
+      .where(and(siteWhere, eq(orders.status, "ready"), sql`COALESCE(${orders.readyAt}, ${orders.updatedAt}, ${orders.createdAt}) < ${new Date(now.getTime() - 3 * 86400000)}`))
+      .orderBy(asc(orders.readyAt), asc(orders.updatedAt));
+    if (!readyRows.length) return [];
+    const scopedCustomers = await db.select().from(customers).where(this.siteWhere(customers.siteId, siteId));
+    const customerMap = new Map(scopedCustomers.map((customer) => [customer.id, customer]));
+    return readyRows.map((order) => {
+      const customer = customerMap.get(order.customerId) || null;
+      const readyDate = order.readyAt || order.updatedAt || order.createdAt || new Date();
+      const daysWaiting = Math.max(0, Math.floor((now.getTime() - new Date(readyDate).getTime()) / 86400000));
+      const firstName = (customer?.name || "").trim().split(/\s+/)[0] || "client";
+      const message = `Bonjour ${firstName},\n\nVos vêtements sont prêts depuis ${daysWaiting} jours.\n\nVous pouvez venir les récupérer à votre convenance.\n\nMerci.`;
+      return {
+        ...order,
+        customer,
+        readyDate,
+        daysWaiting,
+        whatsappMessage: message,
+        whatsappUrl: customer?.phone ? `https://wa.me/${String(customer.phone).replace(/[^0-9]/g, "")}?text=${encodeURIComponent(message)}` : null,
+      };
+    });
+  }
+
+  async getCustomerBehaviorAnalytics(period: string, siteId: number | number[] | null) {
+    const start = this.analyticsStart(period);
+    const now = new Date();
+    const siteWhere = this.siteWhere(orders.siteId, siteId);
+    const customerSiteWhere = this.siteWhere(customers.siteId, siteId);
+    const orderRows = await db.select().from(orders)
+      .where(and(siteWhere, sql`${orders.createdAt} >= ${start}`, sql`${orders.createdAt} <= ${now}`, ne(orders.status, "cancelled")));
+    const deliveredRows = await db.select().from(orders)
+      .where(and(siteWhere, sql`${orders.deliveredAt} IS NOT NULL`, sql`${orders.deliveredAt} >= ${start}`, sql`${orders.deliveredAt} <= ${now}`, ne(orders.status, "cancelled")));
+    const paymentRows = await db.select({
+      orderCreatedAt: orders.createdAt,
+      paymentDate: payments.date,
+    }).from(payments)
+      .innerJoin(orders, eq(payments.orderId, orders.id))
+      .where(and(siteWhere, sql`${payments.date} >= ${start}`, sql`${payments.date} <= ${now}`, ne(orders.status, "cancelled")));
+
+    const scopedCustomers = await db.select().from(customers).where(customerSiteWhere);
+    const depositDates = orderRows
+      .map((order) => order.createdAt ? new Date(order.createdAt) : null)
+      .filter((date): date is Date => !!date && !Number.isNaN(date.getTime()));
+    const pickupDates = deliveredRows
+      .map((order) => order.deliveredAt ? new Date(order.deliveredAt) : null)
+      .filter((date): date is Date => !!date && !Number.isNaN(date.getTime()));
+    const pickupDelays = deliveredRows
+      .filter((order) => order.createdAt && order.deliveredAt)
+      .map((order) => (new Date(order.deliveredAt!).getTime() - new Date(order.createdAt!).getTime()) / 86400000);
+    const storageTimes = deliveredRows
+      .filter((order) => order.readyAt && order.deliveredAt)
+      .map((order) => (new Date(order.deliveredAt!).getTime() - new Date(order.readyAt!).getTime()) / 86400000);
+    const paymentTimes = paymentRows
+      .filter((row) => row.orderCreatedAt && row.paymentDate)
+      .map((row) => (new Date(row.paymentDate!).getTime() - new Date(row.orderCreatedAt!).getTime()) / 3600000);
+    const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+
+    const atRiskCustomers = scopedCustomers.filter((customer) => Number(customer.churnRiskScore || 0) >= 55 || customer.segment === "at_risk" || customer.segment === "lost");
+    const averageMonthlySpend = scopedCustomers.length
+      ? scopedCustomers.reduce((sum, customer) => {
+          const avgDays = Number(customer.avgDaysBetweenVisits || 0);
+          const spendPerVisit = customer.visitCount > 0 ? Number(customer.totalRevenue || 0) / customer.visitCount : 0;
+          return sum + (avgDays > 0 ? spendPerVisit * (30 / avgDays) : spendPerVisit);
+        }, 0) / scopedCustomers.length
+      : 0;
+
+    const customerCycles = scopedCustomers
+      .filter((customer) => customer.visitCount >= 3)
+      .map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        segment: customer.segment,
+        visitCount: customer.visitCount,
+        avgDaysBetweenVisits: customer.avgDaysBetweenVisits == null ? null : Number(customer.avgDaysBetweenVisits),
+        lastVisitAt: customer.lastVisitAt,
+        expectedNextVisitDate: customer.expectedNextVisitDate,
+        churnRiskScore: customer.churnRiskScore,
+        regularity: customer.visitCount >= 5 ? "Predictable" : customer.visitCount >= 3 ? "Fairly Regular" : "Irregular",
+      }));
+
+    const morningDeposits = depositDates.filter((date) => date.getHours() >= 8 && date.getHours() < 11).length;
+    const eveningPickups = pickupDates.filter((date) => date.getHours() >= 17).length;
+    const averageReturnFrequency = average(scopedCustomers.map((customer) => Number(customer.avgDaysBetweenVisits || 0)).filter(Boolean));
+
+    return {
+      period,
+      depositActivityByHour: this.hourlyBuckets(depositDates),
+      pickupActivityByHour: this.hourlyBuckets(pickupDates),
+      activityByDayOfWeek: this.dayBuckets(depositDates),
+      customerCycles,
+      churn: {
+        atRiskCount: atRiskCustomers.length,
+        revenueAtRisk: averageMonthlySpend * atRiskCustomers.length,
+        customers: atRiskCustomers.map((customer) => ({
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          segment: customer.segment,
+          churnRiskScore: customer.churnRiskScore,
+          lastVisitAt: customer.lastVisitAt,
+          avgDaysBetweenVisits: customer.avgDaysBetweenVisits == null ? null : Number(customer.avgDaysBetweenVisits),
+          totalRevenue: Number(customer.totalRevenue || 0),
+        })),
+      },
+      metrics: {
+        averageReturnFrequency,
+        depositToPickupDelayDays: average(pickupDelays),
+        averageStorageTimeDays: average(storageTimes),
+        timeToPaymentHours: average(paymentTimes),
+      },
+      insights: [
+        depositDates.length ? `${Math.round((morningDeposits / depositDates.length) * 100)}% of deposits occur between 8h and 11h` : null,
+        pickupDates.length ? `${Math.round((eveningPickups / pickupDates.length) * 100)}% of pickups occur after 17h` : null,
+        averageReturnFrequency ? `Average customer returns every ${Math.round(averageReturnFrequency)} days` : null,
+      ].filter(Boolean),
+      storageOccupancy: await this.getStorageOccupancyAlerts(siteId),
+    };
   }
 
   async markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined> {
@@ -676,10 +855,14 @@ export class DatabaseStorage implements IStorage {
     const prev30Expenses = await this.sumExpensesInRangeBySite(previousStart, previousEnd, siteId);
 
     const monthlyComparison: { month: string; income: number; expenses: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
-      const monthLabel = mStart.toLocaleString("en-US", { month: "short", year: "2-digit" });
+    const comparisonStart = new Date(selectedStart.getFullYear(), selectedStart.getMonth(), 1);
+    const comparisonEnd = new Date(selectedEnd.getFullYear(), selectedEnd.getMonth(), 1);
+    for (let cursor = new Date(comparisonStart); cursor <= comparisonEnd; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)) {
+      const periodMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const periodMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59, 999);
+      const mStart = new Date(Math.max(periodMonthStart.getTime(), selectedStart.getTime()));
+      const mEnd = new Date(Math.min(periodMonthEnd.getTime(), selectedEnd.getTime()));
+      const monthLabel = periodMonthStart.toLocaleString("en-US", { month: "short", year: "2-digit" });
       monthlyComparison.push({ month: monthLabel, income: await this.sumPaymentsInRangeBySite(mStart, mEnd, siteId), expenses: await this.sumExpensesInRangeBySite(mStart, mEnd, siteId) });
     }
 

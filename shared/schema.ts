@@ -1,4 +1,5 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -19,9 +20,19 @@ export const customers = pgTable("customers", {
   totalDeliveries: integer("total_deliveries").default(0).notNull(),
   onTimeDeliveries: integer("on_time_deliveries").default(0).notNull(),
   lateDeliveries: integer("late_deliveries").default(0).notNull(),
+  lastVisitAt: timestamp("last_visit_at"),
+  avgDaysBetweenVisits: decimal("avg_days_between_visits", { precision: 10, scale: 2 }),
+  visitCount: integer("visit_count").default(0).notNull(),
+  expectedNextVisitDate: timestamp("expected_next_visit_date"),
+  segment: varchar("segment", { length: 50 }),
+  churnRiskScore: integer("churn_risk_score"),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  avgDepositHour: decimal("avg_deposit_hour", { precision: 5, scale: 2 }),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_clients_last_visit").on(table.lastVisitAt),
+]);
 
 export const services = pgTable("services", {
   id: serial("id").primaryKey(),
@@ -50,7 +61,9 @@ export const orders = pgTable("orders", {
   paymentStatus: text("payment_status").notNull().default("unpaid"),
   entryDate: timestamp("entry_date").defaultNow(),
   pickupDate: timestamp("pickup_date"),
+  readyAt: timestamp("ready_at"),
   deliveredAt: timestamp("delivered_at"),
+  cancelledAt: timestamp("cancelled_at"),
   discount: decimal("discount", { precision: 10, scale: 2 }).default("0"),
   discountPct: decimal("discount_pct", { precision: 5, scale: 2 }).default("0"),
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0"),
@@ -65,7 +78,13 @@ export const orders = pgTable("orders", {
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_orders_site_status_ready")
+    .on(table.siteId, table.status, table.readyAt)
+    .where(sql`${table.status} = 'ready'`),
+  index("idx_orders_created_at").on(table.createdAt),
+  index("idx_orders_delivered_at").on(table.deliveredAt),
+]);
 
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
@@ -367,9 +386,28 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
 }));
 
 // Insert schemas
-export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
+export const insertCustomerSchema = createInsertSchema(customers).omit({
+  id: true,
+  createdAt: true,
+  lastVisitAt: true,
+  avgDaysBetweenVisits: true,
+  visitCount: true,
+  expectedNextVisitDate: true,
+  segment: true,
+  churnRiskScore: true,
+  totalRevenue: true,
+  avgDepositHour: true,
+});
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
-export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true, updatedAt: true, totalAmount: true });
+export const insertOrderSchema = createInsertSchema(orders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  totalAmount: true,
+  readyAt: true,
+  deliveredAt: true,
+  cancelledAt: true,
+});
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, date: true });
 export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true, returnedForTreatment: true, returnStage: true, returnNotes: true, returnedAt: true, resolvedAt: true });

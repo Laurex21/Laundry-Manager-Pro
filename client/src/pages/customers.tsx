@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -38,14 +39,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "at_risk">("all");
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const [, navigate] = useLocation();
 
-  const filteredCustomers = customers?.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search)
-  );
+  const filteredCustomers = customers?.filter((c) => {
+    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
+    const matchesFilter = filter === "all" || c.segment === "at_risk" || c.segment === "lost";
+    return matchesSearch && matchesFilter;
+  });
 
   const totalCount = customers?.length ?? 0;
 
@@ -80,6 +83,14 @@ export default function Customers() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+        </div>
+        <div className="flex rounded-md border bg-background p-0.5">
+          <Button type="button" variant={filter === "all" ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter("all")}>
+            Tous
+          </Button>
+          <Button type="button" variant={filter === "at_risk" ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter("at_risk")}>
+            At Risk
+          </Button>
         </div>
         {!isLoading && (
           <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
@@ -124,6 +135,11 @@ export default function Customers() {
                   <Phone className="w-3 h-3 shrink-0" />
                   <span className="truncate">{customer.phone}</span>
                 </p>
+                {customer.segment && (
+                  <Badge variant="secondary" className="mt-1 h-5 px-1.5 text-[10px] capitalize">
+                    {String(customer.segment).replace(/_/g, " ")}
+                  </Badge>
+                )}
               </div>
 
               {/* Email - hidden on small screens */}

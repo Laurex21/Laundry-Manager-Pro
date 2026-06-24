@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
+import { orderDisplayId } from "./order-display";
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
   received: { en: "Received", fr: "Reçu" },
@@ -29,6 +30,10 @@ function formatReceiptDate(date: Date | string | null | undefined, pattern: stri
   return format(value, pattern, { locale: dateLocaleFor(lang) });
 }
 
+function formatReceiptDateTime(date: Date | string | null | undefined, lang: string): string {
+  return formatReceiptDate(date, "dd/MM/yyyy • HH'h'mm", lang);
+}
+
 function paymentReference(reference: string | null | undefined, lang: string): string {
   return reference ? ` (${label("Ref:", "Réf :", lang)} ${reference})` : "";
 }
@@ -52,10 +57,6 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function orderDisplayId(order: any): number | string {
-  return order?.orderNumber ?? order?.id ?? "";
 }
 
 function agentFirstName(agent: any, fallback = "Staff"): string {
@@ -136,7 +137,7 @@ function buildPaymentHistoryLines(payments: any[], orderTotal: number, symbol: s
     const ref = paymentReference(payment.reference, lang);
     const paidLabel = label("Paid", "Payé", lang);
     const remainingLabel = label("Remaining balance", "Solde restant", lang);
-    return `${formatReceiptDate(payment.date || fallbackDate, "MMM dd", lang)} - ${payment.method}${ref} - ${paidLabel}: ${symbol}${amount.toFixed(2)} - ${remainingLabel}: ${remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}`;
+    return `${formatReceiptDateTime(payment.date || fallbackDate, lang)} - ${payment.method}${ref} - ${paidLabel}: ${symbol}${amount.toFixed(2)} - ${remainingLabel}: ${remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}`;
   });
 }
 
@@ -149,7 +150,7 @@ function buildPaymentHistoryHtml(payments: any[], orderTotal: number, symbol: st
     const ref = paymentReference(payment.reference, lang);
     return `<div style="padding:8px 0;border-bottom:1px solid rgba(14,165,233,0.18);font-size:12px;color:#475569;">
       <div style="display:flex;justify-content:space-between;gap:12px;">
-        <span>${formatReceiptDate(payment.date || fallbackDate, "MMM dd", lang)} &bull; ${escapeHtml(payment.method)}${escapeHtml(ref)}</span>
+        <span>${formatReceiptDateTime(payment.date || fallbackDate, lang)} &bull; ${escapeHtml(payment.method)}${escapeHtml(ref)}</span>
         <span style="color:#16a34a;font-weight:600;white-space:nowrap;">${symbol}${amount.toFixed(2)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;gap:12px;margin-top:3px;font-size:11px;font-weight:700;color:${remaining > 0 ? "#dc2626" : "#16a34a"};">
@@ -462,8 +463,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
-  const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
-  const pickupDate = formatReceiptDate(order.pickupDate, "MMM dd, yyyy", lang);
+  const entryDate = formatReceiptDateTime(order.entryDate || new Date(), lang);
+  const pickupDate = formatReceiptDateTime(order.pickupDate, lang);
   const registeredBy = agentFirstName(order.createdByEmployee);
   const discount = Number(order.discount || 0);
   const subtotal = orderSubtotal(items);
@@ -518,7 +519,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
-    .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); font-weight: 700; }
+    .receipt * { font-weight: 700 !important; }
     .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
     .print-btn:hover { background: #1d4ed8; }
     .header { background: ${settings.receiptHeaderColor}; color: #fff; padding: 28px 32px; }
@@ -627,7 +629,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}</p>
+      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
     </div>
   </div>
 </body>
@@ -647,7 +649,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
-  const entryDate = formatReceiptDate(order.entryDate || new Date(), "MMM dd, yyyy", lang);
+  const entryDate = formatReceiptDateTime(order.entryDate || new Date(), lang);
   const subtotal = orderSubtotal(items);
   const discount = Number(order.discount || 0);
   const pickupCost = Number(order.pickupCost || 0);
@@ -662,7 +664,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
     customerName: customer.name || "",
     customerPhone: customer.phone || "",
     orderDate: entryDate,
-    receiptDate: formatReceiptDate(new Date(), "MMM dd, yyyy", lang),
+    receiptDate: formatReceiptDateTime(new Date(), lang),
     items,
     garments,
     subtotal,
@@ -714,8 +716,8 @@ export function generateThermalPaymentReceipt(
     contactLines: getReceiptContactLines(settings, orderId, lang),
     customerName: customer?.name || "",
     customerPhone: customer?.phone || "",
-    orderDate: formatReceiptDate(entryDate || new Date(), "MMM dd, yyyy", lang),
-    receiptDate: formatReceiptDate(payment.date || new Date(), "MMM dd, yyyy", lang),
+    orderDate: formatReceiptDateTime(entryDate || new Date(), lang),
+    receiptDate: formatReceiptDateTime(payment.date || new Date(), lang),
     items,
     garments,
     subtotal,
@@ -753,8 +755,8 @@ export function generatePaymentReceipt(
   action: ReceiptAction = "download"
 ) {
   const lang = settings.receiptLanguage || "en";
-  const displayEntryDate = formatReceiptDate(entryDate, "MMM dd, yyyy", lang);
-  const displayPickupDate = formatReceiptDate(pickupDate, "MMM dd, yyyy", lang);
+  const displayEntryDate = formatReceiptDateTime(entryDate, lang);
+  const displayPickupDate = formatReceiptDateTime(pickupDate, lang);
   const receivedBy = agentFirstName(payment.agentName);
 
   const itemsHtml = items.map((item: any) => {
@@ -809,7 +811,8 @@ export function generatePaymentReceipt(
     @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
-    .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); font-weight: 700; }
+    .receipt * { font-weight: 700 !important; }
     .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
     .header { background: ${settings.receiptHeaderColor}; color: #fff; padding: 28px 32px; }
     .brand { max-width: 100%; }
@@ -853,7 +856,7 @@ export function generatePaymentReceipt(
     <div class="meta">
       <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || emptyValue}</div></div>
       <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${displayEntryDate}</div></div>
-      <div class="meta-item"><div class="label">${label("Receipt Date", "Date du reçu", lang)}</div><div class="value">${formatReceiptDate(payment.date, "MMM dd, yyyy", lang)}</div></div>
+      <div class="meta-item"><div class="label">${label("Receipt Date", "Date du reçu", lang)}</div><div class="value">${formatReceiptDateTime(payment.date, lang)}</div></div>
       <div class="meta-item"><div class="label">${label("Payment received by", "Paiement reçu par", lang)}</div><div class="value">${escapeHtml(receivedBy)}</div></div>
       ${settings.showPickupDate ? `<div class="meta-item"><div class="label">${label("Expected Pickup", "Retrait prévu", lang)}</div><div class="value">${displayPickupDate}</div></div>` : ""}
     </div>
@@ -908,7 +911,7 @@ export function generatePaymentReceipt(
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDate(new Date(), "PPP", lang)}</p>
+      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
     </div>
   </div>
 </body>

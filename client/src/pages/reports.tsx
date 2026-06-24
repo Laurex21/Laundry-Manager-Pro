@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
-import { format, subDays, startOfMonth, endOfMonth, type Locale } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, differenceInCalendarMonths, eachMonthOfInterval, type Locale } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import {
   DollarSign,
@@ -200,6 +200,24 @@ export default function Reports() {
     }));
   }, [data?.dailyRevenue, i18n.language]);
 
+  const formattedMonthlyComparison = useMemo(() => {
+    if (!perfData?.monthlyComparison) return [];
+    const monthCount = Math.max(1, differenceInCalendarMonths(dateTo, dateFrom) + 1);
+    const monthLabels = eachMonthOfInterval({ start: startOfMonth(dateFrom), end: startOfMonth(dateTo) })
+      .map((date) => format(date, "MMM yy", { locale: activeDateLocale }));
+
+    return perfData.monthlyComparison.map((item, index) => ({
+      ...item,
+      month: monthLabels[index] || item.month,
+      shortMonth: monthLabels[index] || item.month,
+      fullMonth: monthLabels[index] || item.month,
+      _monthCount: monthCount,
+    }));
+  }, [perfData?.monthlyComparison, dateFrom, dateTo, activeDateLocale]);
+
+  const monthTickAngle = formattedMonthlyComparison.length > 4 ? -35 : 0;
+  const monthChartBottomMargin = formattedMonthlyComparison.length > 4 ? 36 : 12;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -373,12 +391,15 @@ export default function Reports() {
                 <h4 className="text-sm font-semibold mb-1">{t("income_vs_expenses")}</h4>
                 <p className="text-xs text-muted-foreground mb-3">{t("income_vs_expenses_subtitle")}</p>
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={perfData.monthlyComparison} barGap={4} margin={{ top: 8, right: 6, left: 0, bottom: 8 }}>
+                  <BarChart data={formattedMonthlyComparison} barGap={4} margin={{ top: 8, right: 6, left: 0, bottom: monthChartBottomMargin }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis
                       dataKey="month"
                       interval={0}
                       minTickGap={0}
+                      angle={monthTickAngle}
+                      textAnchor={monthTickAngle ? "end" : "middle"}
+                      height={monthTickAngle ? 52 : 30}
                       tick={{ fontSize: 10 }}
                       tickMargin={8}
                       className="fill-muted-foreground"

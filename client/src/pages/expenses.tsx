@@ -106,7 +106,7 @@ export default function Expenses() {
       if (dateFilter === "7days" && !isWithinInterval(expDate, { start: subDays(now, 7), end: now })) return false;
       if (dateFilter === "30days" && !isWithinInterval(expDate, { start: subDays(now, 30), end: now })) return false;
       if (dateFilter === "thisYear" && !isWithinInterval(expDate, { start: startOfYear(now), end: now })) return false;
-      if (typeFilter !== "all" && exp.category.toLowerCase() !== typeFilter) return false;
+      if (typeFilter !== "all" && normalizedCategory(exp.category) !== typeFilter) return false;
       return true;
     });
   }, [expenditures, dateFilter, typeFilter]);
@@ -204,16 +204,19 @@ export default function Expenses() {
           >
             {t("all")}
           </button>
-          {EXPENSE_TYPE_KEYS.map((et) => (
-            <button
-              key={et.key}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${typeFilter === et.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
-              onClick={() => setTypeFilter(typeFilter === et.key ? "all" : et.key)}
-              data-testid={`filter-tab-${et.key}`}
-            >
-              {t(et.labelKey)}
-            </button>
-          ))}
+          {expenseCategoryOptions.map((category) => {
+            const categoryKey = normalizedCategory(category);
+            return (
+              <button
+                key={categoryKey}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${typeFilter === categoryKey ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                onClick={() => setTypeFilter(typeFilter === categoryKey ? "all" : categoryKey)}
+                data-testid={`filter-tab-${categoryKey}`}
+              >
+                {getCategoryDisplay(category, t).label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

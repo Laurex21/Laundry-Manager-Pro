@@ -13,6 +13,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { generateDepositReceipt } from "@/lib/receipt";
 import { useQuery as useSettingsQuery } from "@tanstack/react-query";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { orderDisplayId } from "@/lib/order-display";
 import {
   Plus,
   Search,
@@ -216,7 +217,7 @@ export default function Orders() {
                 filteredOrders.map((order: any) => (
                   <tr key={order.id} className="group hover:bg-muted/25 transition-colors">
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-muted-foreground">
-                      #{order.orderNumber ?? order.id}
+                      #{orderDisplayId(order)}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-foreground leading-tight">{order.customer?.name || t("unknown")}</div>
@@ -294,7 +295,7 @@ export default function Orders() {
                         {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                        <span className="font-mono font-medium">#{order.orderNumber ?? order.id}</span>
+                        <span className="font-mono font-medium">#{orderDisplayId(order)}</span>
                         <span>·</span>
                         <span>{format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</span>
                       </div>

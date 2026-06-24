@@ -9,6 +9,7 @@ import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
 import { parseLocalDateParam } from "./lib/reporting-date";
+import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -223,6 +224,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
   seedDatabase().catch(console.error);
+  startTemporalIntelligenceJob();
 
   app.get("/api/public/stats", async (_req, res) => {
     try {
@@ -527,10 +529,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/orders/:id/deliver", isAuthenticated, async (req, res) => {
-    const { deliveredAt } = req.body;
-    const date = deliveredAt ? new Date(deliveredAt) : new Date();
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-    const updated = await storage.markDelivered(Number(req.params.id), date);
+    const updated = await storage.markDelivered(Number(req.params.id), new Date());
     if (!updated) return res.status(404).json({ message: "Order not found" });
     if (updated.siteId != null) {
       await trackEmployeeActivity(req, {
@@ -802,6 +802,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/analytics/production-delays", isAuthenticated, async (req: any, res) => {
     const delays = await storage.getProductionDelays(scopedSites(req));
     res.json(delays);
+  });
+
+  app.get("/api/analytics/customer-behavior", isAuthenticated, async (req: any, res) => {
+    const period = (req.query.period as string) || "month";
+    const data = await storage.getCustomerBehaviorAnalytics(period, scopedSites(req));
+    res.json(data);
+  });
+
+  app.get("/api/analytics/storage-occupancy", isAuthenticated, async (req: any, res) => {
+    const data = await storage.getStorageOccupancyAlerts(scopedSites(req));
+    res.json(data);
   });
 
   app.get("/api/analytics/advanced", isAuthenticated, async (req: any, res) => {

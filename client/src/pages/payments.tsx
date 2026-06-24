@@ -7,6 +7,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-methods";
 import { generatePaymentReceipt, generateThermalPaymentReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { orderDisplayId } from "@/lib/order-display";
 import {
   CreditCard,
   CheckCircle2,
@@ -51,7 +52,6 @@ export default function Payments() {
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
   const [reference, setReference] = useState("");
-  const [paymentDate, setPaymentDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
     paymentId?: number;
@@ -124,8 +124,8 @@ export default function Payments() {
             paymentId: createdPayment?.id,
             amount: paidAmount.toFixed(2),
             method,
-            date: paymentDate,
-            customerName: (selectedOrder as any)?.customer?.name || t("order_number", { id: (selectedOrder as any)?.orderNumber ?? selectedOrderId }),
+            date: createdPayment?.date || new Date().toISOString(),
+            customerName: (selectedOrder as any)?.customer?.name || t("order_number", { id: orderDisplayId(selectedOrder as any) || selectedOrderId }),
             totalAmount: totalAmount.toFixed(2),
             newStatus,
           });
@@ -156,7 +156,7 @@ export default function Payments() {
       const customer = orderDetails?.customer || {};
       const pickupDate = orderDetails?.pickupDate || "";
       const entryDate = orderDetails?.entryDate || successPayment.date;
-      const displayOrderId = orderDetails?.orderNumber ?? successPayment.orderId;
+      const displayOrderId = orderDisplayId(orderDetails) || successPayment.orderId;
 
       const mergedSettings = {
         ...DEFAULT_SETTINGS,
@@ -311,7 +311,7 @@ export default function Payments() {
               <div className="flex items-center justify-between gap-3 p-3 rounded-md bg-muted/40 border border-border">
                 <div>
                   <p className="text-sm font-semibold">
-                    {t("order_number", { id: selectedOrder.orderNumber ?? selectedOrder.id })}
+                    {t("order_number", { id: orderDisplayId(selectedOrder) })}
                     {(selectedOrder as any)?.customer?.name && (
                       <span className="font-normal text-muted-foreground"> - {(selectedOrder as any).customer.name}</span>
                     )}
@@ -420,17 +420,6 @@ export default function Payments() {
                     </Select>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      {t("date")}
-                    </label>
-                    <Input
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                      data-testid="input-payment-date"
-                    />
-                  </div>
                 </div>
 
                 {/* Reference - conditional */}
@@ -553,7 +542,7 @@ export default function Payments() {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium leading-snug">
-                        #{order.orderNumber ?? order.id}
+                        #{orderDisplayId(order)}
                         {order.customer?.name && (
                           <span className="font-normal text-muted-foreground"> - {order.customer.name}</span>
                         )}
