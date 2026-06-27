@@ -128,12 +128,23 @@ export default function Expenses() {
   }, [expenditures, t]);
 
   const chartData = useMemo(() => {
-    const categories: Record<string, number> = {};
+    const categories: Record<string, { category: string; total: number }> = {};
     filteredExpenditures.forEach((exp) => {
-      categories[exp.category] = (categories[exp.category] || 0) + Number(exp.amount);
+      const category = exp.category?.trim() || t("uncategorized");
+      const key = normalizedCategory(category);
+      categories[key] = {
+        category: categories[key]?.category || category,
+        total: (categories[key]?.total || 0) + Number(exp.amount),
+      };
     });
-    return Object.entries(categories).map(([name, value]) => ({ name, value })).filter((item) => item.value > 0);
-  }, [filteredExpenditures]);
+    return Object.entries(categories)
+      .map(([key, value]) => ({
+        key,
+        name: getCategoryDisplay(value.category, t).label,
+        value: value.total,
+      }))
+      .filter((item) => item.value > 0);
+  }, [filteredExpenditures, t]);
 
   const totalFilteredExpenses = filteredExpenditures.reduce((sum, item) => sum + Number(item.amount), 0);
 
@@ -309,11 +320,11 @@ export default function Expenses() {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={chartData} cx="50%" cy="45%" innerRadius={50} outerRadius={72} paddingAngle={5} dataKey="value">
+                    <Pie data={chartData} cx="50%" cy="45%" innerRadius={50} outerRadius={72} paddingAngle={5} dataKey="value" nameKey="name">
                       {chartData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => [`${symbol}${value.toFixed(2)}`, t("amount")]}
+                      formatter={(value: number, name: string) => [`${symbol}${value.toFixed(2)}`, name]}
                       contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                     />
                     <Legend verticalAlign="bottom" align="center" layout="horizontal" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px" }} />
