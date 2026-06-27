@@ -260,13 +260,13 @@ export default function Reports() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard
             title={t("total_revenue")}
             value={`${symbol}${(data?.totalRevenue ?? 0).toFixed(2)}`}
@@ -654,16 +654,16 @@ function MetricCard({
 }) {
   return (
     <Card data-testid={testId}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 min-w-0">
+      <CardContent className="p-4 sm:p-5 xl:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <p className="text-sm text-muted-foreground font-medium">{title}</p>
-            <p className="text-2xl font-bold font-mono mt-1 truncate" data-testid={`${testId}-value`}>
+            <p className="mt-1 break-words font-mono text-xl font-bold leading-tight sm:text-2xl" data-testid={`${testId}-value`}>
               {value}
             </p>
           </div>
-          <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0", iconBg)}>
-            <Icon className={cn("w-6 h-6", iconColor)} />
+          <div className={cn("w-10 h-10 sm:w-11 sm:h-11 xl:w-12 xl:h-12 rounded-xl flex items-center justify-center flex-shrink-0", iconBg)}>
+            <Icon className={cn("w-5 h-5 xl:w-6 xl:h-6", iconColor)} />
           </div>
         </div>
       </CardContent>
