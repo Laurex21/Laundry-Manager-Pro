@@ -64,6 +64,23 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS maintenance_cost numeric(10, 2) DEFAULT 0
   `);
   await pool.query(`
+    ALTER TABLE customers
+    ADD COLUMN IF NOT EXISTS last_visit_at timestamp,
+    ADD COLUMN IF NOT EXISTS avg_days_between_visits numeric(10, 2),
+    ADD COLUMN IF NOT EXISTS visit_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS expected_next_visit_date timestamp,
+    ADD COLUMN IF NOT EXISTS segment varchar(50),
+    ADD COLUMN IF NOT EXISTS churn_risk_score integer,
+    ADD COLUMN IF NOT EXISTS total_revenue numeric(12, 2) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS avg_deposit_hour numeric(5, 2)
+  `);
+  await pool.query(`
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS ready_at timestamp,
+    ADD COLUMN IF NOT EXISTS delivered_at timestamp,
+    ADD COLUMN IF NOT EXISTS cancelled_at timestamp
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS employee_activities (
       id serial PRIMARY KEY,
       employee_id integer NOT NULL REFERENCES employees(id),
@@ -120,6 +137,10 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_clients_last_visit ON customers(last_visit_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_site_status_ready ON orders(site_id, status, ready_at) WHERE status = 'ready'`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_delivered_at ON orders(delivered_at)`);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
