@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:analytics-i18n": "tsx server/lib/analytics-i18n.test.ts",
     "test:reporting": "tsx server/lib/reporting-date.test.ts",
     "test:schema-guard": "tsx server/lib/schema-guard.test.ts",
     "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",

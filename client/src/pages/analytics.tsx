@@ -401,6 +401,8 @@ function AdvancedAnalytics({ period }: { period: string }) {
   const employee = data?.employeeInsights || {};
   const machine = data?.machineInsights || {};
   const operations = data?.operationalInsights || {};
+  const formatRecommendation = (recommendation: any) => formatAdvancedRecommendation(recommendation, t);
+  const formatAlert = (alert: any) => formatAdvancedAlert(alert, t);
 
   return (
     <div className="space-y-6" data-testid="section-advanced-analytics">
@@ -474,7 +476,7 @@ function AdvancedAnalytics({ period }: { period: string }) {
                   <CardHeader><CardTitle className="text-base">{t("what_should_owner_do", "What should the owner do next?")}</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
                     {data?.recommendations?.length ? data.recommendations.slice(0, 4).map((rec: string, i: number) => (
-                      <div key={i} className="rounded-md border bg-muted/30 p-3 text-sm">{rec}</div>
+                      <div key={i} className="rounded-md border bg-muted/30 p-3 text-sm">{formatRecommendation(rec)}</div>
                     )) : <p className="text-sm text-muted-foreground">{t("not_enough_data_recommendations", "Not enough activity data yet for recommendations.")}</p>}
                   </CardContent>
                 </Card>
@@ -491,8 +493,8 @@ function AdvancedAnalytics({ period }: { period: string }) {
                 <InsightPanel icon={<Target className="w-4 h-4" />} title={t("service_profitability", "Service Profitability")} items={[
                   [t("most_profitable_service", "Most Profitable"), operations.mostProfitableService?.name],
                   [t("least_profitable_service", "Least Profitable"), operations.leastProfitableService?.name],
-                  [t("most_profitable_service", "Top Service Revenue"), `${symbol}${Number(operations.mostProfitableService?.revenue || 0).toFixed(0)}`],
-                  [t("least_profitable_service", "Lowest Service Revenue"), `${symbol}${Number(operations.leastProfitableService?.revenue || 0).toFixed(0)}`],
+                  [t("top_service_revenue", "Top Service Revenue"), `${symbol}${Number(operations.mostProfitableService?.revenue || 0).toFixed(0)}`],
+                  [t("lowest_service_revenue", "Lowest Service Revenue"), `${symbol}${Number(operations.leastProfitableService?.revenue || 0).toFixed(0)}`],
                 ]} />
               </div>
             </TabsContent>
@@ -505,9 +507,9 @@ function AdvancedAnalytics({ period }: { period: string }) {
                 {data?.alerts?.length ? data.alerts.map((alert: any, i: number) => (
                   <div key={i} className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950/20">
                     <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                    <span>{alert.message}</span>
+                    <span>{formatAlert(alert)}</span>
                   </div>
-                )) : <p className="text-sm text-muted-foreground">{t("no_alerts", "No alerts detected.")}</p>}
+                )) : <p className="text-sm text-muted-foreground">{t("analytics_no_alerts", "No alerts detected.")}</p>}
               </CardContent>
             </Card>
             <Card className="border-muted">
@@ -516,7 +518,7 @@ function AdvancedAnalytics({ period }: { period: string }) {
               </CardHeader>
               <CardContent className="space-y-2">
                 {data?.recommendations?.length ? data.recommendations.map((rec: string, i: number) => (
-                  <div key={i} className="rounded-md border bg-muted/30 p-3 text-sm">{rec}</div>
+                  <div key={i} className="rounded-md border bg-muted/30 p-3 text-sm">{formatRecommendation(rec)}</div>
                 )) : <p className="text-sm text-muted-foreground">{t("not_enough_data_recommendations", "Not enough activity data yet for recommendations.")}</p>}
               </CardContent>
             </Card>
@@ -525,6 +527,55 @@ function AdvancedAnalytics({ period }: { period: string }) {
       </Card>
     </div>
   );
+}
+
+function formatAdvancedRecommendation(recommendation: any, t: ReturnType<typeof useTranslation>["t"]): string {
+  if (typeof recommendation === "string") return recommendation;
+  if (!recommendation || typeof recommendation !== "object") return "";
+
+  switch (recommendation.type) {
+    case "employee_orders_above_average":
+      return t("rec_employee_orders_above_average", {
+        employee: recommendation.employeeName,
+        percent: recommendation.percent,
+      });
+    case "machine_underutilized":
+      return t("rec_machine_underutilized", { machine: recommendation.machineName });
+    case "machine_maintenance_soon":
+      return t("rec_machine_maintenance_soon", {
+        machine: recommendation.machineName,
+        days: recommendation.days,
+      });
+    case "service_highest_revenue":
+      return t("rec_service_highest_revenue", { service: recommendation.serviceName });
+    default:
+      return recommendation.message || "";
+  }
+}
+
+function formatAdvancedAlert(alert: any, t: ReturnType<typeof useTranslation>["t"]): string {
+  if (!alert || typeof alert !== "object") return "";
+
+  switch (alert.type) {
+    case "employee_risk":
+      if (alert.message?.includes("order deletions")) return t("alert_employee_deletions", { employee: alert.message.split(" has ")[0] });
+      if (alert.message?.includes("order cancellations")) return t("alert_employee_cancellations", { employee: alert.message.split(" has ")[0] });
+      if (alert.message?.includes("unusual discounts")) return t("alert_employee_discounts", { employee: alert.message.split(" applied ")[0] });
+      if (alert.message?.includes("payment modifications")) return t("alert_employee_payment_modifications", { employee: alert.message.split(" has ")[0] });
+      break;
+    case "maintenance":
+      if (alert.message?.includes("maintenance is overdue")) return t("alert_machine_maintenance_overdue", { machine: alert.message.split(" maintenance ")[0] });
+      if (alert.message?.includes("requires maintenance within")) {
+        const machine = alert.message.split(" requires ")[0];
+        const days = alert.message.match(/within (\d+) days/)?.[1] || "";
+        return t("alert_machine_maintenance_soon", { machine, days });
+      }
+      break;
+    case "maintenance_cost":
+      return t("alert_machine_high_maintenance_cost", { machine: alert.message?.split(" has ")[0] });
+  }
+
+  return alert.message || "";
 }
 
 function InsightPanel({ icon, title, items }: { icon: React.ReactNode; title: string; items: [string, any][] }) {

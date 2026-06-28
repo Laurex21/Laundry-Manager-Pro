@@ -1464,15 +1464,29 @@ export class DatabaseStorage implements IStorage {
     const mostProfitableService = [...servicesRanked].sort((a, b) => b.revenue - a.revenue)[0] || null;
     const leastProfitableService = [...servicesRanked].sort((a, b) => a.revenue - b.revenue)[0] || null;
 
-    const recommendations = [];
+    const recommendations: any[] = [];
     const avgOrders = employeesRanked.length ? employeesRanked.reduce((sum, e) => sum + e.totalOrdersHandled, 0) / employeesRanked.length : 0;
     const mostProductive = topBy("totalOrdersHandled");
-    if (mostProductive && avgOrders > 0) recommendations.push(`${mostProductive.name} processed ${Math.round(((mostProductive.totalOrdersHandled - avgOrders) / avgOrders) * 100)}% more orders than average this period.`);
+    if (mostProductive && avgOrders > 0) recommendations.push({
+      type: "employee_orders_above_average",
+      employeeName: mostProductive.name,
+      percent: Math.round(((mostProductive.totalOrdersHandled - avgOrders) / avgOrders) * 100),
+    });
     const underused = machineStats.find((machine) => machine.utilizationLabel === "critical" || machine.utilizationLabel === "underutilized");
-    if (underused) recommendations.push(`${underused.name} is underutilized and should be reviewed for scheduling or maintenance issues.`);
+    if (underused) recommendations.push({
+      type: "machine_underutilized",
+      machineName: underused.name,
+    });
     const maintenanceSoon = machineStats.find((machine) => machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance <= 14);
-    if (maintenanceSoon) recommendations.push(`${maintenanceSoon.name} will require maintenance within ${maintenanceSoon.daysUntilNextMaintenance} days.`);
-    if (mostProfitableService) recommendations.push(`${mostProfitableService.name} generated the highest service revenue this period.`);
+    if (maintenanceSoon) recommendations.push({
+      type: "machine_maintenance_soon",
+      machineName: maintenanceSoon.name,
+      days: maintenanceSoon.daysUntilNextMaintenance,
+    });
+    if (mostProfitableService) recommendations.push({
+      type: "service_highest_revenue",
+      serviceName: mostProfitableService.name,
+    });
 
     const orderCount = employeesRanked.reduce((sum, employee) => sum + employee.totalOrdersHandled, 0);
     const revenue = await this.sumPaymentsInRangeBySite(start, now, siteId);
