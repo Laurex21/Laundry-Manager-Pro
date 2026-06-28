@@ -118,8 +118,8 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden divide-y divide-border">
-      <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="border rounded-lg overflow-hidden divide-y divide-border bg-card">
+      <div className="hidden xl:grid grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         <span>{t("employee_name")}</span>
         <span>{t("employee_position", "Position")}</span>
         <span>{t("phone")} / {t("email")}</span>
@@ -133,18 +133,29 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
         const bgColor = AVATAR_COLORS[emp.id % AVATAR_COLORS.length];
 
         return (
-          <div key={emp.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_1fr_1fr_auto] gap-x-4 gap-y-1 px-4 py-3 items-center hover:bg-muted/20 transition-colors" data-testid={`card-employee-${emp.id}`}>
-            <div className="flex items-center gap-2.5 min-w-0">
+          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-muted/20 transition-colors xl:grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] xl:gap-x-4 xl:gap-y-1 xl:items-center xl:py-3" data-testid={`card-employee-${emp.id}`}>
+            <div className="flex items-center gap-3 min-w-0">
               <div className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0`}>
                 {initial}
               </div>
-              <span className="font-medium text-sm truncate">{emp.name}</span>
+              <div className="min-w-0">
+                <span className="block font-medium text-sm truncate">{emp.name}</span>
+                <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">
+                  {t("employee_name")}
+                </span>
+              </div>
             </div>
             <div className="flex flex-col gap-1 items-start">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">
+                {t("employee_position", "Position")}
+              </span>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded w-fit">{emp.position || emp.role}</span>
               <Badge variant={emp.status === "inactive" ? "outline" : "default"} className="text-[10px]">{t(`employee_status_${emp.status}`, emp.status)}</Badge>
             </div>
             <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-w-0">
+              <span className="mb-0.5 font-semibold uppercase tracking-wide xl:hidden">
+                {t("phone")} / {t("email")}
+              </span>
               {emp.employeeCode && (
                 <span className="flex items-center gap-1 truncate">
                   <IdCard className="w-3 h-3 shrink-0" />{emp.employeeCode}
@@ -161,19 +172,30 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
                 </span>
               )}
             </div>
-            <span className="text-sm font-mono">{emp.kgProcessed}</span>
-            <span className="text-sm font-mono">{emp.ordersHandled}</span>
-            <span className="text-sm font-medium">
-              {emp.salary ? `${symbol}${Number(emp.salary).toFixed(0)}` : "-"}
-            </span>
-            <div className="flex gap-1 justify-end">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} data-testid={`button-attendance-employee-${emp.id}`}>
+            <div className="grid grid-cols-3 gap-3 rounded-md bg-muted/35 p-3 xl:contents">
+              <div className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("kg_processed")}</span>
+                <span className="text-sm font-mono">{emp.kgProcessed}</span>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("orders_handled")}</span>
+                <span className="text-sm font-mono">{emp.ordersHandled}</span>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("monthly_salary")}</span>
+                <span className="text-sm font-medium">
+                  {emp.salary ? `${symbol}${Number(emp.salary).toFixed(0)}` : "-"}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-1 justify-end border-t pt-3 xl:border-t-0 xl:pt-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8 xl:h-7 xl:w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} aria-label={`${t("attendance", "Pointage")} - ${emp.name}`} data-testid={`button-attendance-employee-${emp.id}`}>
                 <Clock className="w-3.5 h-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(emp)} data-testid={`button-edit-employee-${emp.id}`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 xl:h-7 xl:w-7" onClick={() => onEdit(emp)} aria-label={`${t("edit", "Edit")} - ${emp.name}`} data-testid={`button-edit-employee-${emp.id}`}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(emp)} data-testid={`button-delete-employee-${emp.id}`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 xl:h-7 xl:w-7 text-destructive" onClick={() => onDelete(emp)} aria-label={`${t("delete", "Delete")} - ${emp.name}`} data-testid={`button-delete-employee-${emp.id}`}>
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
             </div>
