@@ -50,6 +50,14 @@ function garmentItemTotal(garments: any[]): number {
   return garments.reduce((sum: number, garment: any) => sum + Math.max(0, Number(garment.quantity) || 0), 0);
 }
 
+function serviceItemTotal(items: any[]): number {
+  return items.reduce((sum: number, item: any) => sum + Math.max(0, Number(item.quantity) || 0), 0);
+}
+
+function receiptRegisteredItemTotal(garments: any[], items: any[]): number {
+  return garments.length > 0 ? garmentItemTotal(garments) : serviceItemTotal(items);
+}
+
 function orderTotalFromParts(subtotal: number, discount: number, pickupCost: number): number {
   return Math.max(0, subtotal - discount + pickupCost);
 }
@@ -236,8 +244,14 @@ function buildThermalReceiptHtml(args: {
         const name = garment.itemName || garment.name || label("Item", "Article", args.lang);
         return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}`)}</div>`;
       }).join("")
+    : args.items.length > 0
+      ? args.items.map((item: any) => {
+          const service = item.service || {};
+          const name = service.name || label("Service", "Service", args.lang);
+          return `<div class="compact-row">${escapeHtml(`${item.quantity || 1} x ${name}`)}</div>`;
+        }).join("")
     : "";
-  const garmentTotal = garmentItemTotal(args.garments);
+  const garmentTotal = receiptRegisteredItemTotal(args.garments, args.items);
 
   const paidInFull = args.balance <= 0 && args.totalPaid > 0;
   const logoHtml = args.showLogo && args.logoBase64
@@ -496,8 +510,11 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
-  ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
-  const garmentTotal = garmentItemTotal(garments);
+  ).join("") : items.length > 0 ? items.map((item: any) => {
+    const service = item.service || {};
+    return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
+  }).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
+  const garmentTotal = receiptRegisteredItemTotal(garments, items);
 
   const pipelineHtml = buildPipelineHtml(order.status || "received", lang);
 
@@ -788,8 +805,11 @@ export function generatePaymentReceipt(
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
-  ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
-  const garmentTotal = garmentItemTotal(garments);
+  ).join("") : items.length > 0 ? items.map((item: any) => {
+    const service = item.service || {};
+    return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
+  }).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
+  const garmentTotal = receiptRegisteredItemTotal(garments, items);
 
   const subtotalAmount = orderSubtotal(items);
   const orderTotal = orderTotalFromParts(subtotalAmount, discount, pickupCost);
