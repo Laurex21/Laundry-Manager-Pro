@@ -489,6 +489,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return `<tr>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(svc.name || label("Service", "Service", lang))}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${price.toFixed(2)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join("");
@@ -544,6 +545,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     .items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .items-table thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
     .items-table thead th:nth-child(2) { text-align: center; }
+    .items-table thead th:nth-child(3) { text-align: right; }
     .items-table thead th:last-child { text-align: right; }
     .checklist-section { padding: 0 32px 24px; }
     .checklist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -590,8 +592,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     <div class="items-section">
       <div class="section-title">${label("Service Summary", "Résumé des services", lang)}</div>
       <table class="items-table">
-        <thead><tr><th>${label("Service Name", "Service", lang)}</th><th>${label("Qty", "Qté", lang)}</th><th>${label("Price", "Prix", lang)}</th></tr></thead>
-        <tbody>${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">${label("No services recorded", "Aucun service enregistré", lang)}</td></tr>`}</tbody>
+        <thead><tr><th>${label("Service Name", "Service", lang)}</th><th>${label("Qty", "Qté", lang)}</th><th>${label("Unit Cost", "Coût unitaire", lang)}</th><th>${label("Total Cost", "Coût total", lang)}</th></tr></thead>
+        <tbody>${itemsHtml || `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;">${label("No services recorded", "Aucun service enregistré", lang)}</td></tr>`}</tbody>
       </table>
     </div>
 
@@ -779,6 +781,7 @@ export function generatePaymentReceipt(
     return `<tr>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(svc.name || label("Service", "Service", lang))}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${price.toFixed(2)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join("");
@@ -839,6 +842,7 @@ export function generatePaymentReceipt(
     .items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .items-table thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
     .items-table thead th:nth-child(2) { text-align: center; }
+    .items-table thead th:nth-child(3) { text-align: right; }
     .items-table thead th:last-child { text-align: right; }
     .summary-box { background: #f8fafc; border-radius: 6px; padding: 16px 20px; }
     .summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #475569; }
@@ -889,8 +893,8 @@ export function generatePaymentReceipt(
     <div class="section" style="padding-top:0;">
       <div class="section-title">${label("Service Summary", "Résumé des services", lang)}</div>
       <table class="items-table">
-        <thead><tr><th>${label("Service", "Service", lang)}</th><th>${label("Qty", "Qté", lang)}</th><th>${label("Price", "Prix", lang)}</th></tr></thead>
-        <tbody>${itemsHtml || `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;">${label("No services recorded", "Aucun service enregistré", lang)}</td></tr>`}</tbody>
+        <thead><tr><th>${label("Service", "Service", lang)}</th><th>${label("Qty", "Qté", lang)}</th><th>${label("Unit Cost", "Coût unitaire", lang)}</th><th>${label("Total Cost", "Coût total", lang)}</th></tr></thead>
+        <tbody>${itemsHtml || `<tr><td colspan="4" style="padding:12px;text-align:center;color:#94a3b8;">${label("No services recorded", "Aucun service enregistré", lang)}</td></tr>`}</tbody>
       </table>
       <div class="summary-box" style="margin-top:12px;">
         <div class="summary-row"><span>${label("Subtotal", "Sous-total", lang)}</span><span>${symbol}${subtotalAmount.toFixed(2)}</span></div>
