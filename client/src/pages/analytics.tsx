@@ -123,16 +123,17 @@ function bucketOpacity(intensity: string): string {
   return "0.14";
 }
 
-function riskLabel(score: number | null | undefined): string {
+function riskLabel(score: number | null | undefined, t: ReturnType<typeof useTranslation>["t"]): string {
   const value = Number(score ?? 0);
-  if (value <= 15) return "Healthy";
-  if (value <= 35) return "Monitor";
-  if (value <= 55) return "Attention";
-  if (value <= 85) return "High Risk";
-  return "Critical";
+  if (value <= 15) return t("churn_risk_healthy");
+  if (value <= 35) return t("churn_risk_monitor");
+  if (value <= 55) return t("churn_risk_attention");
+  if (value <= 85) return t("churn_risk_high");
+  return t("churn_risk_critical");
 }
 
 function CustomerBehaviorSection({ period }: { period: string }) {
+  const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data, isLoading } = useQuery<any>({
@@ -153,7 +154,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
     <div className="space-y-4" data-testid="section-customer-behavior">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-base">Peak Deposit Hours</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("peak_deposit_hours")}</CardTitle></CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={depositData}>
@@ -168,7 +169,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
           </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-base">Peak Pickup Hours</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("peak_pickup_hours")}</CardTitle></CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={pickupData}>
@@ -183,7 +184,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
           </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-base">Activity by Day</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("activity_by_day")}</CardTitle></CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dayData}>
@@ -203,18 +204,18 @@ function CustomerBehaviorSection({ period }: { period: string }) {
         <Card className="shadow-sm lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              Churn Risk
+              {t("churn_risk")}
               <Badge variant={Number(churn.atRiskCount || 0) > 0 ? "destructive" : "secondary"}>{churn.atRiskCount || 0}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-md border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">At-risk customers</p>
+                <p className="text-xs text-muted-foreground">{t("at_risk_customers")}</p>
                 <p className="text-2xl font-bold">{churn.atRiskCount || 0}</p>
               </div>
               <div className="rounded-md border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">Revenue at risk</p>
+                <p className="text-xs text-muted-foreground">{t("revenue_at_risk")}</p>
                 <p className="text-2xl font-bold">{symbol}{Number(churn.revenueAtRisk || 0).toFixed(0)}</p>
               </div>
             </div>
@@ -224,26 +225,26 @@ function CustomerBehaviorSection({ period }: { period: string }) {
                   <div className="min-w-0">
                     <p className="font-medium truncate">{customer.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      Last visit: {formatBusinessDateTime(customer.lastVisitAt)} · Cycle: {customer.avgDaysBetweenVisits ? `${Math.round(customer.avgDaysBetweenVisits)} days` : "-"}
+                      {t("last_visit")}: {formatBusinessDateTime(customer.lastVisitAt)} · {t("cycle")}: {customer.avgDaysBetweenVisits ? t("days_value", { count: Math.round(customer.avgDaysBetweenVisits) }) : "-"}
                     </p>
                   </div>
-                  <Badge variant={Number(customer.churnRiskScore || 0) >= 86 ? "destructive" : "secondary"}>{riskLabel(customer.churnRiskScore)}</Badge>
+                  <Badge variant={Number(customer.churnRiskScore || 0) >= 86 ? "destructive" : "secondary"}>{riskLabel(customer.churnRiskScore, t)}</Badge>
                 </div>
               ))}
-              {!(churn.customers || []).length && <p className="text-sm text-muted-foreground">No churn risk detected.</p>}
+              {!(churn.customers || []).length && <p className="text-sm text-muted-foreground">{t("no_churn_risk_detected")}</p>}
             </div>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-base">Customer Behavior</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("customer_behavior")}</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <MetricLine label="Average return frequency" value={`${Number(metrics.averageReturnFrequency || 0).toFixed(1)} days`} />
-            <MetricLine label="Deposit-to-pickup delay" value={`${Number(metrics.depositToPickupDelayDays || 0).toFixed(1)} days`} />
-            <MetricLine label="Average storage time" value={`${Number(metrics.averageStorageTimeDays || 0).toFixed(1)} days`} />
-            <MetricLine label="Time-to-payment" value={`${Number(metrics.timeToPaymentHours || 0).toFixed(1)}h`} />
+            <MetricLine label={t("average_return_frequency")} value={t("days_decimal_value", { value: Number(metrics.averageReturnFrequency || 0).toFixed(1) })} />
+            <MetricLine label={t("deposit_to_pickup_delay")} value={t("days_decimal_value", { value: Number(metrics.depositToPickupDelayDays || 0).toFixed(1) })} />
+            <MetricLine label={t("average_storage_time")} value={t("days_decimal_value", { value: Number(metrics.averageStorageTimeDays || 0).toFixed(1) })} />
+            <MetricLine label={t("time_to_payment")} value={t("hours_decimal_value", { value: Number(metrics.timeToPaymentHours || 0).toFixed(1) })} />
             <div className="pt-2 space-y-2">
-              {(data.insights || []).map((insight: string) => (
-                <div key={insight} className="rounded-md bg-muted/50 px-3 py-2">{insight}</div>
+              {(data.insights || []).map((insight: any, index: number) => (
+                <div key={`${insight?.type || insight}-${index}`} className="rounded-md bg-muted/50 px-3 py-2">{formatCustomerBehaviorInsight(insight, t)}</div>
               ))}
             </div>
           </CardContent>
@@ -251,6 +252,30 @@ function CustomerBehaviorSection({ period }: { period: string }) {
       </div>
     </div>
   );
+}
+
+function formatCustomerBehaviorInsight(insight: any, t: ReturnType<typeof useTranslation>["t"]): string {
+  if (!insight) return "";
+  if (typeof insight === "string") {
+    const depositMatch = insight.match(/^(\d+)% of deposits occur between 8h and 11h$/);
+    if (depositMatch) return t("insight_deposits_morning", { pct: depositMatch[1] });
+    const pickupMatch = insight.match(/^(\d+)% of pickups occur after 17h$/);
+    if (pickupMatch) return t("insight_pickups_evening", { pct: pickupMatch[1] });
+    const returnMatch = insight.match(/^Average customer returns every (\d+) days$/);
+    if (returnMatch) return t("insight_average_customer_returns", { days: returnMatch[1] });
+    return insight;
+  }
+
+  switch (insight.type) {
+    case "deposits_morning":
+      return t("insight_deposits_morning", { pct: insight.pct });
+    case "pickups_evening":
+      return t("insight_pickups_evening", { pct: insight.pct });
+    case "average_customer_returns":
+      return t("insight_average_customer_returns", { days: insight.days });
+    default:
+      return insight.message || "";
+  }
 }
 
 function MetricLine({ label, value }: { label: string; value: string }) {
@@ -330,7 +355,7 @@ function WasteAlerts() {
             {alerts.map((alert, i) => (
               <div key={i} className={`p-4 rounded-lg border ${alert.severity === "high" ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900" : "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:border-yellow-900"}`}>
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge variant={alert.severity === "high" ? "destructive" : "secondary"}>{alert.severity}</Badge>
+                  <Badge variant={alert.severity === "high" ? "destructive" : "secondary"}>{t(`severity_${alert.severity}`, { defaultValue: alert.severity })}</Badge>
                   <span className="font-medium">{getAlertMessage(alert, t)}</span>
                 </div>
                 <p className="text-sm text-muted-foreground">{getAlertRecommendation(alert, t)}</p>
@@ -530,7 +555,21 @@ function AdvancedAnalytics({ period }: { period: string }) {
 }
 
 function formatAdvancedRecommendation(recommendation: any, t: ReturnType<typeof useTranslation>["t"]): string {
-  if (typeof recommendation === "string") return recommendation;
+  if (typeof recommendation === "string") {
+    const employeeMatch = recommendation.match(/^(.+) processed (\d+)% more orders than average this period\.$/);
+    if (employeeMatch) return t("rec_employee_orders_above_average", { employee: employeeMatch[1], percent: employeeMatch[2] });
+    const maintenanceSoonMatch = recommendation.match(/^(.+) will require maintenance within (-?\d+) days\.$/);
+    if (maintenanceSoonMatch) {
+      const days = Number(maintenanceSoonMatch[2]);
+      if (days < 0) return t("rec_machine_maintenance_overdue", { machine: maintenanceSoonMatch[1] });
+      return t("rec_machine_maintenance_soon", { machine: maintenanceSoonMatch[1], days });
+    }
+    const serviceMatch = recommendation.match(/^(.+) generated the highest service revenue this period\.$/);
+    if (serviceMatch) return t("rec_service_highest_revenue", { service: serviceMatch[1] });
+    const underutilizedMatch = recommendation.match(/^(.+) is underutilized and should be reviewed for scheduling or maintenance issues\.$/);
+    if (underutilizedMatch) return t("rec_machine_underutilized", { machine: underutilizedMatch[1] });
+    return recommendation;
+  }
   if (!recommendation || typeof recommendation !== "object") return "";
 
   switch (recommendation.type) {
@@ -546,6 +585,8 @@ function formatAdvancedRecommendation(recommendation: any, t: ReturnType<typeof 
         machine: recommendation.machineName,
         days: recommendation.days,
       });
+    case "machine_maintenance_overdue":
+      return t("rec_machine_maintenance_overdue", { machine: recommendation.machineName });
     case "service_highest_revenue":
       return t("rec_service_highest_revenue", { service: recommendation.serviceName });
     default:
@@ -567,7 +608,7 @@ function formatAdvancedAlert(alert: any, t: ReturnType<typeof useTranslation>["t
       if (alert.message?.includes("maintenance is overdue")) return t("alert_machine_maintenance_overdue", { machine: alert.message.split(" maintenance ")[0] });
       if (alert.message?.includes("requires maintenance within")) {
         const machine = alert.message.split(" requires ")[0];
-        const days = alert.message.match(/within (\d+) days/)?.[1] || "";
+        const days = alert.message.match(/within (-?\d+) days/)?.[1] || "";
         return t("alert_machine_maintenance_soon", { machine, days });
       }
       break;

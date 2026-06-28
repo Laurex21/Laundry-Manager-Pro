@@ -638,9 +638,9 @@ export class DatabaseStorage implements IStorage {
         timeToPaymentHours: average(paymentTimes),
       },
       insights: [
-        depositDates.length ? `${Math.round((morningDeposits / depositDates.length) * 100)}% of deposits occur between 8h and 11h` : null,
-        pickupDates.length ? `${Math.round((eveningPickups / pickupDates.length) * 100)}% of pickups occur after 17h` : null,
-        averageReturnFrequency ? `Average customer returns every ${Math.round(averageReturnFrequency)} days` : null,
+        depositDates.length ? { type: "deposits_morning", pct: Math.round((morningDeposits / depositDates.length) * 100) } : null,
+        pickupDates.length ? { type: "pickups_evening", pct: Math.round((eveningPickups / pickupDates.length) * 100) } : null,
+        averageReturnFrequency ? { type: "average_customer_returns", days: Math.round(averageReturnFrequency) } : null,
       ].filter(Boolean),
       storageOccupancy: await this.getStorageOccupancyAlerts(siteId),
     };
@@ -1477,7 +1477,12 @@ export class DatabaseStorage implements IStorage {
       type: "machine_underutilized",
       machineName: underused.name,
     });
-    const maintenanceSoon = machineStats.find((machine) => machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance <= 14);
+    const maintenanceOverdue = machineStats.find((machine) => machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance < 0);
+    if (maintenanceOverdue) recommendations.push({
+      type: "machine_maintenance_overdue",
+      machineName: maintenanceOverdue.name,
+    });
+    const maintenanceSoon = machineStats.find((machine) => machine.daysUntilNextMaintenance != null && machine.daysUntilNextMaintenance >= 0 && machine.daysUntilNextMaintenance <= 14);
     if (maintenanceSoon) recommendations.push({
       type: "machine_maintenance_soon",
       machineName: maintenanceSoon.name,

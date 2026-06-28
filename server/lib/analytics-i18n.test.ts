@@ -16,22 +16,45 @@ const storage = readFileSync(join(root, "server/storage.ts"), "utf8");
   "rec_employee_orders_above_average",
   "rec_machine_underutilized",
   "rec_machine_maintenance_soon",
+  "rec_machine_maintenance_overdue",
   "rec_service_highest_revenue",
+  "peak_deposit_hours",
+  "peak_pickup_hours",
+  "activity_by_day",
+  "customer_behavior",
+  "average_return_frequency",
+  "deposit_to_pickup_delay",
+  "average_storage_time",
+  "time_to_payment",
+  "insight_deposits_morning",
+  "insight_pickups_evening",
+  "insight_average_customer_returns",
 ].forEach((key) => {
   assert.match(analytics, new RegExp(`"${key}"`));
   assert.match(i18n, new RegExp(`"${key}"`));
 });
 
+assert.match(analytics, /severity_\$\{alert\.severity\}/);
+assert.match(i18n, /"severity_medium"/);
+
 [
   "employee_orders_above_average",
   "machine_underutilized",
   "machine_maintenance_soon",
+  "machine_maintenance_overdue",
   "service_highest_revenue",
+  "deposits_morning",
+  "pickups_evening",
+  "average_customer_returns",
 ].forEach((type) => {
   assert.match(storage, new RegExp(`type: "${type}"`));
 });
 
 assert.doesNotMatch(storage, /processed \$\{Math\.round/);
 assert.doesNotMatch(storage, /generated the highest service revenue this period/);
+assert.doesNotMatch(storage, /% of deposits occur between 8h and 11h/);
+assert.doesNotMatch(storage, /% of pickups occur after 17h/);
+assert.doesNotMatch(storage, /Average customer returns every/);
+assert.match(storage, /const maintenanceSoon = machineStats\.find\(\(machine\) => machine\.daysUntilNextMaintenance != null && machine\.daysUntilNextMaintenance >= 0 && machine\.daysUntilNextMaintenance <= 14\)/);
 
 console.log("analytics i18n regression tests passed");
