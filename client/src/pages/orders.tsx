@@ -369,6 +369,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     name: "items"
   });
 
+  const watchedGarmentItems = useWatch({
+    control: form.control,
+    name: "garmentItems"
+  });
+
   const watchedDiscount = useWatch({
     control: form.control,
     name: "discount"
@@ -415,6 +420,13 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
     const pickupVal = Number(watchedPickupCost) || 0;
     return Math.max(0, subtotal - discountVal + pickupVal);
   }, [subtotal, watchedDiscount, watchedPickupCost]);
+
+  const totalRegisteredGarments = useMemo(() => {
+    return (watchedGarmentItems || []).reduce((sum, garment) => {
+      if (!garment?.itemName?.trim()) return sum;
+      return sum + Math.max(0, Number(garment.quantity) || 0);
+    }, 0);
+  }, [watchedGarmentItems]);
 
   function onAddCustomerSubmit(data: z.infer<typeof insertCustomerSchema>) {
     createCustomer(data, {
@@ -691,14 +703,19 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
             </div>
 
             <div className="space-y-4" data-testid="garment-inventory-section">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <Shirt className="w-4 h-4 text-muted-foreground" />
                   <h3 className="text-sm font-medium text-muted-foreground">{t('garment_inventory', 'Garment Inventory')}</h3>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1 })}>
-                  <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground" aria-live="polite" data-testid="text-total-registered-garments">
+                    {t("total_registered_items", "Total registered items")}: <span className="font-mono text-foreground">{totalRegisteredGarments}</span>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1 })}>
+                    <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
 

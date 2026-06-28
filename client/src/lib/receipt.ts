@@ -46,6 +46,10 @@ function orderSubtotal(items: any[]): number {
   return items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * Number(item.quantity || 0)), 0);
 }
 
+function garmentItemTotal(garments: any[]): number {
+  return garments.reduce((sum: number, garment: any) => sum + Math.max(0, Number(garment.quantity) || 0), 0);
+}
+
 function orderTotalFromParts(subtotal: number, discount: number, pickupCost: number): number {
   return Math.max(0, subtotal - discount + pickupCost);
 }
@@ -233,6 +237,7 @@ function buildThermalReceiptHtml(args: {
         return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}`)}</div>`;
       }).join("")
     : "";
+  const garmentTotal = garmentItemTotal(args.garments);
 
   const paidInFull = args.balance <= 0 && args.totalPaid > 0;
   const logoHtml = args.showLogo && args.logoBase64
@@ -297,7 +302,7 @@ function buildThermalReceiptHtml(args: {
     ${thermalDivider()}
     <div class="center strong">${escapeHtml(label("Services", "Services", args.lang).toUpperCase())}</div>
     ${itemRows || `<div class="compact-row center">${escapeHtml(label("No services recorded", "Aucun service enregistré", args.lang))}</div>`}
-    ${garmentRows ? `${thermalDivider()}<div class="center strong">${escapeHtml(label("Garments", "Vêtements", args.lang).toUpperCase())}</div>${garmentRows}` : ""}
+    ${garmentRows ? `${thermalDivider()}<div class="center strong">${escapeHtml(label("Garments", "Vêtements", args.lang).toUpperCase())}</div>${thermalLine(label("Total Registered Items", "Total articles enregistrés", args.lang).toUpperCase(), String(garmentTotal), true)}${garmentRows}` : ""}
     ${thermalDivider()}
     ${thermalLine(label("Subtotal", "Sous-total", args.lang).toUpperCase(), thermalMoney(args.subtotal, args.symbol))}
     ${args.discount > 0 ? thermalLine(label("Discount", "Réduction", args.lang).toUpperCase(), `-${thermalMoney(args.discount, args.symbol)}`) : ""}
@@ -491,6 +496,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
+  const garmentTotal = garmentItemTotal(garments);
 
   const pipelineHtml = buildPipelineHtml(order.status || "received", lang);
 
@@ -591,7 +597,12 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
     ${settings.showGarmentList ? `
     <div class="checklist-section">
-      <div class="section-title">${label("Garment Checklist", "Checklist des vêtements", lang)}</div>
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;">
+        <div class="section-title" style="margin-bottom:0;">${label("Garment Checklist", "Checklist des vêtements", lang)}</div>
+        <div style="font-size:12px;font-weight:700;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;white-space:nowrap;">
+          ${label("Total Registered Items", "Total articles enregistrés", lang)}: ${garmentTotal}
+        </div>
+      </div>
       <p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">${label("For inventory verification only.", "Pour vérification d'inventaire uniquement.", lang)}</p>
       <table class="checklist-table"><tbody>${garmentHtml}</tbody></table>
     </div>` : ""}
@@ -775,6 +786,7 @@ export function generatePaymentReceipt(
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
+  const garmentTotal = garmentItemTotal(garments);
 
   const subtotalAmount = orderSubtotal(items);
   const orderTotal = orderTotalFromParts(subtotalAmount, discount, pickupCost);
@@ -893,7 +905,12 @@ export function generatePaymentReceipt(
 
     ${settings.showGarmentList ? `
     <div class="section" style="padding-top:0;">
-      <div class="section-title">${label("Garment Checklist", "Checklist des vêtements", lang)}</div>
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px;">
+        <div class="section-title" style="margin-bottom:0;">${label("Garment Checklist", "Checklist des vêtements", lang)}</div>
+        <div style="font-size:12px;font-weight:700;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;white-space:nowrap;">
+          ${label("Total Registered Items", "Total articles enregistrés", lang)}: ${garmentTotal}
+        </div>
+      </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;"><tbody>${garmentHtml}</tbody></table>
     </div>` : ""}
 

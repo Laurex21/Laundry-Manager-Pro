@@ -93,6 +93,9 @@ export default function OrderDetail() {
   const activeMachines = machines?.filter((machine: any) => machine.status !== "inactive") ?? [];
   const shouldShowMachineAssignment = !!nextPipelineStage && isMachineStage(nextPipelineStage.key) && activeMachines.length > 0;
   const hasReturnedItems = order.garmentItems?.some((g: any) => g.returnedForTreatment && !g.resolvedAt);
+  const totalRegisteredGarments = (order.garmentItems || []).reduce((sum: number, garment: any) => {
+    return sum + Math.max(0, Number(garment.quantity) || 0);
+  }, 0);
 
   function handleAdvanceStatus() {
     if (!nextPipelineStage) return;
@@ -443,10 +446,15 @@ export default function OrderDetail() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              {t("garment_checklist")}
-              {hasReturnedItems && <Badge variant="outline" className="border-orange-300 text-orange-600">{t("returns_pending")}</Badge>}
-            </CardTitle>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                {t("garment_checklist")}
+                {hasReturnedItems && <Badge variant="outline" className="border-orange-300 text-orange-600">{t("returns_pending")}</Badge>}
+              </CardTitle>
+              <div className="rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground" data-testid="text-order-total-registered-garments">
+                {t("total_registered_items", "Total registered items")}: <span className="font-mono text-foreground">{totalRegisteredGarments}</span>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {order.garmentItems?.length === 0 ? (

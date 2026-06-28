@@ -93,6 +93,7 @@ const RECEIPT_PT_LABELS: Record<string, string> = {
   "Qty": "Qtd",
   "Price": "Preço",
   "Garment Checklist": "Lista de Peças",
+  "Total Registered Items": "Total de peças registradas",
   "For inventory verification only.": "Apenas para verificação de inventário.",
   "Totals": "Totais",
   "Subtotal": "Subtotal",
