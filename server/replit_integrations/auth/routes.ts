@@ -7,6 +7,7 @@ import { organisations, siteMembers } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { rateLimit } from "../../lib/rate-limit";
 
 async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
   if (!organisationId) return null;
@@ -80,6 +81,18 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function validatePassword(password: string): string | null {
+  if (password.length < 10) {
+    return "Password must be at least 10 characters";
+  }
+  const normalized = password.toLowerCase();
+  const common = ["password", "123456", "123456789", "qwerty", "xpresspro", "pressing"];
+  if (common.some((value) => normalized.includes(value))) {
+    return "Password is too common";
+  }
+  return null;
 }
 
 function passwordResetEmailHtml(resetLink: string) {
@@ -183,11 +196,25 @@ async function sendPasswordResetLink(user: { phone: string | null; email: string
   console.info("Password reset link generated:", {
     email: user.email,
     phone: user.phone,
-    resetLink,
+    resetTokenGenerated: true,
     deliveryConfigured: false,
   });
   return false;
 }
+
+const authAttemptLimiter = rateLimit({
+  name: "auth-attempt",
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  key: (req) => String(req.body?.email || req.body?.identifier || "").trim().toLowerCase(),
+});
+
+const passwordResetLimiter = rateLimit({
+  name: "password-reset",
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  key: (req) => String(req.body?.identifier || req.body?.email || "").trim().toLowerCase(),
+});
 
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/register", async (req, res) => {
@@ -196,8 +223,9 @@ export function registerAuthRoutes(app: Express): void {
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
       }
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const passwordError = validatePassword(String(password));
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
       }
 
       const existingUser = await authStorage.getUserByEmail(email);
@@ -236,7 +264,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authAttemptLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
       if (!email || !password) {
@@ -280,7 +308,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/staff/login", async (req, res) => {
+  app.post("/api/staff/login", authAttemptLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
       if (!email || !password) {
@@ -321,8 +349,9 @@ export function registerAuthRoutes(app: Express): void {
       if (!identifier || !password) {
         return res.status(400).json({ message: "Email or phone number and password are required" });
       }
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const passwordError = validatePassword(String(password));
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
       }
 
       const existingByEmail = email ? await authStorage.getUserByEmail(email) : undefined;
@@ -357,7 +386,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/password-reset/request", async (req, res) => {
+  app.post("/api/auth/password-reset/request", passwordResetLimiter, async (req, res) => {
     try {
       const identifier = String(req.body.identifier || req.body.email || "").trim();
       const requestedAccountType = req.body.accountType === "staff" ? "staff" : "owner";
@@ -403,8 +432,9 @@ export function registerAuthRoutes(app: Express): void {
       if (!token || !password) {
         return res.status(400).json({ message: "Reset token and new password are required" });
       }
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
       }
 
       const resetToken = await authStorage.getValidPasswordResetToken(hashResetToken(token));

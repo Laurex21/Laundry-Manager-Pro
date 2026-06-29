@@ -286,6 +286,7 @@ export default function DiagnosticPage() {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [leadId, setLeadId] = useState<number | null>(null);
+  const [leadAccessToken, setLeadAccessToken] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
 
@@ -313,6 +314,7 @@ export default function DiagnosticPage() {
       });
       const data = await res.json();
       if (data.id) setLeadId(data.id);
+      if (data.leadAccessToken) setLeadAccessToken(data.leadAccessToken);
     } catch { /* continue even if save fails */ }
     setSaving(false);
     setPhase("intro");
@@ -342,11 +344,11 @@ export default function DiagnosticPage() {
       const finalScore = newAnswers.reduce((a, b) => a + b, 0);
       const finalLevel = getLevel(finalScore).label;
       const finalRisk = getRiskIndex(finalScore).label;
-      if (leadId) {
+      if (leadId && leadAccessToken) {
         fetch(`/api/diagnostic/complete/${leadId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers: newAnswers, totalScore: finalScore, level: finalLevel, riskIndex: finalRisk }),
+          body: JSON.stringify({ answers: newAnswers, totalScore: finalScore, level: finalLevel, riskIndex: finalRisk, leadAccessToken }),
         }).catch(() => {});
       }
       setPhase("results");

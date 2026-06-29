@@ -298,6 +298,7 @@ export default function RentabilitePage() {
   const [lead,  setLead ] = useState<Lead>({ name:"", country:"", city:"", phone:"", email:"" });
   const [inp,   setInp  ] = useState<Inputs>(DEFAULTS);
   const [leadId,setLeadId] = useState<number|null>(null);
+  const [leadAccessToken, setLeadAccessToken] = useState<string|null>(null);
   const [saving,setSaving] = useState(false);
   const [phoneCode, setPhoneCode] = useState("+237");
 
@@ -329,6 +330,7 @@ export default function RentabilitePage() {
       });
       const d = await r.json();
       if (d.id) setLeadId(d.id);
+      if (d.leadAccessToken) setLeadAccessToken(d.leadAccessToken);
     } catch { /* continue */ }
     setSaving(false);
     setStage("mode");
@@ -336,10 +338,10 @@ export default function RentabilitePage() {
   }
 
   function goResults() {
-    if (leadId) {
+    if (leadId && leadAccessToken) {
       fetch(`/api/v1/leads/rentabilite/${leadId}/complete`, {
         method:"PATCH", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ calculationJson: { inputs: inp, results, mode } }),
+        body: JSON.stringify({ calculationJson: { inputs: inp, results, mode }, leadAccessToken }),
       }).catch(()=>{});
     }
     setStage("results");

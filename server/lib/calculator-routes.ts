@@ -4,6 +4,8 @@ import { calculatorLeads } from "@shared/schema";
 import { eq, and, isNotNull, gte } from "drizzle-orm";
 import { getContactZone, COUNTRY_META, REFERENCE } from "./calculator-config";
 import { sendReportViaWhatsApp, getExpertContactUrl, getReportClickToChatUrl } from "./whatsapp-service";
+import { createPublicAccessToken, publicAccessTokenFromRequest, verifyPublicAccessToken } from "./public-access-token";
+import { rateLimit } from "./rate-limit";
 
 async function generateAiReport(data: {
   country: string; city: string; countryLabel: string;
@@ -198,9 +200,21 @@ async function generateAiReport(data: {
 }
 
 export function registerCalculatorRoutes(app: Express) {
+  const publicToolLimiter = rateLimit({
+    name: "calculator-public",
+    windowMs: 10 * 60 * 1000,
+    max: 30,
+    key: (req) => String(req.params?.leadId || req.body?.phone || "").trim().toLowerCase(),
+  });
+
+  function requireLeadToken(req: any, res: any, leadId: number): boolean {
+    if (verifyPublicAccessToken("calculator", leadId, publicAccessTokenFromRequest(req))) return true;
+    res.status(403).json({ message: "Invalid or expired lead access token" });
+    return false;
+  }
 
   // ── PAGE 1: Save lead immediately ──
-  app.post("/api/calculator/save-lead", async (req, res) => {
+  app.post("/api/calculator/save-lead", publicToolLimiter, async (req, res) => {
     try {
       const { firstName, lastName, phone, whatsappOptIn, email,
               country, city, referralSource, utmSource, utmMedium, utmCampaign } = req.body;
@@ -233,6 +247,7 @@ export function registerCalculatorRoutes(app: Express) {
 
       res.json({
         leadId: lead.id,
+        leadAccessToken: createPublicAccessToken("calculator", lead.id),
         contactZone,
         currency: countryMeta?.currency ?? "FCFA",
         dialCode: countryMeta?.dialCode ?? "+237",
@@ -244,10 +259,11 @@ export function registerCalculatorRoutes(app: Express) {
   });
 
   // ── Update lead with business context ──
-  app.patch("/api/calculator/update-lead/:leadId", async (req, res) => {
+  app.patch("/api/calculator/update-lead/:leadId", publicToolLimiter, async (req, res) => {
     try {
       const { pressingType, dailyCapacity, completedPage } = req.body;
-      const leadId = parseInt(req.params.leadId);
+      const leadId = Number(req.params.leadId);
+      if (!requireLeadToken(req, res, leadId)) return;
 
       const updates: any = {};
       if (pressingType)  updates.pressingType  = pressingType;
@@ -265,12 +281,13 @@ export function registerCalculatorRoutes(app: Express) {
   });
 
   // ── Generate AI report (3-tier) ──
-  app.post("/api/calculator/generate-report/:leadId", async (req, res) => {
+  app.post("/api/calculator/generate-report/:leadId", publicToolLimiter, async (req, res) => {
     if (!process.env.GEMINI_API_KEY) {
       return res.status(503).json({ message: "La génération de rapport n'est pas encore configurée." });
     }
     try {
-      const leadId = parseInt(req.params.leadId);
+      const leadId = Number(req.params.leadId);
+      if (!requireLeadToken(req, res, leadId)) return;
       const { services, objective, budget, experience, language } = req.body;
 
       const [lead] = await db.select().from(calculatorLeads)
@@ -293,7 +310,8 @@ export function registerCalculatorRoutes(app: Express) {
       }
 
       const appUrl      = process.env.APP_URL ?? `https://${process.env.REPL_SLUG ?? "pressflow"}.replit.app`;
-      const reportUrl   = `${appUrl}/rapport/${leadId}`;
+      const leadAccessToken = createPublicAccessToken("calculator", leadId);
+      const reportUrl   = `${appUrl}/rapport/${leadId}?token=${encodeURIComponent(leadAccessToken)}`;
       const countryMeta = COUNTRY_META[lead.country];
       const countryLabel= countryMeta?.label ?? lead.country;
 
@@ -360,7 +378,7 @@ export function registerCalculatorRoutes(app: Express) {
         currency:     report.currency ?? "FCFA",
       });
 
-      res.json({ leadId, reportUrl, report, whatsappSent, clickToChatUrl, expertUrl });
+      res.json({ leadId, leadAccessToken, reportUrl, report, whatsappSent, clickToChatUrl, expertUrl });
     } catch (err: any) {
       console.error("generate-report error:", err);
       const rawMessage = String(err?.message ?? "");
@@ -379,10 +397,12 @@ export function registerCalculatorRoutes(app: Express) {
   });
 
   // ── Track expert contact ──
-  app.post("/api/calculator/track-expert-contact/:leadId", async (req, res) => {
+  app.post("/api/calculator/track-expert-contact/:leadId", publicToolLimiter, async (req, res) => {
     try {
+      const leadId = Number(req.params.leadId);
+      if (!requireLeadToken(req, res, leadId)) return;
       await db.update(calculatorLeads).set({ expertContactedAt: new Date() })
-        .where(eq(calculatorLeads.id, parseInt(req.params.leadId)));
+        .where(eq(calculatorLeads.id, leadId));
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -390,10 +410,12 @@ export function registerCalculatorRoutes(app: Express) {
   });
 
   // ── Public report page ──
-  app.get("/api/calculator/report/:leadId", async (req, res) => {
+  app.get("/api/calculator/report/:leadId", publicToolLimiter, async (req, res) => {
     try {
+      const leadId = Number(req.params.leadId);
+      if (!requireLeadToken(req, res, leadId)) return;
       const [lead] = await db.select().from(calculatorLeads)
-        .where(eq(calculatorLeads.id, parseInt(req.params.leadId)));
+        .where(eq(calculatorLeads.id, leadId));
       if (!lead?.aiReportJson) return res.status(404).json({ message: "Rapport introuvable" });
 
       const countryLabel = COUNTRY_META[lead.country]?.label ?? lead.country;

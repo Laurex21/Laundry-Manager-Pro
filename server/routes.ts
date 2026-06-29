@@ -126,6 +126,49 @@ async function canAccessEmployee(req: any, employeeId: number): Promise<boolean>
   return !!employee && employee.siteId != null && (await canAccessSite(req, employee.siteId));
 }
 
+async function canAccessExpenditure(req: any, expenditureId: number): Promise<boolean> {
+  const expenditure = await storage.getExpenditure(expenditureId);
+  return !!expenditure && expenditure.siteId != null && (await canAccessSite(req, expenditure.siteId));
+}
+
+async function effectiveSiteRole(req: any, siteId: number): Promise<string | null> {
+  const userId = (req.session as any)?.userId as string | undefined;
+  if (!userId || !(await canAccessSite(req, siteId))) return null;
+  if (await canManageSite(req, siteId)) return "owner";
+  return storage.getUserSiteRole(userId, siteId);
+}
+
+function roleRank(role: string | null): number {
+  if (role === "owner") return 3;
+  if (role === "manager") return 2;
+  if (role === "operator") return 1;
+  return 0;
+}
+
+async function requireSiteRole(req: any, res: any, siteId: number, allowed: string[]): Promise<boolean> {
+  const role = await effectiveSiteRole(req, siteId);
+  const minimumRank = Math.min(...allowed.map(roleRank));
+  if (roleRank(role) < minimumRank) {
+    res.status(403).json({ message: "Insufficient permissions" });
+    return false;
+  }
+  return true;
+}
+
+async function requireResourceRole(
+  req: any,
+  res: any,
+  getSiteId: () => Promise<number | null | undefined>,
+  allowed: string[],
+): Promise<boolean> {
+  const siteId = await getSiteId();
+  if (siteId == null) {
+    res.status(404).json({ message: "Resource not found" });
+    return false;
+  }
+  return requireSiteRole(req, res, siteId, allowed);
+}
+
 async function actorEmployee(req: any, siteId: number) {
   const userId = (req.session as any)?.userId as string | undefined;
   if (!userId) return null;
@@ -297,13 +340,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post(api.services.create.path, isAuthenticated, async (req: any, res) => {
     const siteId = requireWriteSite(req, res);
     if (siteId === null) return;
+    if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
     const input = api.services.create.input.parse(req.body);
     const service = await storage.createService({ ...input, siteId } as any);
     res.status(201).json(service);
   });
 
   app.patch(api.services.update.path, isAuthenticated, async (req: any, res) => {
-    if (!(await canAccessService(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    const service = await storage.getService(Number(req.params.id));
+    if (!service) return res.status(404).json({ message: "Service not found" });
+    if (service.siteId == null || !(await requireSiteRole(req, res, service.siteId, ["owner", "manager"]))) return;
     const input = api.services.update.input.parse(req.body);
     const updated = await storage.updateService(Number(req.params.id), input);
     if (!updated) return res.status(404).json({ message: "Service not found" });
@@ -311,7 +357,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete(api.services.delete.path, isAuthenticated, async (req, res) => {
-    if (!(await canAccessService(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    const service = await storage.getService(Number(req.params.id));
+    if (!service) return res.status(404).json({ message: "Service not found" });
+    if (service.siteId == null || !(await requireSiteRole(req, res, service.siteId, ["owner", "manager"]))) return;
     const deleted = await storage.deleteService(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Service not found" });
     res.json({ success: true });
@@ -472,12 +520,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/garment-items/:id/return", isAuthenticated, async (req, res) => {
     const { returnStage, returnNotes } = req.body;
+    const item = await storage.getGarmentItem(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Garment item not found" });
+    if (!(await canAccessOrder(req, item.orderId))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.markGarmentReturned(Number(req.params.id), returnStage, returnNotes);
     if (!updated) return res.status(404).json({ message: "Garment item not found" });
     res.json(updated);
   });
 
   app.patch("/api/garment-items/:id/resolve", isAuthenticated, async (req, res) => {
+    const item = await storage.getGarmentItem(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Garment item not found" });
+    if (!(await canAccessOrder(req, item.orderId))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.resolveGarmentReturn(Number(req.params.id));
     if (!updated) return res.status(404).json({ message: "Garment item not found" });
     res.json(updated);
@@ -505,6 +559,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/orders/:id/approve-cancellation", isAuthenticated, async (req, res) => {
     const userId = (req.session as any)?.userId || "unknown";
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    const order = await storage.getOrder(Number(req.params.id));
+    if (!order?.siteId || !(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
     const updated = await storage.approveCancellation(Number(req.params.id), userId);
     if (!updated) return res.status(404).json({ message: "Order not found" });
     if (updated.siteId != null) {
@@ -523,6 +579,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { note } = req.body;
     const userId = (req.session as any)?.userId || "unknown";
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    const order = await storage.getOrder(Number(req.params.id));
+    if (!order?.siteId || !(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
     const updated = await storage.rejectCancellation(Number(req.params.id), userId, note || "");
     if (!updated) return res.status(404).json({ message: "Order not found" });
     res.json(updated);
@@ -576,6 +634,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post(api.expenditures.create.path, isAuthenticated, async (req: any, res) => {
     const siteId = requireWriteSite(req, res);
     if (siteId === null) return;
+    if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
     const input = api.expenditures.create.input.parse(req.body);
     const expenditure = await storage.createExpenditure({
       ...input,
@@ -587,7 +646,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/expenditures/:id", isAuthenticated, async (req, res) => {
     try {
+      if (!(await canAccessExpenditure(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+      const expenditure = await storage.getExpenditure(Number(req.params.id));
+      if (!expenditure?.siteId || !(await requireSiteRole(req, res, expenditure.siteId, ["owner", "manager"]))) return;
       const body = { ...req.body };
+      delete body.siteId;
       if (body.date && typeof body.date === "string") body.date = new Date(body.date);
       const updated = await storage.updateExpenditure(Number(req.params.id), body);
       if (!updated) return res.status(404).json({ message: "Expenditure not found" });
@@ -636,6 +699,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
+      if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
       let body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
       body = sanitizeInteger(body, MACHINE_INTEGER);
       body = sanitizeDates(body, MACHINE_DATES);
@@ -651,7 +715,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/machines/:id", isAuthenticated, async (req, res) => {
-    if (!(await canAccessMachine(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await requireResourceRole(req, res, async () => (await storage.getMachine(Number(req.params.id)))?.siteId, ["owner", "manager"]))) return;
     let body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
     body = sanitizeInteger(body, MACHINE_INTEGER);
     body = sanitizeDates(body, MACHINE_DATES);
@@ -661,7 +725,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/machines/:id", isAuthenticated, async (req, res) => {
-    if (!(await canAccessMachine(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await requireResourceRole(req, res, async () => (await storage.getMachine(Number(req.params.id)))?.siteId, ["owner", "manager"]))) return;
     const deleted = await storage.deleteMachine(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Machine not found" });
     res.json({ success: true });
@@ -697,6 +761,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
+      if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
       let body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
       body = sanitizeInteger(body, EMPLOYEE_INTEGER);
       body = sanitizeDates(body, EMPLOYEE_DATES);
@@ -711,7 +776,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
-    if (!(await canAccessEmployee(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await requireResourceRole(req, res, async () => (await storage.getEmployee(Number(req.params.id)))?.siteId, ["owner", "manager"]))) return;
     let body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
     body = sanitizeInteger(body, EMPLOYEE_INTEGER);
     body = sanitizeDates(body, EMPLOYEE_DATES);
@@ -721,7 +786,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/employees/:id", isAuthenticated, async (req, res) => {
-    if (!(await canAccessEmployee(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await requireResourceRole(req, res, async () => (await storage.getEmployee(Number(req.params.id)))?.siteId, ["owner", "manager"]))) return;
     const deleted = await storage.deleteEmployee(Number(req.params.id));
     if (!deleted) return res.status(404).json({ message: "Employee not found" });
     res.json({ success: true });

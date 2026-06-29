@@ -2,9 +2,18 @@ import type { Express } from "express";
 import { db } from "../db";
 import { diagnosticLeads } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { createPublicAccessToken, publicAccessTokenFromRequest, verifyPublicAccessToken } from "./public-access-token";
+import { rateLimit } from "./rate-limit";
 
 export function registerDiagnosticRoutes(app: Express) {
-  app.post("/api/diagnostic/save", async (req, res) => {
+  const publicToolLimiter = rateLimit({
+    name: "diagnostic-public",
+    windowMs: 10 * 60 * 1000,
+    max: 30,
+    key: (req) => String(req.params?.id || req.body?.phone || "").trim().toLowerCase(),
+  });
+
+  app.post("/api/diagnostic/save", publicToolLimiter, async (req, res) => {
     try {
       const {
         fullName, phone, email, country, city,
@@ -17,16 +26,19 @@ export function registerDiagnosticRoutes(app: Express) {
         objectives: objectives ?? [],
       }).returning();
 
-      res.json({ id: lead.id });
+      res.json({ id: lead.id, leadAccessToken: createPublicAccessToken("diagnostic", lead.id) });
     } catch (err) {
       console.error("diagnostic save error:", err);
       res.status(500).json({ message: "Erreur lors de la sauvegarde" });
     }
   });
 
-  app.patch("/api/diagnostic/complete/:id", async (req, res) => {
+  app.patch("/api/diagnostic/complete/:id", publicToolLimiter, async (req, res) => {
     try {
       const id = Number(req.params.id);
+      if (!verifyPublicAccessToken("diagnostic", id, publicAccessTokenFromRequest(req))) {
+        return res.status(403).json({ message: "Invalid or expired lead access token" });
+      }
       const { answers, totalScore, level, riskIndex } = req.body;
 
       await db.update(diagnosticLeads).set({

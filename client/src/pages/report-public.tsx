@@ -76,12 +76,15 @@ function ProfitabilitySection({ data, currency }: { data: any; currency: string 
 
 export default function PublicReportPage() {
   const { leadId } = useParams<{ leadId: string }>();
+  const leadAccessToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("token")
+    : null;
   const [copied, setCopied] = useState(false);
   const [showDetail, setShowDetail] = useState(true);
 
   const { data, isLoading, isError } = useQuery<any>({
-    queryKey: ["/api/calculator/report", leadId],
-    queryFn: () => fetch(`/api/calculator/report/${leadId}`).then(r => {
+    queryKey: ["/api/calculator/report", leadId, leadAccessToken],
+    queryFn: () => fetch(`/api/calculator/report/${leadId}?token=${encodeURIComponent(leadAccessToken || "")}`).then(r => {
       if (!r.ok) throw new Error("Rapport introuvable");
       return r.json();
     }),
@@ -210,7 +213,11 @@ export default function PublicReportPage() {
           </Button>
           {data.expertUrl && (
             <a href={data.expertUrl} target="_blank" rel="noopener noreferrer"
-              onClick={() => fetch(`/api/calculator/track-expert-contact/${data.leadId}`, { method: "POST" }).catch(() => {})}>
+              onClick={() => fetch(`/api/calculator/track-expert-contact/${data.leadId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ leadAccessToken }),
+              }).catch(() => {})}>
               <Button size="lg" className="w-full h-14 gap-3 bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/25" data-testid="button-expert">
                 <WaIcon className="w-5 h-5 fill-white flex-shrink-0" />
                 <div className="text-left">

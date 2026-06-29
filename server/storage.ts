@@ -51,10 +51,12 @@ export interface IStorage {
 
   getCustomerOrders(customerId: number): Promise<any[]>;
 
+  getGarmentItem(id: number): Promise<GarmentItem | undefined>;
   markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined>;
   resolveGarmentReturn(id: number): Promise<GarmentItem | undefined>;
 
   getExpenditures(): Promise<Expenditure[]>;
+  getExpenditure(id: number): Promise<Expenditure | undefined>;
   createExpenditure(expenditure: InsertExpenditure): Promise<Expenditure>;
   updateExpenditure(id: number, data: Partial<InsertExpenditure>): Promise<Expenditure | undefined>;
 
@@ -646,6 +648,11 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getGarmentItem(id: number): Promise<GarmentItem | undefined> {
+    const [item] = await db.select().from(garmentItems).where(eq(garmentItems.id, id));
+    return item;
+  }
+
   async markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined> {
     const [updated] = await db.update(garmentItems).set({
       returnedForTreatment: true,
@@ -697,6 +704,11 @@ export class DatabaseStorage implements IStorage {
 
   async getExpenditures(): Promise<Expenditure[]> {
     return await db.select().from(expenditures).orderBy(desc(expenditures.date));
+  }
+
+  async getExpenditure(id: number): Promise<Expenditure | undefined> {
+    const [expenditure] = await db.select().from(expenditures).where(eq(expenditures.id, id));
+    return expenditure;
   }
 
   async createExpenditure(insertExpenditure: InsertExpenditure): Promise<Expenditure> {

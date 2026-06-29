@@ -182,6 +182,7 @@ export default function CalculatorPage() {
   const [stage,   setStage  ] = useState<Stage>("hero");
   const [form,    setForm   ] = useState<CalcForm>(EMPTY_FORM);
   const [leadId,  setLeadId ] = useState<number|null>(null);
+  const [leadAccessToken, setLeadAccessToken] = useState<string|null>(null);
   const [report,  setReport ] = useState<any>(null);
   const [error,   setError  ] = useState<string|null>(null);
   const [saving,  setSaving ] = useState(false);
@@ -246,6 +247,7 @@ export default function CalculatorPage() {
           budget:      form.budget,
           experience:  form.experience,
           language:    publicLangCode(i18n.language),
+          leadAccessToken,
         }),
       });
       const data = await res.json();
@@ -284,6 +286,7 @@ export default function CalculatorPage() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.message);
       setLeadId(d.leadId);
+      setLeadAccessToken(d.leadAccessToken);
       if (form.email) setUnlocked(true);
       return true;
     } catch (e: any) {
@@ -295,11 +298,11 @@ export default function CalculatorPage() {
   }
 
   async function updateLead() {
-    if (!leadId) return;
+    if (!leadId || !leadAccessToken) return;
     await fetch(`/api/calculator/update-lead/${leadId}`, {
       method:"PATCH",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ pressingType: form.pressingType, dailyCapacity: form.pressingSize, completedPage: 3 }),
+      body:JSON.stringify({ pressingType: form.pressingType, dailyCapacity: form.pressingSize, completedPage: 3, leadAccessToken }),
     }).catch(()=>{});
   }
 
