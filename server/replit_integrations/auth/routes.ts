@@ -8,6 +8,12 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { rateLimit } from "../../lib/rate-limit";
+import {
+  CURRENT_LEGAL_DOCUMENTS,
+  clientIp,
+  getCurrentLegalAcceptanceStatus,
+  recordCurrentLegalAcceptance,
+} from "../../lib/legal";
 
 async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
   if (!organisationId) return null;
@@ -56,7 +62,9 @@ async function buildUserResponse(userId: string) {
   if (isOrgOwner && user.organisationId) {
     allSites = await storage.getSites(user.organisationId);
   }
-  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites };
+  const legalAcceptance = await getCurrentLegalAcceptanceStatus(userId);
+
+  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites, legalAcceptance };
 }
 
 async function ensureUserOrganisation(userId: string) {
@@ -219,9 +227,12 @@ const passwordResetLimiter = rateLimit({
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName, phone, businessName } = req.body;
+      const { email, password, firstName, lastName, phone, businessName, acceptedLegal } = req.body;
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
+      }
+      if (acceptedLegal !== true) {
+        return res.status(400).json({ message: "You must accept the current Terms, Privacy Policy, and Cookie Policy to create an account." });
       }
       const passwordError = validatePassword(String(password));
       if (passwordError) {
@@ -248,6 +259,19 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
+
+      const userAfterOrg = await authStorage.getUser(user.id);
+      await recordCurrentLegalAcceptance({
+        userId: user.id,
+        organisationId: userAfterOrg?.organisationId ?? null,
+        siteId: userAfterOrg?.currentSiteId ?? null,
+        source: "registration",
+        ipAddress: clientIp(req),
+        userAgent: req.get("user-agent") ?? null,
+        metadata: {
+          documents: CURRENT_LEGAL_DOCUMENTS.documents,
+        },
+      });
 
       const response = await buildUserResponse(user.id);
 

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Shirt, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,16 +31,25 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (tab === "register" && !acceptedLegal) {
+      toast({
+        title: t("error"),
+        description: "You must accept the Terms of Service, Privacy Policy, and Cookie Policy to create an account.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const endpoint = tab === "login" ? "/api/auth/login" : "/api/auth/register";
       const body =
         tab === "login"
           ? { email, password }
-          : { email, password, firstName, lastName, phone, businessName };
+          : { email, password, firstName, lastName, phone, businessName, acceptedLegal };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -193,10 +204,36 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           </div>
         )}
 
+        {tab === "register" && (
+          <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
+            <Checkbox
+              id="registration-legal-acceptance"
+              checked={acceptedLegal}
+              onCheckedChange={(checked) => setAcceptedLegal(checked === true)}
+              data-testid="checkbox-registration-legal"
+            />
+            <Label htmlFor="registration-legal-acceptance" className="text-xs leading-relaxed text-muted-foreground">
+              I have read and agree to the{" "}
+              <a className="font-semibold text-primary hover:underline" href="/terms" target="_blank" rel="noopener noreferrer">
+                Terms of Service
+              </a>
+              ,{" "}
+              <a className="font-semibold text-primary hover:underline" href="/privacy" target="_blank" rel="noopener noreferrer">
+                Privacy Policy
+              </a>
+              , and{" "}
+              <a className="font-semibold text-primary hover:underline" href="/cookies" target="_blank" rel="noopener noreferrer">
+                Cookie Policy
+              </a>
+              .
+            </Label>
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full h-11 font-semibold text-sm mt-1"
-          disabled={submitting}
+          disabled={submitting || (tab === "register" && !acceptedLegal)}
           data-testid="button-auth-submit"
         >
           {submitting ? (

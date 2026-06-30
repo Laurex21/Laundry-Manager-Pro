@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
+import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -398,6 +399,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </main>
 
       <WhatsAppContactButton />
+      <LegalAcceptanceGate />
 
       {/* Mobile bottom nav */}
       <nav

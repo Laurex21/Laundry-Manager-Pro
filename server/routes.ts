@@ -6,6 +6,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
+import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
 import { parseLocalDateParam } from "./lib/reporting-date";
@@ -263,6 +264,7 @@ async function seedDatabase() {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerLegalRoutes(app);
   registerCalculatorRoutes(app);
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);

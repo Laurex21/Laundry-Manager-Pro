@@ -313,6 +313,39 @@ export const siteInvitations = pgTable("site_invitations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const legalDocuments = pgTable("legal_documents", {
+  id: serial("id").primaryKey(),
+  documentType: varchar("document_type", { length: 30 }).notNull(),
+  version: varchar("version", { length: 80 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  effectiveAt: timestamp("effective_at").notNull(),
+  contentUrl: varchar("content_url", { length: 500 }).notNull(),
+  documentHash: varchar("document_hash", { length: 64 }).notNull(),
+  isRequired: boolean("is_required").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_legal_documents_type_version").on(table.documentType, table.version),
+]);
+
+export const legalAcceptances = pgTable("legal_acceptances", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  organisationId: integer("organisation_id"),
+  siteId: integer("site_id"),
+  termsVersion: varchar("terms_version", { length: 80 }).notNull(),
+  privacyVersion: varchar("privacy_version", { length: 80 }).notNull(),
+  cookieVersion: varchar("cookie_version", { length: 80 }).notNull(),
+  documentHash: varchar("document_hash", { length: 64 }).notNull(),
+  source: varchar("source", { length: 40 }).notNull(),
+  ipAddress: varchar("ip_address", { length: 100 }),
+  userAgent: text("user_agent"),
+  metadata: jsonb("metadata").notNull().default({}),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+}, (table) => [
+  index("idx_legal_acceptances_user_versions").on(table.userId, table.termsVersion, table.privacyVersion, table.cookieVersion),
+  index("idx_legal_acceptances_organisation").on(table.organisationId),
+]);
+
 // Relations
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
@@ -424,6 +457,7 @@ export const insertBusinessSettingsSchema = createInsertSchema(businessSettings)
 export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, createdAt: true });
 export const insertSiteMemberSchema = createInsertSchema(siteMembers).omit({ id: true, createdAt: true });
 export const insertSiteInvitationSchema = createInsertSchema(siteInvitations).omit({ id: true, createdAt: true });
+export const insertLegalAcceptanceSchema = createInsertSchema(legalAcceptances).omit({ id: true, acceptedAt: true });
 
 // Types
 export type Customer = typeof customers.$inferSelect;
@@ -480,6 +514,9 @@ export type Site = typeof sites.$inferSelect;
 export type SiteMember = typeof siteMembers.$inferSelect;
 export type SiteInvitation = typeof siteInvitations.$inferSelect;
 export type InsertSite = z.infer<typeof insertSiteSchema>;
+export type LegalDocument = typeof legalDocuments.$inferSelect;
+export type LegalAcceptance = typeof legalAcceptances.$inferSelect;
+export type InsertLegalAcceptance = z.infer<typeof insertLegalAcceptanceSchema>;
 
 export type OrderWithCustomer = Order & { customer: Customer };
 export type PaymentWithEmployee = Payment & { collectedByEmployee?: Employee | null };

@@ -131,6 +131,50 @@ async function ensureAuthSchema() {
       created_at timestamp DEFAULT now()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS legal_documents (
+      id serial PRIMARY KEY,
+      document_type varchar(30) NOT NULL,
+      version varchar(80) NOT NULL,
+      title varchar(255) NOT NULL,
+      effective_at timestamp NOT NULL,
+      content_url varchar(500) NOT NULL,
+      document_hash varchar(64) NOT NULL,
+      is_required boolean NOT NULL DEFAULT true,
+      created_at timestamp DEFAULT now(),
+      CONSTRAINT legal_documents_document_type_version_unique UNIQUE (document_type, version)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS legal_acceptances (
+      id serial PRIMARY KEY,
+      user_id varchar NOT NULL REFERENCES users(id),
+      organisation_id integer,
+      site_id integer,
+      terms_version varchar(80) NOT NULL,
+      privacy_version varchar(80) NOT NULL,
+      cookie_version varchar(80) NOT NULL,
+      document_hash varchar(64) NOT NULL,
+      source varchar(40) NOT NULL,
+      ip_address varchar(100),
+      user_agent text,
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      accepted_at timestamp DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    INSERT INTO legal_documents (document_type, version, title, effective_at, content_url, document_hash, is_required)
+    VALUES
+      ('terms', '1.0-enterprise-2026-06-30', 'XpressPro Terms of Service', '2026-06-30 00:00:00', '/terms', 'bf7328dc39d69b2d8691d92553c04c92998fe6512eaa461a97c3a86bbc521e39', true),
+      ('privacy', '1.0-2026-06-30', 'XpressPro Privacy Policy', '2026-06-30 00:00:00', '/privacy', 'bf7328dc39d69b2d8691d92553c04c92998fe6512eaa461a97c3a86bbc521e39', true),
+      ('cookies', '1.0-2026-06-30', 'XpressPro Cookie Policy', '2026-06-30 00:00:00', '/cookies', 'bf7328dc39d69b2d8691d92553c04c92998fe6512eaa461a97c3a86bbc521e39', true)
+    ON CONFLICT (document_type, version) DO UPDATE SET
+      title = EXCLUDED.title,
+      effective_at = EXCLUDED.effective_at,
+      content_url = EXCLUDED.content_url,
+      document_hash = EXCLUDED.document_hash,
+      is_required = EXCLUDED.is_required
+  `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_employee_activities_site_date ON employee_activities(site_id, action_date)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_employee_activities_employee_date ON employee_activities(employee_id, action_date)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_machine_usage_site_date ON machine_usage(site_id, usage_date)`);
@@ -138,6 +182,9 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_documents_type_version ON legal_documents(document_type, version)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user_versions ON legal_acceptances(user_id, terms_version, privacy_version, cookie_version)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_acceptances_organisation ON legal_acceptances(organisation_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_clients_last_visit ON customers(last_visit_at)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_site_status_ready ON orders(site_id, status, ready_at) WHERE status = 'ready'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)`);
@@ -222,6 +269,29 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     req.organisationSiteIds = organisationSiteIds.length > 0 ? organisationSiteIds : authorizedSiteIds;
     req.siteScope = currentSiteId === null ? authorizedSiteIds : [Number(currentSiteId)].filter((siteId) => authorizedSiteIds.includes(siteId));
     req.organisationSiteScope = req.organisationSiteIds;
+
+    const legalBypassPaths = new Set([
+      "/api/auth/user",
+      "/api/auth/logout",
+      "/api/legal/current",
+      "/api/legal/status",
+      "/api/legal/accept",
+    ]);
+    if (!legalBypassPaths.has(req.path)) {
+      const { CURRENT_LEGAL_DOCUMENTS, getCurrentLegalAcceptance } = await import("../../lib/legal");
+      const legalAcceptance = await getCurrentLegalAcceptance(req.userId);
+      if (!legalAcceptance) {
+        return res.status(428).json({
+          code: "TERMS_REQUIRED",
+          message: "You must accept the current Terms, Privacy Policy, and Cookie Policy to continue.",
+          legalAcceptance: {
+            required: true,
+            acceptedAt: null,
+            current: CURRENT_LEGAL_DOCUMENTS,
+          },
+        });
+      }
+    }
   } catch (error) {
     console.error("Tenant scope resolution failed:", error);
     return res.status(500).json({ message: "Failed to resolve tenant scope" });

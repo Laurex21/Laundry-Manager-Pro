@@ -17,6 +17,7 @@ const Dashboard         = lazy(() => import("@/pages/dashboard"));
 const AuthPage          = lazy(() => import("@/pages/auth-page"));
 const StaffLogin        = lazy(() => import("@/pages/staff-login"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
+const LegalPage         = lazy(() => import("@/pages/legal"));
 const CalculatorPage    = lazy(() => import("@/pages/calculator"));
 const DiagnosticPage    = lazy(() => import("@/pages/diagnostic"));
 const RentabilitePage   = lazy(() => import("@/pages/rentabilite"));
@@ -146,6 +147,9 @@ function Router() {
         <Route path="/calculator" component={CalculatorRedirect} />
         <Route path="/rapport/:leadId" component={PublicReportPage} />
         <Route path="/auth" component={AuthPage} />
+        <Route path="/terms" component={LegalPage} />
+        <Route path="/privacy" component={LegalPage} />
+        <Route path="/cookies" component={LegalPage} />
         <Route path="/staff-login" component={StaffLogin} />
         <Route path="/reset-password" component={ResetPasswordPage} />
         <Route path="/reset-password/:token" component={ResetPasswordPage} />

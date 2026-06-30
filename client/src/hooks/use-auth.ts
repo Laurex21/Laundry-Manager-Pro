@@ -1,6 +1,27 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 
+export interface LegalAcceptanceState {
+  required: boolean;
+  acceptedAt: string | null;
+  current: {
+    termsVersion: string;
+    privacyVersion: string;
+    cookieVersion: string;
+    effectiveDate: string;
+    documentHash: string;
+    fullDocumentUrl: string;
+    documents: { type: string; title: string; version: string; url: string }[];
+  };
+}
+
+export type AuthUser = User & {
+  planSlug?: string;
+  currentSite?: any;
+  allSites?: any[];
+  legalAcceptance?: LegalAcceptanceState;
+};
+
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
@@ -26,7 +47,7 @@ async function logoutFn(): Promise<void> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useQuery<(User & { planSlug?: string; currentSite?: any; allSites?: any[] }) | null>({
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
