@@ -38,7 +38,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
     if (tab === "register" && !acceptedLegal) {
       toast({
         title: t("error"),
-        description: "You must accept the Terms of Service, Privacy Policy, and Cookie Policy to create an account.",
+        description: t("legal_acceptance_required_register"),
         variant: "destructive",
       });
       return;
@@ -213,17 +213,17 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
               data-testid="checkbox-registration-legal"
             />
             <Label htmlFor="registration-legal-acceptance" className="text-xs leading-relaxed text-muted-foreground">
-              I have read and agree to the{" "}
+              {t("legal_acceptance_read_agree_prefix")}{" "}
               <a className="font-semibold text-primary hover:underline" href="/terms" target="_blank" rel="noopener noreferrer">
-                Terms of Service
+                {t("terms_of_service")}
               </a>
               ,{" "}
               <a className="font-semibold text-primary hover:underline" href="/privacy" target="_blank" rel="noopener noreferrer">
-                Privacy Policy
+                {t("privacy_policy")}
               </a>
-              , and{" "}
+              , {t("and")}{" "}
               <a className="font-semibold text-primary hover:underline" href="/cookies" target="_blank" rel="noopener noreferrer">
-                Cookie Policy
+                {t("cookie_policy")}
               </a>
               .
             </Label>

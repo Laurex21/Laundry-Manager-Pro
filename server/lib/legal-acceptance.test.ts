@@ -11,6 +11,7 @@ const schema = readFileSync(join(root, "shared/schema.ts"), "utf8");
 const authPage = readFileSync(join(root, "client/src/pages/auth-page.tsx"), "utf8");
 const legalGate = readFileSync(join(root, "client/src/components/legal-acceptance-gate.tsx"), "utf8");
 const layout = readFileSync(join(root, "client/src/components/layout-shell.tsx"), "utf8");
+const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
 
 assert.match(schema, /export const legalDocuments = pgTable\("legal_documents"/);
 assert.match(schema, /export const legalAcceptances = pgTable\("legal_acceptances"/);
@@ -47,7 +48,14 @@ assert.match(authPage, /\/cookies/);
 assert.match(legalGate, /legal-acceptance-modal/);
 assert.match(legalGate, /\/api\/legal\/accept/);
 assert.match(legalGate, /link-legal-full-document/);
-assert.match(legalGate, /Decline and sign out/);
+assert.match(legalGate, /legal_acceptance_decline_sign_out/);
 assert.match(layout, /<LegalAcceptanceGate \/>/);
+
+assert.match(i18n, /legal_acceptance_required_register/);
+assert.match(i18n, /Conditions d'utilisation mises à jour/);
+assert.match(i18n, /Politique relative aux cookies/);
+assert.doesNotMatch(authPage, /I have read and agree to the/);
+assert.doesNotMatch(legalGate, /Updated Terms of Service/);
+assert.doesNotMatch(legalGate, /Decline and sign out/);
 
 console.log("legal acceptance regression tests passed");
