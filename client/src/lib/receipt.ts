@@ -30,6 +30,22 @@ function formatReceiptDate(date: Date | string | null | undefined, pattern: stri
   return format(value, pattern, { locale: dateLocaleFor(lang) });
 }
 
+function dateOnlyParts(date: Date | string | null | undefined): [number, number, number] | null {
+  if (typeof date !== "string") return null;
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z?)?$/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function formatReceiptDateOnly(date: Date | string | null | undefined, lang: string): string {
+  const parts = dateOnlyParts(date);
+  if (parts) {
+    const [year, month, day] = parts;
+    return format(new Date(year, month - 1, day, 12), "dd/MM/yyyy", { locale: dateLocaleFor(lang) });
+  }
+  return formatReceiptDate(date, "dd/MM/yyyy", lang);
+}
+
 function formatReceiptDateTime(date: Date | string | null | undefined, lang: string): string {
   return formatReceiptDate(date, "dd/MM/yyyy • HH'h'mm", lang);
 }
@@ -482,8 +498,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
-  const entryDate = formatReceiptDateTime(order.entryDate || new Date(), lang);
-  const pickupDate = formatReceiptDateTime(order.pickupDate, lang);
+  const entryDate = formatReceiptDateTime(order.createdAt || order.entryDate || new Date(), lang);
+  const pickupDate = formatReceiptDateOnly(order.pickupDate, lang);
   const registeredBy = agentFirstName(order.createdByEmployee);
   const discount = Number(order.discount || 0);
   const subtotal = orderSubtotal(items);
@@ -679,7 +695,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
-  const entryDate = formatReceiptDateTime(order.entryDate || new Date(), lang);
+  const entryDate = formatReceiptDateTime(order.createdAt || order.entryDate || new Date(), lang);
   const subtotal = orderSubtotal(items);
   const discount = Number(order.discount || 0);
   const pickupCost = Number(order.pickupCost || 0);
@@ -785,8 +801,8 @@ export function generatePaymentReceipt(
   action: ReceiptAction = "download"
 ) {
   const lang = settings.receiptLanguage || "en";
-  const displayEntryDate = formatReceiptDateTime(entryDate, lang);
-  const displayPickupDate = formatReceiptDateTime(pickupDate, lang);
+  const displayEntryDate = dateOnlyParts(entryDate) ? formatReceiptDateOnly(entryDate, lang) : formatReceiptDateTime(entryDate, lang);
+  const displayPickupDate = formatReceiptDateOnly(pickupDate, lang);
   const receivedBy = agentFirstName(payment.agentName);
 
   const itemsHtml = items.map((item: any) => {
