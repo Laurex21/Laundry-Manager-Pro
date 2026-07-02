@@ -264,14 +264,18 @@ async function downloadReceiptPdfFromHtml(html: string, filename: string): Promi
     await new Promise((resolve) => window.setTimeout(resolve, 100));
     await waitForReceiptImages(doc);
 
-    const receipt = doc.querySelector(".receipt") || doc.body;
+    doc.querySelectorAll(".no-print").forEach((element) => {
+      (element as HTMLElement).style.display = "none";
+    });
+    const receipt = doc.querySelector(".receipt");
+    if (!receipt) throw new Error("Receipt PDF source could not be found");
     const html2pdfModule = await import("html2pdf.js");
     const html2pdf = (html2pdfModule as any).default || html2pdfModule;
 
     await html2pdf()
       .set({
         filename,
-        margin: [12, 12, 12, 12],
+        margin: [0, 0, 0, 0],
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: {
           backgroundColor: "#ffffff",
@@ -286,7 +290,7 @@ async function downloadReceiptPdfFromHtml(html: string, filename: string): Promi
           avoid: [".header", ".meta", ".section", ".pipeline-section", ".items-section", ".checklist-section", ".summary", ".payment-section", ".terms", ".footer"],
         },
       })
-      .from(receipt)
+      .from(doc.body)
       .save();
   } finally {
     iframe.remove();
