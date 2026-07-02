@@ -223,6 +223,76 @@ function receiptPrintCss(): string {
   `;
 }
 
+function waitForReceiptImages(doc: Document): Promise<void> {
+  const images = Array.from(doc.images || []);
+  if (images.length === 0) return Promise.resolve();
+
+  return Promise.all(images.map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener("error", () => resolve(), { once: true });
+    });
+  })).then(() => undefined);
+}
+
+async function downloadReceiptPdfFromHtml(html: string, filename: string): Promise<void> {
+  const testCapture = (globalThis as any).__captureReceiptPdfHtml;
+  if (typeof testCapture === "function") {
+    testCapture(html, filename);
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "794px";
+  iframe.style.height = "1123px";
+  iframe.style.opacity = "0";
+  iframe.style.pointerEvents = "none";
+  iframe.setAttribute("aria-hidden", "true");
+
+  try {
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) throw new Error("Receipt PDF frame could not be created");
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
+    await waitForReceiptImages(doc);
+
+    const receipt = doc.querySelector(".receipt") || doc.body;
+    const html2pdfModule = await import("html2pdf.js");
+    const html2pdf = (html2pdfModule as any).default || html2pdfModule;
+
+    await html2pdf()
+      .set({
+        filename,
+        margin: [12, 12, 12, 12],
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: {
+          backgroundColor: "#ffffff",
+          logging: false,
+          scale: 2,
+          useCORS: true,
+          windowWidth: 794,
+        },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: {
+          mode: ["css", "legacy"],
+          avoid: [".header", ".meta", ".section", ".pipeline-section", ".items-section", ".checklist-section", ".summary", ".payment-section", ".terms", ".footer"],
+        },
+      })
+      .from(receipt)
+      .save();
+  } finally {
+    iframe.remove();
+  }
+}
+
 function thermalMoney(amount: number, symbol: string): string {
   const currency = symbol.trim();
   const rounded = Math.round(amount).toLocaleString("fr-FR");
@@ -601,7 +671,9 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `deposit-receipt-order-${displayOrderId}.html`);
+  void downloadReceiptPdfFromHtml(html, `deposit-receipt-order-${displayOrderId}.pdf`).catch(() => {
+    openReceiptPrintWindow(html);
+  });
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -894,5 +966,7 @@ export function generatePaymentReceipt(
     return;
   }
 
-  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `payment-receipt-order-${orderId}.html`);
+  void downloadReceiptPdfFromHtml(html, `payment-receipt-order-${orderId}.pdf`).catch(() => {
+    openReceiptPrintWindow(html);
+  });
 }

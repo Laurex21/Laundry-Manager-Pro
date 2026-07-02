@@ -2,17 +2,8 @@ import assert from "node:assert/strict";
 import { generateDepositReceipt } from "../../client/src/lib/receipt";
 import { DEFAULT_SETTINGS } from "../../client/src/lib/receipt-settings";
 
-let capturedBlob: Blob | null = null;
-
-const originalUrl = globalThis.URL;
-(globalThis as any).URL = {
-  ...originalUrl,
-  createObjectURL(blob: Blob) {
-    capturedBlob = blob;
-    return "blob:test";
-  },
-  revokeObjectURL() {},
-};
+let capturedHtml = "";
+let capturedFilename = "";
 
 (globalThis as any).document = {
   createElement() {
@@ -26,6 +17,11 @@ const originalUrl = globalThis.URL;
     appendChild() {},
     removeChild() {},
   },
+};
+
+(globalThis as any).__captureReceiptPdfHtml = (html: string, filename: string) => {
+  capturedHtml = html;
+  capturedFilename = filename;
 };
 
 generateDepositReceipt({
@@ -48,12 +44,12 @@ generateDepositReceipt({
   showLogo: false,
 }, "download");
 
-assert.ok(capturedBlob, "receipt download should create a blob");
-const html = await capturedBlob.text();
+assert.equal(capturedFilename, "deposit-receipt-order-26.pdf");
+assert.ok(capturedHtml, "receipt download should render HTML into a PDF");
 
-assert.match(html, /Date de commande<\/div><div class="value">30\/06\/2026 • 22h00/);
-assert.match(html, /Retrait prévu<\/div><div class="value">04\/07\/2026<\/div>/);
-assert.doesNotMatch(html, /Retrait prévu<\/div><div class="value">04\/07\/2026 • 0[01]h00/);
-assert.doesNotMatch(html, /Date de commande<\/div><div class="value">30\/06\/2026 • 0[01]h00/);
+assert.match(capturedHtml, /Date de commande<\/div><div class="value">30\/06\/2026 • 22h00/);
+assert.match(capturedHtml, /Retrait prévu<\/div><div class="value">04\/07\/2026<\/div>/);
+assert.doesNotMatch(capturedHtml, /Retrait prévu<\/div><div class="value">04\/07\/2026 • 0[01]h00/);
+assert.doesNotMatch(capturedHtml, /Date de commande<\/div><div class="value">30\/06\/2026 • 0[01]h00/);
 
 console.log("receipt date regression tests passed");
