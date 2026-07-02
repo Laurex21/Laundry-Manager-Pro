@@ -200,6 +200,29 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function receiptPrintCss(): string {
+  return `
+    @page { size: A4; margin: 12mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @media print {
+      html, body { width: 100%; background: #fff !important; }
+      body { padding: 0 !important; }
+      .no-print { display: none !important; }
+      .receipt {
+        width: 100% !important;
+        max-width: 680px !important;
+        margin: 0 auto !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+      }
+      .header, .meta, .pipeline-section, .items-section, .checklist-section, .summary, .payment-section, .section, .terms, .footer {
+        break-inside: avoid;
+      }
+      .items-table tr, .checklist-table tr { break-inside: avoid; }
+    }
+  `;
+}
+
 function thermalMoney(amount: number, symbol: string): string {
   const currency = symbol.trim();
   const rounded = Math.round(amount).toLocaleString("fr-FR");
@@ -372,114 +395,6 @@ function openThermalReceiptPrintWindow(html: string): void {
   win.focus();
 }
 
-type PdfLine = { label?: string; value: string; strong?: boolean };
-type PdfSection = { title: string; lines: PdfLine[] };
-
-function wrapPdfText(text: string, maxChars = 78): string[] {
-  const words = String(text || "").split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
-  words.forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  });
-  if (current) lines.push(current);
-  return lines.length ? lines : [""];
-}
-
-async function downloadReceiptPdf(args: {
-  filename: string;
-  title: string;
-  businessName: string;
-  subtitle?: string;
-  contactLines?: string[];
-  logoBase64?: string | null;
-  sections: PdfSection[];
-  footer: string;
-}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
-  const pdf = await PDFDocument.create();
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const margin = 44;
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - margin;
-
-  const ensureSpace = (space: number) => {
-    if (y - space < margin) {
-      page = pdf.addPage([pageWidth, pageHeight]);
-      y = pageHeight - margin;
-    }
-  };
-  const draw = (text: string, x: number, size = 10, font = regular, color = rgb(0.12, 0.16, 0.22)) => {
-    page.drawText(text.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x, y, size, font, color });
-  };
-
-  page.drawRectangle({ x: 0, y: pageHeight - 118, width: pageWidth, height: 118, color: rgb(0.08, 0.22, 0.45) });
-  let brandX = margin;
-  if (args.logoBase64) {
-    try {
-      const [meta, data] = args.logoBase64.split(",");
-      const bytes = Uint8Array.from(atob(data || meta), c => c.charCodeAt(0));
-      const image = meta?.includes("image/jpeg") || meta?.includes("image/jpg")
-        ? await pdf.embedJpg(bytes)
-        : await pdf.embedPng(bytes);
-      const scale = Math.min(56 / image.width, 42 / image.height);
-      page.drawImage(image, { x: margin, y: pageHeight - 86, width: image.width * scale, height: image.height * scale });
-      brandX = margin + image.width * scale + 14;
-    } catch {
-      brandX = margin;
-    }
-  }
-  page.drawText(args.businessName.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 22, font: bold, color: rgb(1, 1, 1) });
-  y -= 26;
-  if (args.subtitle) {
-    page.drawText(args.subtitle.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 10, font: regular, color: rgb(0.86, 0.91, 0.98) });
-    y -= 15;
-  }
-  (args.contactLines || []).slice(0, 3).forEach((line) => {
-    page.drawText(line.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, ""), { x: brandX, y, size: 8, font: regular, color: rgb(0.86, 0.91, 0.98) });
-    y -= 12;
-  });
-  y = pageHeight - 52;
-  draw(args.title, pageWidth - 230, 16, bold, rgb(1, 1, 1));
-  y = pageHeight - 150;
-
-  args.sections.forEach((section) => {
-    ensureSpace(48);
-    draw(section.title.toUpperCase(), margin, 10, bold, rgb(0.37, 0.45, 0.56));
-    y -= 16;
-    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
-    y -= 14;
-
-    section.lines.forEach((line) => {
-      const prefix = line.label ? `${line.label}: ` : "";
-      const wrapped = wrapPdfText(`${prefix}${line.value}`);
-      wrapped.forEach((wrappedLine, idx) => {
-        ensureSpace(18);
-        draw(wrappedLine, margin + (idx > 0 ? 14 : 0), line.strong ? 11 : 10, line.strong ? bold : regular);
-        y -= 15;
-      });
-    });
-    y -= 8;
-  });
-
-  ensureSpace(28);
-  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: rgb(0.82, 0.86, 0.91) });
-  y -= 18;
-  draw(args.footer, margin, 9, regular, rgb(0.37, 0.45, 0.56));
-
-  const bytes = await pdf.save();
-  downloadBlob(new Blob([bytes], { type: "application/pdf" }), args.filename);
-}
-
 function openReceiptPrintWindow(html: string): void {
   const win = window.open("", "_blank", "width=820,height=900");
   if (!win) return;
@@ -556,7 +471,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   <meta charset="utf-8">
   <title>${depositLabel} - ${orderTitle} ${orderDisplayId(order)}</title>
   <style>
-    @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
+    ${receiptPrintCss()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
     .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); font-weight: 700; }
@@ -859,7 +774,7 @@ export function generatePaymentReceipt(
   <meta charset="utf-8">
   <title>${receiptTitle} - ${orderTitle} ${orderId}</title>
   <style>
-    @media print { body { padding: 0; background: #fff; } .no-print { display: none; } }
+    ${receiptPrintCss()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
     .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); font-weight: 700; }
