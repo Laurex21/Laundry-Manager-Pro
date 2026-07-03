@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock,
-  AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck
+  AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +44,15 @@ function getStageIndex(status: string): number {
   const normalizedStatus = normalizeProductionStatus(status);
   const idx = PIPELINE_STAGES.findIndex(s => s.key === normalizedStatus);
   return idx >= 0 ? idx : 0;
+}
+
+function normalizeWhatsAppPhone(phone?: string | null): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) return digits.slice(2);
+  if (digits.startsWith("237")) return digits;
+  if (digits.startsWith("6")) return `237${digits}`;
+  return digits;
 }
 
 export default function OrderDetail() {
@@ -99,6 +108,10 @@ export default function OrderDetail() {
   const totalRegisteredGarments = (order.garmentItems || []).reduce((sum: number, garment: any) => {
     return sum + Math.max(0, Number(garment.quantity) || 0);
   }, 0);
+  const totalPaid = (order.payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
+  const balanceDue = Math.max(0, Number(order.totalAmount) - totalPaid);
+  const readyWhatsAppPhone = normalizeWhatsAppPhone(order.customer?.phone);
+  const canNotifyCustomer = order.status === "ready" && readyWhatsAppPhone.length >= 8;
 
   function handleAdvanceStatus() {
     if (!nextPipelineStage) return;
@@ -166,6 +179,68 @@ export default function OrderDetail() {
       receiptLanguage: settings?.receiptLanguage || i18n.language,
     };
     generateThermalDepositReceipt(order, symbol, mergedSettings);
+  }
+
+  function buildReadyWhatsAppMessage(): string {
+    const firstName = String(order.customer?.name || "").trim().split(/\s+/)[0] || t("customer").toLowerCase();
+    const displayId = orderDisplayId(order);
+    const balanceText = balanceDue === 0 ? t("fully_paid_label") : `${symbol}${balanceDue.toFixed(2)}`;
+    const businessName = settings?.businessName || "Xpress Pro";
+
+    if (i18n.language.startsWith("fr")) {
+      return [
+        `Bonjour ${firstName},`,
+        "",
+        `Votre commande ${businessName} #${displayId} est prête à récupérer.`,
+        `Solde dû : ${balanceText}.`,
+        "Votre reçu/facture est joint à ce message.",
+        "",
+        "Merci.",
+      ].join("\n");
+    }
+
+    if (i18n.language.startsWith("pt")) {
+      return [
+        `Olá ${firstName},`,
+        "",
+        `A sua encomenda ${businessName} #${displayId} está pronta para recolha.`,
+        `Saldo em dívida: ${balanceText}.`,
+        "O recibo/fatura está anexado a esta mensagem.",
+        "",
+        "Obrigado.",
+      ].join("\n");
+    }
+
+    return [
+      `Hello ${firstName},`,
+      "",
+      `Your ${businessName} order #${displayId} is ready for pickup.`,
+      `Balance due: ${balanceText}.`,
+      "Your receipt/invoice is attached to this message.",
+      "",
+      "Thank you.",
+    ].join("\n");
+  }
+
+  function handleNotifyCustomer() {
+    if (!readyWhatsAppPhone) {
+      toast({ title: t("phone_number"), description: t("customer_phone_missing", "Customer phone number is missing."), variant: "destructive" });
+      return;
+    }
+
+    const mergedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(settings || {}),
+      receiptLanguage: settings?.receiptLanguage || i18n.language,
+    };
+    generateDepositReceipt(order, symbol, mergedSettings, "download");
+
+    const whatsappUrl = `https://wa.me/${readyWhatsAppPhone}?text=${encodeURIComponent(buildReadyWhatsAppMessage())}`;
+    const opened = window.open(whatsappUrl, "_blank");
+    if (opened) opened.opener = null;
+    if (!opened) {
+      toast({ title: "WhatsApp", description: t("popup_blocked", "Allow popups to open WhatsApp.") });
+    }
   }
 
   async function handleRequestCancellation() {
@@ -248,6 +323,18 @@ export default function OrderDetail() {
           <Button variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
             <Printer className="w-4 h-4 mr-2" /> {t("print_thermal_receipt")}
           </Button>
+          {order.status === "ready" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNotifyCustomer}
+              disabled={!canNotifyCustomer}
+              title={!canNotifyCustomer ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
+              data-testid="button-notify-customer-whatsapp"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer", "Notify customer")}
+            </Button>
+          )}
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />
         </div>
@@ -557,8 +644,6 @@ export default function OrderDetail() {
       )}
 
       {(() => {
-        const totalPaid = (order.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-        const balance = Math.max(0, Number(order.totalAmount) - totalPaid);
         const pickupCost = Number(order.pickupCost || 0);
         const discount = Number(order.discount || 0);
         const originalSubtotal = Number(order.originalPrice || 0) || (Number(order.totalAmount) + discount - pickupCost);
@@ -594,9 +679,9 @@ export default function OrderDetail() {
                   <span className="font-mono font-semibold">-{symbol}{totalPaid.toFixed(2)}</span>
                 </div>
               )}
-              <div className={`flex justify-between text-base font-bold border-t pt-2 ${balance === 0 ? "text-green-600" : "text-destructive"}`}>
+              <div className={`flex justify-between text-base font-bold border-t pt-2 ${balanceDue === 0 ? "text-green-600" : "text-destructive"}`}>
                 <span>{t("balance_due")}</span>
-                <span className="font-mono">{balance === 0 ? `✓ ${t("fully_paid_label")}` : `${symbol}${balance.toFixed(2)}`}</span>
+                <span className="font-mono">{balanceDue === 0 ? `✓ ${t("fully_paid_label")}` : `${symbol}${balanceDue.toFixed(2)}`}</span>
               </div>
             </CardContent>
           </Card>
