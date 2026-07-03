@@ -2,6 +2,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { pool } from "../../db";
+import { ensureOrderItemQuantitySupportsDecimals } from "../../lib/order-item-quantity-schema";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
@@ -75,22 +76,7 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS total_revenue numeric(12, 2) NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS avg_deposit_hour numeric(5, 2)
   `);
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'order_items'
-          AND column_name = 'quantity'
-          AND (data_type <> 'numeric' OR numeric_precision <> 10 OR numeric_scale <> 2)
-      ) THEN
-        ALTER TABLE order_items
-        ALTER COLUMN quantity TYPE numeric(10, 2)
-        USING quantity::numeric;
-      END IF;
-    END $$;
-  `);
+  await ensureOrderItemQuantitySupportsDecimals();
   await pool.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS ready_at timestamp,

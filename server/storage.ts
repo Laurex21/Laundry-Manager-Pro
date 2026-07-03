@@ -26,6 +26,7 @@ import { users, type User } from "@shared/models/auth";
 import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
 import { formatReportingDay } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
+import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
@@ -303,6 +304,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
+    await ensureOrderItemQuantitySupportsDecimals();
     const created = await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
       let orderWithNumber = { ...order, orderNumber: order.id };
