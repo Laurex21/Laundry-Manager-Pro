@@ -223,19 +223,6 @@ function receiptPrintCss(): string {
   `;
 }
 
-function waitForReceiptImages(doc: Document): Promise<void> {
-  const images = Array.from(doc.images || []);
-  if (images.length === 0) return Promise.resolve();
-
-  return Promise.all(images.map((image) => {
-    if (image.complete) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      image.addEventListener("load", () => resolve(), { once: true });
-      image.addEventListener("error", () => resolve(), { once: true });
-    });
-  })).then(() => undefined);
-}
-
 async function downloadReceiptPdfFromHtml(html: string, filename: string): Promise<void> {
   const testCapture = (globalThis as any).__captureReceiptPdfHtml;
   if (typeof testCapture === "function") {
@@ -243,58 +230,41 @@ async function downloadReceiptPdfFromHtml(html: string, filename: string): Promi
     return;
   }
 
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.left = "-10000px";
-  iframe.style.top = "0";
-  iframe.style.width = "794px";
-  iframe.style.height = "1123px";
-  iframe.style.opacity = "0";
-  iframe.style.pointerEvents = "none";
-  iframe.setAttribute("aria-hidden", "true");
+  const printHtml = stripNoPrintElements(html);
 
-  try {
-    document.body.appendChild(iframe);
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) throw new Error("Receipt PDF frame could not be created");
+  const response = await fetch("/api/receipts/render-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ html: printHtml, filename }),
+  });
 
-    doc.open();
-    doc.write(html);
-    doc.close();
-    await new Promise((resolve) => window.setTimeout(resolve, 100));
-    await waitForReceiptImages(doc);
-
-    doc.querySelectorAll(".no-print").forEach((element) => {
-      (element as HTMLElement).style.display = "none";
-    });
-    const receipt = doc.querySelector(".receipt");
-    if (!receipt) throw new Error("Receipt PDF source could not be found");
-    const html2pdfModule = await import("html2pdf.js");
-    const html2pdf = (html2pdfModule as any).default || html2pdfModule;
-
-    await html2pdf()
-      .set({
-        filename,
-        margin: [0, 0, 0, 0],
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: {
-          backgroundColor: "#ffffff",
-          logging: false,
-          scale: 2,
-          useCORS: true,
-          windowWidth: 794,
-        },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        pagebreak: {
-          mode: ["css", "legacy"],
-          avoid: [".header", ".meta", ".section", ".pipeline-section", ".items-section", ".checklist-section", ".summary", ".payment-section", ".terms", ".footer"],
-        },
-      })
-      .from(doc.body)
-      .save();
-  } finally {
-    iframe.remove();
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new Error(`Failed to generate PDF: ${message || response.status}`);
   }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function stripNoPrintElements(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  doc.querySelectorAll(".no-print").forEach((element) => {
+    (element as HTMLElement).style.display = "none";
+  });
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
 }
 
 function thermalMoney(amount: number, symbol: string): string {
