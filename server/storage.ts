@@ -936,7 +936,7 @@ export class DatabaseStorage implements IStorage {
         .from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id))
         .where(sql`${orderItems.orderId} IN (${sql.join(orderIds.map(id => sql`${id}`), sql`, `)})`);
       const serviceMap = new Map<string, number>();
-      for (const item of items) serviceMap.set(item.serviceName, (serviceMap.get(item.serviceName) || 0) + item.quantity);
+      for (const item of items) serviceMap.set(item.serviceName, (serviceMap.get(item.serviceName) || 0) + Number(item.quantity || 0));
       serviceDistribution = Array.from(serviceMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     }
 
@@ -1466,7 +1466,7 @@ export class DatabaseStorage implements IStorage {
     const serviceRows = await db.select({
       name: services.name,
       revenue: sql<string>`COALESCE(SUM(${orderItems.quantity} * ${orderItems.priceAtOrder}), 0)`,
-      quantity: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)`,
+      quantity: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)::float8`,
     }).from(orderItems)
       .innerJoin(services, eq(orderItems.serviceId, services.id))
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
@@ -1765,7 +1765,7 @@ export class DatabaseStorage implements IStorage {
       db.select({ count: sql<number>`count(*)::int` }).from(orders),
       db.select({ count: sql<number>`count(*)::int` }).from(customers),
       db.select({ count: sql<number>`count(*)::int` }).from(payments),
-      db.select({ total: sql<number>`coalesce(sum(${orderItems.quantity}),0)::int` }).from(orderItems),
+      db.select({ total: sql<number>`coalesce(sum(${orderItems.quantity}),0)::float8` }).from(orderItems),
     ]);
     const laundries = await db
       .select({ count: sql<number>`count(*)::int` })

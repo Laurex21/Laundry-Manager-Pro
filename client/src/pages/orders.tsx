@@ -673,7 +673,8 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
                           <FormControl>
                             <Input
                               type="number"
-                              min="1"
+                              min="0.01"
+                              step="0.01"
                               className="h-9"
                               {...field}
                               onChange={e => field.onChange(Number(e.target.value))}

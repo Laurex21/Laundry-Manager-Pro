@@ -76,6 +76,22 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS avg_deposit_hour numeric(5, 2)
   `);
   await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'order_items'
+          AND column_name = 'quantity'
+          AND (data_type <> 'numeric' OR numeric_precision <> 10 OR numeric_scale <> 2)
+      ) THEN
+        ALTER TABLE order_items
+        ALTER COLUMN quantity TYPE numeric(10, 2)
+        USING quantity::numeric;
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS ready_at timestamp,
     ADD COLUMN IF NOT EXISTS delivered_at timestamp,

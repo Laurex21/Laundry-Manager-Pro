@@ -90,7 +90,7 @@ export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => orders.id),
   serviceId: integer("service_id").notNull().references(() => services.id),
-  quantity: integer("quantity").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2, mode: "number" }).notNull(),
   priceAtOrder: decimal("price_at_order", { precision: 10, scale: 2 }).notNull(),
 });
 
