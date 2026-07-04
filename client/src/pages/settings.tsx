@@ -827,7 +827,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 page-fade-in">
       <div>
         <h1 className="text-2xl sm:text-3xl font-display font-bold">{t("settings")}</h1>
         <p className="text-muted-foreground mt-1">{t("settings_subtitle")}</p>

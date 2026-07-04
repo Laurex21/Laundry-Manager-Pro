@@ -377,7 +377,7 @@ export default function OrderDetail() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 page-fade-in">
       <div className="flex flex-wrap items-center gap-4">
         <Link href="/orders">
           <Button variant="ghost" size="icon" data-testid="button-back-orders">

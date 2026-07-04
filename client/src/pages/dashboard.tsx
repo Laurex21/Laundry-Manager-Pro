@@ -58,7 +58,7 @@ export default function Dashboard() {
   const ordersByStatus = dashData?.ordersByStatus;
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
+    <div className="space-y-4 page-fade-in">
 
       {/* Header */}
       <div className="flex items-center justify-between min-h-[2rem]">

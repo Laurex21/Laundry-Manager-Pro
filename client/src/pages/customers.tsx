@@ -53,7 +53,7 @@ export default function Customers() {
   const totalCount = customers?.length ?? 0;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 page-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-display font-bold leading-tight">{t("customers")}</h1>

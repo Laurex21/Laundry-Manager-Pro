@@ -92,7 +92,7 @@ export default function CustomerDetail() {
 
   if (customerLoading) {
     return (
-      <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="space-y-6 page-fade-in">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-32 w-full" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -149,7 +149,7 @@ export default function CustomerDetail() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 page-fade-in">
       <div className="flex items-center gap-2 mb-2">
         <Button variant="ghost" size="icon" onClick={() => navigate("/customers")} data-testid="button-back">
           <ArrowLeft className="w-4 h-4" />

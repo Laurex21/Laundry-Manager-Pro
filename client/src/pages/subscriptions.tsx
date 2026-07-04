@@ -42,7 +42,7 @@ export default function Subscriptions() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 page-fade-in">
       <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-subscriptions-title">{t("subscription")}</h1>
 
       {currentSub && (

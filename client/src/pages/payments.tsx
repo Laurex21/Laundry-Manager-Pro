@@ -225,7 +225,7 @@ export default function Payments() {
   }, [remainingBalance, t]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 page-fade-in">
       <div>
         <h1 className="text-2xl font-display font-bold leading-tight">{t("payments")}</h1>
         <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
