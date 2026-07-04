@@ -257,7 +257,7 @@ export default function Orders() {
                   title={!createdOrderWhatsAppPhone ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
                   data-testid="button-send-order-confirmation-whatsapp"
                 >
-                  <MessageCircle className="w-4 h-4 mr-2" /> {t("send_whatsapp_confirmation", "Send WhatsApp confirmation")}
+                  <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer", "Notifier Client")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">

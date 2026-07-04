@@ -111,8 +111,8 @@ export default function OrderDetail() {
   const totalPaid = (order.payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
   const balanceDue = Math.max(0, Number(order.totalAmount) - totalPaid);
   const readyWhatsAppPhone = normalizeWhatsAppPhone(order.customer?.phone);
-  const canNotifyCustomer = order.status === "ready" && readyWhatsAppPhone.length >= 8;
-  const canSendOrderConfirmation = !["ready", "delivered", "cancelled", "canceled"].includes(order.status) && readyWhatsAppPhone.length >= 8;
+  const canShowCustomerNotification = !["cancelled", "canceled", "cancellation_requested"].includes(order.status);
+  const canNotifyCustomer = canShowCustomerNotification && readyWhatsAppPhone.length >= 8;
 
   function handleAdvanceStatus() {
     if (!nextPipelineStage) return;
@@ -182,118 +182,65 @@ export default function OrderDetail() {
     generateThermalDepositReceipt(order, symbol, mergedSettings);
   }
 
-  function buildReadyWhatsAppMessage(): string {
+  function buildCustomerWhatsAppMessage(): string {
     const firstName = String(order.customer?.name || "").trim().split(/\s+/)[0] || t("customer").toLowerCase();
     const displayId = orderDisplayId(order);
-    const balanceText = balanceDue === 0 ? t("fully_paid_label") : `${symbol}${balanceDue.toFixed(2)}`;
     const businessName = settings?.businessName || "Xpress Pro";
-
-    if (i18n.language.startsWith("fr")) {
-      return [
-        `Bonjour ${firstName},`,
-        "",
-        `Votre commande ${businessName} #${displayId} est prête à récupérer.`,
-        `Solde dû : ${balanceText}.`,
-        "Votre reçu/facture est joint à ce message.",
-        "",
-        "Merci.",
-      ].join("\n");
-    }
-
-    if (i18n.language.startsWith("pt")) {
-      return [
-        `Olá ${firstName},`,
-        "",
-        `A sua encomenda ${businessName} #${displayId} está pronta para recolha.`,
-        `Saldo em dívida: ${balanceText}.`,
-        "O recibo/fatura está anexado a esta mensagem.",
-        "",
-        "Obrigado.",
-      ].join("\n");
-    }
-
-    return [
-      `Hello ${firstName},`,
-      "",
-      `Your ${businessName} order #${displayId} is ready for pickup.`,
-      `Balance due: ${balanceText}.`,
-      "Your receipt/invoice is attached to this message.",
-      "",
-      "Thank you.",
-    ].join("\n");
-  }
-
-  function buildOrderConfirmationWhatsAppMessage(): string {
-    const firstName = String(order.customer?.name || "").trim().split(/\s+/)[0] || t("customer").toLowerCase();
-    const displayId = orderDisplayId(order);
     const total = Number(order.totalAmount) || 0;
-    const paid = totalPaid;
-    const balance = balanceDue;
-    const businessName = settings?.businessName || "Xpress Pro";
+    const normalizedStatus = normalizeProductionStatus(order.status);
+    const stageLabel = t(`stage_${normalizedStatus}`, String(normalizedStatus));
+    const paidText = `${symbol}${totalPaid.toFixed(2)}`;
+    const totalText = `${symbol}${total.toFixed(2)}`;
+    const balanceText = balanceDue === 0 ? t("fully_paid_label") : `${symbol}${balanceDue.toFixed(2)}`;
 
     if (i18n.language.startsWith("fr")) {
+      const statusLine = normalizedStatus === "ready"
+        ? `Votre commande ${businessName} #${displayId} est prête à récupérer.`
+        : normalizedStatus === "delivered"
+          ? `Votre commande ${businessName} #${displayId} a été livrée.`
+          : `Votre commande ${businessName} #${displayId} est actuellement à l'étape : ${stageLabel}.`;
       return [
         `Bonjour ${firstName},`,
         "",
-        `Votre commande ${businessName} #${displayId} a bien été enregistrée.`,
-        `Total : ${symbol}${total.toFixed(2)}.`,
-        `Payé : ${symbol}${paid.toFixed(2)}.`,
-        `Solde : ${balance === 0 ? "entièrement payé" : `${symbol}${balance.toFixed(2)}`}.`,
+        statusLine,
+        `État facture : total ${totalText}, payé ${paidText}, solde ${balanceText}.`,
         "Votre reçu/facture est joint à ce message.",
-        "Nous vous informerons quand la commande sera prête à récupérer.",
         "",
         "Merci.",
       ].join("\n");
     }
 
     if (i18n.language.startsWith("pt")) {
+      const statusLine = normalizedStatus === "ready"
+        ? `A sua encomenda ${businessName} #${displayId} está pronta para recolha.`
+        : normalizedStatus === "delivered"
+          ? `A sua encomenda ${businessName} #${displayId} foi entregue.`
+          : `A sua encomenda ${businessName} #${displayId} está atualmente na etapa: ${stageLabel}.`;
       return [
         `Olá ${firstName},`,
         "",
-        `A sua encomenda ${businessName} #${displayId} foi registada.`,
-        `Total: ${symbol}${total.toFixed(2)}.`,
-        `Pago: ${symbol}${paid.toFixed(2)}.`,
-        `Saldo: ${balance === 0 ? "totalmente pago" : `${symbol}${balance.toFixed(2)}`}.`,
+        statusLine,
+        `Estado da fatura: total ${totalText}, pago ${paidText}, saldo ${balanceText}.`,
         "O recibo/fatura está anexado a esta mensagem.",
-        "Vamos avisar quando estiver pronta para recolha.",
         "",
         "Obrigado.",
       ].join("\n");
     }
 
+    const statusLine = normalizedStatus === "ready"
+      ? `Your ${businessName} order #${displayId} is ready for pickup.`
+      : normalizedStatus === "delivered"
+        ? `Your ${businessName} order #${displayId} has been delivered.`
+        : `Your ${businessName} order #${displayId} is currently at this stage: ${stageLabel}.`;
     return [
       `Hello ${firstName},`,
       "",
-      `Your ${businessName} order #${displayId} has been registered.`,
-      `Total: ${symbol}${total.toFixed(2)}.`,
-      `Paid: ${symbol}${paid.toFixed(2)}.`,
-      `Balance: ${balance === 0 ? "fully paid" : `${symbol}${balance.toFixed(2)}`}.`,
+      statusLine,
+      `Invoice status: total ${totalText}, paid ${paidText}, balance ${balanceText}.`,
       "Your receipt/invoice is attached to this message.",
-      "We will notify you when the order is ready for pickup.",
       "",
       "Thank you.",
     ].join("\n");
-  }
-
-  function handleSendOrderConfirmation() {
-    if (!readyWhatsAppPhone) {
-      toast({ title: t("phone_number"), description: t("customer_phone_missing", "Customer phone number is missing."), variant: "destructive" });
-      return;
-    }
-
-    const mergedSettings = {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
-    generateDepositReceipt(order, symbol, mergedSettings, "download");
-
-    const whatsappUrl = `https://wa.me/${readyWhatsAppPhone}?text=${encodeURIComponent(buildOrderConfirmationWhatsAppMessage())}`;
-    const opened = window.open(whatsappUrl, "_blank");
-    if (opened) opened.opener = null;
-    if (!opened) {
-      toast({ title: "WhatsApp", description: t("popup_blocked", "Allow popups to open WhatsApp.") });
-    }
   }
 
   function handleNotifyCustomer() {
@@ -309,7 +256,7 @@ export default function OrderDetail() {
     };
     generateDepositReceipt(order, symbol, mergedSettings, "download");
 
-    const whatsappUrl = `https://wa.me/${readyWhatsAppPhone}?text=${encodeURIComponent(buildReadyWhatsAppMessage())}`;
+    const whatsappUrl = `https://wa.me/${readyWhatsAppPhone}?text=${encodeURIComponent(buildCustomerWhatsAppMessage())}`;
     const opened = window.open(whatsappUrl, "_blank");
     if (opened) opened.opener = null;
     if (!opened) {
@@ -397,19 +344,7 @@ export default function OrderDetail() {
           <Button variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
             <Printer className="w-4 h-4 mr-2" /> {t("print_thermal_receipt")}
           </Button>
-          {order.status !== "ready" && !["delivered", "cancelled", "canceled"].includes(order.status) && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSendOrderConfirmation}
-              disabled={!canSendOrderConfirmation}
-              title={!canSendOrderConfirmation ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
-              data-testid="button-send-order-confirmation-whatsapp"
-            >
-              <MessageCircle className="w-4 h-4 mr-2" /> {t("send_confirmation", "Send confirmation")}
-            </Button>
-          )}
-          {order.status === "ready" && (
+          {canShowCustomerNotification && (
             <Button
               variant="outline"
               size="sm"
@@ -418,7 +353,7 @@ export default function OrderDetail() {
               title={!canNotifyCustomer ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
               data-testid="button-notify-customer-whatsapp"
             >
-              <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer", "Notify customer")}
+              <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer", "Notifier Client")}
             </Button>
           )}
           <StatusBadge status={order.status} />
