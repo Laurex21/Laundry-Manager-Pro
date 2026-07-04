@@ -23,7 +23,9 @@ import {
   Check,
   Shirt,
   AlertTriangle,
-  PackageOpen
+  PackageOpen,
+  MessageCircle,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +73,78 @@ type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
 const ACTIVE_STATUSES = new Set(["pending", "received", "sorting", "washing", "drying", "ironing", "packaging", "stain_treatment"]);
 
+function normalizeWhatsAppPhone(phone?: string | null): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) return digits.slice(2);
+  if (digits.startsWith("237")) return digits;
+  if (digits.startsWith("6")) return `237${digits}`;
+  return digits;
+}
+
+function buildOrderConfirmationWhatsAppMessage({
+  order,
+  symbol,
+  businessName,
+  language,
+  paidAmount,
+}: {
+  order: any;
+  symbol: string;
+  businessName: string;
+  language: string;
+  paidAmount?: number;
+}): string {
+  const firstName = String(order.customer?.name || "").trim().split(/\s+/)[0] || "customer";
+  const displayId = orderDisplayId(order);
+  const total = Number(order.totalAmount) || 0;
+  const paid = paidAmount ?? (order.payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount || 0), 0);
+  const balance = Math.max(0, total - paid);
+
+  if (language.startsWith("fr")) {
+    return [
+      `Bonjour ${firstName},`,
+      "",
+      `Votre commande ${businessName} #${displayId} a bien été enregistrée.`,
+      `Total : ${symbol}${total.toFixed(2)}.`,
+      `Payé : ${symbol}${paid.toFixed(2)}.`,
+      `Solde : ${balance === 0 ? "entièrement payé" : `${symbol}${balance.toFixed(2)}`}.`,
+      "Votre reçu/facture est joint à ce message.",
+      "Nous vous informerons quand la commande sera prête à récupérer.",
+      "",
+      "Merci.",
+    ].join("\n");
+  }
+
+  if (language.startsWith("pt")) {
+    return [
+      `Olá ${firstName},`,
+      "",
+      `A sua encomenda ${businessName} #${displayId} foi registada.`,
+      `Total: ${symbol}${total.toFixed(2)}.`,
+      `Pago: ${symbol}${paid.toFixed(2)}.`,
+      `Saldo: ${balance === 0 ? "totalmente pago" : `${symbol}${balance.toFixed(2)}`}.`,
+      "O recibo/fatura está anexado a esta mensagem.",
+      "Vamos avisar quando estiver pronta para recolha.",
+      "",
+      "Obrigado.",
+    ].join("\n");
+  }
+
+  return [
+    `Hello ${firstName},`,
+    "",
+    `Your ${businessName} order #${displayId} has been registered.`,
+    `Total: ${symbol}${total.toFixed(2)}.`,
+    `Paid: ${symbol}${paid.toFixed(2)}.`,
+    `Balance: ${balance === 0 ? "fully paid" : `${symbol}${balance.toFixed(2)}`}.`,
+    "Your receipt/invoice is attached to this message.",
+    "We will notify you when the order is ready for pickup.",
+    "",
+    "Thank you.",
+  ].join("\n");
+}
+
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
   const [search, setSearch] = useState("");
@@ -80,6 +154,28 @@ export default function Orders() {
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
+  const [createdOrder, setCreatedOrder] = useState<any | null>(null);
+
+  const createdOrderWhatsAppPhone = normalizeWhatsAppPhone(createdOrder?.customer?.phone);
+
+  function handleCreatedOrderWhatsApp() {
+    if (!createdOrder || !createdOrderWhatsAppPhone) return;
+
+    generateDepositReceipt(createdOrder, symbol, {
+      ...DEFAULT_SETTINGS,
+      ...(settings || {}),
+      receiptLanguage: settings?.receiptLanguage || i18n.language,
+    }, "download");
+
+    const whatsappUrl = `https://wa.me/${createdOrderWhatsAppPhone}?text=${encodeURIComponent(buildOrderConfirmationWhatsAppMessage({
+      order: createdOrder,
+      symbol,
+      businessName: settings?.businessName || "Xpress Pro",
+      language: i18n.language,
+    }))}`;
+    const opened = window.open(whatsappUrl, "_blank");
+    if (opened) opened.opener = null;
+  }
 
   const summary = useMemo(() => {
     if (!orders) return { total: 0, active: 0, ready: 0, unpaid: 0 };
@@ -127,10 +223,50 @@ export default function Orders() {
             <DialogHeader>
               <DialogTitle>{t("create_new_order")}</DialogTitle>
             </DialogHeader>
-            <OrderForm onSuccess={() => setOpen(false)} />
+            <OrderForm onSuccess={(orderDetails) => {
+              setCreatedOrder(orderDetails);
+              setOpen(false);
+            }} />
           </DialogContent>
         </Dialog>
       </div>
+
+      <Dialog open={!!createdOrder} onOpenChange={(isOpen) => !isOpen && setCreatedOrder(null)}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{t("order_registered", "Order registered")}</DialogTitle>
+          </DialogHeader>
+          {createdOrder && (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <div className="font-semibold">{createdOrder.customer?.name || t("unknown")}</div>
+                <div className="text-muted-foreground">
+                  #{orderDisplayId(createdOrder)} &bull; {symbol}{Number(createdOrder.totalAmount).toFixed(2)}
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Link href={`/orders/${createdOrder.id}`}>
+                  <Button variant="outline" className="w-full" onClick={() => setCreatedOrder(null)} data-testid="button-view-created-order">
+                    <Eye className="w-4 h-4 mr-2" /> {t("view_order", "View order")}
+                  </Button>
+                </Link>
+                <Button
+                  className="w-full"
+                  onClick={handleCreatedOrderWhatsApp}
+                  disabled={!createdOrderWhatsAppPhone}
+                  title={!createdOrderWhatsAppPhone ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
+                  data-testid="button-send-order-confirmation-whatsapp"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" /> {t("send_whatsapp_confirmation", "Send WhatsApp confirmation")}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("whatsapp_confirmation_hint", "The receipt downloads first, then WhatsApp opens with a prefilled confirmation message for staff to review.")}
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Summary chips */}
       <div className="flex flex-wrap gap-2">
@@ -320,7 +456,7 @@ export default function Orders() {
   );
 }
 
-function OrderForm({ onSuccess }: { onSuccess: () => void }) {
+function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const { t, i18n } = useTranslation();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
@@ -459,10 +595,11 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
 
     createOrder(formattedData, {
       onSuccess: async (newOrder: any) => {
+        let orderDetails = newOrder;
         try {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
-            const orderDetails = await res.json();
+            orderDetails = await res.json();
             generateDepositReceipt(orderDetails, symbol, {
               ...DEFAULT_SETTINGS,
               ...(settings || {}),
@@ -471,7 +608,7 @@ function OrderForm({ onSuccess }: { onSuccess: () => void }) {
           }
         } catch {}
         form.reset();
-        onSuccess();
+        onSuccess(orderDetails);
       }
     });
   }
