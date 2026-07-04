@@ -287,30 +287,43 @@ async function downloadReceiptPdfFromHtml(html: string, filename: string): Promi
 
   const printHtml = stripNoPrintElements(html);
 
-  const response = await fetch("/api/receipts/render-pdf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ html: printHtml, filename }),
-  });
-
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(`Failed to generate PDF: ${message || response.status}`);
-  }
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
+  const targetName = `receipt_dl_${Date.now()}`;
+  let popup: Window | null = null;
   try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
+    popup = window.open("", targetName);
+  } catch {
+    popup = null;
   }
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/api/receipts/render-pdf";
+  form.target = targetName;
+  form.style.display = "none";
+
+  const htmlField = document.createElement("input");
+  htmlField.type = "hidden";
+  htmlField.name = "html";
+  htmlField.value = printHtml;
+  form.appendChild(htmlField);
+
+  const filenameField = document.createElement("input");
+  filenameField.type = "hidden";
+  filenameField.name = "filename";
+  filenameField.value = filename;
+  form.appendChild(filenameField);
+
+  document.body.appendChild(form);
+  form.submit();
+  form.remove();
+
+  window.setTimeout(() => {
+    try {
+      if (popup && !popup.closed) popup.close();
+    } catch {
+      // ignore - browser may prevent closing cross-origin/blocked popups
+    }
+  }, 2000);
 }
 
 function stripNoPrintElements(html: string): string {

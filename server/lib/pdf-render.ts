@@ -21,8 +21,9 @@ function getChromiumExecutablePath(): string {
 }
 
 let browserPromise: Promise<Browser> | null = null;
-const A4_WIDTH_PX = 794;
-const A4_HEIGHT_PX = 1123;
+const A4_WIDTH_MM = 210;
+const MIN_HEIGHT_MM = 120;
+const PX_TO_MM = 25.4 / 96;
 
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
@@ -52,19 +53,15 @@ export async function renderHtmlToPdf(html: string): Promise<Buffer> {
       const target = receipt || document.body;
       const rect = target.getBoundingClientRect();
       return {
-        width: Math.max(rect.width, document.documentElement.scrollWidth, document.body.scrollWidth),
         height: Math.max(rect.height, document.documentElement.scrollHeight, document.body.scrollHeight),
       };
     });
-    const scale = Math.max(
-      0.35,
-      Math.min(1, A4_WIDTH_PX / Math.max(dimensions.width, 1), A4_HEIGHT_PX / Math.max(dimensions.height, 1)),
-    );
+    const pageHeightMm = Math.max(MIN_HEIGHT_MM, dimensions.height * PX_TO_MM + 4);
     const pdfUint8 = await page.pdf({
-      format: "a4",
+      width: `${A4_WIDTH_MM}mm`,
+      height: `${pageHeightMm}mm`,
       printBackground: true,
-      preferCSSPageSize: true,
-      scale,
+      preferCSSPageSize: false,
       margin: { top: "0mm", bottom: "0mm", left: "0mm", right: "0mm" },
     });
     return Buffer.from(pdfUint8);
