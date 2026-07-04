@@ -278,62 +278,14 @@ function receiptPrintCss(): string {
   `;
 }
 
-async function downloadReceiptPdfFromHtml(html: string, filename: string): Promise<void> {
-  const testCapture = (globalThis as any).__captureReceiptPdfHtml;
+function downloadReceiptHtml(html: string, filename: string): void {
+  const testCapture = (globalThis as any).__captureReceiptHtml;
   if (typeof testCapture === "function") {
     testCapture(html, filename);
     return;
   }
 
-  const printHtml = stripNoPrintElements(html);
-
-  const targetName = `receipt_dl_${Date.now()}`;
-  let popup: Window | null = null;
-  try {
-    popup = window.open("", targetName);
-  } catch {
-    popup = null;
-  }
-
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "/api/receipts/render-pdf";
-  form.target = targetName;
-  form.style.display = "none";
-
-  const htmlField = document.createElement("input");
-  htmlField.type = "hidden";
-  htmlField.name = "html";
-  htmlField.value = printHtml;
-  form.appendChild(htmlField);
-
-  const filenameField = document.createElement("input");
-  filenameField.type = "hidden";
-  filenameField.name = "filename";
-  filenameField.value = filename;
-  form.appendChild(filenameField);
-
-  document.body.appendChild(form);
-  form.submit();
-  form.remove();
-
-  window.setTimeout(() => {
-    try {
-      if (popup && !popup.closed) popup.close();
-    } catch {
-      // ignore - browser may prevent closing cross-origin/blocked popups
-    }
-  }, 2000);
-}
-
-function stripNoPrintElements(html: string): string {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  doc.documentElement.classList.add("pdf-export");
-  doc.querySelectorAll(".no-print").forEach((element) => {
-    (element as HTMLElement).style.display = "none";
-  });
-  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), filename);
 }
 
 function thermalMoney(amount: number, symbol: string): string {
@@ -714,9 +666,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  void downloadReceiptPdfFromHtml(html, `deposit-receipt-order-${displayOrderId}.pdf`).catch(() => {
-    openReceiptPrintWindow(html);
-  });
+  downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -1009,7 +959,5 @@ export function generatePaymentReceipt(
     return;
   }
 
-  void downloadReceiptPdfFromHtml(html, `payment-receipt-order-${orderId}.pdf`).catch(() => {
-    openReceiptPrintWindow(html);
-  });
+  downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
 }

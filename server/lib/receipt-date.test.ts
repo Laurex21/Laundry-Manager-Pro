@@ -19,7 +19,7 @@ let capturedFilename = "";
   },
 };
 
-(globalThis as any).__captureReceiptPdfHtml = (html: string, filename: string) => {
+(globalThis as any).__captureReceiptHtml = (html: string, filename: string) => {
   capturedHtml = html;
   capturedFilename = filename;
 };
@@ -44,8 +44,8 @@ generateDepositReceipt({
   showLogo: false,
 }, "download");
 
-assert.equal(capturedFilename, "deposit-receipt-order-26.pdf");
-assert.ok(capturedHtml, "receipt download should render HTML into a PDF");
+assert.equal(capturedFilename, "deposit-receipt-order-26.html");
+assert.ok(capturedHtml, "receipt download should render HTML");
 
 assert.match(capturedHtml, /Date de commande<\/div><div class="value">30\/06\/2026 • 22h00/);
 assert.match(capturedHtml, /Retrait prévu<\/div><div class="value">04\/07\/2026<\/div>/);

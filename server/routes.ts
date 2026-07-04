@@ -11,7 +11,6 @@ import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
 import { parseLocalDateParam } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
-import { renderHtmlToPdf } from "./lib/pdf-render";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -271,23 +270,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerRentabiliteRoutes(app);
   seedDatabase().catch(console.error);
   startTemporalIntelligenceJob();
-
-  app.post("/api/receipts/render-pdf", isAuthenticated, async (req: any, res) => {
-    try {
-      const { html, filename } = req.body || {};
-      if (typeof html !== "string" || !html.trim()) {
-        return res.status(400).json({ message: "Missing html content" });
-      }
-      const pdfBuffer = await renderHtmlToPdf(html);
-      const safeFilename = String(filename || "receipt.pdf").replace(/[^a-zA-Z0-9_\-.]/g, "_");
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
-      res.send(pdfBuffer);
-    } catch (err) {
-      console.error("PDF render failed:", err);
-      res.status(500).json({ message: "Failed to generate PDF" });
-    }
-  });
 
   app.get("/api/public/stats", async (_req, res) => {
     try {
