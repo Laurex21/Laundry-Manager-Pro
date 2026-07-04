@@ -202,8 +202,63 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 function receiptPrintCss(): string {
   return `
-    @page { size: A4; margin: 12mm; }
+    @page { size: A4; margin: 6mm; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html.pdf-export body { background: #fff !important; padding: 0 !important; }
+    html.pdf-export .receipt {
+      width: 100% !important;
+      max-width: 190mm !important;
+      margin: 0 auto !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    html.pdf-export .header { padding: 14px 18px !important; }
+    html.pdf-export .header img { max-height: 34px !important; }
+    html.pdf-export .header h1 { font-size: 18px !important; line-height: 1.15 !important; }
+    html.pdf-export .header p { font-size: 9px !important; line-height: 1.25 !important; margin-top: 3px !important; }
+    html.pdf-export .order-id-inline { margin-top: 6px !important; }
+    html.pdf-export .order-id-inline .label { font-size: 8px !important; letter-spacing: 0.5px !important; }
+    html.pdf-export .order-id-inline .id { font-size: 20px !important; margin-top: 0 !important; }
+    html.pdf-export .deposit-badge { font-size: 8px !important; padding: 2px 8px !important; margin-top: 4px !important; }
+    html.pdf-export .meta { gap: 8px !important; padding: 9px 18px !important; }
+    html.pdf-export .meta-item .label { font-size: 8px !important; letter-spacing: 0.4px !important; margin-bottom: 1px !important; }
+    html.pdf-export .meta-item .value { font-size: 10px !important; line-height: 1.25 !important; }
+    html.pdf-export .pipeline-section,
+    html.pdf-export .items-section,
+    html.pdf-export .checklist-section,
+    html.pdf-export .summary,
+    html.pdf-export .payment-section,
+    html.pdf-export .section,
+    html.pdf-export .terms,
+    html.pdf-export .footer {
+      padding: 8px 18px !important;
+    }
+    html.pdf-export .section[style*="padding-top:0"],
+    html.pdf-export .section[style*="padding-top: 0"] {
+      padding-top: 0 !important;
+    }
+    html.pdf-export .section-title { font-size: 9px !important; letter-spacing: 0.5px !important; margin-bottom: 5px !important; }
+    html.pdf-export .items-table,
+    html.pdf-export .checklist-table,
+    html.pdf-export table { font-size: 9px !important; }
+    html.pdf-export th,
+    html.pdf-export td {
+      padding: 4px 6px !important;
+      line-height: 1.2 !important;
+    }
+    html.pdf-export .summary-box,
+    html.pdf-export .payment-box {
+      padding: 8px 10px !important;
+      border-radius: 4px !important;
+    }
+    html.pdf-export .summary-row { padding: 2px 0 !important; font-size: 9px !important; line-height: 1.2 !important; }
+    html.pdf-export .summary-row.total { margin-top: 4px !important; padding-top: 5px !important; font-size: 11px !important; }
+    html.pdf-export .payment-amount { font-size: 18px !important; }
+    html.pdf-export .terms h3 { font-size: 9px !important; margin-bottom: 5px !important; }
+    html.pdf-export .terms li { font-size: 7.5px !important; line-height: 1.2 !important; margin-bottom: 3px !important; }
+    html.pdf-export .footer { padding-top: 7px !important; padding-bottom: 7px !important; }
+    html.pdf-export .footer p { font-size: 8px !important; line-height: 1.2 !important; }
+    html.pdf-export .footer .thanks { font-size: 10px !important; margin-bottom: 2px !important; }
     @media print {
       html, body { width: 100%; background: #fff !important; }
       body { padding: 0 !important; }
@@ -261,6 +316,7 @@ async function downloadReceiptPdfFromHtml(html: string, filename: string): Promi
 function stripNoPrintElements(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
+  doc.documentElement.classList.add("pdf-export");
   doc.querySelectorAll(".no-print").forEach((element) => {
     (element as HTMLElement).style.display = "none";
   });
