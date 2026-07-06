@@ -158,10 +158,10 @@ export default function Orders() {
 
   const createdOrderWhatsAppPhone = normalizeWhatsAppPhone(createdOrder?.customer?.phone);
 
-  function handleCreatedOrderWhatsApp() {
+  async function handleCreatedOrderWhatsApp() {
     if (!createdOrder || !createdOrderWhatsAppPhone) return;
 
-    generateDepositReceipt(createdOrder, symbol, {
+    await generateDepositReceipt(createdOrder, symbol, {
       ...DEFAULT_SETTINGS,
       ...(settings || {}),
       receiptLanguage: settings?.receiptLanguage || i18n.language,
@@ -600,7 +600,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
             orderDetails = await res.json();
-            generateDepositReceipt(orderDetails, symbol, {
+            await generateDepositReceipt(orderDetails, symbol, {
               ...DEFAULT_SETTINGS,
               ...(settings || {}),
               receiptLanguage: settings?.receiptLanguage || i18n.language,

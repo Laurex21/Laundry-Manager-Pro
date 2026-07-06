@@ -14,7 +14,7 @@ assert.match(orderDetailPage, /const canShowCustomerNotification = !\["cancelled
 assert.match(orderDetailPage, /data-testid="button-notify-customer-whatsapp"/);
 assert.match(orderDetailPage, /function buildCustomerWhatsAppMessage/);
 assert.doesNotMatch(orderDetailPage, /data-testid="button-send-order-confirmation-whatsapp"/);
-assert.match(orderDetailPage, /generateDepositReceipt\(order, symbol, mergedSettings, "download"\)/);
+assert.match(orderDetailPage, /await generateDepositReceipt\(order, symbol, mergedSettings, "download"\)/);
 assert.match(orderDetailPage, /https:\/\/wa\.me\/\$\{readyWhatsAppPhone\}\?text=\$\{encodeURIComponent\(buildCustomerWhatsAppMessage\(\)\)\}/);
 assert.match(orderDetailPage, /Votre commande \$\{businessName\} #\$\{displayId\} est actuellement à l'étape : \$\{stageLabel\}\./);
 assert.match(orderDetailPage, /État facture : total \$\{totalText\}, payé \$\{paidText\}, solde \$\{balanceText\}\./);
@@ -29,6 +29,6 @@ assert.match(ordersPage, /Notifier Client/);
 assert.match(ordersPage, /The receipt downloads first, then WhatsApp opens with a prefilled confirmation message/);
 assert.match(ordersPage, /Your .* order #\$\{displayId\} has been registered/);
 assert.match(ordersPage, /Votre commande .* #\$\{displayId\} a bien été enregistrée/);
-assert.match(ordersPage, /generateDepositReceipt\(createdOrder, symbol/);
+assert.match(ordersPage, /await generateDepositReceipt\(createdOrder, symbol/);
 
 console.log("order whatsapp notify regression tests passed");

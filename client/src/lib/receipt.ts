@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
+import { domToPng } from "modern-screenshot";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 import { orderDisplayId } from "./order-display";
 
@@ -200,6 +201,15 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function downloadDataUrl(dataUrl: string, filename: string): void {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 function receiptPrintCss(): string {
   return `
     @page { size: A4; margin: 6mm; }
@@ -286,6 +296,68 @@ function downloadReceiptHtml(html: string, filename: string): void {
   }
 
   downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), filename);
+}
+
+async function waitForReceiptAssets(container: ParentNode): Promise<void> {
+  const images = Array.from(container.querySelectorAll("img"));
+  await Promise.all(images.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      img.addEventListener("load", () => resolve(), { once: true });
+      img.addEventListener("error", () => resolve(), { once: true });
+    });
+  }));
+}
+
+async function downloadReceiptImage(html: string, imageFilename: string, fallbackHtmlFilename: string): Promise<void> {
+  const testCapture = (globalThis as any).__captureReceiptHtml;
+  if (typeof testCapture === "function") {
+    testCapture(html, imageFilename);
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "Receipt image renderer");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.position = "fixed";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "760px";
+  iframe.style.height = "1200px";
+  iframe.style.border = "0";
+  iframe.style.pointerEvents = "none";
+  document.body.appendChild(iframe);
+
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) throw new Error("Receipt renderer unavailable");
+    doc.open();
+    doc.write(html);
+    doc.close();
+    await new Promise<void>((resolve) => {
+      if (doc.readyState === "complete") {
+        resolve();
+        return;
+      }
+      iframe.addEventListener("load", () => resolve(), { once: true });
+    });
+    await waitForReceiptAssets(doc);
+
+    const receipt = doc.querySelector<HTMLElement>(".receipt");
+    if (!receipt) throw new Error("Receipt content unavailable");
+
+    const dataUrl = await domToPng(receipt, {
+      backgroundColor: "#ffffff",
+      scale: Math.min(2, window.devicePixelRatio || 1.5),
+      fetch: { requestInit: { cache: "force-cache" } },
+    });
+    downloadDataUrl(dataUrl, imageFilename);
+  } catch (error) {
+    console.error("Receipt image download failed; falling back to HTML.", error);
+    downloadReceiptHtml(html, fallbackHtmlFilename);
+  } finally {
+    document.body.removeChild(iframe);
+  }
 }
 
 function thermalMoney(amount: number, symbol: string): string {
@@ -472,7 +544,7 @@ function openReceiptPrintWindow(html: string): void {
 
 type ReceiptAction = "download" | "print";
 
-export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
+export async function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download"): Promise<void> {
   const lang = settings.receiptLanguage || "en";
   const displayOrderId = orderDisplayId(order);
   const customer = order.customer || {};
@@ -666,7 +738,11 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
+  await downloadReceiptImage(
+    html,
+    `deposit-receipt-order-${displayOrderId}.png`,
+    `deposit-receipt-order-${displayOrderId}.html`
+  );
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -779,7 +855,7 @@ export function generatePaymentReceipt(
   settings: ReceiptSettings = DEFAULT_SETTINGS,
   pickupCost: number = 0,
   action: ReceiptAction = "download"
-) {
+): Promise<void> | void {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = dateOnlyParts(entryDate) ? formatReceiptDateOnly(entryDate, lang) : formatReceiptDateTime(entryDate, lang);
   const displayPickupDate = formatReceiptDateOnly(pickupDate, lang);
@@ -959,5 +1035,9 @@ export function generatePaymentReceipt(
     return;
   }
 
-  downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
+  return downloadReceiptImage(
+    html,
+    `payment-receipt-order-${orderId}.png`,
+    `payment-receipt-order-${orderId}.html`
+  );
 }

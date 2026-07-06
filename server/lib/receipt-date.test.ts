@@ -24,7 +24,7 @@ let capturedFilename = "";
   capturedFilename = filename;
 };
 
-generateDepositReceipt({
+await generateDepositReceipt({
   id: 26,
   siteOrderNumber: 26,
   createdAt: "2026-06-30T22:00:00.000",
@@ -44,8 +44,8 @@ generateDepositReceipt({
   showLogo: false,
 }, "download");
 
-assert.equal(capturedFilename, "deposit-receipt-order-26.html");
-assert.ok(capturedHtml, "receipt download should render HTML");
+assert.equal(capturedFilename, "deposit-receipt-order-26.png");
+assert.ok(capturedHtml, "receipt image download should render from receipt HTML");
 
 assert.match(capturedHtml, /Date de commande<\/div><div class="value">30\/06\/2026 • 22h00/);
 assert.match(capturedHtml, /Retrait prévu<\/div><div class="value">04\/07\/2026<\/div>/);

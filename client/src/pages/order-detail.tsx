@@ -164,13 +164,13 @@ export default function OrderDetail() {
     }
   }
 
-  function handleDownloadReceipt() {
+  async function handleDownloadReceipt() {
     const mergedSettings = {
       ...DEFAULT_SETTINGS,
       ...(settings || {}),
       receiptLanguage: settings?.receiptLanguage || i18n.language,
     };
-    generateDepositReceipt(order, symbol, mergedSettings, "download");
+    await generateDepositReceipt(order, symbol, mergedSettings, "download");
   }
 
   function handlePrintThermalReceipt() {
@@ -243,7 +243,7 @@ export default function OrderDetail() {
     ].join("\n");
   }
 
-  function handleNotifyCustomer() {
+  async function handleNotifyCustomer() {
     if (!readyWhatsAppPhone) {
       toast({ title: t("phone_number"), description: t("customer_phone_missing", "Customer phone number is missing."), variant: "destructive" });
       return;
@@ -254,7 +254,7 @@ export default function OrderDetail() {
       ...(settings || {}),
       receiptLanguage: settings?.receiptLanguage || i18n.language,
     };
-    generateDepositReceipt(order, symbol, mergedSettings, "download");
+    await generateDepositReceipt(order, symbol, mergedSettings, "download");
 
     const whatsappUrl = `https://wa.me/${readyWhatsAppPhone}?text=${encodeURIComponent(buildCustomerWhatsAppMessage())}`;
     const opened = window.open(whatsappUrl, "_blank");
