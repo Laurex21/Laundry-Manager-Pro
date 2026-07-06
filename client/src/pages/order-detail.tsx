@@ -245,7 +245,7 @@ export default function OrderDetail() {
 
   async function handleNotifyCustomer() {
     if (!readyWhatsAppPhone) {
-      toast({ title: t("phone_number"), description: t("customer_phone_missing", "Customer phone number is missing."), variant: "destructive" });
+      toast({ title: t("phone_number"), description: t("customer_phone_missing"), variant: "destructive" });
       return;
     }
 
@@ -350,10 +350,10 @@ export default function OrderDetail() {
               size="sm"
               onClick={handleNotifyCustomer}
               disabled={!canNotifyCustomer}
-              title={!canNotifyCustomer ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
+              title={!canNotifyCustomer ? t("customer_phone_missing") : undefined}
               data-testid="button-notify-customer-whatsapp"
             >
-              <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer", "Notifier Client")}
+              <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer")}
             </Button>
           )}
           <StatusBadge status={order.status} />

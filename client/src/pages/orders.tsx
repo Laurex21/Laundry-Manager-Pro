@@ -234,7 +234,7 @@ export default function Orders() {
       <Dialog open={!!createdOrder} onOpenChange={(isOpen) => !isOpen && setCreatedOrder(null)}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
-            <DialogTitle>{t("order_registered", "Order registered")}</DialogTitle>
+            <DialogTitle>{t("order_registered")}</DialogTitle>
           </DialogHeader>
           {createdOrder && (
             <div className="space-y-4">
@@ -247,21 +247,21 @@ export default function Orders() {
               <div className="grid gap-2 sm:grid-cols-2">
                 <Link href={`/orders/${createdOrder.id}`}>
                   <Button variant="outline" className="w-full" onClick={() => setCreatedOrder(null)} data-testid="button-view-created-order">
-                    <Eye className="w-4 h-4 mr-2" /> {t("view_order", "View order")}
+                    <Eye className="w-4 h-4 mr-2" /> {t("view_order")}
                   </Button>
                 </Link>
                 <Button
                   className="w-full"
                   onClick={handleCreatedOrderWhatsApp}
                   disabled={!createdOrderWhatsAppPhone}
-                  title={!createdOrderWhatsAppPhone ? t("customer_phone_missing", "Customer phone number is missing.") : undefined}
+                  title={!createdOrderWhatsAppPhone ? t("customer_phone_missing") : undefined}
                   data-testid="button-send-order-confirmation-whatsapp"
                 >
-                  <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer", "Notifier Client")}
+                  <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                {t("whatsapp_confirmation_hint", "The receipt downloads first, then WhatsApp opens with a prefilled confirmation message for staff to review.")}
+                {t("whatsapp_confirmation_hint")}
               </p>
             </div>
           )}

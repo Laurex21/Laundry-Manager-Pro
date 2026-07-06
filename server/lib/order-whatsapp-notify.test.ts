@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const orderDetailPage = readFileSync(join(root, "client/src/pages/order-detail.tsx"), "utf8");
 const ordersPage = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
+const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
 
 assert.match(orderDetailPage, /MessageCircle/);
 assert.match(orderDetailPage, /function normalizeWhatsAppPhone/);
@@ -18,17 +19,34 @@ assert.match(orderDetailPage, /await generateDepositReceipt\(order, symbol, merg
 assert.match(orderDetailPage, /https:\/\/wa\.me\/\$\{readyWhatsAppPhone\}\?text=\$\{encodeURIComponent\(buildCustomerWhatsAppMessage\(\)\)\}/);
 assert.match(orderDetailPage, /Votre commande \$\{businessName\} #\$\{displayId\} est actuellement à l'étape : \$\{stageLabel\}\./);
 assert.match(orderDetailPage, /État facture : total \$\{totalText\}, payé \$\{paidText\}, solde \$\{balanceText\}\./);
-assert.match(orderDetailPage, /Notifier Client/);
+assert.match(orderDetailPage, /t\("notify_customer"\)/);
+assert.match(orderDetailPage, /t\("customer_phone_missing"\)/);
+assert.doesNotMatch(orderDetailPage, /t\("notify_customer",/);
+assert.doesNotMatch(orderDetailPage, /t\("customer_phone_missing",/);
 assert.match(orderDetailPage, /Votre reçu\/facture est joint à ce message/);
 assert.match(orderDetailPage, /Your receipt\/invoice is attached to this message/);
 
 assert.match(ordersPage, /function buildOrderConfirmationWhatsAppMessage/);
 assert.match(ordersPage, /setCreatedOrder\(orderDetails\)/);
 assert.match(ordersPage, /data-testid="button-send-order-confirmation-whatsapp"/);
-assert.match(ordersPage, /Notifier Client/);
-assert.match(ordersPage, /The receipt downloads first, then WhatsApp opens with a prefilled confirmation message/);
+assert.match(ordersPage, /t\("order_registered"\)/);
+assert.match(ordersPage, /t\("view_order"\)/);
+assert.match(ordersPage, /t\("notify_customer"\)/);
+assert.match(ordersPage, /t\("customer_phone_missing"\)/);
+assert.match(ordersPage, /t\("whatsapp_confirmation_hint"\)/);
+assert.doesNotMatch(ordersPage, /t\("order_registered",/);
+assert.doesNotMatch(ordersPage, /t\("view_order",/);
+assert.doesNotMatch(ordersPage, /t\("notify_customer",/);
+assert.doesNotMatch(ordersPage, /t\("customer_phone_missing",/);
+assert.doesNotMatch(ordersPage, /t\("whatsapp_confirmation_hint",/);
 assert.match(ordersPage, /Your .* order #\$\{displayId\} has been registered/);
 assert.match(ordersPage, /Votre commande .* #\$\{displayId\} a bien été enregistrée/);
 assert.match(ordersPage, /await generateDepositReceipt\(createdOrder, symbol/);
+assert.match(i18n, /"order_registered": "Order registered"/);
+assert.match(i18n, /"order_registered": "Commande enregistrée"/);
+assert.match(i18n, /"order_registered": "Pedido registrado"/);
+assert.match(i18n, /"whatsapp_confirmation_hint": "The receipt downloads first/);
+assert.match(i18n, /"whatsapp_confirmation_hint": "Le reçu se télécharge d'abord/);
+assert.match(i18n, /"whatsapp_confirmation_hint": "O recibo é baixado primeiro/);
 
 console.log("order whatsapp notify regression tests passed");
