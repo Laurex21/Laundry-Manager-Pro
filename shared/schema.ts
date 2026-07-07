@@ -442,7 +442,9 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   cancelledAt: true,
 });
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
-export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, date: true });
+export const insertPaymentSchema = createInsertSchema(payments)
+  .omit({ id: true })
+  .extend({ date: z.coerce.date().optional() });
 export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true, returnedForTreatment: true, returnStage: true, returnNotes: true, returnedAt: true, resolvedAt: true });
 export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true });
 export const insertMachineSchema = createInsertSchema(machines).omit({ id: true, createdAt: true, cycleCount: true, totalKgProcessed: true, utilizationRate: true });

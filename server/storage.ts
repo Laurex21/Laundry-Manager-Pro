@@ -812,18 +812,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   private async sumPaymentsInRange(start: Date, end: Date): Promise<number> {
-    const reportOrderIds = (await db.select({ id: orders.id }).from(orders)
-      .where(and(sql`${orders.entryDate} >= ${start}`, sql`${orders.entryDate} <= ${end}`, ne(orders.status, "cancelled"))))
-      .map(o => o.id);
-    if (reportOrderIds.length === 0) return 0;
-    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(${payments.amount}), 0)` })
       .from(payments)
-      .where(sql`${payments.orderId} IN (${sql.join(reportOrderIds.map(id => sql`${id}`), sql`, `)})`);
+      .innerJoin(orders, eq(payments.orderId, orders.id))
+      .where(and(
+        sql`${payments.date} IS NOT NULL`,
+        sql`${payments.date} >= ${start}`,
+        sql`${payments.date} <= ${end}`,
+        ne(orders.status, "cancelled")
+      ));
     return Number(result?.total || 0);
   }
 
   private async sumExpensesInRange(start: Date, end: Date): Promise<number> {
-    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(${expenditures.amount}), 0)` })
       .from(expenditures)
       .where(and(sql`${expenditures.date} IS NOT NULL`, sql`${expenditures.date} >= ${start}`, sql`${expenditures.date} <= ${end}`));
     return Number(result?.total || 0);
@@ -832,24 +834,23 @@ export class DatabaseStorage implements IStorage {
   private async sumPaymentsInRangeBySite(start: Date, end: Date, siteId: number | number[] | null): Promise<number> {
     const siteWhere = this.siteWhere(orders.siteId, siteId);
     if (!siteWhere) return this.sumPaymentsInRange(start, end);
-    const siteOrderIds = (await db.select({ id: orders.id }).from(orders)
-      .where(and(
-        siteWhere,
-        sql`${orders.entryDate} >= ${start}`,
-        sql`${orders.entryDate} <= ${end}`,
-        ne(orders.status, "cancelled")
-      ))).map(o => o.id);
-    if (siteOrderIds.length === 0) return 0;
-    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(${payments.amount}), 0)` })
       .from(payments)
-      .where(sql`${payments.orderId} IN (${sql.join(siteOrderIds.map(id => sql`${id}`), sql`, `)})`);
+      .innerJoin(orders, eq(payments.orderId, orders.id))
+      .where(and(
+        sql`${payments.date} IS NOT NULL`,
+        sql`${payments.date} >= ${start}`,
+        sql`${payments.date} <= ${end}`,
+        siteWhere,
+        ne(orders.status, "cancelled")
+      ));
     return Number(result?.total || 0);
   }
 
   private async sumExpensesInRangeBySite(start: Date, end: Date, siteId: number | number[] | null): Promise<number> {
     const siteWhere = this.siteWhere(expenditures.siteId, siteId);
     if (!siteWhere) return this.sumExpensesInRange(start, end);
-    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+    const [result] = await db.select({ total: sql<string>`COALESCE(SUM(${expenditures.amount}), 0)` })
       .from(expenditures)
       .where(and(
         sql`${expenditures.date} IS NOT NULL`,
@@ -908,11 +909,18 @@ export class DatabaseStorage implements IStorage {
     const totalOrders = reportOrders.length;
 
     const orderIds = reportOrders.map(o => o.id);
-    let filteredPayments: any[] = [];
-    if (orderIds.length > 0) {
-      filteredPayments = await db.select().from(payments)
-        .where(sql`${payments.orderId} IN (${sql.join(orderIds.map(id => sql`${id}`), sql`, `)})`);
-    }
+    const paymentWhere = orderSiteWhere
+      ? and(sql`${payments.date} IS NOT NULL`, sql`${payments.date} >= ${startDate}`, sql`${payments.date} <= ${endDate}`, orderSiteWhere, ne(orders.status, "cancelled"))
+      : and(sql`${payments.date} IS NOT NULL`, sql`${payments.date} >= ${startDate}`, sql`${payments.date} <= ${endDate}`, ne(orders.status, "cancelled"));
+    const filteredPayments = await db.select({
+      id: payments.id,
+      orderId: payments.orderId,
+      customerId: orders.customerId,
+      amount: payments.amount,
+      date: payments.date,
+    }).from(payments)
+      .innerJoin(orders, eq(payments.orderId, orders.id))
+      .where(paymentWhere);
     const totalRevenue = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
     const siteExpenseWhere = expenseSiteWhere
@@ -922,13 +930,9 @@ export class DatabaseStorage implements IStorage {
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
     const dailyRevenueMap = new Map<string, number>();
-    const paymentsByOrder = new Map<number, number>();
     for (const payment of filteredPayments) {
-      paymentsByOrder.set(payment.orderId, (paymentsByOrder.get(payment.orderId) || 0) + Number(payment.amount));
-    }
-    for (const order of reportOrders) {
-      const day = formatReportingDay(order.entryDate);
-      dailyRevenueMap.set(day, (dailyRevenueMap.get(day) || 0) + (paymentsByOrder.get(order.id) || 0));
+      const day = formatReportingDay(payment.date);
+      dailyRevenueMap.set(day, (dailyRevenueMap.get(day) || 0) + Number(payment.amount));
     }
     const dailyRevenue = Array.from(dailyRevenueMap.entries()).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -942,27 +946,31 @@ export class DatabaseStorage implements IStorage {
       serviceDistribution = Array.from(serviceMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     }
 
-    const customerOrderMap = new Map<number, { orderCount: number; totalSpent: number }>();
-    for (const order of reportOrders) {
-      const existing = customerOrderMap.get(order.customerId) || { orderCount: 0, totalSpent: 0 };
-      existing.orderCount++; existing.totalSpent += Number(order.totalAmount);
-      customerOrderMap.set(order.customerId, existing);
-    }
-    const allCustomers = await this.customersForScopedOrders(reportOrders);
+    const customerIds = Array.from(new Set([...reportOrders.map(o => o.customerId), ...filteredPayments.map(p => p.customerId)]));
+    const allCustomers = customerIds.length
+      ? await db.select().from(customers).where(inArray(customers.id, customerIds))
+      : [];
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
-    const topCustomers = Array.from(customerOrderMap.entries())
-      .map(([customerId, data]) => ({ name: customerMap.get(customerId)?.name || 'Unknown', ...data }))
+    const customerPaymentMap = new Map<number, { orderIds: Set<number>; totalSpent: number }>();
+    for (const payment of filteredPayments) {
+      const existing = customerPaymentMap.get(payment.customerId) || { orderIds: new Set<number>(), totalSpent: 0 };
+      existing.orderIds.add(payment.orderId);
+      existing.totalSpent += Number(payment.amount);
+      customerPaymentMap.set(payment.customerId, existing);
+    }
+    const topCustomers = Array.from(customerPaymentMap.entries())
+      .map(([customerId, data]) => ({ name: customerMap.get(customerId)?.name || 'Unknown', orderCount: data.orderIds.size, totalSpent: data.totalSpent }))
       .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 10);
 
     const customerAreaMap = new Map<string, { area: string; customerIds: Set<number>; orderCount: number; totalSpent: number }>();
-    for (const order of reportOrders) {
-      const customer = customerMap.get(order.customerId);
+    for (const [customerId, paymentData] of customerPaymentMap.entries()) {
+      const customer = customerMap.get(customerId);
       const area = (customer?.address || "").trim() || "Unknown area";
       const key = area.toLowerCase();
       const existing = customerAreaMap.get(key) || { area, customerIds: new Set<number>(), orderCount: 0, totalSpent: 0 };
-      existing.customerIds.add(order.customerId);
-      existing.orderCount++;
-      existing.totalSpent += Number(order.totalAmount);
+      existing.customerIds.add(customerId);
+      existing.orderCount += paymentData.orderIds.size;
+      existing.totalSpent += paymentData.totalSpent;
       customerAreaMap.set(key, existing);
     }
     const customerAreas = Array.from(customerAreaMap.values())
@@ -1392,19 +1400,22 @@ export class DatabaseStorage implements IStorage {
       if (!stat) continue;
       stat.activityCount += 1;
       if (["order_created", "order_processed", "order_delivered"].includes(activity.actionType)) stat.totalOrdersHandled += 1;
-      if (activity.actionType === "payment_collected") stat.totalPaymentsCollected += Number(activity.amount || 0);
       if (activity.actionType === "order_deleted") stat.deletions += 1;
       if (activity.actionType === "order_cancelled") stat.cancellations += 1;
       if (activity.actionType === "discount_applied") stat.discounts += Number(activity.amount || 0);
       if (activity.actionType === "payment_modified") stat.paymentModifications += 1;
-      stat.totalRevenueHandled += Number(activity.amount || 0);
+      if (activity.actionType !== "payment_collected") stat.totalRevenueHandled += Number(activity.amount || 0);
       stat.totalWeightProcessed += Number(activity.weightKg || 0);
     }
 
     for (const paymentJoin of paymentRows as any[]) {
       const employeeId = paymentJoin.payments?.collectedByEmployeeId;
       const stat = employeeId ? employeeStats.get(employeeId) : null;
-      if (stat) stat.totalPaymentsCollected += Number(paymentJoin.payments.amount || 0);
+      if (stat) {
+        const amount = Number(paymentJoin.payments.amount || 0);
+        stat.totalPaymentsCollected += amount;
+        stat.totalRevenueHandled += amount;
+      }
     }
 
     const employeesRanked = Array.from(employeeStats.values()).map((stat) => ({

@@ -458,6 +458,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           collectedByEmployeeId: employee?.id ?? null,
           amount: advanceAmount.toString(),
           method: orderData.advancePaymentMethod || "Cash",
+          date: order.entryDate || new Date(),
           isAdvance: true,
         } as any);
         await trackEmployeeActivity(req, {

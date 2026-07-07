@@ -38,6 +38,12 @@ function dateLocaleFor(language: string) {
   return enUS;
 }
 
+function todayInputDate() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
 const NON_PAYABLE_ORDER_STATUSES = new Set(["cancelled", "cancellation_requested"]);
 
 export default function Payments() {
@@ -51,6 +57,7 @@ export default function Payments() {
   const [orderSearch, setOrderSearch] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [paymentDate, setPaymentDate] = useState(todayInputDate);
   const [reference, setReference] = useState("");
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
@@ -97,6 +104,7 @@ export default function Payments() {
   const handleSelectOrder = useCallback((orderId: number) => {
     setSelectedOrderId(orderId);
     setAmount("");
+    setPaymentDate(todayInputDate());
     setSuccessPayment(null);
   }, []);
 
@@ -109,14 +117,14 @@ export default function Payments() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedOrderId || !selectedOrder || NON_PAYABLE_ORDER_STATUSES.has(selectedOrder.status) || amountError || !amount) return;
+    if (!selectedOrderId || !selectedOrder || NON_PAYABLE_ORDER_STATUSES.has(selectedOrder.status) || amountError || !amount || !paymentDate) return;
 
     const paidAmount = Number(amount);
     const newTotalPaid = totalPaid + paidAmount;
     const newStatus = newTotalPaid >= totalAmount ? "paid" : "partial";
 
     createPayment(
-      { orderId: selectedOrderId, amount, method, reference: reference || undefined },
+      { orderId: selectedOrderId, amount, method, date: new Date(`${paymentDate}T00:00:00`), reference: reference || undefined },
       {
         onSuccess: (createdPayment: any) => {
           setSuccessPayment({
@@ -130,6 +138,7 @@ export default function Payments() {
             newStatus,
           });
           setAmount("");
+          setPaymentDate(todayInputDate());
           setReference("");
           setSelectedOrderId(null);
         },
@@ -420,6 +429,22 @@ export default function Payments() {
                     </Select>
                   </div>
 
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      {t("payment_date")}
+                    </label>
+                    <Input
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      required
+                      data-testid="input-payment-date"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("payment_date_hint")}
+                    </p>
+                  </div>
+
                 </div>
 
                 {/* Reference - conditional */}
@@ -443,7 +468,7 @@ export default function Payments() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isPending || !amount || !!amountError}
+                  disabled={isPending || !amount || !paymentDate || !!amountError}
                   data-testid="button-submit-payment"
                 >
                   {isPending
