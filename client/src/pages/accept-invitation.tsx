@@ -118,6 +118,7 @@ export default function AcceptInvitation() {
     manager: "bg-blue-100 text-blue-700",
     operator: "bg-green-100 text-green-700",
   };
+  const loggedInAsOwner = user && user.userType !== "staff";
 
   if (accepted) {
     return (
@@ -233,18 +234,24 @@ export default function AcceptInvitation() {
               <p className="text-sm text-muted-foreground text-center">
                 {t("accepting_as")} <strong>{user.email}</strong>
               </p>
-              <Button
-                className="w-full"
-                onClick={() => acceptMut.mutate()}
-                disabled={acceptMut.isPending}
-                data-testid="button-accept-invite"
-              >
-                {acceptMut.isPending ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("joining")}</>
-                ) : (
-                  t("accept_invitation_join_team")
-                )}
-              </Button>
+              {loggedInAsOwner ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" data-testid="owner-staff-invite-warning">
+                  {t("owner_cannot_accept_staff_invitation")}
+                </div>
+              ) : (
+                <Button
+                  className="w-full"
+                  onClick={() => acceptMut.mutate()}
+                  disabled={acceptMut.isPending}
+                  data-testid="button-accept-invite"
+                >
+                  {acceptMut.isPending ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("joining")}</>
+                  ) : (
+                    t("accept_invitation_join_team")
+                  )}
+                </Button>
+              )}
               <Button variant="ghost" className="w-full" onClick={() => setLocation("/")} data-testid="button-decline-invite">
                 {t("decline")}
               </Button>

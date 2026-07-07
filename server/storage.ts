@@ -1735,6 +1735,17 @@ export class DatabaseStorage implements IStorage {
   async acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null> {
     const [inv] = await db.select().from(siteInvitations).where(eq(siteInvitations.token, token));
     if (!inv || inv.status !== "pending" || inv.expiresAt < new Date()) return null;
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || user.userType !== "staff") {
+      throw new Error("OWNER_ACCOUNT_CANNOT_ACCEPT_STAFF_INVITATION");
+    }
+    const invitedIdentifier = inv.identifier.trim().toLowerCase();
+    const userIdentifiers = [user.email, user.phone]
+      .filter((value): value is string => !!value)
+      .map((value) => value.trim().toLowerCase());
+    if (!userIdentifiers.includes(invitedIdentifier)) {
+      throw new Error("INVITATION_IDENTIFIER_MISMATCH");
+    }
     return await db.transaction(async (tx) => {
       const existing = await tx.select().from(siteMembers).where(and(eq(siteMembers.siteId, inv.siteId), eq(siteMembers.userId, userId)));
       if (existing.length === 0) {

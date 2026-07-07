@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:auth-i18n": "tsx server/lib/auth-login-i18n.test.ts",
+    "test:staff-invitation-boundary": "tsx server/lib/staff-invitation-account-boundary.test.ts",
     "test:analytics-i18n": "tsx server/lib/analytics-i18n.test.ts",
     "test:payment-date-accounting": "tsx server/lib/payment-date-accounting.test.ts",
     "test:reporting": "tsx server/lib/reporting-date.test.ts",

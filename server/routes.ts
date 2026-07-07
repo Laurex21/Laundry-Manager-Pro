@@ -1072,6 +1072,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
       res.json({ success: true, invitation: result });
     } catch (err) {
+      if (err instanceof Error && err.message === "OWNER_ACCOUNT_CANNOT_ACCEPT_STAFF_INVITATION") {
+        return res.status(409).json({ message: "Owner accounts cannot be converted to staff. Use a different email for staff access." });
+      }
+      if (err instanceof Error && err.message === "INVITATION_IDENTIFIER_MISMATCH") {
+        return res.status(403).json({ message: "This invitation is for a different email or phone number." });
+      }
       res.status(500).json({ message: "Failed to accept invitation" });
     }
   });
