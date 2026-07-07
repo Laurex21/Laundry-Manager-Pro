@@ -186,7 +186,7 @@ export default function AcceptInvitation() {
 
           {!user ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center">Create your staff login for this site. This does not create a subscriber account.</p>
+              <p className="text-sm text-muted-foreground text-center">{t("create_staff_login_description")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">{t("first_name")}</label>
@@ -222,10 +222,10 @@ export default function AcceptInvitation() {
                 disabled={onboardMut.isPending || !credential.trim() || password.length < 6}
                 data-testid="button-create-staff-account"
               >
-                {onboardMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("joining")}</> : "Create staff login"}
+                {onboardMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("joining")}</> : t("create_staff_login")}
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => setLocation("/staff-login")} data-testid="button-existing-staff-login">
-                Already have staff credentials?
+                {t("already_have_staff_credentials")}
               </Button>
             </div>
           ) : (

@@ -199,7 +199,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
               onClick={() => setLocation("/reset-password?account=owner")}
               data-testid="button-forgot-owner-password"
             >
-              {t("forgot_password", "Mot de passe oublié ?")}
+              {t("forgot_password")}
             </button>
           </div>
         )}
@@ -276,13 +276,13 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
       </p>
       {tab === "login" && (
         <p className="text-xs text-muted-foreground text-center">
-          Staff member?{" "}
+          {t("staff_member_prompt")}{" "}
           <button
             type="button"
             className="text-primary font-semibold hover:underline"
             onClick={() => setLocation("/staff-login")}
           >
-            Use staff login
+            {t("use_staff_login")}
           </button>
         </p>
       )}

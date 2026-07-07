@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
-import { Loader2, Shirt, UserCheck } from "lucide-react";
+import { ArrowRight, Loader2, Shirt, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,8 +61,8 @@ export default function StaffLogin() {
           <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mx-auto mb-3 shadow-lg shadow-primary/20">
             <UserCheck className="w-6 h-6 text-primary-foreground" />
           </div>
-          <CardTitle>Staff login</CardTitle>
-          <CardDescription>Access your assigned XPRESSPRO site without creating a subscriber account.</CardDescription>
+          <CardTitle>{t("staff_login_title")}</CardTitle>
+          <CardDescription>{t("staff_login_description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -95,15 +95,22 @@ export default function StaffLogin() {
                 onClick={() => setLocation("/reset-password?account=staff")}
                 data-testid="button-forgot-staff-password"
               >
-                {t("forgot_password", "Mot de passe oublié ?")}
+                {t("forgot_password")}
               </button>
             </div>
             <Button className="w-full" type="submit" disabled={submitting} data-testid="button-staff-login-submit">
-              {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("please_wait")}</> : "Log in as staff"}
+              {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("please_wait")}</> : t("login_as_staff")}
             </Button>
-            <Button variant="ghost" type="button" className="w-full" onClick={() => setLocation("/auth")} data-testid="button-owner-login-link">
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full border-primary/40 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary font-semibold"
+              onClick={() => setLocation("/auth")}
+              data-testid="button-owner-login-link"
+            >
               <Shirt className="w-4 h-4 mr-2" />
-              Owner login
+              {t("login_as_admin")}
+              <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </form>
         </CardContent>
