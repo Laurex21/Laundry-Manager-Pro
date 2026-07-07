@@ -28,6 +28,17 @@ import { formatReportingDay } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 
+let businessSettingsSchemaReady = false;
+
+async function ensureBusinessSettingsSchema(): Promise<void> {
+  if (businessSettingsSchemaReady) return;
+  await db.execute(sql`
+    ALTER TABLE business_settings
+    ADD COLUMN IF NOT EXISTS company_registration_number varchar(100) DEFAULT ''
+  `);
+  businessSettingsSchemaReady = true;
+}
+
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
@@ -1561,6 +1572,7 @@ export class DatabaseStorage implements IStorage {
   // ─── Business Settings (Prompt A) ───────────────────────────────────────────
 
   async getSettings(userId: string): Promise<BusinessSettings> {
+    await ensureBusinessSettingsSchema();
     const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
     if (existing) return existing;
     const [userRow] = await db.select().from(users).where(eq(users.id, userId));
@@ -1572,6 +1584,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings> {
+    await ensureBusinessSettingsSchema();
     const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
     if (existing) {
       const [updated] = await db.update(businessSettings)

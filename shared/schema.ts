@@ -252,6 +252,7 @@ export const businessSettings = pgTable("business_settings", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().unique(),
   businessName: varchar("business_name", { length: 255 }).notNull().default("My Laundry"),
+  companyRegistrationNumber: varchar("company_registration_number", { length: 100 }).default(""),
   tagline: varchar("tagline", { length: 255 }).default(""),
   logoBase64: text("logo_base64"),
   address: varchar("address", { length: 500 }).default(""),

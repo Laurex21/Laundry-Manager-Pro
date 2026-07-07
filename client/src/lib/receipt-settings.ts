@@ -1,5 +1,6 @@
 export interface ReceiptSettings {
   businessName: string;
+  companyRegistrationNumber?: string | null;
   tagline?: string | null;
   logoBase64?: string | null;
   address?: string | null;
@@ -22,6 +23,7 @@ export interface ReceiptSettings {
 
 export const DEFAULT_SETTINGS: ReceiptSettings = {
   businessName: "XpressPro",
+  companyRegistrationNumber: "",
   tagline: "Laundry Management",
   logoBase64: null,
   address: "",
@@ -75,6 +77,7 @@ const RECEIPT_PT_LABELS: Record<string, string> = {
   "Laundry Service": "Serviço de Lavandaria",
   "Thank you for your trust": "Obrigado pela confiança",
   "Receipt generated on": "Recibo gerado em",
+  "Registration No.": "Nº de Registo",
   "Deposit Receipt": "Recibo de Depósito",
   "Payment Receipt": "Recibo de Pagamento",
   "Order No.": "Nº do Pedido",

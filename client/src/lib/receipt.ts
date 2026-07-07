@@ -135,7 +135,10 @@ function buildTermsHtml(settings: ReceiptSettings, lang: string): string {
 
 function getContactLines(settings: ReceiptSettings): string[] {
   const addressPart = [settings.address, settings.city].filter(Boolean).join(", ");
-  return [addressPart, settings.country, settings.phone, settings.phone2, settings.email, settings.website].filter(Boolean) as string[];
+  const registrationLine = settings.companyRegistrationNumber
+    ? `${label("Registration No.", "N° d'immatriculation", settings.receiptLanguage || "en")} ${settings.companyRegistrationNumber}`
+    : null;
+  return [addressPart, settings.country, registrationLine, settings.phone, settings.phone2, settings.email, settings.website].filter(Boolean) as string[];
 }
 
 function getReceiptContactLines(settings: ReceiptSettings, receiptNumber: number | string, lang: string): string[] {

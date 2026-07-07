@@ -42,6 +42,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
   const { t } = useTranslation();
   const [form, setForm] = useState({
     businessName: settings.businessName || "",
+    companyRegistrationNumber: settings.companyRegistrationNumber || "",
     tagline: settings.tagline || "",
     address: settings.address || "",
     city: settings.city || "",
@@ -76,6 +77,16 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="businessName">{t("business_name_label")}</Label>
           <Input id="businessName" value={form.businessName} onChange={F("businessName")} placeholder={t("business_name_placeholder")} data-testid="input-business-name" />
+        </div>
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="companyRegistrationNumber">{t("company_registration_number")}</Label>
+          <Input
+            id="companyRegistrationNumber"
+            value={form.companyRegistrationNumber}
+            onChange={F("companyRegistrationNumber")}
+            placeholder={t("company_registration_number_placeholder")}
+            data-testid="input-company-registration-number"
+          />
         </div>
         <div className="space-y-2 md:col-span-2">
           <Label htmlFor="tagline">{t("tagline")}</Label>
