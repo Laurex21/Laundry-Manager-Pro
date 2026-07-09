@@ -319,56 +319,22 @@ async function downloadReceiptImage(html: string, imageFilename: string, fallbac
     return;
   }
 
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("title", "Receipt image renderer");
-  iframe.setAttribute("aria-hidden", "true");
-  // Keep iframe in-viewport but invisible: browsers render off-screen iframes
-  // at reduced quality / skip GPU rasterization, causing blurry output.
-  iframe.style.position = "fixed";
-  iframe.style.top = "0";
-  iframe.style.left = "0";
-  iframe.style.width = "760px";
-  iframe.style.height = "1200px";
-  iframe.style.border = "0";
-  iframe.style.opacity = "0";
-  iframe.style.pointerEvents = "none";
-  iframe.style.zIndex = "-1";
-  document.body.appendChild(iframe);
-
+  // Send HTML to the server for Puppeteer-based PDF rendering.
+  // PDFs are sent as documents in WhatsApp (not photos) so they are never
+  // compressed, and text stays vector-sharp at any zoom level.
+  const pdfFilename = imageFilename.replace(/\.[^.]+$/, ".pdf");
   try {
-    const doc = iframe.contentDocument;
-    if (!doc) throw new Error("Receipt renderer unavailable");
-    doc.open();
-    doc.write(html);
-    doc.close();
-    await new Promise<void>((resolve) => {
-      if (doc.readyState === "complete") {
-        resolve();
-        return;
-      }
-      iframe.addEventListener("load", () => resolve(), { once: true });
+    const response = await fetch("/api/receipts/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html }),
     });
-    // Wait for fonts to fully load inside the iframe before capturing.
-    await (doc.fonts?.ready ?? Promise.resolve());
-    await waitForReceiptAssets(doc);
-
-    const receipt = doc.querySelector<HTMLElement>(".receipt");
-    if (!receipt) throw new Error("Receipt content unavailable");
-
-    // Scale by 4× device pixel ratio so Retina/high-DPI screens get crisp output.
-    const dpr = Math.max(window.devicePixelRatio || 1, 1);
-    const receiptImageScale = 4 * dpr;
-    const dataUrl = await domToPng(receipt, {
-      backgroundColor: "#ffffff",
-      scale: receiptImageScale,
-      fetch: { requestInit: { cache: "force-cache" } },
-    });
-    downloadDataUrl(dataUrl, imageFilename);
+    if (!response.ok) throw new Error(`Server PDF error ${response.status}`);
+    const blob = await response.blob();
+    downloadBlob(blob, pdfFilename);
   } catch (error) {
-    console.error("Receipt image download failed; falling back to HTML.", error);
+    console.error("Receipt PDF download failed; falling back to HTML.", error);
     downloadReceiptHtml(html, fallbackHtmlFilename);
-  } finally {
-    document.body.removeChild(iframe);
   }
 }
 
