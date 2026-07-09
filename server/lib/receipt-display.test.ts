@@ -35,6 +35,9 @@ assert.match(receipt, /new Blob\(\[html\], \{ type: "text\/html;charset=utf-8" \
 assert.match(receipt, /import \{ domToPng \} from "modern-screenshot"/);
 assert.match(receipt, /async function downloadReceiptImage/);
 assert.match(receipt, /domToPng\(receipt/);
+assert.match(receipt, /const receiptImageScale = 3/);
+assert.match(receipt, /scale: receiptImageScale/);
+assert.doesNotMatch(receipt, /scale: Math\.min\(2, window\.devicePixelRatio/);
 assert.match(receipt, /`deposit-receipt-order-\$\{displayOrderId\}\.png`/);
 assert.match(receipt, /`payment-receipt-order-\$\{orderId\}\.png`/);
 assert.match(packageJson, /"modern-screenshot"/);

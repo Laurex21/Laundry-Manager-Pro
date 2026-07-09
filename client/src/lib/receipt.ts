@@ -349,9 +349,11 @@ async function downloadReceiptImage(html: string, imageFilename: string, fallbac
     const receipt = doc.querySelector<HTMLElement>(".receipt");
     if (!receipt) throw new Error("Receipt content unavailable");
 
+    // Force a high-resolution PNG so long receipts remain readable after sharing/compression.
+    const receiptImageScale = 3;
     const dataUrl = await domToPng(receipt, {
       backgroundColor: "#ffffff",
-      scale: Math.min(2, window.devicePixelRatio || 1.5),
+      scale: receiptImageScale,
       fetch: { requestInit: { cache: "force-cache" } },
     });
     downloadDataUrl(dataUrl, imageFilename);
