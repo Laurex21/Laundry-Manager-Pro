@@ -322,13 +322,17 @@ async function downloadReceiptImage(html: string, imageFilename: string, fallbac
   const iframe = document.createElement("iframe");
   iframe.setAttribute("title", "Receipt image renderer");
   iframe.setAttribute("aria-hidden", "true");
+  // Keep iframe in-viewport but invisible: browsers render off-screen iframes
+  // at reduced quality / skip GPU rasterization, causing blurry output.
   iframe.style.position = "fixed";
-  iframe.style.left = "-10000px";
   iframe.style.top = "0";
+  iframe.style.left = "0";
   iframe.style.width = "760px";
   iframe.style.height = "1200px";
   iframe.style.border = "0";
+  iframe.style.opacity = "0";
   iframe.style.pointerEvents = "none";
+  iframe.style.zIndex = "-1";
   document.body.appendChild(iframe);
 
   try {
@@ -344,13 +348,16 @@ async function downloadReceiptImage(html: string, imageFilename: string, fallbac
       }
       iframe.addEventListener("load", () => resolve(), { once: true });
     });
+    // Wait for fonts to fully load inside the iframe before capturing.
+    await (doc.fonts?.ready ?? Promise.resolve());
     await waitForReceiptAssets(doc);
 
     const receipt = doc.querySelector<HTMLElement>(".receipt");
     if (!receipt) throw new Error("Receipt content unavailable");
 
-    // Force a high-resolution PNG so long receipts remain readable after sharing/compression.
-    const receiptImageScale = 3;
+    // Scale by 4× device pixel ratio so Retina/high-DPI screens get crisp output.
+    const dpr = Math.max(window.devicePixelRatio || 1, 1);
+    const receiptImageScale = 4 * dpr;
     const dataUrl = await domToPng(receipt, {
       backgroundColor: "#ffffff",
       scale: receiptImageScale,
