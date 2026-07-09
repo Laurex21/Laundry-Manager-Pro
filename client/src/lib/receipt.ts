@@ -1,6 +1,5 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
-import { domToPng } from "modern-screenshot";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 import { orderDisplayId } from "./order-display";
 
@@ -204,15 +203,6 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function downloadDataUrl(dataUrl: string, filename: string): void {
-  const a = document.createElement("a");
-  a.href = dataUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
 function receiptPrintCss(): string {
   return `
     @page { size: A4; margin: 6mm; }
@@ -299,43 +289,6 @@ function downloadReceiptHtml(html: string, filename: string): void {
   }
 
   downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), filename);
-}
-
-async function waitForReceiptAssets(container: ParentNode): Promise<void> {
-  const images = Array.from(container.querySelectorAll("img"));
-  await Promise.all(images.map((img) => {
-    if (img.complete) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      img.addEventListener("load", () => resolve(), { once: true });
-      img.addEventListener("error", () => resolve(), { once: true });
-    });
-  }));
-}
-
-async function downloadReceiptImage(html: string, imageFilename: string, fallbackHtmlFilename: string): Promise<void> {
-  const testCapture = (globalThis as any).__captureReceiptHtml;
-  if (typeof testCapture === "function") {
-    testCapture(html, imageFilename);
-    return;
-  }
-
-  // Send HTML to the server for Puppeteer-based PDF rendering.
-  // PDFs are sent as documents in WhatsApp (not photos) so they are never
-  // compressed, and text stays vector-sharp at any zoom level.
-  const pdfFilename = imageFilename.replace(/\.[^.]+$/, ".pdf");
-  try {
-    const response = await fetch("/api/receipts/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html }),
-    });
-    if (!response.ok) throw new Error(`Server PDF error ${response.status}`);
-    const blob = await response.blob();
-    downloadBlob(blob, pdfFilename);
-  } catch (error) {
-    console.error("Receipt PDF download failed; falling back to HTML.", error);
-    downloadReceiptHtml(html, fallbackHtmlFilename);
-  }
 }
 
 function thermalMoney(amount: number, symbol: string): string {
@@ -522,7 +475,7 @@ function openReceiptPrintWindow(html: string): void {
 
 type ReceiptAction = "download" | "print";
 
-export async function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download"): Promise<void> {
+export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
   const displayOrderId = orderDisplayId(order);
   const customer = order.customer || {};
@@ -716,11 +669,7 @@ export async function generateDepositReceipt(order: any, symbol: string, setting
     return;
   }
 
-  await downloadReceiptImage(
-    html,
-    `deposit-receipt-order-${displayOrderId}.png`,
-    `deposit-receipt-order-${displayOrderId}.html`
-  );
+  downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -833,7 +782,7 @@ export function generatePaymentReceipt(
   settings: ReceiptSettings = DEFAULT_SETTINGS,
   pickupCost: number = 0,
   action: ReceiptAction = "download"
-): Promise<void> | void {
+) {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = dateOnlyParts(entryDate) ? formatReceiptDateOnly(entryDate, lang) : formatReceiptDateTime(entryDate, lang);
   const displayPickupDate = formatReceiptDateOnly(pickupDate, lang);
@@ -1013,9 +962,5 @@ export function generatePaymentReceipt(
     return;
   }
 
-  return downloadReceiptImage(
-    html,
-    `payment-receipt-order-${orderId}.png`,
-    `payment-receipt-order-${orderId}.html`
-  );
+  downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
 }
