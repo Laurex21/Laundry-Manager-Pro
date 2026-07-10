@@ -81,6 +81,7 @@ export default function OrderDetail() {
   const [stageMachineId, setStageMachineId] = useState("");
   const [stageWeightKg, setStageWeightKg] = useState("");
   const [stageDurationMinutes, setStageDurationMinutes] = useState("");
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const formatLocalDate = (date: Date | string, pattern: string) =>
     format(new Date(date), pattern, { locale: dateLocaleFor(i18n.language) });
 
@@ -163,8 +164,6 @@ export default function OrderDetail() {
       toast({ title: t("error"), description: t("failed_resolve"), variant: "destructive" });
     }
   }
-
-  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
 
   async function handleDownloadReceipt() {
     if (isDownloadingReceipt) return;
