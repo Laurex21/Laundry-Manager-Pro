@@ -44,8 +44,8 @@ await generateDepositReceipt({
   showLogo: false,
 }, "download");
 
-assert.equal(capturedFilename, "deposit-receipt-order-26.png");
-assert.ok(capturedHtml, "receipt image download should render from receipt HTML");
+assert.equal(capturedFilename, "deposit-receipt-order-26.html");
+assert.ok(capturedHtml, "receipt HTML download should render receipt HTML");
 
 assert.match(capturedHtml, /Date de commande<\/div><div class="value">30\/06\/2026 • 22h00/);
 assert.match(capturedHtml, /Retrait prévu<\/div><div class="value">04\/07\/2026<\/div>/);

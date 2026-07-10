@@ -1,6 +1,5 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
-import { domToPng } from "modern-screenshot";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 import { orderDisplayId } from "./order-display";
 
@@ -204,15 +203,6 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function downloadDataUrl(dataUrl: string, filename: string): void {
-  const a = document.createElement("a");
-  a.href = dataUrl;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
 function receiptPrintCss(): string {
   return `
     @page { size: A4; margin: 6mm; }
@@ -299,82 +289,6 @@ function downloadReceiptHtml(html: string, filename: string): void {
   }
 
   downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), filename);
-}
-
-async function waitForReceiptAssets(container: ParentNode): Promise<void> {
-  const images = Array.from(container.querySelectorAll("img"));
-  await Promise.all(images.map((img) => {
-    if (img.complete) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      img.addEventListener("load", () => resolve(), { once: true });
-      img.addEventListener("error", () => resolve(), { once: true });
-    });
-  }));
-}
-
-async function downloadReceiptImage(html: string, imageFilename: string, fallbackHtmlFilename: string): Promise<void> {
-  const testCapture = (globalThis as any).__captureReceiptHtml;
-  if (typeof testCapture === "function") {
-    testCapture(html, imageFilename);
-    return;
-  }
-
-  // --- Attempt 1: server-side PDF via Puppeteer (vector text, WhatsApp-safe) ---
-  const pdfFilename = imageFilename.replace(/\.[^.]+$/, ".pdf");
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 45_000);
-    const response = await fetch("/api/receipts/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html }),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!response.ok) throw new Error(`Server PDF error ${response.status}`);
-    const blob = await response.blob();
-    downloadBlob(blob, pdfFilename);
-    return; // success — done
-  } catch (pdfError) {
-    console.warn("PDF generation failed, falling back to high-res image.", pdfError);
-  }
-
-  // --- Attempt 2: high-resolution PNG image rendered in-browser ---
-  const iframe = document.createElement("iframe");
-  iframe.setAttribute("title", "Receipt image renderer");
-  iframe.setAttribute("aria-hidden", "true");
-  iframe.style.cssText = "position:fixed;top:0;left:0;width:760px;height:1200px;border:0;opacity:0;pointer-events:none;z-index:-1;";
-  document.body.appendChild(iframe);
-
-  try {
-    const doc = iframe.contentDocument;
-    if (!doc) throw new Error("iframe unavailable");
-    doc.open();
-    doc.write(html);
-    doc.close();
-    await new Promise<void>((resolve) => {
-      if (doc.readyState === "complete") { resolve(); return; }
-      iframe.addEventListener("load", () => resolve(), { once: true });
-    });
-    await (doc.fonts?.ready ?? Promise.resolve());
-    await waitForReceiptAssets(doc);
-
-    const receipt = doc.querySelector<HTMLElement>(".receipt");
-    if (!receipt) throw new Error("Receipt element not found");
-
-    const dpr = Math.max(window.devicePixelRatio || 1, 1);
-    const dataUrl = await domToPng(receipt, {
-      backgroundColor: "#ffffff",
-      scale: 4 * dpr,
-      fetch: { requestInit: { cache: "force-cache" } },
-    });
-    downloadDataUrl(dataUrl, imageFilename);
-  } catch (imgError) {
-    console.error("Image fallback also failed; downloading HTML.", imgError);
-    downloadReceiptHtml(html, fallbackHtmlFilename);
-  } finally {
-    document.body.removeChild(iframe);
-  }
 }
 
 function thermalMoney(amount: number, symbol: string): string {
@@ -561,7 +475,7 @@ function openReceiptPrintWindow(html: string): void {
 
 type ReceiptAction = "download" | "print";
 
-export async function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download"): Promise<void> {
+export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
   const displayOrderId = orderDisplayId(order);
   const customer = order.customer || {};
@@ -755,11 +669,7 @@ export async function generateDepositReceipt(order: any, symbol: string, setting
     return;
   }
 
-  await downloadReceiptImage(
-    html,
-    `deposit-receipt-order-${displayOrderId}.png`,
-    `deposit-receipt-order-${displayOrderId}.html`
-  );
+  downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -872,7 +782,7 @@ export function generatePaymentReceipt(
   settings: ReceiptSettings = DEFAULT_SETTINGS,
   pickupCost: number = 0,
   action: ReceiptAction = "download"
-): Promise<void> | void {
+) {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = dateOnlyParts(entryDate) ? formatReceiptDateOnly(entryDate, lang) : formatReceiptDateTime(entryDate, lang);
   const displayPickupDate = formatReceiptDateOnly(pickupDate, lang);
@@ -1052,9 +962,5 @@ export function generatePaymentReceipt(
     return;
   }
 
-  return downloadReceiptImage(
-    html,
-    `payment-receipt-order-${orderId}.png`,
-    `payment-receipt-order-${orderId}.html`
-  );
+  downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
 }
