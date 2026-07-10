@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock,
-  AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck, MessageCircle
+  AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck, MessageCircle, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -164,13 +164,24 @@ export default function OrderDetail() {
     }
   }
 
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
+
   async function handleDownloadReceipt() {
-    const mergedSettings = {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
-    await generateDepositReceipt(order, symbol, mergedSettings, "download");
+    if (isDownloadingReceipt) return;
+    setIsDownloadingReceipt(true);
+    try {
+      const mergedSettings = {
+        ...DEFAULT_SETTINGS,
+        ...(settings || {}),
+        receiptLanguage: settings?.receiptLanguage || i18n.language,
+      };
+      await generateDepositReceipt(order, symbol, mergedSettings, "download");
+    } catch (err) {
+      console.error("Receipt download error:", err);
+      toast({ title: t("error"), description: "Could not download receipt.", variant: "destructive" });
+    } finally {
+      setIsDownloadingReceipt(false);
+    }
   }
 
   function handlePrintThermalReceipt() {
@@ -338,8 +349,11 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={handleDownloadReceipt} data-testid="button-download-deposit-receipt">
-            <Download className="w-4 h-4 mr-2" /> {t("download_receipt")}
+          <Button variant="outline" size="sm" onClick={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
+            {isDownloadingReceipt
+              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              : <Download className="w-4 h-4 mr-2" />}
+            {isDownloadingReceipt ? t("generating", "Generating…") : t("download_receipt")}
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
             <Printer className="w-4 h-4 mr-2" /> {t("print_thermal_receipt")}

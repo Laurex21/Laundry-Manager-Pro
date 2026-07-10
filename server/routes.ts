@@ -1126,7 +1126,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       try {
         const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: "networkidle0" });
+        await page.setContent(html, { waitUntil: "load" });
         await page.evaluateHandle("document.fonts.ready");
 
         // Measure actual content height so PDF fits on one page.
