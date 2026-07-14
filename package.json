@@ -11,6 +11,7 @@
     "test:auth-i18n": "tsx server/lib/auth-login-i18n.test.ts",
     "test:staff-invitation-boundary": "tsx server/lib/staff-invitation-account-boundary.test.ts",
     "test:business-registration-settings": "tsx server/lib/business-registration-settings.test.ts",
+    "test:new-order-service-search": "tsx server/lib/new-order-service-search.test.ts",
     "test:receipt-display": "tsx server/lib/receipt-display.test.ts",
     "test:analytics-i18n": "tsx server/lib/analytics-i18n.test.ts",
     "test:payment-date-accounting": "tsx server/lib/payment-date-accounting.test.ts",

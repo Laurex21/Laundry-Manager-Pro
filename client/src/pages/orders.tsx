@@ -5,7 +5,7 @@ import { useServices } from "@/hooks/use-services";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createOrderWithItemsSchema } from "@shared/routes";
-import { insertCustomerSchema } from "@shared/schema";
+import { insertCustomerSchema, type Service } from "@shared/schema";
 import { z } from "zod";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -80,6 +80,109 @@ function normalizeWhatsAppPhone(phone?: string | null): string {
   if (digits.startsWith("237")) return digits;
   if (digits.startsWith("6")) return `237${digits}`;
   return digits;
+}
+
+function normalizeServiceSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .trim();
+}
+
+function ServiceCombobox({
+  services,
+  value,
+  onChange,
+  symbol,
+}: {
+  services: Service[];
+  value: number;
+  onChange: (serviceId: number) => void;
+  symbol: string;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const selectedService = services.find((service) => service.id === value);
+  const groupedServices = useMemo(() => {
+    const groups = new Map<string, Service[]>();
+
+    services.forEach((service) => {
+      const category = service.category?.trim() || t("uncategorized");
+      const categoryServices = groups.get(category) || [];
+      categoryServices.push(service);
+      groups.set(category, categoryServices);
+    });
+
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [services, t]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <FormControl>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className={cn(
+              "h-9 w-full justify-between px-3 font-normal",
+              !selectedService && "text-muted-foreground"
+            )}
+          >
+            <span className="truncate text-left">
+              {selectedService
+                ? `${selectedService.name} (${symbol}${Number(selectedService.price).toFixed(2)}/${selectedService.unit})`
+                : t("select_service")}
+            </span>
+            <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+          </Button>
+        </FormControl>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command
+          filter={(itemValue, searchValue) =>
+            normalizeServiceSearch(itemValue).includes(normalizeServiceSearch(searchValue)) ? 1 : 0
+          }
+        >
+          <CommandInput
+            placeholder={t("search_services")}
+            aria-label={t("search_services")}
+          />
+          <CommandList>
+            <CommandEmpty>{t("no_service_found")}</CommandEmpty>
+            {groupedServices.map(([category, categoryServices]) => (
+              <CommandGroup key={category} heading={category}>
+                {categoryServices.map((service) => (
+                  <CommandItem
+                    key={service.id}
+                    value={`${service.id} ${service.name} ${category}`}
+                    onSelect={() => {
+                      onChange(service.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-1 h-4 w-4",
+                        service.id === value ? "opacity-100" : "opacity-0"
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{service.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {symbol}{Number(service.price).toFixed(2)}/{service.unit}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function buildOrderConfirmationWhatsAppMessage({
@@ -462,6 +565,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { data: customers } = useCustomers();
   const { data: services } = useServices();
+  const activeServices = useMemo(() => services?.filter((service) => service.active) || [], [services]);
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
 
@@ -780,23 +884,12 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                       render={({ field }) => (
                         <FormItem className="flex-1">
                           <FormLabel className="text-xs">{t("service")}</FormLabel>
-                          <Select
-                            onValueChange={(val) => field.onChange(Number(val))}
-                            value={field.value > 0 ? field.value.toString() : ""}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-9">
-                                <SelectValue placeholder={t("select_service")} />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {services?.filter(s => s.active).map((service) => (
-                                <SelectItem key={service.id} value={service.id.toString()}>
-                                  {service.name} ({symbol}{Number(service.price).toFixed(2)}/{service.unit})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <ServiceCombobox
+                            services={activeServices}
+                            value={Number(field.value) || 0}
+                            onChange={field.onChange}
+                            symbol={symbol}
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
