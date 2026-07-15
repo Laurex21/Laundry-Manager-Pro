@@ -54,64 +54,111 @@ function AnalyticsContent() {
   return (
     <div className="space-y-8 page-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-analytics-title">{t("analytics_kpis")}</h1>
-        <div className="flex gap-1 bg-muted p-1 rounded-lg">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-analytics-title">{t("analytics_kpis")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("analytics_owner_summary", { defaultValue: "See what needs attention, then explore performance in detail." })}</p>
+        </div>
+        <fieldset className="flex gap-1 bg-muted p-1 rounded-lg" aria-label={t("analytics_period", { defaultValue: "Analytics period" })}>
+          <legend className="sr-only">{t("analytics_period", { defaultValue: "Analytics period" })}</legend>
           {periods.map(p => (
             <Button key={p.key} variant={period === p.key ? "default" : "ghost"} size="sm" onClick={() => setPeriod(p.key)}
-              className={period === p.key ? "bg-primary text-white" : ""} data-testid={`button-period-${p.key}`}>
+              aria-pressed={period === p.key}
+              className={period === p.key ? "bg-primary text-primary-foreground" : ""} data-testid={`button-period-${p.key}`}>
               {p.label}
             </Button>
           ))}
+        </fieldset>
+      </div>
+
+      <Tabs defaultValue="overview" className="space-y-6">
+        <div className="sticky top-0 z-10 -mx-1 overflow-x-auto bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <TabsList className="grid min-w-[560px] grid-cols-3">
+            <TabsTrigger value="overview" className="min-h-11">{t("analytics_overview", { defaultValue: "Owner overview" })}</TabsTrigger>
+            <TabsTrigger value="customers" className="min-h-11">{t("analytics_customers_operations", { defaultValue: "Customers & operations" })}</TabsTrigger>
+            <TabsTrigger value="intelligence" className="min-h-11">{t("analytics_business_intelligence", { defaultValue: "Business intelligence" })}</TabsTrigger>
+          </TabsList>
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label={t("total_kg_label")} value={kpis?.totalKg || 0} />
-        <KpiCard label={t("total_orders")} value={kpis?.totalOrders || 0} />
-        <KpiCard label={t("avg_kg_order")} value={(kpis?.avgWeightPerOrder || 0).toFixed(1)} />
-        <KpiCard label={t("total_revenue")} value={`${symbol}${(kpis?.totalRevenue || 0).toFixed(0)}`} />
-        <KpiCard label={t("total_expenses_label")} value={`${symbol}${(kpis?.totalExpenses || 0).toFixed(0)}`} />
-        <KpiCard label={t("net_profit")} value={`${symbol}${(kpis?.profit || 0).toFixed(0)}`} color={kpis?.profit >= 0 ? "text-green-600" : "text-red-600"} />
-        <KpiCard label={t("cost_per_kg")} value={`${symbol}${(kpis?.costPerKg || 0).toFixed(2)}`} />
-        <KpiCard label={t("profit_per_kg")} value={`${symbol}${(kpis?.profitPerKg || 0).toFixed(2)}`} color={kpis?.profitPerKg >= 0 ? "text-green-600" : "text-red-600"} />
-      </div>
-
-      <Card className="shadow-sm" data-testid="card-break-even">
-        <CardHeader><CardTitle>{t("break_even")}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">{t("break_even_point")}: {(kpis?.breakEvenKg || 0).toFixed(0)} kg</div>
-            <div className="h-3 bg-muted rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${kpis?.totalKg >= kpis?.breakEvenKg ? "bg-green-500" : "bg-red-500"}`}
-                style={{ width: `${Math.min(100, kpis?.breakEvenKg > 0 ? (kpis?.totalKg / kpis?.breakEvenKg) * 100 : 0)}%` }} />
+        <TabsContent value="overview" className="space-y-6" tabIndex={0}>
+          <section className="space-y-4" aria-labelledby="analytics-attention-heading">
+            <div>
+              <h2 id="analytics-attention-heading" className="text-lg font-semibold">{t("analytics_needs_attention", { defaultValue: "Needs attention" })}</h2>
+              <p className="text-sm text-muted-foreground">{t("analytics_attention_description", { defaultValue: "Issues that may affect today's service, cost, or customer experience." })}</p>
             </div>
-            <div className="text-sm">
-              {kpis?.totalKg >= kpis?.breakEvenKg
-                ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {t("above_break_even")}</span>
-                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {t("need_more_kg", { count: Math.round((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)) })}</span>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            <ProductionDelaysSection />
+            <WasteSection />
+          </section>
 
-      <Card className="shadow-sm" data-testid="card-operational-kpis">
-        <CardHeader><CardTitle>{t("operational_kpis")}</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm"><span>{t("machine_utilization")}</span><span>{(kpis?.machineUtilization || 0).toFixed(0)}%</span></div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, kpis?.machineUtilization || 0)}%` }} />
+          <section className="space-y-4" aria-labelledby="analytics-performance-heading">
+            <div>
+              <h2 id="analytics-performance-heading" className="text-lg font-semibold">{t("analytics_business_performance", { defaultValue: "Business performance" })}</h2>
+              <p className="text-sm text-muted-foreground">{t("analytics_performance_description", { defaultValue: "Financial and production results for the selected period." })}</p>
             </div>
-          </div>
-          <div className="text-sm"><span className="text-muted-foreground">{t("employee_productivity")}:</span> {(kpis?.employeeProductivity || 0).toFixed(1)} {t("kg_per_person")}</div>
-        </CardContent>
-      </Card>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <KpiCard label={t("total_revenue")} value={`${symbol}${(kpis?.totalRevenue || 0).toFixed(0)}`} />
+              <KpiCard label={t("net_profit")} value={`${symbol}${(kpis?.profit || 0).toFixed(0)}`} color={kpis?.profit >= 0 ? "text-green-600" : "text-red-600"} />
+              <KpiCard label={t("total_orders")} value={kpis?.totalOrders || 0} />
+              <KpiCard label={t("total_kg_label")} value={kpis?.totalKg || 0} />
+              <KpiCard label={t("total_expenses_label")} value={`${symbol}${(kpis?.totalExpenses || 0).toFixed(0)}`} />
+              <KpiCard label={t("profit_per_kg")} value={`${symbol}${(kpis?.profitPerKg || 0).toFixed(2)}`} color={kpis?.profitPerKg >= 0 ? "text-green-600" : "text-red-600"} />
+              <KpiCard label={t("cost_per_kg")} value={`${symbol}${(kpis?.costPerKg || 0).toFixed(2)}`} />
+              <KpiCard label={t("avg_kg_order")} value={(kpis?.avgWeightPerOrder || 0).toFixed(1)} />
+            </div>
 
-      <WasteSection />
-      <CustomerBehaviorSection period={period} />
-      <PerformanceScoreSection />
-      <ProductionDelaysSection />
-      <AdvancedAnalyticsSection period={period} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="shadow-sm" data-testid="card-break-even">
+                <CardHeader><CardTitle>{t("break_even")}</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="text-sm text-muted-foreground">{t("break_even_point")}: {(kpis?.breakEvenKg || 0).toFixed(0)} kg</div>
+                  <div className="h-3 bg-muted rounded-full overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, kpis?.breakEvenKg > 0 ? Math.round((kpis?.totalKg / kpis?.breakEvenKg) * 100) : 0)}>
+                    <div className={`h-full rounded-full transition-all ${kpis?.totalKg >= kpis?.breakEvenKg ? "bg-green-500" : "bg-red-500"}`}
+                      style={{ width: `${Math.min(100, kpis?.breakEvenKg > 0 ? (kpis?.totalKg / kpis?.breakEvenKg) * 100 : 0)}%` }} />
+                  </div>
+                  <div className="text-sm">
+                    {kpis?.totalKg >= kpis?.breakEvenKg
+                      ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" aria-hidden="true" /> {t("above_break_even")}</span>
+                      : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" aria-hidden="true" /> {t("need_more_kg", { count: Math.round((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)) })}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-sm" data-testid="card-operational-kpis">
+                <CardHeader><CardTitle>{t("operational_kpis")}</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm"><span>{t("machine_utilization")}</span><span>{(kpis?.machineUtilization || 0).toFixed(0)}%</span></div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(kpis?.machineUtilization || 0))}>
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, kpis?.machineUtilization || 0)}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-sm"><span className="text-muted-foreground">{t("employee_productivity")}:</span> {(kpis?.employeeProductivity || 0).toFixed(1)} {t("kg_per_person")}</div>
+                </CardContent>
+              </Card>
+            </div>
+            <PerformanceScoreSection />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="customers" className="space-y-6" tabIndex={0}>
+          <section className="space-y-4" aria-labelledby="analytics-customer-heading">
+            <div>
+              <h2 id="analytics-customer-heading" className="text-lg font-semibold">{t("analytics_customer_flow", { defaultValue: "Customer flow and retention" })}</h2>
+              <p className="text-sm text-muted-foreground">{t("analytics_customer_description", { defaultValue: "Plan staffing, improve turnaround, and identify customers at risk." })}</p>
+            </div>
+            <CustomerBehaviorSection period={period} />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="intelligence" className="space-y-6" tabIndex={0}>
+          <section className="space-y-4" aria-labelledby="analytics-intelligence-heading">
+            <div>
+              <h2 id="analytics-intelligence-heading" className="text-lg font-semibold">{t("analytics_deeper_insights", { defaultValue: "Deeper business insights" })}</h2>
+              <p className="text-sm text-muted-foreground">{t("analytics_intelligence_description", { defaultValue: "Compare people, machines, services, risks, and recommendations." })}</p>
+            </div>
+            <AdvancedAnalyticsSection period={period} />
+          </section>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

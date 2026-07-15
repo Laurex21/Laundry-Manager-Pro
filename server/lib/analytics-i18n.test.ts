@@ -34,6 +34,25 @@ const storage = readFileSync(join(root, "server/storage.ts"), "utf8");
   assert.match(i18n, new RegExp(`"${key}"`));
 });
 
+[
+  "analytics_owner_summary",
+  "analytics_period",
+  "analytics_overview",
+  "analytics_customers_operations",
+  "analytics_business_intelligence",
+  "analytics_needs_attention",
+  "analytics_attention_description",
+  "analytics_business_performance",
+  "analytics_performance_description",
+  "analytics_customer_flow",
+  "analytics_customer_description",
+  "analytics_deeper_insights",
+  "analytics_intelligence_description",
+].forEach((key) => {
+  assert.match(analytics, new RegExp(`"${key}"`));
+  assert.equal([...i18n.matchAll(new RegExp(`"${key}"`, "g"))].length, 3, `${key} must exist in English, French, and Portuguese`);
+});
+
 assert.match(analytics, /severity_\$\{alert\.severity\}/);
 assert.match(i18n, /"severity_medium"/);
 
