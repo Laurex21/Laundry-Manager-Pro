@@ -25,6 +25,7 @@ import {
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
@@ -56,6 +57,7 @@ function normalizeWhatsAppPhone(phone?: string | null): string {
 }
 
 export default function OrderDetail() {
+  const { openWhatsApp } = useWhatsAppLauncher();
   const [, params] = useRoute("/orders/:id");
   const orderId = Number(params?.id);
   const { data: order, isLoading } = useOrder(orderId);
@@ -266,12 +268,7 @@ export default function OrderDetail() {
     };
     await generateDepositReceipt(order, symbol, mergedSettings, "download");
 
-    const whatsappUrl = `https://wa.me/${readyWhatsAppPhone}?text=${encodeURIComponent(buildCustomerWhatsAppMessage())}`;
-    const opened = window.open(whatsappUrl, "_blank");
-    if (opened) opened.opener = null;
-    if (!opened) {
-      toast({ title: "WhatsApp", description: t("popup_blocked", "Allow popups to open WhatsApp.") });
-    }
+    openWhatsApp({ phone: readyWhatsAppPhone, text: buildCustomerWhatsAppMessage() });
   }
 
   async function handleRequestCancellation() {

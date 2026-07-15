@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
+import { useWhatsAppLauncher, whatsappRequestFromUrl } from "@/components/whatsapp-launcher";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
@@ -34,6 +35,7 @@ const QUEUE_STAGES = [
 ];
 
 export default function Dashboard() {
+  const { openWhatsApp } = useWhatsAppLauncher();
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
@@ -339,9 +341,15 @@ export default function Dashboard() {
                           <p className="text-[11px] text-muted-foreground mt-0.5">{formatBusinessDateTime(order.readyDate)}</p>
                         </div>
                         {order.whatsappUrl && (
-                          <a href={order.whatsappUrl} target="_blank" rel="noopener noreferrer">
-                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs">WhatsApp</Button>
-                          </a>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => openWhatsApp(whatsappRequestFromUrl(order.whatsappUrl))}
+                          >
+                            WhatsApp
+                          </Button>
                         )}
                       </div>
                     </div>

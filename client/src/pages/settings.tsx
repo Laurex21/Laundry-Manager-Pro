@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DEFAULT_SETTINGS, DEFAULT_TERMS_EN, type ReceiptSettings } from "@/lib/receipt-settings";
+import { clearWhatsAppDevicePreference } from "@/components/whatsapp-launcher";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Building2, Receipt, FileText, Users, Save, Plus, Trash2, Copy,
   Link as LinkIcon, Shield, Clock, Upload, X, Globe2, MoreVertical,
+  MessageCircle,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -51,6 +53,7 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
     phone2: settings.phone2 || "",
     email: settings.email || "",
     website: settings.website || "",
+    whatsappAppPreference: settings.whatsappAppPreference || "ask",
     logoBase64: settings.logoBase64 || "",
   });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -121,6 +124,44 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
           <Input id="country" value={form.country} onChange={F("country")} placeholder={t("country_placeholder")} data-testid="input-country" />
         </div>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <MessageCircle className="h-4 w-4 text-[#128C7E]" aria-hidden="true" />
+            {t("whatsapp_messenger")}
+          </CardTitle>
+          <CardDescription className="text-xs">{t("whatsapp_messenger_description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="whatsappAppPreference">{t("default_whatsapp_app")}</Label>
+            <Select
+              value={form.whatsappAppPreference}
+              onValueChange={(value) => setForm((current) => ({ ...current, whatsappAppPreference: value }))}
+            >
+              <SelectTrigger id="whatsappAppPreference" data-testid="select-whatsapp-app-preference">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ask">{t("whatsapp_preference_ask")}</SelectItem>
+                <SelectItem value="whatsapp">{t("whatsapp_preference_personal")}</SelectItem>
+                <SelectItem value="business">{t("whatsapp_preference_business")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs leading-relaxed text-muted-foreground">{t("whatsapp_preference_hint")}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={clearWhatsAppDevicePreference}
+            data-testid="button-reset-whatsapp-device-choice"
+          >
+            {t("reset_whatsapp_device_choice")}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">

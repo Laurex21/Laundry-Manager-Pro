@@ -13,6 +13,7 @@ import {
   MessageCircle, ArrowRight, BarChart2, Sparkles, BadgeCheck,
 } from "lucide-react";
 import { PublicLanguageTools } from "@/components/public-language-tools";
+import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 
 // ─── Geo presets ─────────────────────────────────────────────────────────────
 const GEO: Record<string, { sym: string; kwh: number; waterM3: number; diesel: number; minWage: number; benchLow: number; benchHigh: number }> = {
@@ -292,6 +293,7 @@ const DEFAULTS: Inputs = {
 };
 
 export default function RentabilitePage() {
+  const { openWhatsApp } = useWhatsAppLauncher();
   const [, setLocation] = useLocation();
   const [stage, setStage] = useState<Stage>("lead");
   const [mode,  setMode ] = useState<Mode>("smart");
@@ -923,7 +925,7 @@ export default function RentabilitePage() {
             <h3 className="font-bold text-base mb-1">Un expert analyse votre résultat</h3>
             <p className="text-sm text-muted-foreground mb-3">Obtenez des recommandations personnalisées pour améliorer votre rentabilité.</p>
             <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all"
-              onClick={() => window.open(`https://wa.me/?text=Bonjour, j'ai calculé ma rentabilité sur XpressPro (bénéfice estimé : ${fmtN(r.monthlyProfit)} ${sym}/mois) et j'aimerais un accompagnement expert.`, "_blank")}>
+              onClick={() => openWhatsApp({ text: `Bonjour, j'ai calculé ma rentabilité sur XpressPro (bénéfice estimé : ${fmtN(r.monthlyProfit)} ${sym}/mois) et j'aimerais un accompagnement expert.` })}>
               <MessageCircle className="w-4 h-4 mr-2" /> Parler à un expert
             </Button>
           </div>
@@ -945,7 +947,7 @@ export default function RentabilitePage() {
                 Essayer gratuitement
               </Button>
               <Button variant="outline" className="border-white/40 text-white hover:bg-white/10 w-full"
-                onClick={() => window.open("https://wa.me/?text=Bonjour, je voudrais une démo de XpressPro.", "_blank")}>
+                onClick={() => openWhatsApp({ text: "Bonjour, je voudrais une démo de XpressPro." })}>
                 Demander une démo
               </Button>
             </div>

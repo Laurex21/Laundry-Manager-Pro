@@ -262,6 +262,7 @@ export const businessSettings = pgTable("business_settings", {
   phone2: varchar("phone2", { length: 50 }).default(""),
   email: varchar("email", { length: 255 }).default(""),
   website: varchar("website", { length: 255 }).default(""),
+  whatsappAppPreference: varchar("whatsapp_app_preference", { length: 20 }).notNull().default("ask"),
   receiptHeaderColor: varchar("receipt_header_color", { length: 7 }).notNull().default("#1e3a5f"),
   receiptLanguage: varchar("receipt_language", { length: 5 }).notNull().default("en"),
   showLogo: boolean("show_logo").notNull().default(true),
@@ -456,7 +457,11 @@ export const insertMachineUsageSchema = createInsertSchema(machineUsage).omit({ 
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, ordersUsed: true });
 export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).omit({ id: true, changedAt: true });
-export const insertBusinessSettingsSchema = createInsertSchema(businessSettings).omit({ id: true, updatedAt: true });
+export const insertBusinessSettingsSchema = createInsertSchema(businessSettings)
+  .omit({ id: true, userId: true, updatedAt: true })
+  .extend({
+    whatsappAppPreference: z.enum(["ask", "whatsapp", "business"]).optional(),
+  });
 export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, createdAt: true });
 export const insertSiteMemberSchema = createInsertSchema(siteMembers).omit({ id: true, createdAt: true });
 export const insertSiteInvitationSchema = createInsertSchema(siteInvitations).omit({ id: true, createdAt: true });

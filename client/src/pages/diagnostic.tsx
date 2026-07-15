@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Shirt, ChevronRight, ChevronLeft, CheckCircle2, Download, MessageCircle, Star, Award, TrendingUp, ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { PublicLanguageTools } from "@/components/public-language-tools";
+import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 
 // ─── Questions ────────────────────────────────────────────────────────────────
 const QUESTIONS = [
@@ -280,6 +281,7 @@ const EMPTY_FORM: LeadForm = {
 };
 
 export default function DiagnosticPage() {
+  const { openWhatsApp } = useWhatsAppLauncher();
   const [, setLocation] = useLocation();
   const [phase, setPhase] = useState<Phase>("lead");
   const [form, setForm] = useState<LeadForm>(EMPTY_FORM);
@@ -673,7 +675,7 @@ export default function DiagnosticPage() {
             <div className="text-2xl mb-3">🤝</div>
             <h3 className="font-bold text-base mb-1">Besoin d'un accompagnement personnalisé ?</h3>
             <p className="text-sm text-muted-foreground mb-4">Nos experts vous accompagnent pour structurer et développer votre activité.</p>
-            <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all" onClick={() => window.open(`https://wa.me/?text=Bonjour, j'ai obtenu le niveau ${level.label} au diagnostic XpressPro (${totalScore}/60) et je souhaite un accompagnement.`, "_blank")}>
+            <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all" onClick={() => openWhatsApp({ text: `Bonjour, j'ai obtenu le niveau ${level.label} au diagnostic XpressPro (${totalScore}/60) et je souhaite un accompagnement.` })}>
               <MessageCircle className="w-4 h-4 mr-2" /> Parler à un expert
             </Button>
           </div>
@@ -704,7 +706,7 @@ export default function DiagnosticPage() {
               <Button className="w-full bg-white text-primary hover:bg-blue-50 font-semibold" onClick={() => setLocation("/auth")}>
                 Essayer la plateforme
               </Button>
-              <Button variant="outline" className="w-full border-white/40 text-white hover:bg-white/10" onClick={() => window.open("https://wa.me/?text=Bonjour, je souhaite une démo de la plateforme XpressPro.", "_blank")}>
+              <Button variant="outline" className="w-full border-white/40 text-white hover:bg-white/10" onClick={() => openWhatsApp({ text: "Bonjour, je souhaite une démo de la plateforme XpressPro." })}>
                 Demander une démo
               </Button>
             </div>

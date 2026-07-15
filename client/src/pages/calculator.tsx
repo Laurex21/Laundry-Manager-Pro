@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { PublicLanguageTools, publicLangCode } from "@/components/public-language-tools";
 import { useTranslation } from "react-i18next";
+import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 
 // ─── Country data (kept from original) ────────────────────────────────────────
 const COUNTRY_META: Record<string, { label: string; currency: string; dialCode: string; dialCodeNumeric: string; cityPlaceholder: string }> = {
@@ -177,6 +178,7 @@ function NavRow({ onBack, onNext, nextLabel="Étape suivante", disabled=false }:
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function CalculatorPage() {
+  const { openWhatsApp } = useWhatsAppLauncher();
   const { i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const [stage,   setStage  ] = useState<Stage>("hero");
@@ -854,7 +856,7 @@ export default function CalculatorPage() {
               Parlez directement à un expert qui analysera votre projet et vous guidera pas à pas.
             </p>
             <Button variant="outline" className="w-full border-2 hover:bg-primary/5 hover:-translate-y-0.5 transition-all"
-              onClick={()=>window.open(`https://wa.me/?text=Bonjour, j'ai simulé mon budget pressing sur XpressPro pour ${form.city} et j'aimerais une consultation expert.`, "_blank")}>
+              onClick={() => openWhatsApp({ text: `Bonjour, j'ai simulé mon budget pressing sur XpressPro pour ${form.city} et j'aimerais une consultation expert.` })}>
               <MessageCircle className="w-4 h-4 mr-2"/>Parler à un expert
             </Button>
           </div>
@@ -877,7 +879,7 @@ export default function CalculatorPage() {
                 Essayer gratuitement
               </Button>
               <Button variant="outline" className="border-white/40 text-white hover:bg-white/10 w-full"
-                onClick={()=>window.open("https://wa.me/?text=Bonjour, je souhaite une démo de XpressPro pour mon pressing.", "_blank")}>
+                onClick={() => openWhatsApp({ text: "Bonjour, je souhaite une démo de XpressPro pour mon pressing." })}>
                 Demander une démo
               </Button>
             </div>

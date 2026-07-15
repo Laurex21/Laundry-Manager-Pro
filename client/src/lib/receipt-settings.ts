@@ -10,6 +10,7 @@ export interface ReceiptSettings {
   phone2?: string | null;
   email?: string | null;
   website?: string | null;
+  whatsappAppPreference?: "ask" | "whatsapp" | "business";
   receiptHeaderColor: string;
   receiptLanguage: string;
   showLogo: boolean;
@@ -33,6 +34,7 @@ export const DEFAULT_SETTINGS: ReceiptSettings = {
   phone2: "",
   email: "",
   website: "",
+  whatsappAppPreference: "ask",
   receiptHeaderColor: "#1e3a5f",
   receiptLanguage: "en",
   showLogo: true,

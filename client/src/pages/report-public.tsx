@@ -5,6 +5,7 @@ import { Loader2, Calculator, Printer, Link2, ChevronDown, MessageCircle, Users,
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { PublicLanguageTools } from "@/components/public-language-tools";
+import { useWhatsAppLauncher, whatsappRequestFromUrl } from "@/components/whatsapp-launcher";
 
 const COUNTRY_CURRENCY: Record<string, string> = {
   cameroun: "FCFA", senegal: "FCFA", cote_divoire: "FCFA", mali: "FCFA",
@@ -75,6 +76,7 @@ function ProfitabilitySection({ data, currency }: { data: any; currency: string 
 }
 
 export default function PublicReportPage() {
+  const { openWhatsApp } = useWhatsAppLauncher();
   const { leadId } = useParams<{ leadId: string }>();
   const leadAccessToken = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("token")
@@ -212,20 +214,26 @@ export default function PublicReportPage() {
             </div>
           </Button>
           {data.expertUrl && (
-            <a href={data.expertUrl} target="_blank" rel="noopener noreferrer"
-              onClick={() => fetch(`/api/calculator/track-expert-contact/${data.leadId}`, {
+            <Button
+              type="button"
+              size="lg"
+              className="w-full h-14 gap-3 bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/25"
+              data-testid="button-expert"
+              onClick={() => {
+                fetch(`/api/calculator/track-expert-contact/${data.leadId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ leadAccessToken }),
-              }).catch(() => {})}>
-              <Button size="lg" className="w-full h-14 gap-3 bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/25" data-testid="button-expert">
-                <WaIcon className="w-5 h-5 fill-white flex-shrink-0" />
-                <div className="text-left">
-                  <div className="font-semibold text-sm">Parler à un expert</div>
-                  <div className="text-xs text-white/80">Réponse WhatsApp rapide</div>
-                </div>
-              </Button>
-            </a>
+                }).catch(() => {});
+                openWhatsApp(whatsappRequestFromUrl(data.expertUrl));
+              }}
+            >
+              <WaIcon className="w-5 h-5 fill-white flex-shrink-0" />
+              <div className="text-left">
+                <div className="font-semibold text-sm">Parler à un expert</div>
+                <div className="text-xs text-white/80">Réponse WhatsApp rapide</div>
+              </div>
+            </Button>
           )}
         </div>
 

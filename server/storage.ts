@@ -36,6 +36,10 @@ async function ensureBusinessSettingsSchema(): Promise<void> {
     ALTER TABLE business_settings
     ADD COLUMN IF NOT EXISTS company_registration_number varchar(100) DEFAULT ''
   `);
+  await db.execute(sql`
+    ALTER TABLE business_settings
+    ADD COLUMN IF NOT EXISTS whatsapp_app_preference varchar(20) NOT NULL DEFAULT 'ask'
+  `);
   businessSettingsSchemaReady = true;
 }
 

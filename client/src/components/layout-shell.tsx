@@ -11,6 +11,7 @@ import {
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
 import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
+import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -232,19 +233,19 @@ function DemoBanner() {
 
 function WhatsAppContactButton() {
   const { t } = useTranslation();
+  const { openWhatsApp } = useWhatsAppLauncher();
 
   return (
-    <a
-      href={WHATSAPP_SUPPORT_URL}
-      target="_blank"
-      rel="noopener noreferrer"
+    <button
+      type="button"
+      onClick={() => openWhatsApp({ phone: WHATSAPP_SUPPORT_URL.replace("https://wa.me/", "") })}
       className="fixed bottom-20 right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 lg:bottom-6 lg:right-6"
       aria-label={t("whatsapp_contact_support")}
       data-testid="button-whatsapp-support"
     >
       <FaWhatsapp className="h-5 w-5" aria-hidden="true" />
       <span className="hidden sm:inline">{t("whatsapp_contact_support")}</span>
-    </a>
+    </button>
   );
 }
 
@@ -335,6 +336,17 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             <p className="text-xs font-semibold truncate leading-tight">{user?.firstName} {user?.lastName}</p>
             <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">{user?.email}</p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-7 h-7 text-muted-foreground hover:text-[#128C7E] shrink-0"
+            onClick={clearWhatsAppDevicePreference}
+            data-testid="button-change-whatsapp-app"
+            title={t("change_whatsapp_app")}
+            aria-label={t("change_whatsapp_app")}
+          >
+            <FaWhatsapp className="w-3.5 h-3.5" aria-hidden="true" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"

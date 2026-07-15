@@ -68,6 +68,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
@@ -255,6 +256,7 @@ export default function Orders() {
   const [open, setOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
+  const { openWhatsApp } = useWhatsAppLauncher();
   const symbol = getSymbol();
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
@@ -270,14 +272,15 @@ export default function Orders() {
       receiptLanguage: settings?.receiptLanguage || i18n.language,
     }, "download");
 
-    const whatsappUrl = `https://wa.me/${createdOrderWhatsAppPhone}?text=${encodeURIComponent(buildOrderConfirmationWhatsAppMessage({
+    openWhatsApp({
+      phone: createdOrderWhatsAppPhone,
+      text: buildOrderConfirmationWhatsAppMessage({
       order: createdOrder,
       symbol,
       businessName: settings?.businessName || "Xpress Pro",
       language: i18n.language,
-    }))}`;
-    const opened = window.open(whatsappUrl, "_blank");
-    if (opened) opened.opener = null;
+      }),
+    });
   }
 
   const summary = useMemo(() => {

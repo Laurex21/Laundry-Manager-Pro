@@ -8,7 +8,7 @@ import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
-import { insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
+import { insertBusinessSettingsSchema, insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
 import { parseLocalDateParam } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 
@@ -909,7 +909,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       if (!(await requireOwnerOrganisation(req, res))) return;
       const userId = (req.session as any).userId;
-      const settings = await storage.upsertSettings(userId, req.body);
+      const parsed = insertBusinessSettingsSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
+      }
+      const settings = await storage.upsertSettings(userId, parsed.data);
       res.json(settings);
     } catch (err) {
       res.status(500).json({ message: "Failed to save settings" });

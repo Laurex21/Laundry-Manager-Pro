@@ -57,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 
 const VIP_THRESHOLD = 50000;
 
@@ -84,6 +85,7 @@ export default function CustomerDetail() {
   const [, navigate] = useLocation();
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
+  const { openWhatsApp } = useWhatsAppLauncher();
   const symbol = getSymbol();
 
   const { data: customer, isLoading: customerLoading } = useCustomer(customerId);
@@ -130,7 +132,6 @@ export default function CustomerDetail() {
   const normalCycleDays = customer.avgDaysBetweenVisits ? Math.round(Number(customer.avgDaysBetweenVisits)) : null;
   const shouldShowChurnWarning = (customer.segment === "at_risk" || customer.segment === "lost") && daysSinceLastVisit != null && normalCycleDays != null;
 
-  const whatsappLink = `https://wa.me/${customer.phone.replace(/[^0-9+]/g, "")}`;
   const callLink = `tel:${customer.phone}`;
   const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customer.address)}`;
 
@@ -189,11 +190,15 @@ export default function CustomerDetail() {
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} data-testid="button-edit-profile">
             <Pen className="w-4 h-4 mr-1.5" /> {t("edit_profile")}
           </Button>
-          <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm" data-testid="button-whatsapp">
-              <MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp
-            </Button>
-          </a>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => openWhatsApp({ phone: customer.phone })}
+            data-testid="button-whatsapp"
+          >
+            <MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp
+          </Button>
           <a href={callLink}>
             <Button variant="outline" size="sm" data-testid="button-call">
               <Phone className="w-4 h-4 mr-1.5" /> {t("call")}

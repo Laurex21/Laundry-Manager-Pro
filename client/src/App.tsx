@@ -9,6 +9,7 @@ import { Loader2, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, lazy, Suspense } from "react";
 import LayoutShell from "@/components/layout-shell";
+import { WhatsAppLauncherProvider } from "@/components/whatsapp-launcher";
 
 // ─── Lazy-loaded routes (code-split into separate chunks) ─────────────────────
 const NotFound          = lazy(() => import("@/pages/not-found"));
@@ -211,7 +212,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Router />
+        <WhatsAppLauncherProvider>
+          <Router />
+        </WhatsAppLauncherProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
