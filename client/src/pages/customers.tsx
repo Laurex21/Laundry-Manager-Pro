@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -39,14 +40,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "at_risk">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "expired" | "vip" | "none">("all");
+  const [showMembershipColumns, setShowMembershipColumns] = useState(false);
+  const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({ queryKey: ["/api/customer-subscription-summaries"] });
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const [, navigate] = useLocation();
 
   const filteredCustomers = customers?.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
-    const matchesFilter = filter === "all" || c.segment === "at_risk" || c.segment === "lost";
+    const sub = subscriptionSummaries[String(c.id)];
+    const matchesFilter = filter === "all" || (filter === "active" && sub?.status === "active") || (filter === "expired" && (sub?.status === "expired" || (sub?.expiryDate && new Date(sub.expiryDate) < new Date()))) || (filter === "vip" && c.segment === "vip") || (filter === "none" && !sub);
     return matchesSearch && matchesFilter;
   });
 
@@ -84,14 +88,8 @@ export default function Customers() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex rounded-md border bg-background p-0.5">
-          <Button type="button" variant={filter === "all" ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter("all")}>
-            Tous
-          </Button>
-          <Button type="button" variant={filter === "at_risk" ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter("at_risk")}>
-            At Risk
-          </Button>
-        </div>
+        <div className="flex flex-wrap rounded-md border bg-background p-0.5">{[["all","Tous les clients"],["active","Membres actifs"],["expired","Membres expirés"],["vip","VIP"],["none","Sans abonnement"]].map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter(value as any)}>{label}</Button>)}</div>
+        <Button variant="outline" size="sm" onClick={()=>setShowMembershipColumns(v=>!v)}>Colonnes</Button>
         {!isLoading && (
           <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />
@@ -141,6 +139,7 @@ export default function Customers() {
                   </Badge>
                 )}
               </div>
+              {showMembershipColumns && (() => { const sub = subscriptionSummaries[String(customer.id)]; return <div className="hidden xl:grid min-w-[430px] grid-cols-4 gap-3 text-xs"><span><Badge variant={sub?.status === "active" ? "default" : "secondary"}>{sub?.status === "active" ? "Actif" : sub ? "Expiré" : "Aucun"}</Badge></span><span className="truncate">{sub?.planName || "—"}</span><span>{sub?.renewalDate || sub?.expiryDate || "—"}</span><span>{sub?.remainingKg != null ? `${sub.remainingKg} kg` : sub?.remainingPieces != null ? `${sub.remainingPieces} pcs` : sub?.remainingOrders != null ? `${sub.remainingOrders} cmd` : "—"}</span></div>; })()}
 
               {/* Email - hidden on small screens */}
               {customer.email ? (

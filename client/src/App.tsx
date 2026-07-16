@@ -35,6 +35,7 @@ const Machines          = lazy(() => import("@/pages/machines"));
 const Employees         = lazy(() => import("@/pages/employees"));
 const Analytics         = lazy(() => import("@/pages/analytics"));
 const Subscriptions     = lazy(() => import("@/pages/subscriptions"));
+const MembershipPlans   = lazy(() => import("@/pages/membership-plans"));
 const SettingsPage      = lazy(() => import("@/pages/settings"));
 const AcceptInvitation  = lazy(() => import("@/pages/accept-invitation"));
 
@@ -197,6 +198,9 @@ function Router() {
         </Route>
         <Route path="/subscriptions">
           <ProtectedRoute component={Subscriptions} page="subscriptions" />
+        </Route>
+        <Route path="/membership-plans">
+          <ProtectedRoute component={MembershipPlans} page="customers" />
         </Route>
         <Route path="/settings">
           <ProtectedRoute component={SettingsPage} page="settings" />

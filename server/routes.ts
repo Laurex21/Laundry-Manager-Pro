@@ -11,6 +11,7 @@ import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertBusinessSettingsSchema, insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
 import { parseLocalDateParam } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
+import { registerMembershipRoutes } from "./lib/membership-routes";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -268,6 +269,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerCalculatorRoutes(app);
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
+  registerMembershipRoutes(app);
   seedDatabase().catch(console.error);
   startTemporalIntelligenceJob();
 

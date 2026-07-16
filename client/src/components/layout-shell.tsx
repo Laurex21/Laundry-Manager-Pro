@@ -7,6 +7,7 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight,
+  ListChecks,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +35,7 @@ const ALL_NAV_ITEMS = [
   { icon: Cog, labelKey: "machines", href: "/machines", page: "machines" },
   { icon: UserCheck, labelKey: "employees", href: "/employees", page: "employees" },
   { icon: TrendingUp, labelKey: "analytics", href: "/analytics", page: "analytics" },
+  { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
   { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
   { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
 ];
@@ -69,6 +71,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/employees": "employees",
   "/analytics": "analytics",
   "/subscriptions": "subscription",
+  "/membership-plans": "subscription_plans",
   "/settings": "settings",
 };
 

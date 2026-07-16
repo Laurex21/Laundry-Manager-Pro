@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -291,6 +291,120 @@ export const sites = pgTable("sites", {
   city: varchar("city", { length: 100 }).default(""),
   phone: varchar("phone", { length: 50 }).default(""),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  billingCycle: varchar("billing_cycle", { length: 20 }).notNull(),
+  durationDays: integer("duration_days").notNull(),
+  activationFee: decimal("activation_fee", { precision: 12, scale: 2 }).default("0"),
+  recurringPrice: decimal("recurring_price", { precision: 12, scale: 2 }).notNull(),
+  includedWeightKg: decimal("included_weight_kg", { precision: 10, scale: 2 }),
+  includedPieces: integer("included_pieces"),
+  maxOrders: integer("max_orders"),
+  allowCarryForward: boolean("allow_carry_forward").default(false),
+  carryForwardLimit: decimal("carry_forward_limit", { precision: 10, scale: 2 }),
+  overagePricePerKg: decimal("overage_price_per_kg", { precision: 10, scale: 2 }),
+  overagePricePerPiece: decimal("overage_price_per_piece", { precision: 10, scale: 2 }),
+  pickupIncluded: boolean("pickup_included").default(false),
+  deliveryIncluded: boolean("delivery_included").default(false),
+  expressIncluded: boolean("express_included").default(false),
+  priorityQueue: boolean("priority_queue").default(false),
+  discountPercentage: decimal("discount_percentage", { precision: 5, scale: 2 }).default("0"),
+  autoRenew: boolean("auto_renew").default(true),
+  gracePeriodDays: integer("grace_period_days").default(3),
+  renewalReminderDays: integer("renewal_reminder_days").default(7),
+  cancellationPolicy: text("cancellation_policy"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_sub_plans_org").on(table.organisationId),
+]);
+
+export const subscriptionPlanServices = pgTable("subscription_plan_services", {
+  id: serial("id").primaryKey(),
+  subscriptionPlanId: integer("subscription_plan_id").notNull().references(() => subscriptionPlans.id, { onDelete: "cascade" }),
+  serviceId: integer("service_id").notNull().references(() => services.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_sub_plan_service_unique").on(table.subscriptionPlanId, table.serviceId),
+]);
+
+export const customerSubscriptions = pgTable("customer_subscriptions", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  subscriptionPlanId: integer("subscription_plan_id").notNull().references(() => subscriptionPlans.id),
+  membershipNumber: varchar("membership_number", { length: 50 }).notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  startDate: date("start_date").notNull(),
+  expiryDate: date("expiry_date").notNull(),
+  renewalDate: date("renewal_date"),
+  nextBillingDate: date("next_billing_date"),
+  remainingKg: decimal("remaining_kg", { precision: 10, scale: 2 }),
+  remainingPieces: integer("remaining_pieces"),
+  remainingOrders: integer("remaining_orders"),
+  totalConsumedKg: decimal("total_consumed_kg", { precision: 10, scale: 2 }).default("0"),
+  totalConsumedPieces: integer("total_consumed_pieces").default(0),
+  totalOrdersUsed: integer("total_orders_used").default(0),
+  autoRenew: boolean("auto_renew").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  cancelledAt: timestamp("cancelled_at"),
+}, (table) => [
+  index("idx_customer_subs_org").on(table.organisationId),
+  index("idx_customer_subs_client").on(table.customerId),
+  index("idx_customer_subs_status").on(table.status),
+]);
+
+export const subscriptionTransactions = pgTable("subscription_transactions", {
+  id: serial("id").primaryKey(),
+  customerSubscriptionId: integer("customer_subscription_id").notNull().references(() => customerSubscriptions.id),
+  orderId: integer("order_id").references(() => orders.id),
+  serviceId: integer("service_id").references(() => services.id),
+  kgConsumed: decimal("kg_consumed", { precision: 10, scale: 2 }),
+  piecesConsumed: integer("pieces_consumed"),
+  amountCovered: decimal("amount_covered", { precision: 12, scale: 2 }),
+  extraAmountCharged: decimal("extra_amount_charged", { precision: 12, scale: 2 }).default("0"),
+  transactionDate: timestamp("transaction_date").defaultNow(),
+}, (table) => [
+  index("idx_sub_transactions_sub").on(table.customerSubscriptionId),
+]);
+
+export const membershipSubscriptionPayments = pgTable("membership_subscription_payments", {
+  id: serial("id").primaryKey(),
+  subscriptionId: integer("subscription_id").notNull().references(() => customerSubscriptions.id),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  paymentDate: timestamp("payment_date").defaultNow(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  reference: varchar("reference", { length: 100 }),
+  invoiceNumber: varchar("invoice_number", { length: 50 }),
+  status: varchar("status", { length: 20 }).default("completed"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_membership_sub_payments_sub").on(table.subscriptionId),
+  index("idx_membership_sub_payments_org").on(table.organisationId),
+]);
+
+export const membershipCards = pgTable("membership_cards", {
+  id: serial("id").primaryKey(),
+  customerSubscriptionId: integer("customer_subscription_id").notNull().references(() => customerSubscriptions.id, { onDelete: "cascade" }),
+  cardNumber: varchar("card_number", { length: 50 }).notNull().unique(),
+  qrCode: text("qr_code"),
+  barcode: varchar("barcode", { length: 100 }),
+  issueDate: date("issue_date").defaultNow(),
+  expiryDate: date("expiry_date"),
+  digitalCardImage: text("digital_card_image"),
+  physicalPrinted: boolean("physical_printed").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
