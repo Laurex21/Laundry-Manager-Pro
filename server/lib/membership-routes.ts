@@ -9,6 +9,7 @@ import {
   membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
 } from "@shared/schema";
 import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
+import { buildMembershipCard } from "./membership-card-generator";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
@@ -38,6 +39,43 @@ async function customerInOrganisation(customerId: number, organisationId: number
     .innerJoin(sites, eq(customers.siteId, sites.id))
     .where(and(eq(customers.id, customerId), eq(sites.organisationId, organisationId))).limit(1);
   return row?.customer ?? null;
+}
+
+async function membershipCardContext(subscriptionId: number, organisationId: number) {
+  const [row] = await db.select({
+    subscription: customerSubscriptions,
+    plan: subscriptionPlans,
+    customer: customers,
+    card: membershipCards,
+    organisation: organisations,
+  }).from(customerSubscriptions)
+    .innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId)))
+    .innerJoin(customers, eq(customerSubscriptions.customerId, customers.id))
+    .innerJoin(sites, and(eq(customers.siteId, sites.id), eq(sites.organisationId, organisationId)))
+    .innerJoin(organisations, eq(organisations.id, organisationId))
+    .leftJoin(membershipCards, eq(membershipCards.customerSubscriptionId, customerSubscriptions.id))
+    .where(and(eq(customerSubscriptions.id, subscriptionId), eq(customerSubscriptions.organisationId, organisationId)))
+    .limit(1);
+  if (!row) return null;
+  const [settings] = await db.select().from(businessSettings).where(eq(businessSettings.userId, row.organisation.ownerId)).limit(1);
+  return { ...row, settings: settings ?? { businessName: row.organisation.name, logoBase64: null } };
+}
+
+async function persistMembershipCard(subscriptionId: number, organisationId: number) {
+  const context = await membershipCardContext(subscriptionId, organisationId);
+  if (!context) return null;
+  const generated = await buildMembershipCard(organisationId, context.customer, context.subscription, context.plan, context.settings);
+  const values = {
+    cardNumber: context.subscription.membershipNumber,
+    qrCode: generated.qrCode,
+    barcode: generated.qrContent,
+    expiryDate: context.subscription.expiryDate,
+    digitalCardImage: generated.digitalCardImage,
+  };
+  const [card] = context.card
+    ? await db.update(membershipCards).set(values).where(eq(membershipCards.id, context.card.id)).returning()
+    : await db.insert(membershipCards).values({ customerSubscriptionId: subscriptionId, ...values }).returning();
+  return { card, generated, context };
 }
 
 async function servicesBelongToOrganisation(serviceIds: number[], organisationId: number) {
@@ -90,6 +128,43 @@ async function calculateCoverage(organisationId: number, subscriptionId: number,
 }
 
 export function registerMembershipRoutes(app: Express) {
+  app.get("/api/subscriptions/:id/card", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
+    if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid subscription" });
+    let context = await membershipCardContext(id, organisationId);
+    if (!context) return res.status(404).json({ message: "Subscription not found" });
+    if (!context.card?.digitalCardImage || !context.card.qrCode) {
+      const created = await persistMembershipCard(id, organisationId);
+      if (!created) return res.status(404).json({ message: "Subscription not found" });
+      context = { ...created.context, card: created.card };
+    }
+    res.json({
+      cardNumber: context.card!.cardNumber,
+      qrCode: context.card!.qrCode,
+      issueDate: context.card!.issueDate,
+      expiryDate: context.card!.expiryDate,
+      digitalCardImage: context.card!.digitalCardImage,
+    });
+  });
+
+  app.post("/api/subscriptions/:id/card/regenerate", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
+    if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid subscription" });
+    const generated = await persistMembershipCard(id, organisationId);
+    if (!generated) return res.status(404).json({ message: "Subscription not found" });
+    res.json({ cardNumber: generated.card.cardNumber, qrCode: generated.card.qrCode, issueDate: generated.card.issueDate, expiryDate: generated.card.expiryDate, digitalCardImage: generated.card.digitalCardImage });
+  });
+
+  app.get("/api/subscriptions/:id/card/download", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
+    if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid subscription" });
+    const generated = await persistMembershipCard(id, organisationId);
+    if (!generated) return res.status(404).json({ message: "Subscription not found" });
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Content-Disposition", `attachment; filename="membership-${generated.context.subscription.membershipNumber.replace(/[^a-zA-Z0-9_-]/g, "-")}.png"`);
+    res.send(generated.generated.png);
+  });
+
   app.get("/api/customers/:id/subscription/active", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId))) return res.status(404).json({ message: "Customer not found" });
@@ -125,7 +200,7 @@ export function registerMembershipRoutes(app: Express) {
   app.get("/api/orders/:id/subscriber-receipt", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const orderId = Number(req.params.id);
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
-    const [row] = await db.select({ order: orders, customer: customers, transaction: subscriptionTransactions, subscription: customerSubscriptions, plan: subscriptionPlans }).from(orders).innerJoin(sites, and(eq(orders.siteId, sites.id), eq(sites.organisationId, organisationId))).innerJoin(customers, eq(orders.customerId, customers.id)).innerJoin(subscriptionTransactions, eq(subscriptionTransactions.orderId, orders.id)).innerJoin(customerSubscriptions, and(eq(subscriptionTransactions.customerSubscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId))).innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(orders.id, orderId)).limit(1);
+    const [row] = await db.select({ order: orders, customer: customers, transaction: subscriptionTransactions, subscription: customerSubscriptions, plan: subscriptionPlans, card: membershipCards }).from(orders).innerJoin(sites, and(eq(orders.siteId, sites.id), eq(sites.organisationId, organisationId))).innerJoin(customers, eq(orders.customerId, customers.id)).innerJoin(subscriptionTransactions, eq(subscriptionTransactions.orderId, orders.id)).innerJoin(customerSubscriptions, and(eq(subscriptionTransactions.customerSubscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId))).innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).leftJoin(membershipCards, eq(membershipCards.customerSubscriptionId, customerSubscriptions.id)).where(eq(orders.id, orderId)).limit(1);
     if (!row) return res.status(404).json({ message: "No subscription coverage for this order; use the standard receipt" });
     const items = await db.select({ serviceName: services.name, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
@@ -242,10 +317,10 @@ export function registerMembershipRoutes(app: Express) {
   app.get("/api/customers/:id/subscription", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId))) return res.status(404).json({ message: "Customer not found" });
-    const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.customerId, customerId), inArray(customerSubscriptions.status, ["active", "suspended", "pending"]))).orderBy(desc(customerSubscriptions.createdAt)).limit(1);
+    const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans, customerName: customers.name, customerPhone: customers.phone }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).innerJoin(customers, eq(customerSubscriptions.customerId, customers.id)).where(and(eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.customerId, customerId), inArray(customerSubscriptions.status, ["active", "suspended", "pending"]))).orderBy(desc(customerSubscriptions.createdAt)).limit(1);
     if (!row) return res.json(null);
     const payments = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.subscriptionId, row.subscription.id))).orderBy(desc(membershipSubscriptionPayments.paymentDate));
-    res.json({ ...row.subscription, plan: row.plan, payments });
+    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments });
   });
 
   app.post("/api/customers/:id/subscription", isAuthenticated, async (req: any, res) => {
