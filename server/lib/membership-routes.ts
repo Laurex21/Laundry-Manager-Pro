@@ -248,7 +248,9 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/subscription-plans", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req);
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
-    const input = planInput.parse(req.body);
+    const parsed = planInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid input", field: parsed.error.errors[0]?.path.join(".") });
+    const input = parsed.data;
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId))) return res.status(400).json({ message: "Invalid service selection" });
     const created = await db.transaction(async (tx) => {
       const { serviceIds, ...values } = input;
@@ -269,7 +271,10 @@ export function registerMembershipRoutes(app: Express) {
   });
 
   app.put("/api/subscription-plans/:id", isAuthenticated, async (req: any, res) => {
-    const organisationId = await organisationIdFor(req); const id = Number(req.params.id); const input = planInput.parse(req.body);
+    const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
+    const parsed = planInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid input", field: parsed.error.errors[0]?.path.join(".") });
+    const input = parsed.data;
     const [existing] = await db.select({ id: subscriptionPlans.id }).from(subscriptionPlans).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId ?? -1), isNull(subscriptionPlans.deletedAt))).limit(1);
     if (!existing) return res.status(404).json({ message: "Plan not found" });
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId!))) return res.status(400).json({ message: "Invalid service selection" });
