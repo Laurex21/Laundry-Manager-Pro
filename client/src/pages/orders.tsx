@@ -11,7 +11,7 @@ import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { generateDepositReceipt } from "@/lib/receipt";
-import { useQuery as useSettingsQuery } from "@tanstack/react-query";
+import { useQuery, useQuery as useSettingsQuery } from "@tanstack/react-query";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import {
@@ -26,6 +26,7 @@ import {
   PackageOpen,
   MessageCircle,
   Eye,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -366,6 +367,7 @@ export default function Orders() {
                   <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer")}
                 </Button>
               </div>
+              {createdOrder.subscriptionCoverage && <div className="rounded-xl border p-4"><div className="mb-3 flex items-center gap-2 font-semibold"><Star className="h-4 w-4 text-primary" />{t("subscription_coverage")}</div><div className="grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-green-50 p-3 dark:bg-green-950/30"><p className="text-xs text-muted-foreground">{t("covered_by_subscription")}</p><p className="font-bold text-green-700">{symbol}{Number(createdOrder.subscriptionCoverage.coveredAmount).toFixed(2)}</p></div><div className="rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30"><p className="text-xs text-muted-foreground">{t("extra_charges")}</p><p className="font-bold text-amber-700">{symbol}{Number(createdOrder.subscriptionCoverage.extraAmount).toFixed(2)}</p></div></div><p className="mt-3 text-center text-xs text-muted-foreground">{t("remaining_balance")}: {createdOrder.subscriptionCoverage.remainingAfter.kg ?? "—"} kg · {createdOrder.subscriptionCoverage.remainingAfter.pieces ?? "—"} pcs</p></div>}
               <p className="text-xs text-muted-foreground">
                 {t("whatsapp_confirmation_hint")}
               </p>
@@ -636,6 +638,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     control: form.control,
     name: "customerId"
   });
+  const { data: activeSub } = useQuery<any>({ queryKey: ["customer-active-sub", watchedCustomerId], queryFn: async () => { const r = await fetch(`/api/customers/${watchedCustomerId}/subscription/active`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load subscription"); return r.json(); }, enabled: !!watchedCustomerId });
 
   const selectedCustomer = customers?.find((c: any) => c.id === Number(watchedCustomerId));
   const customerDiscountPct = Number(selectedCustomer?.defaultDiscountPct || 0);
@@ -704,9 +707,13 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
       onSuccess: async (newOrder: any) => {
         let orderDetails = newOrder;
         try {
+          if (activeSub?.id) {
+            const apply = await fetch("/api/subscriptions/apply-to-order", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ customerSubscriptionId: activeSub.id, orderId: newOrder.id }) });
+            if (apply.ok) orderDetails.subscriptionCoverage = (await apply.json()).coverage;
+          }
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
-            orderDetails = await res.json();
+            orderDetails = { ...(await res.json()), subscriptionCoverage: orderDetails.subscriptionCoverage };
             await generateDepositReceipt(orderDetails, symbol, {
               ...DEFAULT_SETTINGS,
               ...(settings || {}),
@@ -866,6 +873,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 />
               </div>
             </div>
+            {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:bg-blue-950/20"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" /></span><span className="text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-3 gap-2 text-center text-xs">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">

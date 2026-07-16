@@ -171,6 +171,13 @@ export default function OrderDetail() {
     if (isDownloadingReceipt) return;
     setIsDownloadingReceipt(true);
     try {
+      const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=a4`, { credentials: "include" });
+      if (subscriberReceipt.ok) {
+        const html = await subscriberReceipt.text();
+        const receiptWindow = window.open("", "_blank");
+        if (receiptWindow) { receiptWindow.document.write(html); receiptWindow.document.close(); }
+        return;
+      }
       const mergedSettings = {
         ...DEFAULT_SETTINGS,
         ...(settings || {}),
@@ -185,7 +192,13 @@ export default function OrderDetail() {
     }
   }
 
-  function handlePrintThermalReceipt() {
+  async function handlePrintThermalReceipt() {
+    const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=thermal80`, { credentials: "include" });
+    if (subscriberReceipt.ok) {
+      const html = await subscriberReceipt.text(); const receiptWindow = window.open("", "_blank");
+      if (receiptWindow) { receiptWindow.document.write(html); receiptWindow.document.close(); receiptWindow.print(); }
+      return;
+    }
     const mergedSettings = {
       ...DEFAULT_SETTINGS,
       ...(settings || {}),
