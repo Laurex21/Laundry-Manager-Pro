@@ -5,9 +5,10 @@ import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { users } from "@shared/models/auth";
 import {
-  customerSubscriptions, customers, membershipCards, organisations, services, sites,
+  businessSettings, customerSubscriptions, customers, membershipCards, orders, orderItems, organisations, services, sites,
   membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
 } from "@shared/schema";
+import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
@@ -53,7 +54,88 @@ function addDays(value: string | Date, days: number) {
   return dateOnly(date);
 }
 
+async function calculateCoverage(organisationId: number, subscriptionId: number, orderId: number) {
+  const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans, order: orders })
+    .from(customerSubscriptions)
+    .innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId)))
+    .innerJoin(orders, eq(orders.id, orderId))
+    .innerJoin(sites, and(eq(orders.siteId, sites.id), eq(sites.organisationId, organisationId)))
+    .where(and(eq(customerSubscriptions.id, subscriptionId), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.status, "active"), eq(customerSubscriptions.customerId, orders.customerId)))
+    .limit(1);
+  if (!row) return null;
+  const included = new Set((await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).innerJoin(subscriptionPlans, and(eq(subscriptionPlanServices.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x => x.serviceId));
+  const items = await db.select({ serviceId: orderItems.serviceId, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder, serviceName: services.name, unit: services.unit }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
+  let kgLeft = row.subscription.remainingKg == null ? null : Number(row.subscription.remainingKg);
+  let piecesLeft = row.subscription.remainingPieces;
+  let coveredAmount = 0, extraAmount = 0, kgToDeduct = 0, piecesToDeduct = 0;
+  const coverageBreakdown = items.map(item => {
+    const quantity = Number(item.quantity); const lineAmount = quantity * Number(item.unitPrice);
+    let coveredQty = 0;
+    if (included.has(item.serviceId)) {
+      if (item.unit === "kg") coveredQty = kgLeft == null ? quantity : Math.min(quantity, Math.max(0, kgLeft));
+      else coveredQty = piecesLeft == null ? quantity : Math.min(quantity, Math.max(0, piecesLeft));
+    }
+    const extraQty = quantity - coveredQty; const lineCovered = coveredQty * Number(item.unitPrice);
+    const overageRate = item.unit === "kg" ? Number(row.plan.overagePricePerKg ?? item.unitPrice) : Number(row.plan.overagePricePerPiece ?? item.unitPrice);
+    const lineExtra = extraQty * overageRate;
+    coveredAmount += lineCovered; extraAmount += lineExtra;
+    if (item.unit === "kg") { kgToDeduct += coveredQty; if (kgLeft != null) kgLeft -= coveredQty; }
+    else { piecesToDeduct += coveredQty; if (piecesLeft != null) piecesLeft -= coveredQty; }
+    return { serviceId: item.serviceId, serviceName: item.serviceName, coveredQty, extraQty, coveredAmount: lineCovered, extraAmount: lineExtra };
+  });
+  const discount = coveredAmount * (Number(row.plan.discountPercentage ?? 0) / 100);
+  extraAmount = Math.max(0, extraAmount - discount);
+  const ordersToDeduct = row.subscription.remainingOrders == null ? 0 : 1;
+  return { coveredAmount, extraAmount, kgToDeduct, piecesToDeduct, ordersToDeduct, coverageBreakdown, remainingAfter: { kg: kgLeft, pieces: piecesLeft, orders: row.subscription.remainingOrders == null ? null : Math.max(0, row.subscription.remainingOrders - ordersToDeduct) }, savingsAchieved: coveredAmount + discount, subscription: row.subscription, plan: row.plan, order: row.order };
+}
+
 export function registerMembershipRoutes(app: Express) {
+  app.get("/api/customers/:id/subscription/active", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
+    if (!organisationId || !(await customerInOrganisation(customerId, organisationId))) return res.status(404).json({ message: "Customer not found" });
+    const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(and(eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.customerId, customerId), eq(customerSubscriptions.status, "active"))).orderBy(desc(customerSubscriptions.createdAt)).limit(1);
+    if (!row || new Date(`${row.subscription.expiryDate}T23:59:59Z`) < new Date()) return res.json(null);
+    const serviceIds = (await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).innerJoin(subscriptionPlans, and(eq(subscriptionPlanServices.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x=>x.serviceId);
+    res.json({ ...row.subscription, planName: row.plan.name, serviceIds, benefits: { pickupIncluded: row.plan.pickupIncluded, deliveryIncluded: row.plan.deliveryIncluded, expressIncluded: row.plan.expressIncluded, priorityQueue: row.plan.priorityQueue, discountPercentage: row.plan.discountPercentage } });
+  });
+
+  app.post("/api/subscriptions/calculate-coverage", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const input = z.object({ customerSubscriptionId: z.coerce.number().int().positive(), orderId: z.coerce.number().int().positive() }).parse(req.body);
+    if (!organisationId) return res.status(403).json({ message: "Organisation required" });
+    const coverage = await calculateCoverage(organisationId, input.customerSubscriptionId, input.orderId);
+    if (!coverage) return res.status(404).json({ message: "Eligible subscription/order not found" });
+    const { subscription: _s, plan: _p, order: _o, ...result } = coverage; res.json(result);
+  });
+
+  app.post("/api/subscriptions/apply-to-order", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const input = z.object({ customerSubscriptionId: z.coerce.number().int().positive(), orderId: z.coerce.number().int().positive() }).parse(req.body);
+    if (!organisationId) return res.status(403).json({ message: "Organisation required" });
+    const coverage = await calculateCoverage(organisationId, input.customerSubscriptionId, input.orderId);
+    if (!coverage) return res.status(404).json({ message: "Eligible subscription/order not found" });
+    const existing = await db.select({ id: subscriptionTransactions.id }).from(subscriptionTransactions).innerJoin(customerSubscriptions, and(eq(subscriptionTransactions.customerSubscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId))).where(and(eq(subscriptionTransactions.orderId, input.orderId), eq(subscriptionTransactions.customerSubscriptionId, input.customerSubscriptionId))).limit(1);
+    if (existing.length) return res.status(409).json({ message: "Subscription already applied to this order" });
+    const updated = await db.transaction(async tx => {
+      await tx.insert(subscriptionTransactions).values({ customerSubscriptionId: input.customerSubscriptionId, orderId: input.orderId, kgConsumed: String(coverage.kgToDeduct), piecesConsumed: coverage.piecesToDeduct, amountCovered: String(coverage.coveredAmount), extraAmountCharged: String(coverage.extraAmount) });
+      const [subscription] = await tx.update(customerSubscriptions).set({ remainingKg: coverage.remainingAfter.kg == null ? null : String(coverage.remainingAfter.kg), remainingPieces: coverage.remainingAfter.pieces, remainingOrders: coverage.remainingAfter.orders, totalConsumedKg: String(Number(coverage.subscription.totalConsumedKg ?? 0) + coverage.kgToDeduct), totalConsumedPieces: Number(coverage.subscription.totalConsumedPieces ?? 0) + coverage.piecesToDeduct, totalOrdersUsed: Number(coverage.subscription.totalOrdersUsed ?? 0) + 1, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, input.customerSubscriptionId), eq(customerSubscriptions.organisationId, organisationId))).returning();
+      return subscription;
+    });
+    const { subscription: _s, plan: _p, order: _o, ...result } = coverage; res.json({ subscription: updated, coverage: result });
+  });
+
+  app.get("/api/orders/:id/subscriber-receipt", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const orderId = Number(req.params.id);
+    if (!organisationId) return res.status(403).json({ message: "Organisation required" });
+    const [row] = await db.select({ order: orders, customer: customers, transaction: subscriptionTransactions, subscription: customerSubscriptions, plan: subscriptionPlans }).from(orders).innerJoin(sites, and(eq(orders.siteId, sites.id), eq(sites.organisationId, organisationId))).innerJoin(customers, eq(orders.customerId, customers.id)).innerJoin(subscriptionTransactions, eq(subscriptionTransactions.orderId, orders.id)).innerJoin(customerSubscriptions, and(eq(subscriptionTransactions.customerSubscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId))).innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(orders.id, orderId)).limit(1);
+    if (!row) return res.status(404).json({ message: "No subscription coverage for this order; use the standard receipt" });
+    const items = await db.select({ serviceName: services.name, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
+    const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
+    const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
+    const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0) };
+    const format = z.enum(["a4", "thermal58", "thermal80"]).catch("a4").parse(req.query.format);
+    const data = { ...row, items, settings, coverage };
+    const html = format === "thermal58" ? generateSubscriberThermalReceiptHTML(data, 58) : format === "thermal80" ? generateSubscriberThermalReceiptHTML(data, 80) : generateSubscriberReceiptHTML(data);
+    res.type("html").send(html);
+  });
   app.get("/api/customer-subscription-summaries", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req);
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
