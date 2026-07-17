@@ -13,6 +13,7 @@ export const customers = pgTable("customers", {
   phone: varchar("phone", { length: 20 }).notNull(),
   email: text("email"),
   address: text("address").notNull(),
+  area: text("area"),
   notes: text("notes"),
   starchLevel: text("starch_level"),
   detergentType: text("detergent_type"),
@@ -119,6 +120,7 @@ export const garmentItems = pgTable("garment_items", {
   orderId: integer("order_id").notNull().references(() => orders.id),
   itemName: text("item_name").notNull(),
   quantity: integer("quantity").notNull().default(1),
+  details: text("details"),
   returnedForTreatment: boolean("returned_for_treatment").default(false),
   returnStage: text("return_stage"),
   returnNotes: text("return_notes"),
@@ -376,6 +378,7 @@ export const subscriptionTransactions = pgTable("subscription_transactions", {
   transactionDate: timestamp("transaction_date").defaultNow(),
 }, (table) => [
   index("idx_sub_transactions_sub").on(table.customerSubscriptionId),
+  uniqueIndex("idx_sub_transactions_order_unique").on(table.customerSubscriptionId, table.orderId).where(sql`${table.orderId} is not null`),
 ]);
 
 export const membershipSubscriptionPayments = pgTable("membership_subscription_payments", {
