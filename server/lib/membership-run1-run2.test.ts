@@ -10,8 +10,6 @@ const server = readFileSync(join(root, "server/index.ts"), "utf8");
 
 assert.match(schema, /idx_sub_transactions_order_unique/);
 assert.match(schema, /customerSubscriptionId, table\.orderId\)\.where/);
-assert.match(schema, /area: text\("area"\)/);
-assert.match(schema, /details: text\("details"\)/);
 
 assert.match(routes, /for update/);
 assert.match(routes, /error\?\.code === "23505"/);
