@@ -19,6 +19,7 @@
     "test:reporting": "tsx server/lib/reporting-date.test.ts",
     "test:schema-guard": "tsx server/lib/schema-guard.test.ts",
     "test:membership-card": "tsx server/lib/membership-card-generator.test.ts",
+    "test:membership-run1-run2": "tsx server/lib/membership-run1-run2.test.ts",
     "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"

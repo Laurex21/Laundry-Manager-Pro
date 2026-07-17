@@ -70,6 +70,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
+import { useToast } from "@/hooks/use-toast";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
@@ -568,6 +569,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const { t, i18n } = useTranslation();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
+  const { toast } = useToast();
   const { data: customers } = useCustomers();
   const { data: services } = useServices();
   const activeServices = useMemo(() => services?.filter((service) => service.active) || [], [services]);
@@ -684,7 +686,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     });
   }
 
-  function onSubmit(data: CreateOrderFormValues) {
+  async function onSubmit(data: CreateOrderFormValues) {
     const formattedData = {
       ...data,
       customerId: Number(data.customerId),
@@ -703,13 +705,31 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
       })),
     };
 
+    if (activeSub?.id) {
+      try {
+        const preview = await fetch("/api/subscriptions/calculate-coverage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ customerSubscriptionId: activeSub.id, customerId: formattedData.customerId, items: formattedData.items }),
+        });
+        const payload = await preview.json().catch(() => null);
+        if (!preview.ok) throw new Error(payload?.message || "Unable to calculate subscription coverage");
+      } catch (error) {
+        toast({ title: "Unable to save subscribed order", description: error instanceof Error ? error.message : "Subscription coverage could not be calculated.", variant: "destructive" });
+        return;
+      }
+    }
+
     createOrder(formattedData, {
       onSuccess: async (newOrder: any) => {
         let orderDetails = newOrder;
         try {
           if (activeSub?.id) {
             const apply = await fetch("/api/subscriptions/apply-to-order", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ customerSubscriptionId: activeSub.id, orderId: newOrder.id }) });
-            if (apply.ok) orderDetails.subscriptionCoverage = (await apply.json()).coverage;
+            const payload = await apply.json().catch(() => null);
+            if (!apply.ok) throw new Error(payload?.message || "Order saved, but subscription coverage could not be applied");
+            orderDetails.subscriptionCoverage = payload.coverage;
           }
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
@@ -720,7 +740,13 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               receiptLanguage: settings?.receiptLanguage || i18n.language,
             }, "download");
           }
-        } catch {}
+        } catch (error) {
+          toast({
+            title: "Subscription coverage not applied",
+            description: error instanceof Error ? error.message : "The order was saved without deducting the subscription balance.",
+            variant: "destructive",
+          });
+        }
         form.reset();
         onSuccess(orderDetails);
       }
