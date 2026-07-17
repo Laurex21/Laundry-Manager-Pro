@@ -184,6 +184,7 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS legal_documents_document_type_version_unique ON legal_documents(document_type, version)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_documents_type_version ON legal_documents(document_type, version)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user_versions ON legal_acceptances(user_id, terms_version, privacy_version, cookie_version)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_legal_acceptances_organisation ON legal_acceptances(organisation_id)`);
