@@ -55,9 +55,16 @@ export default function Customers() {
   });
 
   const totalCount = customers?.length ?? 0;
+  const customerFilters = [
+    ["all", t("all")],
+    ["active", t("active_subscription")],
+    ["expired", t("expired_subscription")],
+    ["vip", "VIP"],
+    ["none", t("no_subscription")],
+  ] as const;
 
   return (
-    <div className="space-y-6 page-fade-in">
+    <div className="space-y-4 sm:space-y-6 page-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-display font-bold leading-tight">{t("customers")}</h1>
@@ -78,20 +85,33 @@ export default function Customers() {
         </Dialog>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:items-center sm:gap-3">
+        <div className="relative min-w-0 sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder={t("search_customers")}
             className="pl-9 h-9 bg-background"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            name="customerSearch"
+            autoComplete="off"
+            aria-label={t("search_customers")}
           />
         </div>
-        <div className="flex flex-wrap rounded-md border bg-background p-0.5">{[["all","Tous les clients"],["active","Membres actifs"],["expired","Membres expirés"],["vip","VIP"],["none","Sans abonnement"]].map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter(value as any)}>{label}</Button>)}</div>
-        <Button variant="outline" size="sm" onClick={()=>setShowMembershipColumns(v=>!v)}>Colonnes</Button>
+        <label className="sr-only" htmlFor="customer-category-filter">Catégorie client</label>
+        <select
+          id="customer-category-filter"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value as typeof filter)}
+          className="h-9 max-w-[10.5rem] rounded-md border border-input bg-background px-3 text-sm text-foreground sm:hidden"
+          aria-label="Catégorie client"
+        >
+          {customerFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        <div className="hidden flex-wrap rounded-md border bg-background p-0.5 sm:flex">{customerFilters.map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter(value)}>{label}</Button>)}</div>
+        <Button className="hidden sm:inline-flex" variant="outline" size="sm" onClick={()=>setShowMembershipColumns(v=>!v)}>Colonnes</Button>
         {!isLoading && (
-          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
+          <span className="col-span-2 text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:col-span-1">
             <Users className="w-3.5 h-3.5" />
             {t("n_customers", { count: filteredCustomers?.length ?? totalCount })}
           </span>
@@ -113,11 +133,13 @@ export default function Customers() {
         </div>
       ) : filteredCustomers && filteredCustomers.length > 0 ? (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
-          {filteredCustomers.map((customer) => (
+          {filteredCustomers.map((customer) => {
+            const subscription = subscriptionSummaries[String(customer.id)];
+            return (
             <button
               key={customer.id}
               type="button"
-              className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset transition-colors group"
+              className="group flex min-h-16 w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:gap-4 sm:px-4"
               onClick={() => navigate(`/customers/${customer.id}`)}
               data-testid={`card-customer-${customer.id}`}
             >
@@ -138,6 +160,9 @@ export default function Customers() {
                     {String(customer.segment).replace(/_/g, " ")}
                   </Badge>
                 )}
+                <Badge variant={subscription?.status === "active" ? "default" : "secondary"} className="mt-1 ml-1 h-5 px-1.5 text-[10px] sm:hidden">
+                  {subscription?.status === "active" ? t("active_subscription") : subscription ? t("expired_subscription") : t("no_subscription")}
+                </Badge>
               </div>
               {showMembershipColumns && (() => { const sub = subscriptionSummaries[String(customer.id)]; return <div className="hidden xl:grid min-w-[430px] grid-cols-4 gap-3 text-xs"><span><Badge variant={sub?.status === "active" ? "default" : "secondary"}>{sub?.status === "active" ? "Actif" : sub ? "Expiré" : "Aucun"}</Badge></span><span className="truncate">{sub?.planName || "—"}</span><span>{sub?.renewalDate || sub?.expiryDate || "—"}</span><span>{sub?.remainingKg != null ? `${sub.remainingKg} kg` : sub?.remainingPieces != null ? `${sub.remainingPieces} pcs` : sub?.remainingOrders != null ? `${sub.remainingOrders} cmd` : "—"}</span></div>; })()}
 
@@ -163,7 +188,7 @@ export default function Customers() {
 
               <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0 group-hover:text-muted-foreground transition-colors" />
             </button>
-          ))}
+          );})}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center gap-3 py-16 border border-dashed border-border rounded-lg text-center">
@@ -217,7 +242,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
             </FormItem>
           )}
         />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="phone"
@@ -225,7 +250,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
               <FormItem>
                 <FormLabel>{t("phone")}</FormLabel>
                 <FormControl>
-                  <Input placeholder={t("phone_placeholder")} {...field} />
+                  <Input type="tel" inputMode="tel" autoComplete="tel" placeholder={t("phone_placeholder")} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -238,7 +263,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
               <FormItem>
                 <FormLabel>{t("email_optional")}</FormLabel>
                 <FormControl>
-                  <Input placeholder={t("customer_email_placeholder")} {...field} value={field.value || ""} />
+                  <Input type="email" inputMode="email" autoComplete="email" spellCheck={false} placeholder={t("customer_email_placeholder")} {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

@@ -327,7 +327,7 @@ export default function Orders() {
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6">
             <DialogHeader>
               <DialogTitle>{t("create_new_order")}</DialogTitle>
             </DialogHeader>
@@ -761,17 +761,18 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between border-b pb-4">
-        <h3 className="font-semibold text-lg">{t("order_details")}</h3>
+    <div className="min-w-0 space-y-4 sm:space-y-6">
+      <div className="flex min-w-0 items-center justify-between gap-2 border-b pb-3 sm:pb-4">
+        <h3 className="min-w-0 text-base font-semibold sm:text-lg">{t("order_details")}</h3>
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={() => setShowAddCustomer(!showAddCustomer)}
         >
-          <UserPlus className="w-4 h-4 mr-2" />
-          {showAddCustomer ? t("select_existing") : t("register_new_customer")}
+          <UserPlus className="h-4 w-4 shrink-0 sm:mr-2" aria-hidden="true" />
+          <span className="hidden sm:inline">{showAddCustomer ? t("select_existing") : t("register_new_customer")}</span>
+          <span className="sm:hidden">{showAddCustomer ? t("customers") : t("add_customer")}</span>
         </Button>
       </div>
 
@@ -779,7 +780,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
         <Form {...customerForm}>
           <form onSubmit={customerForm.handleSubmit(onAddCustomerSubmit)} className="space-y-4 p-4 bg-muted/20 rounded-lg border">
             <h4 className="font-medium text-sm">{t("quick_register_customer")}</h4>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={customerForm.control}
                 name="name"
@@ -797,7 +798,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-xs">{t("phone")}</FormLabel>
-                    <FormControl><Input placeholder="+1..." {...field} /></FormControl>
+                    <FormControl><Input type="tel" inputMode="tel" autoComplete="tel" placeholder="+1…" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -822,7 +823,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
               <FormField
                 control={form.control}
                 name="customerId"
@@ -881,7 +882,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4">
                 <FormField
                   control={form.control}
                   name="entryDate"
@@ -906,7 +907,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 />
               </div>
             </div>
-            {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:bg-blue-950/20"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" /></span><span className="text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-3 gap-2 text-center text-xs">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
+            {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:bg-blue-950/20 sm:p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="shrink-0 text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -921,12 +922,12 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 const itemPrice = selectedService ? Number(selectedService.price) * (watchedItems[index]?.quantity || 0) : 0;
 
                 return (
-                  <div key={field.id} className="flex gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
+                  <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.25rem] items-end gap-2 rounded-lg border border-border/50 bg-muted/20 p-2 sm:grid-cols-[minmax(0,1fr)_5rem_6rem_2.25rem] sm:gap-3 sm:p-3">
                     <FormField
                       control={form.control}
                       name={`items.${index}.serviceId`}
                       render={({ field }) => (
-                        <FormItem className="flex-1">
+                        <FormItem className="min-w-0">
                           <FormLabel className="text-xs">{t("service")}</FormLabel>
                           <ServiceCombobox
                             services={activeServices}
@@ -942,7 +943,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                       control={form.control}
                       name={`items.${index}.quantity`}
                       render={({ field }) => (
-                        <FormItem className="w-20">
+                        <FormItem className="min-w-0">
                           <FormLabel className="text-xs">{t("qty")}</FormLabel>
                           <FormControl>
                             <Input
@@ -958,9 +959,9 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                         </FormItem>
                       )}
                     />
-                    <div className="w-24 pb-2 text-right">
+                    <div className="col-span-2 row-start-2 flex min-w-0 items-center justify-between px-1 pb-1 text-right sm:col-span-1 sm:row-start-auto sm:block sm:px-0 sm:pb-2">
                       <span className="text-xs text-muted-foreground block">{t("price")}</span>
-                      <span className="font-mono font-medium">{symbol}{itemPrice.toFixed(2)}</span>
+                      <span className="font-mono text-sm font-medium">{symbol}{itemPrice.toFixed(2)}</span>
                     </div>
                     <Button
                       type="button"
@@ -995,12 +996,12 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
 
               {garmentFields.map((field, index) => (
-                <div key={field.id} className="flex gap-3 items-end p-3 bg-muted/20 rounded-lg border border-border/50">
+                <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.25rem] items-end gap-2 rounded-lg border border-border/50 bg-muted/20 p-2 sm:gap-3 sm:p-3">
                   <FormField
                     control={form.control}
                     name={`garmentItems.${index}.itemName`}
                     render={({ field }) => (
-                      <FormItem className="flex-1">
+                      <FormItem className="min-w-0">
                         <FormLabel className="text-xs">{t('item_name', 'Item Name')}</FormLabel>
                         <FormControl>
                           <Input placeholder={t('garment_placeholder', 'e.g. Shirt, Trousers, Dress')} {...field} />
@@ -1013,7 +1014,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                     control={form.control}
                     name={`garmentItems.${index}.quantity`}
                     render={({ field }) => (
-                      <FormItem className="w-20">
+                      <FormItem className="min-w-0">
                         <FormLabel className="text-xs">{t('qty', 'Qty')}</FormLabel>
                         <FormControl>
                           <Input
