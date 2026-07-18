@@ -168,7 +168,8 @@ async function calculateDraftCoverage(organisationId: number, subscriptionId: nu
   const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans })
     .from(customerSubscriptions)
     .innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId)))
-    .innerJoin(customers, and(eq(customerSubscriptions.customerId, customers.id), eq(customers.siteId, siteId)))
+    .innerJoin(customers, eq(customerSubscriptions.customerId, customers.id))
+    .innerJoin(sites, and(eq(customers.siteId, sites.id), eq(sites.organisationId, organisationId)))
     .where(and(eq(customerSubscriptions.id, subscriptionId), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.customerId, customerId), eq(customerSubscriptions.status, "active"))).limit(1);
   if (!row) return null;
   const included = new Set((await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x => x.serviceId));
