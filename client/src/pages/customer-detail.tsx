@@ -318,11 +318,16 @@ export default function CustomerDetail() {
       )}
 
       <Tabs defaultValue="contact" className="w-full">
-        <TabsList className="w-full sm:w-auto" data-testid="tabs-list">
-          <TabsTrigger value="contact" data-testid="tab-contact">{t("contact_info")}</TabsTrigger>
-          <TabsTrigger value="preferences" data-testid="tab-preferences">{t("preferences")}</TabsTrigger>
-          <TabsTrigger value="history" data-testid="tab-history">{t("order_history")}</TabsTrigger>
-          <TabsTrigger value="membership" data-testid="tab-membership">{t("membership")}</TabsTrigger>
+        {/* WCAG 2.2 reflow: show every tab in a two-row mobile grid instead of clipping it. */}
+        <TabsList
+          className="grid h-auto w-full grid-cols-2 gap-1 sm:inline-flex sm:h-10 sm:w-auto"
+          data-testid="tabs-list"
+          aria-label={t("customer_details")}
+        >
+          <TabsTrigger className="min-h-10" value="contact" data-testid="tab-contact">{t("contact_info")}</TabsTrigger>
+          <TabsTrigger className="min-h-10" value="preferences" data-testid="tab-preferences">{t("preferences")}</TabsTrigger>
+          <TabsTrigger className="min-h-10" value="history" data-testid="tab-history">{t("order_history")}</TabsTrigger>
+          <TabsTrigger className="min-h-10" value="membership" data-testid="tab-membership">{t("membership")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="contact">
