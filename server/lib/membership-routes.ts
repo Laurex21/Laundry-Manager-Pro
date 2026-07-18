@@ -5,7 +5,7 @@ import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { users } from "@shared/models/auth";
 import {
-  businessSettings, customerSubscriptions, customers, membershipCards, orders, orderItems, organisations, services, sites,
+  businessSettings, customerSubscriptions, customers, garmentItems, membershipCards, orders, orderItems, organisations, services, sites,
   membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
 } from "@shared/schema";
 import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
@@ -124,28 +124,37 @@ function addDays(value: string | Date, days: number) {
 
 type CoverageItem = { serviceId: number; quantity: number | string; unitPrice: number | string; serviceName: string; unit: string | null };
 
-function computeCoverage(row: { subscription: typeof customerSubscriptions.$inferSelect; plan: typeof subscriptionPlans.$inferSelect; order?: typeof orders.$inferSelect }, included: Set<number>, items: CoverageItem[]) {
+function computeCoverage(row: { subscription: typeof customerSubscriptions.$inferSelect; plan: typeof subscriptionPlans.$inferSelect; order?: typeof orders.$inferSelect }, included: Set<number>, items: CoverageItem[], garmentPieceCount = 0) {
+  const originalPiecesLeft = row.subscription.remainingPieces;
   let kgLeft = row.subscription.remainingKg == null ? null : Number(row.subscription.remainingKg);
   let piecesLeft = row.subscription.remainingPieces;
   let coveredAmount = 0, extraAmount = 0, kgToDeduct = 0, piecesToDeduct = 0;
   const orderLimitAvailable = row.subscription.remainingOrders == null || row.subscription.remainingOrders > 0;
   const coverageBreakdown = items.map(item => {
     const quantity = Number(item.quantity); const lineAmount = quantity * Number(item.unitPrice);
+    const consumesKg = item.unit === "kg" && (kgLeft != null || originalPiecesLeft == null);
     let coveredQty = 0;
     if (orderLimitAvailable && included.has(item.serviceId)) {
-      if (item.unit === "kg") coveredQty = kgLeft == null ? quantity : Math.min(quantity, Math.max(0, kgLeft));
+      if (consumesKg) coveredQty = kgLeft == null ? quantity : Math.min(quantity, Math.max(0, kgLeft));
       else coveredQty = piecesLeft == null ? quantity : Math.min(quantity, Math.max(0, piecesLeft));
     }
     const extraQty = quantity - coveredQty; const lineCovered = coveredQty * Number(item.unitPrice);
-    const overageRate = item.unit === "kg" ? Number(row.plan.overagePricePerKg ?? item.unitPrice) : Number(row.plan.overagePricePerPiece ?? item.unitPrice);
+    const overageRate = consumesKg ? Number(row.plan.overagePricePerKg ?? item.unitPrice) : Number(row.plan.overagePricePerPiece ?? item.unitPrice);
     const lineExtra = extraQty * overageRate;
     coveredAmount += lineCovered; extraAmount += lineExtra;
-    if (item.unit === "kg") { kgToDeduct += coveredQty; if (kgLeft != null) kgLeft -= coveredQty; }
+    if (consumesKg) { kgToDeduct += coveredQty; if (kgLeft != null) kgLeft -= coveredQty; }
     else { piecesToDeduct += coveredQty; if (piecesLeft != null) piecesLeft -= coveredQty; }
     return { serviceId: item.serviceId, serviceName: item.serviceName, coveredQty, extraQty, coveredAmount: lineCovered, extraAmount: lineExtra, originalAmount: lineAmount };
   });
   const discount = orderLimitAvailable ? extraAmount * (Number(row.plan.discountPercentage ?? 0) / 100) : 0;
   extraAmount = Math.max(0, extraAmount - discount);
+  // Registered garments are the source of truth for piece consumption. A
+  // combined plan must consume its kg allowance and its piece allowance on the
+  // same order; service units alone cannot represent both dimensions.
+  if (orderLimitAvailable && originalPiecesLeft != null && garmentPieceCount > 0) {
+    piecesToDeduct = Math.min(garmentPieceCount, Math.max(0, originalPiecesLeft));
+    piecesLeft = Math.max(0, originalPiecesLeft - piecesToDeduct);
+  }
   const ordersToDeduct = row.subscription.remainingOrders == null || !orderLimitAvailable ? 0 : 1;
   return { coveredAmount, extraAmount, discount, kgToDeduct, piecesToDeduct, ordersToDeduct, coverageBreakdown, remainingAfter: { kg: kgLeft, pieces: piecesLeft, orders: row.subscription.remainingOrders == null ? null : Math.max(0, row.subscription.remainingOrders - ordersToDeduct) }, savingsAchieved: coveredAmount + discount, subscription: row.subscription, plan: row.plan, order: row.order };
 }
@@ -161,10 +170,11 @@ async function calculateCoverage(organisationId: number, subscriptionId: number,
   if (!row) return null;
   const included = new Set((await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).innerJoin(subscriptionPlans, and(eq(subscriptionPlanServices.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x => x.serviceId));
   const items = await db.select({ serviceId: orderItems.serviceId, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder, serviceName: services.name, unit: services.unit }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
-  return computeCoverage(row, included, items);
+  const [garmentTotal] = await db.select({ count: sql<number>`coalesce(sum(${garmentItems.quantity}), 0)` }).from(garmentItems).where(eq(garmentItems.orderId, orderId));
+  return computeCoverage(row, included, items, Number(garmentTotal?.count ?? 0));
 }
 
-async function calculateDraftCoverage(organisationId: number, subscriptionId: number, customerId: number, siteId: number, draftItems: Array<{ serviceId: number; quantity: number }>) {
+async function calculateDraftCoverage(organisationId: number, subscriptionId: number, customerId: number, siteId: number, draftItems: Array<{ serviceId: number; quantity: number }>, garmentPieceCount = 0) {
   const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans })
     .from(customerSubscriptions)
     .innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId)))
@@ -181,7 +191,7 @@ async function calculateDraftCoverage(organisationId: number, subscriptionId: nu
   if (serviceRows.length !== serviceIds.length) return null;
   const byId = new Map(serviceRows.map(service => [service.serviceId, service]));
   const items = draftItems.map(item => ({ ...byId.get(item.serviceId)!, quantity: item.quantity }));
-  return computeCoverage(row, included, items);
+  return computeCoverage(row, included, items, garmentPieceCount);
 }
 
 export function registerMembershipRoutes(app: Express) {
@@ -238,13 +248,14 @@ export function registerMembershipRoutes(app: Express) {
       orderId: z.coerce.number().int().positive().optional(),
       customerId: z.coerce.number().int().positive().optional(),
       items: z.array(z.object({ serviceId: z.coerce.number().int().positive(), quantity: z.coerce.number().positive() })).optional(),
+      garmentPieceCount: z.coerce.number().int().min(0).optional(),
     }).refine(value => !!value.orderId || (!!value.customerId && !!value.items?.length), { message: "Provide orderId or customerId with items" }).parse(req.body);
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
     const siteId = selectedSiteId(req);
     if (!siteId) return res.status(400).json({ message: "Select a specific site before calculating subscription coverage" });
     const coverage = input.orderId
       ? await calculateCoverage(organisationId, input.customerSubscriptionId, input.orderId, siteId)
-      : await calculateDraftCoverage(organisationId, input.customerSubscriptionId, input.customerId!, siteId, input.items!);
+      : await calculateDraftCoverage(organisationId, input.customerSubscriptionId, input.customerId!, siteId, input.items!, input.garmentPieceCount ?? 0);
     if (!coverage) return res.status(404).json({ message: "Eligible subscription/order not found" });
     if (coverage.subscription.remainingOrders != null && coverage.subscription.remainingOrders <= 0) return res.status(409).json({ message: "Subscription order limit exhausted" });
     const { subscription: _s, plan: _p, order: _o, ...result } = coverage; res.json(result);
@@ -263,6 +274,7 @@ export function registerMembershipRoutes(app: Express) {
         if (!coverage) return { status: 404 as const, message: "Eligible subscription/order not found" };
         if (coverage.subscription.remainingOrders != null && coverage.subscription.remainingOrders <= 0) return { status: 409 as const, message: "Subscription order limit exhausted" };
         await tx.insert(subscriptionTransactions).values({ customerSubscriptionId: input.customerSubscriptionId, orderId: input.orderId, kgConsumed: String(coverage.kgToDeduct), piecesConsumed: coverage.piecesToDeduct, amountCovered: String(coverage.coveredAmount), extraAmountCharged: String(coverage.extraAmount) });
+        await tx.update(orders).set({ originalPrice: coverage.order!.originalPrice ?? coverage.order!.totalAmount, totalAmount: String(coverage.extraAmount), paymentStatus: coverage.extraAmount <= 0 ? "paid" : coverage.order!.paymentStatus, updatedAt: new Date() }).where(and(eq(orders.id, input.orderId), eq(orders.siteId, siteId)));
         const [subscription] = await tx.update(customerSubscriptions).set({ remainingKg: coverage.remainingAfter.kg == null ? null : String(coverage.remainingAfter.kg), remainingPieces: coverage.remainingAfter.pieces, remainingOrders: coverage.remainingAfter.orders, totalConsumedKg: String(Number(coverage.subscription.totalConsumedKg ?? 0) + coverage.kgToDeduct), totalConsumedPieces: Number(coverage.subscription.totalConsumedPieces ?? 0) + coverage.piecesToDeduct, totalOrdersUsed: Number(coverage.subscription.totalOrdersUsed ?? 0) + 1, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, input.customerSubscriptionId), eq(customerSubscriptions.organisationId, organisationId))).returning();
         return { status: 200 as const, subscription, coverage };
       });

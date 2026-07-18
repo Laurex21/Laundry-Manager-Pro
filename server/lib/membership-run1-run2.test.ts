@@ -28,6 +28,12 @@ assert.match(routes, /eq\(orders\.siteId, siteId\)/);
 assert.match(routes, /inArray\(customers\.siteId, allowedSites\)/);
 
 assert.match(routes, /calculateDraftCoverage/);
+assert.match(routes, /garmentPieceCount/);
+assert.match(routes, /const consumesKg = item\.unit === "kg"/);
+assert.match(routes, /sum\(\$\{garmentItems\.quantity\}\)/);
+assert.match(routes, /originalPrice: coverage\.order!\.originalPrice \?\? coverage\.order!\.totalAmount/);
+assert.match(ordersPage, /garmentPieceCount: totalRegisteredGarments/);
+assert.match(ordersPage, /subscriber-receipt\?format=a4/);
 assert.match(routes, /innerJoin\(sites, and\(eq\(services\.siteId, sites\.id\), eq\(sites\.organisationId, organisationId\)\)\)/);
 assert.doesNotMatch(routes, /inArray\(services\.id, serviceIds\), eq\(services\.siteId, siteId\)/);
 assert.match(ordersPage, /\/api\/subscriptions\/calculate-coverage/);

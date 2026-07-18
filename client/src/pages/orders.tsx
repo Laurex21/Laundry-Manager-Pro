@@ -711,7 +711,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ customerSubscriptionId: activeSub.id, customerId: formattedData.customerId, items: formattedData.items }),
+          body: JSON.stringify({ customerSubscriptionId: activeSub.id, customerId: formattedData.customerId, items: formattedData.items, garmentPieceCount: totalRegisteredGarments }),
         });
         const payload = await preview.json().catch(() => null);
         if (!preview.ok) throw new Error(payload?.message || "Unable to calculate subscription coverage");
@@ -734,11 +734,19 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
           if (res.ok) {
             orderDetails = { ...(await res.json()), subscriptionCoverage: orderDetails.subscriptionCoverage };
-            await generateDepositReceipt(orderDetails, symbol, {
-              ...DEFAULT_SETTINGS,
-              ...(settings || {}),
-              receiptLanguage: settings?.receiptLanguage || i18n.language,
-            }, "download");
+            if (activeSub?.id) {
+              const subscriberReceipt = await fetch(`/api/orders/${newOrder.id}/subscriber-receipt?format=a4`, { credentials: "include" });
+              if (!subscriberReceipt.ok) throw new Error("Subscriber receipt could not be generated");
+              const html = await subscriberReceipt.text();
+              const receiptWindow = window.open("", "_blank");
+              if (receiptWindow) { receiptWindow.document.write(html); receiptWindow.document.close(); }
+            } else {
+              await generateDepositReceipt(orderDetails, symbol, {
+                ...DEFAULT_SETTINGS,
+                ...(settings || {}),
+                receiptLanguage: settings?.receiptLanguage || i18n.language,
+              }, "download");
+            }
           }
         } catch (error) {
           toast({
