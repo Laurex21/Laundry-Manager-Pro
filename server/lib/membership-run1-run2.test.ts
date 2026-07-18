@@ -7,6 +7,7 @@ const routes = readFileSync(join(root, "server/lib/membership-routes.ts"), "utf8
 const schema = readFileSync(join(root, "shared/schema.ts"), "utf8");
 const ordersPage = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
 const server = readFileSync(join(root, "server/index.ts"), "utf8");
+const subscriberReceipt = readFileSync(join(root, "server/lib/subscription-receipt.ts"), "utf8");
 
 assert.match(schema, /idx_sub_transactions_order_unique/);
 assert.match(schema, /customerSubscriptionId, table\.orderId\)\.where/);
@@ -40,5 +41,17 @@ assert.match(ordersPage, /\/api\/subscriptions\/calculate-coverage/);
 assert.match(ordersPage, /Subscription coverage not applied/);
 assert.doesNotMatch(ordersPage, /catch \{\}/);
 assert.match(server, /status >= 500 \? "Internal Server Error"/);
+
+assert.match(routes, /const garments = await db\.select\(\{ itemName: garmentItems\.itemName, quantity: garmentItems\.quantity \}\)/);
+assert.match(routes, /orderNumber/);
+assert.match(routes, /kgConsumed: Number\(row\.transaction\.kgConsumed/);
+assert.match(routes, /piecesConsumed: Number\(row\.transaction\.piecesConsumed/);
+assert.match(subscriberReceipt, /order\.orderNumber \?\? order\.id/);
+assert.match(subscriberReceipt, /Vêtements enregistrés/);
+assert.match(subscriberReceipt, /Consommation de cette commande/);
+assert.match(subscriberReceipt, /Taux de consommation/);
+assert.match(subscriberReceipt, /plan\.includedWeightKg/);
+assert.match(subscriberReceipt, /plan\.includedPieces/);
+assert.match(ordersPage, /garmentPieceCount: totalRegisteredGarments/);
 
 console.log("membership Run 1/2 regression tests passed");

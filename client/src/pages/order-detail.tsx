@@ -105,9 +105,12 @@ export default function OrderDetail() {
   const activeMachines = machines?.filter((machine: any) => machine.status !== "inactive") ?? [];
   const shouldShowMachineAssignment = !!nextPipelineStage && isMachineStage(nextPipelineStage.key) && activeMachines.length > 0;
   const hasReturnedItems = order.garmentItems?.some((g: any) => g.returnedForTreatment && !g.resolvedAt);
-  const totalServicePieces = (order.items || []).reduce((sum: number, item: any) => {
-    return sum + Math.max(0, Number(item.quantity) || 0);
-  }, 0);
+  const serviceQuantityTotals: Map<string, number> = (order.items || []).reduce((totals: Map<string, number>, item: any) => {
+    const unit = item.service?.unit === "kg" ? "kg" : t("pieces", "pieces");
+    totals.set(unit, (totals.get(unit) || 0) + Math.max(0, Number(item.quantity) || 0));
+    return totals;
+  }, new Map<string, number>());
+  const serviceQuantitySummary = Array.from(serviceQuantityTotals.entries()).map(([unit, quantity]) => `${quantity} ${unit}`).join(" · ");
   const totalRegisteredGarments = (order.garmentItems || []).reduce((sum: number, garment: any) => {
     return sum + Math.max(0, Number(garment.quantity) || 0);
   }, 0);
@@ -555,8 +558,8 @@ export default function OrderDetail() {
           <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">{t("services_card_title")}</CardTitle>
-              <div className="rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground" data-testid="text-order-total-service-pieces">
-                {t("total_pieces", "Total pieces")}: <span className="font-mono text-foreground">{totalServicePieces}</span>
+              <div className="rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground" data-testid="text-order-total-service-quantity">
+                {t("service_quantity", "Service quantity")}: <span className="font-mono text-foreground">{serviceQuantitySummary || "0"}</span>
               </div>
             </div>
           </CardHeader>

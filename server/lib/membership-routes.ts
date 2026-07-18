@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
@@ -294,11 +294,15 @@ export function registerMembershipRoutes(app: Express) {
     const [row] = await db.select({ order: orders, customer: customers, transaction: subscriptionTransactions, subscription: customerSubscriptions, plan: subscriptionPlans, card: membershipCards }).from(orders).innerJoin(sites, and(eq(orders.siteId, sites.id), eq(sites.organisationId, organisationId))).innerJoin(customers, eq(orders.customerId, customers.id)).innerJoin(subscriptionTransactions, eq(subscriptionTransactions.orderId, orders.id)).innerJoin(customerSubscriptions, and(eq(subscriptionTransactions.customerSubscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId))).innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).leftJoin(membershipCards, eq(membershipCards.customerSubscriptionId, customerSubscriptions.id)).where(and(eq(orders.id, orderId), eq(orders.siteId, siteId))).limit(1);
     if (!row) return res.status(404).json({ message: "No subscription coverage for this order; use the standard receipt" });
     const items = await db.select({ serviceName: services.name, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
+    const garments = await db.select({ itemName: garmentItems.itemName, quantity: garmentItems.quantity }).from(garmentItems).where(eq(garmentItems.orderId, orderId));
+    const siteOrders = await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId)).orderBy(asc(orders.createdAt), asc(orders.id));
+    const siteOrderIndex = siteOrders.findIndex((siteOrder) => siteOrder.id === orderId);
+    const order = { ...row.order, orderNumber: siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id };
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
-    const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0) };
+    const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
     const format = z.enum(["a4", "thermal58", "thermal80"]).catch("a4").parse(req.query.format);
-    const data = { ...row, items, settings, coverage };
+    const data = { ...row, order, items, garments, settings, coverage };
     const html = format === "thermal58" ? generateSubscriberThermalReceiptHTML(data, 58) : format === "thermal80" ? generateSubscriberThermalReceiptHTML(data, 80) : generateSubscriberReceiptHTML(data);
     res.type("html").send(html);
   });
