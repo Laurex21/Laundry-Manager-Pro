@@ -174,7 +174,10 @@ async function calculateDraftCoverage(organisationId: number, subscriptionId: nu
   if (!row) return null;
   const included = new Set((await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x => x.serviceId));
   const serviceIds = [...new Set(draftItems.map(item => item.serviceId))];
-  const serviceRows = serviceIds.length ? await db.select({ serviceId: services.id, unitPrice: services.price, serviceName: services.name, unit: services.unit }).from(services).where(and(inArray(services.id, serviceIds), eq(services.siteId, siteId))) : [];
+  const serviceRows = serviceIds.length ? await db.select({ serviceId: services.id, unitPrice: services.price, serviceName: services.name, unit: services.unit })
+    .from(services)
+    .innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId)))
+    .where(inArray(services.id, serviceIds)) : [];
   if (serviceRows.length !== serviceIds.length) return null;
   const byId = new Map(serviceRows.map(service => [service.serviceId, service]));
   const items = draftItems.map(item => ({ ...byId.get(item.serviceId)!, quantity: item.quantity }));

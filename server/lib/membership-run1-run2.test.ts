@@ -28,6 +28,8 @@ assert.match(routes, /eq\(orders\.siteId, siteId\)/);
 assert.match(routes, /inArray\(customers\.siteId, allowedSites\)/);
 
 assert.match(routes, /calculateDraftCoverage/);
+assert.match(routes, /innerJoin\(sites, and\(eq\(services\.siteId, sites\.id\), eq\(sites\.organisationId, organisationId\)\)\)/);
+assert.doesNotMatch(routes, /inArray\(services\.id, serviceIds\), eq\(services\.siteId, siteId\)/);
 assert.match(ordersPage, /\/api\/subscriptions\/calculate-coverage/);
 assert.match(ordersPage, /Subscription coverage not applied/);
 assert.doesNotMatch(ordersPage, /catch \{\}/);
