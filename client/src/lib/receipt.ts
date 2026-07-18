@@ -281,7 +281,7 @@ function receiptPrintCss(): string {
   `;
 }
 
-function downloadReceiptHtml(html: string, filename: string): void {
+export function downloadReceiptHtml(html: string, filename: string): void {
   const testCapture = (globalThis as any).__captureReceiptHtml;
   if (typeof testCapture === "function") {
     testCapture(html, filename);
