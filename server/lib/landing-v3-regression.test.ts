@@ -7,7 +7,10 @@ assert.doesNotMatch(source, /framer-motion|motion\./, "landing must use CSS/Inte
 assert.doesNotMatch(source, /Mamadou Diallo|Amina Kouassi|Chidi Okafor/, "landing must not contain fabricated testimonials");
 assert.match(source, /IntersectionObserver/, "landing must reveal sections without an animation library");
 assert.match(source, /href="\/auth\?tab=register"/, "free-trial CTAs must open registration");
-assert.match(source, /href="\/calculateur"/, "profitability CTAs must use the existing calculator route");
+assert.match(source, /href="\/rentabilite"/, "profitability CTAs must use the profitability route");
+assert.match(source, /href="\/calculateur"/, "startup-budget tool must use the budget calculator route");
+assert.match(source, /href="\/diagnostic"/, "diagnostic tools must use the diagnostic route");
+assert.match(source, /VITE_DEMO_VIDEO_URL_FR/, "landing must read the configured demo video URL");
 assert.match(source, /testimonials_placeholder/, "landing must show an honest testimonial placeholder until real proof exists");
 assert.match(source, /enabled: false/, "missing map endpoint must not create a public 404");
 assert.match(source, /prefers-reduced-motion/, "landing motion must respect reduced-motion preferences");
