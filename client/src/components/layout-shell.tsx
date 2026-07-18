@@ -260,7 +260,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const navItems = ALL_NAV_ITEMS.filter((item) => canAccess(item.page));
   const bottomNavItems = ALL_NAV_ITEMS.filter(
-    (item) => BOTTOM_NAV_PAGES.includes(item.page) && canAccess(item.page)
+    (item) => item.href !== "/membership-plans" && BOTTOM_NAV_PAGES.includes(item.page) && canAccess(item.page)
   );
 
   const pageTitleKey = PAGE_TITLES[location] || "dashboard";
@@ -418,7 +418,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
       {/* Mobile bottom nav */}
       <nav
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border flex items-stretch"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border flex items-stretch pb-[env(safe-area-inset-bottom)]"
         data-testid="bottom-nav"
       >
         {bottomNavItems.map((item) => {
