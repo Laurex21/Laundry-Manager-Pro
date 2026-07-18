@@ -10,7 +10,7 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
-import { generateDepositReceipt } from "@/lib/receipt";
+import { downloadReceiptHtml, generateDepositReceipt } from "@/lib/receipt";
 import { useQuery, useQuery as useSettingsQuery } from "@tanstack/react-query";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
@@ -738,8 +738,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               const subscriberReceipt = await fetch(`/api/orders/${newOrder.id}/subscriber-receipt?format=a4`, { credentials: "include" });
               if (!subscriberReceipt.ok) throw new Error("Subscriber receipt could not be generated");
               const html = await subscriberReceipt.text();
-              const receiptWindow = window.open("", "_blank");
-              if (receiptWindow) { receiptWindow.document.write(html); receiptWindow.document.close(); }
+              downloadReceiptHtml(html, `subscriber-receipt-order-${orderDisplayId(orderDetails)}.html`);
             } else {
               await generateDepositReceipt(orderDetails, symbol, {
                 ...DEFAULT_SETTINGS,

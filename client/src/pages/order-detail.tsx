@@ -27,7 +27,7 @@ import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { queryClient } from "@/lib/queryClient";
-import { generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
+import { downloadReceiptHtml, generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
@@ -177,8 +177,7 @@ export default function OrderDetail() {
       const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=a4`, { credentials: "include" });
       if (subscriberReceipt.ok) {
         const html = await subscriberReceipt.text();
-        const receiptWindow = window.open("", "_blank");
-        if (receiptWindow) { receiptWindow.document.write(html); receiptWindow.document.close(); }
+        downloadReceiptHtml(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`);
         return;
       }
       const mergedSettings = {
