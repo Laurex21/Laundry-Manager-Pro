@@ -6,10 +6,15 @@ import { isAuthenticated } from "../replit_integrations/auth";
 import { users } from "@shared/models/auth";
 import {
   businessSettings, customerSubscriptions, customers, garmentItems, membershipCards, orders, orderItems, organisations, services, sites,
-  membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
+  loyaltyProgram, membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
 } from "@shared/schema";
 import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
 import { buildMembershipCard } from "./membership-card-generator";
+import { createPendingSubscriptionNotification } from "./subscription-notifications";
+import { usageThresholdCrossed } from "./subscription-formulas";
+import { awardRenewalPoints } from "./loyalty";
+import { rateLimit } from "./rate-limit";
+import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
@@ -195,6 +200,64 @@ async function calculateDraftCoverage(organisationId: number, subscriptionId: nu
 }
 
 export function registerMembershipRoutes(app: Express) {
+  const subscriptionWriteLimiter = rateLimit({
+    name: "subscription-write",
+    windowMs: 60_000,
+    max: 10,
+    key: (req) => String(req.user?.organisationId ?? req.organisationId ?? req.userId ?? "anonymous"),
+    keyOnly: true,
+  });
+  app.get("/api/loyalty-program", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req);
+    if (!organisationId) return res.status(403).json({ message: "Organisation required" });
+    const [program] = await db.select().from(loyaltyProgram)
+      .where(eq(loyaltyProgram.organisationId, organisationId)).limit(1);
+    res.json(program ?? {
+      organisationId,
+      pointsPerOrder: 10,
+      pointsPerFcfa: null,
+      renewalBonus: 50,
+      referralBonus: 100,
+      pointExpireDays: null,
+      isActive: true,
+    });
+  });
+
+  app.put("/api/loyalty-program", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req);
+    if (!organisationId || !(await requirePlanManager(req, res, organisationId))) return;
+    const input = z.object({
+      enabled: z.boolean(),
+      pointsPerOrder: z.coerce.number().int().min(0).max(100_000),
+      pointsPerFcfa: z.coerce.number().min(0).max(100).nullish(),
+      renewalBonus: z.coerce.number().int().min(0).max(100_000),
+      referralBonus: z.coerce.number().int().min(0).max(100_000),
+      pointExpireDays: z.coerce.number().int().positive().max(3650).nullish(),
+      isActive: z.boolean(),
+    }).parse(req.body);
+    const values = {
+      ...input,
+      pointsPerFcfa: input.pointsPerFcfa == null ? null : String(input.pointsPerFcfa),
+    };
+    const [organisation] = await db.select({ ownerId: organisations.ownerId })
+      .from(organisations).where(eq(organisations.id, organisationId)).limit(1);
+    if (!organisation) return res.status(404).json({ message: "Organisation not found" });
+    const program = await db.transaction(async (tx) => {
+      await tx.insert(businessSettings).values({
+        userId: organisation.ownerId,
+        loyaltyProgramEnabled: input.enabled,
+      }).onConflictDoUpdate({
+        target: businessSettings.userId,
+        set: { loyaltyProgramEnabled: input.enabled, updatedAt: new Date() },
+      });
+      const [saved] = await tx.insert(loyaltyProgram).values({ organisationId, ...values })
+        .onConflictDoUpdate({ target: loyaltyProgram.organisationId, set: values })
+        .returning();
+      return saved;
+    });
+    res.json(program);
+  });
+
   app.get("/api/subscriptions/:id/card", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid subscription" });
@@ -214,7 +277,7 @@ export function registerMembershipRoutes(app: Express) {
     });
   });
 
-  app.post("/api/subscriptions/:id/card/regenerate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/subscriptions/:id/card/regenerate", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid subscription" });
     const generated = await persistMembershipCard(id, organisationId, siteScope(req));
@@ -241,7 +304,7 @@ export function registerMembershipRoutes(app: Express) {
     res.json({ ...row.subscription, planName: row.plan.name, serviceIds, benefits: { pickupIncluded: row.plan.pickupIncluded, deliveryIncluded: row.plan.deliveryIncluded, expressIncluded: row.plan.expressIncluded, priorityQueue: row.plan.priorityQueue, discountPercentage: row.plan.discountPercentage } });
   });
 
-  app.post("/api/subscriptions/calculate-coverage", isAuthenticated, async (req: any, res) => {
+  app.post("/api/subscriptions/calculate-coverage", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req);
     const input = z.object({
       customerSubscriptionId: z.coerce.number().int().positive(),
@@ -261,7 +324,7 @@ export function registerMembershipRoutes(app: Express) {
     const { subscription: _s, plan: _p, order: _o, ...result } = coverage; res.json(result);
   });
 
-  app.post("/api/subscriptions/apply-to-order", isAuthenticated, async (req: any, res) => {
+  app.post("/api/subscriptions/apply-to-order", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const input = z.object({ customerSubscriptionId: z.coerce.number().int().positive(), orderId: z.coerce.number().int().positive() }).parse(req.body);
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
     const siteId = selectedSiteId(req);
@@ -283,6 +346,17 @@ export function registerMembershipRoutes(app: Express) {
       throw error;
     }
     if (applied.status !== 200) return res.status(applied.status).json({ message: applied.message });
+    const usageTrigger = applied.coverage.plan.includedWeightKg != null
+      ? usageThresholdCrossed(Number(applied.coverage.subscription.remainingKg ?? 0), Number(applied.subscription.remainingKg ?? 0), Number(applied.coverage.plan.includedWeightKg))
+      : applied.coverage.plan.includedPieces != null
+        ? usageThresholdCrossed(Number(applied.coverage.subscription.remainingPieces ?? 0), Number(applied.subscription.remainingPieces ?? 0), Number(applied.coverage.plan.includedPieces))
+        : applied.coverage.plan.maxOrders != null
+          ? usageThresholdCrossed(Number(applied.coverage.subscription.remainingOrders ?? 0), Number(applied.subscription.remainingOrders ?? 0), Number(applied.coverage.plan.maxOrders))
+          : null;
+    if (usageTrigger) {
+      await createPendingSubscriptionNotification(input.customerSubscriptionId, organisationId, usageTrigger).catch((error) => console.error("[Subscriptions] Usage notification failed", error));
+    }
+    invalidateSubscriptionDashboard(organisationId);
     const { subscription: _s, plan: _p, order: _o, ...result } = applied.coverage; res.json({ subscription: applied.subscription, coverage: result });
   });
 
@@ -342,7 +416,7 @@ export function registerMembershipRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/subscription-plans", isAuthenticated, async (req: any, res) => {
+  app.post("/api/subscription-plans", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req);
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
     if (!(await requirePlanManager(req, res, organisationId))) return;
@@ -356,6 +430,7 @@ export function registerMembershipRoutes(app: Express) {
       if (serviceIds.length) await tx.insert(subscriptionPlanServices).values(serviceIds.map((serviceId) => ({ subscriptionPlanId: plan.id, serviceId })));
       return plan;
     });
+    invalidateSubscriptionDashboard(organisationId);
     res.status(201).json(created);
   });
 
@@ -384,6 +459,7 @@ export function registerMembershipRoutes(app: Express) {
       if (serviceIds.length) await tx.insert(subscriptionPlanServices).values(serviceIds.map((serviceId) => ({ subscriptionPlanId: id, serviceId })));
       return plan;
     });
+    invalidateSubscriptionDashboard(organisationId);
     res.json(updated);
   });
 
@@ -395,10 +471,12 @@ export function registerMembershipRoutes(app: Express) {
       if (active.value > 0) return res.status(409).json({ message: "Cannot archive a plan with active subscribers" });
     }
     const [updated] = await db.update(subscriptionPlans).set({ status, updatedAt: new Date() }).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId ?? -1), isNull(subscriptionPlans.deletedAt))).returning();
-    if (!updated) return res.status(404).json({ message: "Plan not found" }); res.json(updated);
+    if (!updated) return res.status(404).json({ message: "Plan not found" });
+    invalidateSubscriptionDashboard(organisationId);
+    res.json(updated);
   });
 
-  app.post("/api/subscription-plans/:id/duplicate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/subscription-plans/:id/duplicate", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await requirePlanManager(req, res, organisationId))) return;
     const [original] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId ?? -1), isNull(subscriptionPlans.deletedAt))).limit(1);
@@ -409,7 +487,9 @@ export function registerMembershipRoutes(app: Express) {
       const links = await tx.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).where(eq(subscriptionPlanServices.subscriptionPlanId, id));
       if (links.length) await tx.insert(subscriptionPlanServices).values(links.map(({ serviceId }) => ({ subscriptionPlanId: plan.id, serviceId })));
       return plan;
-    }); res.status(201).json(clone);
+    });
+    invalidateSubscriptionDashboard(organisationId);
+    res.status(201).json(clone);
   });
 
   app.delete("/api/subscription-plans/:id", isAuthenticated, async (req: any, res) => {
@@ -418,7 +498,9 @@ export function registerMembershipRoutes(app: Express) {
     const [active] = await db.select({ value: count() }).from(customerSubscriptions).where(and(eq(customerSubscriptions.organisationId, organisationId ?? -1), eq(customerSubscriptions.subscriptionPlanId, id), eq(customerSubscriptions.status, "active")));
     if (active.value > 0) return res.status(409).json({ message: "Cannot delete a plan with active subscribers" });
     const [deleted] = await db.update(subscriptionPlans).set({ deletedAt: new Date(), status: "archived", updatedAt: new Date() }).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId ?? -1), isNull(subscriptionPlans.deletedAt))).returning();
-    if (!deleted) return res.status(404).json({ message: "Plan not found" }); res.json({ success: true });
+    if (!deleted) return res.status(404).json({ message: "Plan not found" });
+    invalidateSubscriptionDashboard(organisationId);
+    res.json({ success: true });
   });
 
   app.get("/api/customers/:id/subscription", isAuthenticated, async (req: any, res) => {
@@ -430,7 +512,7 @@ export function registerMembershipRoutes(app: Express) {
     res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments });
   });
 
-  app.post("/api/customers/:id/subscription", isAuthenticated, async (req: any, res) => {
+  app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId, siteScope(req)))) return res.status(404).json({ message: "Customer not found" });
     const input = z.object({ subscriptionPlanId: z.coerce.number().int().positive(), startDate: z.string().date(), notes: z.string().nullish(), paymentMethod: z.string().optional(), activationFeeAmount: z.coerce.number().min(0).optional() }).parse(req.body);
@@ -443,17 +525,27 @@ export function registerMembershipRoutes(app: Express) {
       if (fee > 0) await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(fee), paymentMethod: input.paymentMethod ?? "cash", status: "completed" });
       await tx.insert(membershipCards).values({ customerSubscriptionId: created.id, cardNumber: membershipNumber, barcode: membershipNumber, expiryDate });
       return created;
-    }); res.status(201).json(subscription);
+    });
+    await createPendingSubscriptionNotification(subscription.id, organisationId, "welcome").catch((error) => console.error("[Subscriptions] Welcome notification failed", error));
+    await createPendingSubscriptionNotification(subscription.id, organisationId, "card_ready").catch((error) => console.error("[Subscriptions] Card notification failed", error));
+    const activationAmount = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
+    if (activationAmount > 0) {
+      await createPendingSubscriptionNotification(subscription.id, organisationId, "payment_confirmed", { amount: activationAmount }).catch((error) => console.error("[Subscriptions] Payment notification failed", error));
+    }
+    invalidateSubscriptionDashboard(organisationId);
+    res.status(201).json(subscription);
   });
 
   app.patch("/api/subscriptions/:id/status", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id); const { status } = z.object({ status: z.enum(["suspended", "cancelled", "active"]) }).parse(req.body);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
     const [updated] = await db.update(customerSubscriptions).set({ status, cancelledAt: status === "cancelled" ? new Date() : null, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1))).returning();
-    if (!updated) return res.status(404).json({ message: "Subscription not found" }); res.json(updated);
+    if (!updated) return res.status(404).json({ message: "Subscription not found" });
+    invalidateSubscriptionDashboard(organisationId);
+    res.json(updated);
   });
 
-  app.post("/api/subscriptions/:id/renew", isAuthenticated, async (req: any, res) => {
+  app.post("/api/subscriptions/:id/renew", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
     const input = z.object({ paymentMethod: z.string().optional(), amount: z.coerce.number().positive().optional() }).parse(req.body ?? {});
@@ -462,9 +554,17 @@ export function registerMembershipRoutes(app: Express) {
     const expiryDate = addDays(new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date(), row.plan.durationDays);
     const renewed = await db.transaction(async (tx) => {
       const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
-      const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!))).returning();
-      await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount ?? Number(row.plan.recurringPrice)), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }); return updated;
-    }); res.json(renewed);
+      const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
+      if (!updated) return null;
+      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount ?? Number(row.plan.recurringPrice)), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }).returning();
+      return { subscription: updated, payment };
+    });
+    if (!renewed) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
+    await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: Number(renewed.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
+    await awardRenewalPoints(renewed.payment.id, row.subscription.customerId, organisationId)
+      .catch((error) => console.error("[Loyalty] Renewal points award failed", error));
+    invalidateSubscriptionDashboard(organisationId);
+    res.json(renewed.subscription);
   });
 
   app.get("/api/subscriptions/:id/history", isAuthenticated, async (req: any, res) => {

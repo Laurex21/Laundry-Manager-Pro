@@ -267,6 +267,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     (req.session as any).currentSiteId = currentSiteId;
     req.session.save(() => {});
     req.siteId = currentSiteId ?? null;
+    req.organisationId = user?.organisationId ?? null;
     req.authorizedSiteIds = authorizedSiteIds;
     req.organisationSiteIds = organisationSiteIds.length > 0 ? organisationSiteIds : authorizedSiteIds;
     req.siteScope = currentSiteId === null ? authorizedSiteIds : [Number(currentSiteId)].filter((siteId) => authorizedSiteIds.includes(siteId));

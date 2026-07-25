@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
@@ -25,6 +25,7 @@ import {
   Building2, Receipt, FileText, Users, Save, Plus, Trash2, Copy,
   Link as LinkIcon, Shield, Clock, Upload, X, Globe2, MoreVertical,
   MessageCircle,
+  Gift,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -355,6 +356,102 @@ function TermsTab({ settings, onSave, saving }: { settings: any; onSave: (d: any
           {t("reset_to_default")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function LoyaltyTab({ settings }: { settings: any }) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [enabled, setEnabled] = useState(Boolean(settings.loyaltyProgramEnabled));
+  const { data: program } = useQuery<any>({ queryKey: ["/api/loyalty-program"] });
+  const [form, setForm] = useState({
+    pointsPerOrder: 10,
+    pointsPerFcfa: "",
+    renewalBonus: 50,
+    referralBonus: 100,
+    pointExpireDays: "",
+    isActive: true,
+  });
+  useEffect(() => {
+    if (!program) return;
+    setForm({
+      pointsPerOrder: Number(program.pointsPerOrder ?? 10),
+      pointsPerFcfa: program.pointsPerFcfa ?? "",
+      renewalBonus: Number(program.renewalBonus ?? 50),
+      referralBonus: Number(program.referralBonus ?? 100),
+      pointExpireDays: program.pointExpireDays ?? "",
+      isActive: Boolean(program.isActive),
+    });
+  }, [program]);
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const programResponse = await fetch("/api/loyalty-program", {
+        method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled,
+          ...form,
+          pointsPerFcfa: form.pointsPerFcfa === "" ? null : Number(form.pointsPerFcfa),
+          pointExpireDays: form.pointExpireDays === "" ? null : Number(form.pointExpireDays),
+        }),
+      });
+      if (!programResponse.ok) throw new Error(await programResponse.text());
+      return programResponse.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/settings"] });
+      qc.invalidateQueries({ queryKey: ["/api/loyalty-program"] });
+      toast({ title: t("settings_saved") });
+    },
+    onError: (error: any) => toast({ title: t("error"), description: error.message, variant: "destructive" }),
+  });
+  const numberField = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(current => ({ ...current, [key]: event.target.value }));
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+        <div>
+          <Label htmlFor="loyalty-enabled">{t("loyalty_program")}</Label>
+          <p className="text-sm text-muted-foreground mt-1">{t("loyalty_program_desc")}</p>
+        </div>
+        <Switch
+          id="loyalty-enabled"
+          checked={enabled}
+          onCheckedChange={setEnabled}
+          data-testid="switch-loyalty-program"
+        />
+      </div>
+      <div className={`grid sm:grid-cols-2 gap-4 ${enabled ? "" : "opacity-50 pointer-events-none"}`}>
+        <div className="space-y-2">
+          <Label htmlFor="loyalty-points-order">{t("loyalty_points_per_order")}</Label>
+          <Input id="loyalty-points-order" type="number" min="0" value={form.pointsPerOrder} onChange={numberField("pointsPerOrder")} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="loyalty-points-spend">{t("loyalty_points_per_fcfa")}</Label>
+          <Input id="loyalty-points-spend" type="number" min="0" step="0.0001" value={form.pointsPerFcfa} onChange={numberField("pointsPerFcfa")} placeholder="0.0100" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="loyalty-renewal">{t("loyalty_renewal_bonus")}</Label>
+          <Input id="loyalty-renewal" type="number" min="0" value={form.renewalBonus} onChange={numberField("renewalBonus")} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="loyalty-referral">{t("loyalty_referral_bonus")}</Label>
+          <Input id="loyalty-referral" type="number" min="0" value={form.referralBonus} onChange={numberField("referralBonus")} />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="loyalty-expiry">{t("loyalty_expiry_days")}</Label>
+          <Input id="loyalty-expiry" type="number" min="1" value={form.pointExpireDays} onChange={numberField("pointExpireDays")} placeholder={t("loyalty_never_expires")} />
+        </div>
+      </div>
+      <Button
+        onClick={() => saveMut.mutate()}
+        disabled={saveMut.isPending}
+        data-testid="button-save-loyalty"
+      >
+        <Save className="w-4 h-4 mr-2" />
+        {saveMut.isPending ? t("saving") : t("save_changes")}
+      </Button>
     </div>
   );
 }
@@ -886,7 +983,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="identity">
-        <TabsList className="grid w-full max-w-xl grid-cols-4" data-testid="settings-tabs">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5" data-testid="settings-tabs">
           <TabsTrigger value="identity" className="gap-2" data-testid="tab-identity">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">{t("business")}</span>
@@ -902,6 +999,10 @@ export default function Settings() {
           <TabsTrigger value="team" className="gap-2" data-testid="tab-team">
             <Users className="w-4 h-4" />
             <span className="hidden sm:inline">{t("team")}</span>
+          </TabsTrigger>
+          <TabsTrigger value="loyalty" className="gap-2" data-testid="tab-loyalty">
+            <Gift className="w-4 h-4" />
+            <span className="hidden sm:inline">{t("loyalty")}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -950,6 +1051,17 @@ export default function Settings() {
               </CardHeader>
               <CardContent>
                 <TeamTab />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="loyalty">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("loyalty_program")}</CardTitle>
+                <CardDescription>{t("loyalty_program_desc")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LoyaltyTab settings={merged} />
               </CardContent>
             </Card>
           </TabsContent>

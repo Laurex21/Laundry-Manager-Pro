@@ -435,6 +435,49 @@ export function getDemoFixture(url: string, selectedSiteId: number | null = null
   // Payments list (some pages may call this)
   if (path === "/api/payments") return paymentsForSite(selectedSiteId);
 
+  // Subscription intelligence
+  if (path === "/api/subscriptions/dashboard") {
+    return {
+      mrr: 185000,
+      arr: 2220000,
+      activeSubscribers: 18,
+      newSubscribersThisPeriod: 4,
+      renewalsThisPeriod: 7,
+      renewalRate: 87.5,
+      expiringSoon: 2,
+      cancelledThisPeriod: 1,
+      churnRate: 5.3,
+      avgRevenuePerSubscriber: 10278,
+      revenueByPlan: [
+        { planId: 1, planName: "Premium", subscriberCount: 10, monthlyRevenue: 125000, pctOfTotal: 67.6 },
+        { planId: 2, planName: "Essentiel", subscriberCount: 8, monthlyRevenue: 60000, pctOfTotal: 32.4 },
+      ],
+      topSubscribers: [
+        { clientId: 1, clientName: "Amina Njoya", planName: "Premium", totalSpend: 75000, utilizationPct: 82 },
+        { clientId: 2, clientName: "Paul Mbarga", planName: "Essentiel", totalSpend: 45000, utilizationPct: 64 },
+      ],
+      expiringSoonList: [
+        { clientId: 1, clientName: "Amina Njoya", planName: "Premium", daysUntilExpiry: 3, whatsappUrl: "https://wa.me/237655012345" },
+        { clientId: 2, clientName: "Paul Mbarga", planName: "Essentiel", daysUntilExpiry: 6, whatsappUrl: "https://wa.me/237655012346" },
+      ],
+      mrrTrend: [
+        { month: "mai", mrr: 142000 },
+        { month: "juin", mrr: 163000 },
+        { month: "juil.", mrr: 185000 },
+      ],
+      subscriptionGrowth: [
+        { month: "mai", new: 3, cancelled: 1, net: 2 },
+        { month: "juin", new: 5, cancelled: 1, net: 4 },
+        { month: "juil.", new: 4, cancelled: 1, net: 3 },
+      ],
+      planDistribution: [
+        { planName: "Premium", count: 10, pct: 55.6 },
+        { planName: "Essentiel", count: 8, pct: 44.4 },
+      ],
+    };
+  }
+  if (path === "/api/subscriptions/notifications/due") return [];
+
   // Analytics
   if (path === "/api/analytics/dashboard") return makeDashboard(selectedSiteId);
   if (path.startsWith("/api/analytics/kpis")) return makeKpis(selectedSiteId);

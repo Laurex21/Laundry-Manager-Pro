@@ -12,6 +12,9 @@ import { insertBusinessSettingsSchema, insertEmployeeSchema, insertMachineSchema
 import { parseLocalDateParam } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
+import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
+import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
+import { awardOrderPoints, awardReferralPoints } from "./lib/loyalty";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -270,6 +273,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
   registerMembershipRoutes(app);
+  registerSubscriptionDashboardRoutes(app);
+  registerSubscriptionNotificationRoutes(app);
   seedDatabase().catch(console.error);
   startTemporalIntelligenceJob();
 
@@ -302,6 +307,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
       const input = api.customers.create.input.parse(req.body);
+      if (input.referredByCustomerId != null) {
+        const referrer = await storage.getCustomer(input.referredByCustomerId);
+        if (!referrer || referrer.siteId !== siteId) {
+          return res.status(400).json({ message: "Referrer must belong to the selected site", field: "referredByCustomerId" });
+        }
+      }
       const customer = await storage.createCustomer({ ...input, siteId });
       res.status(201).json(customer);
     } catch (err) {
@@ -315,6 +326,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const existing = await storage.getCustomer(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Customer not found" });
     if (!(await canAccessCustomer(req, existing.id))) return res.status(403).json({ message: "Forbidden" });
+    if (input.referredByCustomerId != null) {
+      if (input.referredByCustomerId === existing.id) {
+        return res.status(400).json({ message: "A customer cannot refer themselves", field: "referredByCustomerId" });
+      }
+      const referrer = await storage.getCustomer(input.referredByCustomerId);
+      if (!referrer || referrer.siteId !== existing.siteId) {
+        return res.status(400).json({ message: "Referrer must belong to the same site", field: "referredByCustomerId" });
+      }
+    }
     const updated = await storage.updateCustomer(Number(req.params.id), input);
     if (!updated) return res.status(404).json({ message: "Customer not found" });
     res.json(updated);
@@ -511,6 +531,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             weightProcessed: input.weightProcessed || "0",
             cycleDurationMinutes: input.cycleDurationMinutes || 0,
           } as any);
+        }
+      }
+      if (input.status === "delivered") {
+        const site = await storage.getSite(updated.siteId);
+        if (site) {
+          await awardOrderPoints(updated.id, site.organisationId)
+            .catch((error) => console.error("[Loyalty] Order points award failed", error));
+          await awardReferralPoints(updated.id, site.organisationId)
+            .catch((error) => console.error("[Loyalty] Referral points award failed", error));
         }
       }
     }
@@ -909,13 +938,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/settings", isAuthenticated, async (req, res) => {
     try {
-      if (!(await requireOwnerOrganisation(req, res))) return;
+      const organisation = await requireOwnerOrganisation(req, res);
+      if (!organisation) return;
       const userId = (req.session as any).userId;
       const parsed = insertBusinessSettingsSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
       }
       const settings = await storage.upsertSettings(userId, parsed.data);
+      if (parsed.data.loyaltyProgramEnabled === true) {
+        const { db } = await import("./db");
+        const { loyaltyProgram } = await import("@shared/schema");
+        await db.insert(loyaltyProgram).values({ organisationId: organisation.id })
+          .onConflictDoNothing();
+      }
       res.json(settings);
     } catch (err) {
       res.status(500).json({ message: "Failed to save settings" });
