@@ -335,8 +335,8 @@ export default function Orders() {
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6">
-            <DialogHeader>
+          <DialogContent className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable]">
+            <DialogHeader className="sticky top-0 z-20 -mx-2 bg-background/95 px-2 pb-3 backdrop-blur-sm">
               <DialogTitle>{t("create_new_order")}</DialogTitle>
             </DialogHeader>
             <OrderForm onSuccess={(orderDetails) => {
@@ -1165,9 +1165,11 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={isOrderPending}>
-              {isOrderPending ? t("saving") : t("create_new_order")}
-            </Button>
+            <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm">
+              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending}>
+                {isOrderPending ? t("saving") : t("create_new_order")}
+              </Button>
+            </div>
           </form>
         </Form>
       )}
