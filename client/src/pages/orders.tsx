@@ -1139,7 +1139,19 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                         <FormItem>
                           <FormLabel className="text-xs text-muted-foreground">{t("discount")} (%)</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" min="0" max="100" className="h-8 text-right font-mono" {...field} data-testid="input-discount-percentage" />
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              className="h-8 text-right font-mono"
+                              {...field}
+                              onChange={(event) => {
+                                const percentage = event.currentTarget.valueAsNumber;
+                                field.onChange(Number.isNaN(percentage) ? 0 : percentage);
+                              }}
+                              data-testid="input-discount-percentage"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

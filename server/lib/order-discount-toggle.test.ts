@@ -12,6 +12,8 @@ assert.match(ordersPage, /grid-cols-1 gap-4 sm:grid-cols-2/);
 assert.match(ordersPage, /<fieldset className="space-y-1\.5">/);
 assert.match(ordersPage, /bg-background text-foreground shadow-sm/);
 assert.match(ordersPage, /max="100"/);
+assert.match(ordersPage, /const percentage = event\.currentTarget\.valueAsNumber/);
+assert.match(ordersPage, /field\.onChange\(Number\.isNaN\(percentage\) \? 0 : percentage\)/);
 assert.match(ordersPage, /discountAmount\.toFixed\(2\)/);
 assert.match(contract, /discountPct: z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
 assert.match(routes, /subtotal \* \(discountPct \/ 100\)/);
