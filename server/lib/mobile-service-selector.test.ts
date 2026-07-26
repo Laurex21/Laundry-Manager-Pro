@@ -15,5 +15,9 @@ assert.match(orders, /WebkitOverflowScrolling: "touch"/);
 assert.match(orders, /overscrollBehavior: "contain"/);
 assert.match(orders, /touchAction: "pan-y"/);
 assert.match(orders, /onTouchMove=\{\(event\) => event\.stopPropagation\(\)\}/);
+assert.match(orders, /sm:max-h-\[94dvh\]/);
+assert.match(orders, /sm:\[scrollbar-gutter:stable\]/);
+assert.match(orders, /DialogHeader className="sticky top-0 z-20/);
+assert.match(orders, /className="sticky bottom-0 z-20 -mx-1/);
 
-console.log("mobile service selector regression tests passed");
+console.log("order dialog responsive regression tests passed");
