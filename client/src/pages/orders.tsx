@@ -143,7 +143,7 @@ function ServiceCombobox({
           </Button>
         </FormControl>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent className="w-[max(var(--radix-popover-trigger-width),280px)] p-0" align="start">
         <Command
           filter={(itemValue, searchValue) =>
             normalizeServiceSearch(itemValue).includes(normalizeServiceSearch(searchValue)) ? 1 : 0
@@ -153,7 +153,7 @@ function ServiceCombobox({
             placeholder={t("search_services")}
             aria-label={t("search_services")}
           />
-          <CommandList>
+          <CommandList className="max-h-[280px] [touch-action:pan-y]">
             <CommandEmpty>{t("no_service_found")}</CommandEmpty>
             {groupedServices.map(([category, categoryServices]) => (
               <CommandGroup key={category} heading={category}>
@@ -165,18 +165,21 @@ function ServiceCombobox({
                       onChange(service.id);
                       setOpen(false);
                     }}
+                    className="items-start py-2"
                   >
                     <Check
                       className={cn(
-                        "mr-1 h-4 w-4",
+                        "mr-1 mt-0.5 h-4 w-4 shrink-0",
                         service.id === value ? "opacity-100" : "opacity-0"
                       )}
                       aria-hidden="true"
                     />
-                    <span className="min-w-0 flex-1 truncate">{service.name}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {symbol}{Number(service.price).toFixed(2)}/{service.unit}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-sm leading-tight">{service.name}</div>
+                      <div className="text-xs text-muted-foreground leading-tight mt-0.5">
+                        {symbol}{Number(service.price).toFixed(2)}/{service.unit}
+                      </div>
+                    </div>
                   </CommandItem>
                 ))}
               </CommandGroup>
