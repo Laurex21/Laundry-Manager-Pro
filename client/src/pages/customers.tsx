@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/form";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
@@ -211,10 +212,11 @@ export default function Customers() {
 function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
   const { t } = useTranslation();
   const { mutate, isPending } = useCreateCustomer();
+  const { data: existingCustomers = [] } = useCustomers();
 
   const form = useForm<InsertCustomer>({
     resolver: zodResolver(insertCustomerSchema),
-    defaultValues: { name: "", phone: "", email: "", address: "", notes: "" },
+    defaultValues: { name: "", phone: "", email: "", address: "", notes: "", referredByCustomerId: null },
   });
 
   function onSubmit(data: InsertCustomer) {
@@ -279,6 +281,23 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
               <FormControl>
                 <Input placeholder={t("customer_address_placeholder")} {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="referredByCustomerId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t("referred_by", { defaultValue: "Referred by" })}</FormLabel>
+              <Select value={field.value == null ? "none" : String(field.value)} onValueChange={(value) => field.onChange(value === "none" ? null : Number(value))}>
+                <FormControl><SelectTrigger><SelectValue placeholder={t("no_referrer", { defaultValue: "No referrer" })} /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="none">{t("no_referrer", { defaultValue: "No referrer" })}</SelectItem>
+                  {existingCustomers.map((customer) => <SelectItem key={customer.id} value={String(customer.id)}>{customer.name} · {customer.phone}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

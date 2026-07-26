@@ -27,6 +27,9 @@ export const customers = pgTable("customers", {
   segment: varchar("segment", { length: 50 }),
   churnRiskScore: integer("churn_risk_score"),
   totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  loyaltyPoints: integer("loyalty_points").default(0).notNull(),
+  loyaltyTier: varchar("loyalty_tier", { length: 20 }).default("bronze").notNull(),
+  referredByCustomerId: integer("referred_by_customer_id"),
   avgDepositHour: decimal("avg_deposit_hour", { precision: 5, scale: 2 }),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -272,6 +275,7 @@ export const businessSettings = pgTable("business_settings", {
   showTerms: boolean("show_terms").notNull().default(true),
   termsOfService: text("terms_of_service"),
   receiptFooterNote: varchar("receipt_footer_note", { length: 500 }).default(""),
+  loyaltyProgramEnabled: boolean("loyalty_program_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -362,6 +366,65 @@ export const customerSubscriptions = pgTable("customer_subscriptions", {
   index("idx_customer_subs_org").on(table.organisationId),
   index("idx_customer_subs_client").on(table.customerId),
   index("idx_customer_subs_status").on(table.status),
+  index("idx_customer_subs_expiry").on(table.expiryDate),
+]);
+
+export const subscriptionNotifications = pgTable("subscription_notifications", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  customerSubscriptionId: integer("customer_subscription_id").references(() => customerSubscriptions.id, { onDelete: "cascade" }),
+  clientId: integer("client_id").references(() => customers.id, { onDelete: "cascade" }),
+  trigger: varchar("trigger", { length: 50 }).notNull(),
+  occurrenceKey: varchar("occurrence_key", { length: 100 }),
+  channel: varchar("channel", { length: 20 }).notNull().default("whatsapp"),
+  message: text("message"),
+  whatsappUrl: text("whatsapp_url"),
+  sentAt: timestamp("sent_at"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_sub_notifications_org").on(table.organisationId),
+  index("idx_sub_notifications_status").on(table.status),
+  uniqueIndex("idx_sub_notifications_occurrence_unique")
+    .on(table.organisationId, table.customerSubscriptionId, table.trigger, table.occurrenceKey)
+    .where(sql`${table.occurrenceKey} is not null`),
+]);
+
+export const loyaltyProgram = pgTable("loyalty_program", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  pointsPerOrder: integer("points_per_order").notNull().default(10),
+  pointsPerFcfa: decimal("points_per_fcfa", { precision: 6, scale: 4 }),
+  renewalBonus: integer("renewal_bonus_points").notNull().default(50),
+  referralBonus: integer("referral_bonus_points").notNull().default(100),
+  pointExpireDays: integer("point_expire_days"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_loyalty_program_org").on(table.organisationId),
+]);
+
+export const loyaltyPoints = pgTable("loyalty_points", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  clientId: integer("client_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  points: integer("points").notNull(),
+  reason: varchar("reason", { length: 100 }).notNull(),
+  orderId: integer("order_id").references(() => orders.id),
+  subscriptionPaymentId: integer("subscription_payment_id"),
+  referredClientId: integer("referred_client_id").references(() => customers.id),
+  expiresAt: timestamp("expires_at"),
+  expiredAt: timestamp("expired_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_loyalty_points_client").on(table.clientId),
+  index("idx_loyalty_points_org").on(table.organisationId),
+  uniqueIndex("idx_loyalty_points_order_reason").on(table.organisationId, table.orderId, table.reason)
+    .where(sql`${table.orderId} is not null`),
+  uniqueIndex("idx_loyalty_points_renewal_reason").on(table.organisationId, table.subscriptionPaymentId, table.reason)
+    .where(sql`${table.subscriptionPaymentId} is not null`),
+  uniqueIndex("idx_loyalty_points_referral_reason").on(table.organisationId, table.referredClientId, table.reason)
+    .where(sql`${table.referredClientId} is not null`),
 ]);
 
 export const subscriptionTransactions = pgTable("subscription_transactions", {
@@ -393,7 +456,7 @@ export const membershipSubscriptionPayments = pgTable("membership_subscription_p
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_membership_sub_payments_sub").on(table.subscriptionId),
-  index("idx_membership_sub_payments_org").on(table.organisationId),
+  index("idx_sub_payments_org").on(table.organisationId),
 ]);
 
 export const membershipCards = pgTable("membership_cards", {

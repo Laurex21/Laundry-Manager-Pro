@@ -17,11 +17,14 @@ export function rateLimit(options: {
   windowMs: number;
   max: number;
   key?: (req: any) => string;
+  keyOnly?: boolean;
 }): RequestHandler {
   return (req, res, next) => {
     const now = Date.now();
     const keyPart = options.key?.(req) || "";
-    const key = `${options.name}:${requestIp(req)}:${keyPart}`;
+    const key = options.keyOnly
+      ? `${options.name}:${keyPart || requestIp(req)}`
+      : `${options.name}:${requestIp(req)}:${keyPart}`;
     const current = buckets.get(key);
 
     if (!current || current.resetAt <= now) {

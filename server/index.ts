@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { checkSubscriptionNotifications } from "./lib/subscription-notifications";
+import { expireLoyaltyPoints } from "./lib/loyalty";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -62,6 +64,13 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+  checkSubscriptionNotifications().catch((error) => console.error("[Daily Job] Subscription notifications failed", error));
+  expireLoyaltyPoints().catch((error) => console.error("[Daily Job] Loyalty point expiry failed", error));
+  const subscriptionNotificationTimer = setInterval(() => {
+    checkSubscriptionNotifications().catch((error) => console.error("[Daily Job] Subscription notifications failed", error));
+    expireLoyaltyPoints().catch((error) => console.error("[Daily Job] Loyalty point expiry failed", error));
+  }, 24 * 60 * 60 * 1000);
+  subscriptionNotificationTimer.unref();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
