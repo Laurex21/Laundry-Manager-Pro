@@ -86,7 +86,7 @@ export default function Customers() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:items-center sm:gap-3">
+      <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:gap-3">
         <div className="relative min-w-0 sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -104,15 +104,23 @@ export default function Customers() {
           id="customer-category-filter"
           value={filter}
           onChange={(event) => setFilter(event.target.value as typeof filter)}
-          className="h-9 max-w-[10.5rem] rounded-md border border-input bg-background px-3 text-sm text-foreground sm:hidden"
+          className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground sm:hidden"
           aria-label="Catégorie client"
         >
           {customerFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
         <div className="hidden flex-wrap rounded-md border bg-background p-0.5 sm:flex">{customerFilters.map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter(value)}>{label}</Button>)}</div>
-        <Button className="hidden sm:inline-flex" variant="outline" size="sm" onClick={()=>setShowMembershipColumns(v=>!v)}>Colonnes</Button>
+        <Button
+          className="hidden xl:inline-flex"
+          variant={showMembershipColumns ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={showMembershipColumns}
+          onClick={() => setShowMembershipColumns((visible) => !visible)}
+        >
+          {showMembershipColumns ? t("hide_subscription_details") : t("show_subscription_details")}
+        </Button>
         {!isLoading && (
-          <span className="col-span-2 text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:col-span-1">
+          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />
             {t("n_customers", { count: filteredCustomers?.length ?? totalCount })}
           </span>
@@ -134,6 +142,23 @@ export default function Customers() {
         </div>
       ) : filteredCustomers && filteredCustomers.length > 0 ? (
         <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+          {showMembershipColumns && (
+            <div
+              className="hidden xl:grid grid-cols-[minmax(0,1fr)_430px_180px_200px_16px] items-center gap-4 bg-muted/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              aria-hidden="true"
+            >
+              <span>{t("customer")}</span>
+              <span className="grid grid-cols-4 gap-3">
+                <span>{t("membership_status")}</span>
+                <span>{t("plan_name")}</span>
+                <span>{t("renewal_reminder")}</span>
+                <span>{t("remaining_balance")}</span>
+              </span>
+              <span>{t("email")}</span>
+              <span>{t("address")}</span>
+              <span />
+            </div>
+          )}
           {filteredCustomers.map((customer) => {
             const subscription = subscriptionSummaries[String(customer.id)];
             return (
@@ -165,7 +190,7 @@ export default function Customers() {
                   {subscription?.status === "active" ? t("active_subscription") : subscription ? t("expired_subscription") : t("no_subscription")}
                 </Badge>
               </div>
-              {showMembershipColumns && (() => { const sub = subscriptionSummaries[String(customer.id)]; return <div className="hidden xl:grid min-w-[430px] grid-cols-4 gap-3 text-xs"><span><Badge variant={sub?.status === "active" ? "default" : "secondary"}>{sub?.status === "active" ? "Actif" : sub ? "Expiré" : "Aucun"}</Badge></span><span className="truncate">{sub?.planName || "—"}</span><span>{sub?.renewalDate || sub?.expiryDate || "—"}</span><span>{sub?.remainingKg != null ? `${sub.remainingKg} kg` : sub?.remainingPieces != null ? `${sub.remainingPieces} pcs` : sub?.remainingOrders != null ? `${sub.remainingOrders} cmd` : "—"}</span></div>; })()}
+              {showMembershipColumns && (() => { const sub = subscriptionSummaries[String(customer.id)]; return <div className="hidden xl:grid min-w-[430px] grid-cols-4 gap-3 text-xs"><span><Badge variant={sub?.status === "active" ? "default" : "secondary"}>{sub?.status === "active" ? t("active_subscription") : sub ? t("expired_subscription") : t("no_subscription")}</Badge></span><span className="truncate">{sub?.planName || "—"}</span><span>{sub?.renewalDate || sub?.expiryDate || "—"}</span><span>{sub?.remainingKg != null ? `${sub.remainingKg} kg` : sub?.remainingPieces != null ? `${sub.remainingPieces} pcs` : sub?.remainingOrders != null ? `${sub.remainingOrders} cmd` : "—"}</span></div>; })()}
 
               {/* Email - hidden on small screens */}
               {customer.email ? (

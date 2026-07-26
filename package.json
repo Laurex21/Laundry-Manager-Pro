@@ -20,7 +20,7 @@
     "test:schema-guard": "tsx server/lib/schema-guard.test.ts",
     "test:membership-card": "tsx server/lib/membership-card-generator.test.ts",
     "test:membership-run1-run2": "tsx server/lib/membership-run1-run2.test.ts",
-    "test:membership-run3": "tsx server/lib/membership-run1-run2.test.ts && tsx server/lib/membership-card-generator.test.ts && tsx server/lib/subscription-dashboard.test.ts && tsx server/lib/loyalty.test.ts && tsx server/lib/subscription-security.test.ts",
+    "test:membership-run3": "tsx server/lib/membership-run1-run2.test.ts && tsx server/lib/membership-card-generator.test.ts && tsx server/lib/subscription-dashboard.test.ts && tsx server/lib/loyalty.test.ts && tsx server/lib/subscription-security.test.ts && tsx server/lib/customers-responsive.test.ts && tsx server/lib/mobile-service-selector.test.ts",
     "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"
