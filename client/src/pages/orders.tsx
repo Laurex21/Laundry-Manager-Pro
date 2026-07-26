@@ -587,6 +587,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [discountMode, setDiscountMode] = useState<"fixed" | "percentage">("fixed");
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
@@ -595,6 +596,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
       paymentStatus: "unpaid",
       entryDate: format(new Date(), "yyyy-MM-dd"),
       discount: "0",
+      discountPct: 0,
       pickupCost: "0",
       advancePayment: "0",
       advancePaymentMethod: "Cash",
@@ -634,6 +636,11 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     name: "discount"
   });
 
+  const watchedDiscountPct = useWatch({
+    control: form.control,
+    name: "discountPct"
+  });
+
   const watchedPickupCost = useWatch({
     control: form.control,
     name: "pickupCost"
@@ -667,15 +674,24 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     if (!customer || !Number(customer.defaultDiscountPct)) return;
     const pct = Number(customer.defaultDiscountPct);
     if (subtotal > 0 && pct > 0) {
+      setDiscountMode("percentage");
+      form.setValue("discountPct", pct);
       form.setValue("discount", ((subtotal * pct) / 100).toFixed(2));
     }
   }, [watchedCustomerId, customers, subtotal]);
 
+  const discountAmount = useMemo(() => {
+    if (discountMode === "percentage") {
+      const pct = Math.min(100, Math.max(0, Number(watchedDiscountPct) || 0));
+      return Math.min(subtotal, subtotal * pct / 100);
+    }
+    return Math.min(subtotal, Math.max(0, Number(watchedDiscount) || 0));
+  }, [discountMode, subtotal, watchedDiscount, watchedDiscountPct]);
+
   const total = useMemo(() => {
-    const discountVal = Number(watchedDiscount) || 0;
     const pickupVal = Number(watchedPickupCost) || 0;
-    return Math.max(0, subtotal - discountVal + pickupVal);
-  }, [subtotal, watchedDiscount, watchedPickupCost]);
+    return Math.max(0, subtotal - discountAmount + pickupVal);
+  }, [subtotal, discountAmount, watchedPickupCost]);
 
   const totalRegisteredGarments = useMemo(() => {
     return (watchedGarmentItems || []).reduce((sum, garment) => {
@@ -697,6 +713,8 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   async function onSubmit(data: CreateOrderFormValues) {
     const formattedData = {
       ...data,
+      discount: discountAmount.toFixed(2),
+      discountPct: discountMode === "percentage" ? Number(data.discountPct || 0) : 0,
       customerId: Number(data.customerId),
       items: data.items.map(item => ({
         serviceId: Number(item.serviceId),
@@ -1056,24 +1074,71 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="discount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        {t("discount")} ({symbol})
-                        {customerDiscountPct > 0 && (
-                          <span className="ml-1 text-primary font-medium">({customerDiscountPct}%)</span>
-                        )}
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" min="0" className="h-8 text-right font-mono" {...field} data-testid="input-discount" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 rounded-md border bg-muted/40 p-0.5" role="group" aria-label={t("discount_type")}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={discountMode === "fixed" ? "default" : "ghost"}
+                      className="h-7 px-2 text-xs"
+                      aria-pressed={discountMode === "fixed"}
+                      onClick={() => {
+                        form.setValue("discount", discountAmount.toFixed(2));
+                        form.setValue("discountPct", 0);
+                        setDiscountMode("fixed");
+                      }}
+                      data-testid="button-discount-fixed"
+                    >
+                      {t("fixed_amount")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={discountMode === "percentage" ? "default" : "ghost"}
+                      className="h-7 px-2 text-xs"
+                      aria-pressed={discountMode === "percentage"}
+                      onClick={() => {
+                        form.setValue("discountPct", subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0);
+                        setDiscountMode("percentage");
+                      }}
+                      data-testid="button-discount-percentage"
+                    >
+                      {t("percentage")}
+                    </Button>
+                  </div>
+                  {discountMode === "fixed" ? (
+                    <FormField
+                      control={form.control}
+                      name="discount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs text-muted-foreground">{t("discount")} ({symbol})</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" max={subtotal} className="h-8 text-right font-mono" {...field} data-testid="input-discount" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="discountPct"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs text-muted-foreground">{t("discount")} (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" max="100" className="h-8 text-right font-mono" {...field} data-testid="input-discount-percentage" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                />
+                  {customerDiscountPct > 0 && (
+                    <p className="text-xs text-primary">{t("customer_default_discount", { percentage: customerDiscountPct })}</p>
+                  )}
+                </div>
                 <FormField
                   control={form.control}
                   name="pickupCost"
@@ -1090,12 +1155,12 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                   )}
                 />
               </div>
-              {(Number(watchedPickupCost) > 0 || Number(watchedDiscount) > 0) && (
+              {(Number(watchedPickupCost) > 0 || discountAmount > 0) && (
                 <div className="text-xs text-muted-foreground space-y-1 px-1">
-                  {Number(watchedDiscount) > 0 && (
+                  {discountAmount > 0 && (
                     <div className="flex justify-between">
                       <span>- {t("discount")}:</span>
-                      <span className="font-mono text-destructive">-{symbol}{Number(watchedDiscount).toFixed(2)}</span>
+                      <span className="font-mono text-destructive">-{symbol}{discountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   {Number(watchedPickupCost) > 0 && (

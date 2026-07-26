@@ -426,7 +426,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         subtotal += Number(service.price) * item.quantity;
       }
-      const discountAmount = Number(orderData.discount || 0);
+      const discountPct = Number(orderData.discountPct || 0);
+      const requestedDiscountAmount = Number(orderData.discount || 0);
+      const discountAmount = discountPct > 0
+        ? subtotal * (discountPct / 100)
+        : requestedDiscountAmount;
+      if (!Number.isFinite(discountAmount) || discountAmount < 0 || discountAmount > subtotal) {
+        return res.status(400).json({ message: "Discount must be between zero and the order subtotal" });
+      }
       const pickupCostAmount = Number(orderData.pickupCost || 0);
       const advanceAmount = Number(orderData.advancePayment || 0);
       const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
@@ -438,6 +445,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "received",
         totalAmount: totalAmount.toString(),
         originalPrice: subtotal.toString(),
+        discountPct: discountPct.toString(),
         discountAmount: discountAmount.toString(),
         discount: discountAmount.toString(),
         pickupCost: pickupCostAmount.toString(),
