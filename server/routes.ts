@@ -307,6 +307,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
       const input = api.customers.create.input.parse(req.body);
+      if (input.referredByCustomerId != null) {
+        const referrer = await storage.getCustomer(input.referredByCustomerId);
+        if (!referrer || referrer.siteId !== siteId) {
+          return res.status(400).json({ message: "Referrer must belong to the selected site", field: "referredByCustomerId" });
+        }
+      }
       const customer = await storage.createCustomer({ ...input, siteId });
       res.status(201).json(customer);
     } catch (err) {
@@ -320,6 +326,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const existing = await storage.getCustomer(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Customer not found" });
     if (!(await canAccessCustomer(req, existing.id))) return res.status(403).json({ message: "Forbidden" });
+    if (input.referredByCustomerId != null) {
+      if (input.referredByCustomerId === existing.id) {
+        return res.status(400).json({ message: "A customer cannot refer themselves", field: "referredByCustomerId" });
+      }
+      const referrer = await storage.getCustomer(input.referredByCustomerId);
+      if (!referrer || referrer.siteId !== existing.siteId) {
+        return res.status(400).json({ message: "Referrer must belong to the same site", field: "referredByCustomerId" });
+      }
+    }
     const updated = await storage.updateCustomer(Number(req.params.id), input);
     if (!updated) return res.status(404).json({ message: "Customer not found" });
     res.json(updated);

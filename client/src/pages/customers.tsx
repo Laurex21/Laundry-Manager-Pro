@@ -216,7 +216,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
 
   const form = useForm<InsertCustomer>({
     resolver: zodResolver(insertCustomerSchema),
-    defaultValues: { name: "", phone: "", email: "", address: "", notes: "" },
+    defaultValues: { name: "", phone: "", email: "", address: "", notes: "", referredByCustomerId: null },
   });
 
   function onSubmit(data: InsertCustomer) {
