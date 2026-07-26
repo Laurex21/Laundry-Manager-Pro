@@ -1073,39 +1073,50 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 <span className="text-muted-foreground">{t("subtotal")}:</span>
                 <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 rounded-md border bg-muted/40 p-0.5" role="group" aria-label={t("discount_type")}>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={discountMode === "fixed" ? "default" : "ghost"}
-                      className="h-7 px-2 text-xs"
-                      aria-pressed={discountMode === "fixed"}
-                      onClick={() => {
-                        form.setValue("discount", discountAmount.toFixed(2));
-                        form.setValue("discountPct", 0);
-                        setDiscountMode("fixed");
-                      }}
-                      data-testid="button-discount-fixed"
-                    >
-                      {t("fixed_amount")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={discountMode === "percentage" ? "default" : "ghost"}
-                      className="h-7 px-2 text-xs"
-                      aria-pressed={discountMode === "percentage"}
-                      onClick={() => {
-                        form.setValue("discountPct", subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0);
-                        setDiscountMode("percentage");
-                      }}
-                      data-testid="button-discount-percentage"
-                    >
-                      {t("percentage")}
-                    </Button>
-                  </div>
+                  <fieldset className="space-y-1.5">
+                    <legend className="text-xs font-medium text-muted-foreground">{t("discount_type")}</legend>
+                    <div className="grid grid-cols-2 rounded-lg border bg-muted/60 p-1" role="group" aria-label={t("discount_type")}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className={`min-h-9 rounded-md px-3 text-xs font-medium transition-colors ${
+                          discountMode === "fixed"
+                            ? "bg-background text-foreground shadow-sm hover:bg-background"
+                            : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                        }`}
+                        aria-pressed={discountMode === "fixed"}
+                        onClick={() => {
+                          form.setValue("discount", discountAmount.toFixed(2));
+                          form.setValue("discountPct", 0);
+                          setDiscountMode("fixed");
+                        }}
+                        data-testid="button-discount-fixed"
+                      >
+                        {t("fixed_amount")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className={`min-h-9 rounded-md px-3 text-xs font-medium transition-colors ${
+                          discountMode === "percentage"
+                            ? "bg-background text-foreground shadow-sm hover:bg-background"
+                            : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                        }`}
+                        aria-pressed={discountMode === "percentage"}
+                        onClick={() => {
+                          form.setValue("discountPct", subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0);
+                          setDiscountMode("percentage");
+                        }}
+                        data-testid="button-discount-percentage"
+                      >
+                        {t("percentage")}
+                      </Button>
+                    </div>
+                  </fieldset>
                   {discountMode === "fixed" ? (
                     <FormField
                       control={form.control}
