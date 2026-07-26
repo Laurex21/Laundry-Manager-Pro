@@ -685,10 +685,12 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
 
   const discountAmount = useMemo(() => {
     if (discountMode === "percentage") {
-      const pct = Math.min(100, Math.max(0, Number(watchedDiscountPct) || 0));
+      const raw = Number(watchedDiscountPct);
+      const pct = Math.min(100, Math.max(0, isNaN(raw) ? 0 : raw));
       return Math.min(subtotal, subtotal * pct / 100);
     }
-    return Math.min(subtotal, Math.max(0, Number(watchedDiscount) || 0));
+    const raw = Number(watchedDiscount);
+    return Math.min(subtotal, Math.max(0, isNaN(raw) ? 0 : raw));
   }, [discountMode, subtotal, watchedDiscount, watchedDiscountPct]);
 
   const total = useMemo(() => {
@@ -1142,7 +1144,23 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                         <FormItem>
                           <FormLabel className="text-xs text-muted-foreground">{t("discount")} (%)</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" min="0" max="100" className="h-8 text-right font-mono" {...field} data-testid="input-discount-percentage" />
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              className="h-8 text-right font-mono"
+                              name={field.name}
+                              ref={field.ref}
+                              onBlur={field.onBlur}
+                              value={field.value ?? ""}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                field.onChange(v === "" ? "" : parseFloat(v));
+                              }}
+                              data-testid="input-discount-percentage"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
