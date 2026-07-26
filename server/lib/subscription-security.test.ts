@@ -43,7 +43,8 @@ assert.match(settings, /fetch\("\/api\/loyalty-program"/);
 assert.match(settings, /body: JSON\.stringify\(\{\s+enabled,/);
 assert.match(routes, /const program = await db\.transaction/);
 assert.match(card, /XPRESSPRO:\$\{organisationId\}:\$\{membershipNumber\}:\$\{expiry\}/);
-assert.match(layout, /item\.href !== "\/membership-plans"/);
+assert.match(layout, /const BOTTOM_NAV_HREFS = \["\/", "\/orders", "\/customers", "\/payments"\]/);
+assert.match(layout, /BOTTOM_NAV_HREFS\.includes\(item\.href\)/);
 assert.match(layout, /pb-\[env\(safe-area-inset-bottom\)\]/);
 
 for (const indexName of [

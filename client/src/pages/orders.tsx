@@ -153,7 +153,15 @@ function ServiceCombobox({
             placeholder={t("search_services")}
             aria-label={t("search_services")}
           />
-          <CommandList className="max-h-[280px] [touch-action:pan-y]">
+          <CommandList
+            className="max-h-[min(300px,calc(100dvh-12rem))] touch-pan-y overscroll-contain"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              overscrollBehavior: "contain",
+              touchAction: "pan-y",
+            }}
+            onTouchMove={(event) => event.stopPropagation()}
+          >
             <CommandEmpty>{t("no_service_found")}</CommandEmpty>
             {groupedServices.map(([category, categoryServices]) => (
               <CommandGroup key={category} heading={category}>

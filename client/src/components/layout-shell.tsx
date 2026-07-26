@@ -41,7 +41,9 @@ const ALL_NAV_ITEMS = [
   { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
 ];
 
-const BOTTOM_NAV_PAGES = ["dashboard", "orders", "customers", "payments"];
+// Use exact routes here. Several subscription screens intentionally share the
+// "customers" permission, but must not become duplicate bottom-nav entries.
+const BOTTOM_NAV_HREFS = ["/", "/orders", "/customers", "/payments"];
 
 const LANGUAGES = [
   { code: "en", label: "English", short: "EN" },
@@ -244,7 +246,7 @@ function WhatsAppContactButton() {
     <button
       type="button"
       onClick={() => openWhatsApp({ phone: WHATSAPP_SUPPORT_URL.replace("https://wa.me/", "") })}
-      className="fixed bottom-20 right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 lg:bottom-6 lg:right-6"
+      className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 lg:bottom-6 lg:right-6"
       aria-label={t("whatsapp_contact_support")}
       data-testid="button-whatsapp-support"
     >
@@ -262,7 +264,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const navItems = ALL_NAV_ITEMS.filter((item) => canAccess(item.page));
   const bottomNavItems = ALL_NAV_ITEMS.filter(
-    (item) => item.href !== "/membership-plans" && BOTTOM_NAV_PAGES.includes(item.page) && canAccess(item.page)
+    (item) => BOTTOM_NAV_HREFS.includes(item.href) && canAccess(item.page)
   );
 
   const pageTitleKey = PAGE_TITLES[location] || "dashboard";
@@ -435,7 +437,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 data-testid={`bottom-nav-${item.page}`}
               >
                 <item.icon className={cn("w-4.5 h-4.5", isActive && "stroke-[2.5]")} />
-                <span className="text-[10px] font-semibold leading-none">{t(item.labelKey)}</span>
+                <span className="max-w-full truncate px-1 text-[10px] font-semibold leading-none">{t(item.labelKey)}</span>
               </div>
             </Link>
           );
