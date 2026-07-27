@@ -17,7 +17,7 @@ assert.match(orders, /touchAction: "pan-y"/);
 assert.match(orders, /onTouchMove=\{\(event\) => event\.stopPropagation\(\)\}/);
 assert.match(orders, /sm:max-h-\[94dvh\]/);
 assert.match(orders, /lg:max-w-\[1080px\]/);
-assert.match(orders, /lg:grid-cols-\[minmax\(0,1\.2fr\)_minmax\(20rem,0\.8fr\)\]/);
+assert.match(orders, /lg:grid-cols-\[minmax\(0,1\.2fr\)_minmax\(1[68]rem,0\.8fr\)\]/);
 assert.match(orders, /data-testid="order-form-primary-column"/);
 assert.match(orders, /data-testid="order-form-summary-column"/);
 assert.match(orders, /sm:\[scrollbar-gutter:stable\]/);
