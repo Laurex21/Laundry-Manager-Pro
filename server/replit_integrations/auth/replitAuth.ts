@@ -209,6 +209,18 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_site_status_ready ON orders(site_id, status, ready_at) WHERE status = 'ready'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_delivered_at ON orders(delivered_at)`);
+
+  // One-time data correction: kapnangsilva@gmail.com was accidentally
+  // onboarded as a staff member, overwriting their admin credentials.
+  // Restore owner access; guarded so it only fires when still in the
+  // wrong state and is a safe no-op on every subsequent restart.
+  await pool.query(`
+    UPDATE users
+    SET user_type = 'owner',
+        role      = 'owner'
+    WHERE email     = 'kapnangsilva@gmail.com'
+      AND user_type = 'staff'
+  `);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
