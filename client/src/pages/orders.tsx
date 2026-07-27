@@ -338,7 +338,7 @@ export default function Orders() {
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:max-h-[100dvh] lg:max-w-[1080px] lg:p-5">
+          <DialogContent className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable] md:max-w-[1080px] md:p-5 lg:max-h-[100dvh]">
             <DialogHeader className="sticky top-0 z-20 -mx-2 bg-background/95 px-2 pb-3 backdrop-blur-sm">
               <DialogTitle>{t("create_new_order")}</DialogTitle>
             </DialogHeader>
@@ -591,6 +591,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [discountMode, setDiscountMode] = useState<"fixed" | "percentage">("fixed");
+  const [discountPercentageInput, setDiscountPercentageInput] = useState("0");
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
@@ -678,6 +679,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     const pct = Number(customer.defaultDiscountPct);
     if (subtotal > 0 && pct > 0) {
       setDiscountMode("percentage");
+      setDiscountPercentageInput(String(pct));
       form.setValue("discountPct", pct);
       form.setValue("discount", ((subtotal * pct) / 100).toFixed(2));
     }
@@ -786,6 +788,8 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
           });
         }
         form.reset();
+        setDiscountPercentageInput("0");
+        setDiscountMode("fixed");
         onSuccess(orderDetails);
       }
     });
@@ -940,7 +944,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
             </div>
             {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:bg-blue-950/20 sm:p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="shrink-0 text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
-            <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-start lg:gap-4">
+            <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] md:items-start md:gap-4">
               <div className="min-w-0 space-y-4" data-testid="order-form-primary-column">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1099,6 +1103,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                         onClick={() => {
                           form.setValue("discount", discountAmount.toFixed(2));
                           form.setValue("discountPct", 0);
+                          setDiscountPercentageInput("0");
                           setDiscountMode("fixed");
                         }}
                         data-testid="button-discount-fixed"
@@ -1116,7 +1121,9 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                         }`}
                         aria-pressed={discountMode === "percentage"}
                         onClick={() => {
-                          form.setValue("discountPct", subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0);
+                          const percentage = subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0;
+                          form.setValue("discountPct", percentage);
+                          setDiscountPercentageInput(String(percentage));
                           setDiscountMode("percentage");
                         }}
                         data-testid="button-discount-percentage"
@@ -1155,12 +1162,27 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                               className="h-8 text-right font-mono"
                               name={field.name}
                               ref={field.ref}
-                              onBlur={field.onBlur}
-                              value={field.value ?? ""}
+                              onBlur={() => {
+                                field.onBlur();
+                                if (discountPercentageInput === "") {
+                                  setDiscountPercentageInput("0");
+                                }
+                              }}
+                              value={discountPercentageInput}
                               onFocus={(e) => e.target.select()}
                               onChange={(event) => {
+                                const rawValue = event.currentTarget.value;
                                 const percentage = event.currentTarget.valueAsNumber;
-                                field.onChange(Number.isNaN(percentage) ? 0 : percentage);
+                                const clampedPercentage = Number.isNaN(percentage)
+                                  ? 0
+                                  : Math.min(100, Math.max(0, percentage));
+                                setDiscountPercentageInput(
+                                  rawValue === "" ? "" : String(clampedPercentage)
+                                );
+                                form.setValue("discountPct", clampedPercentage, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
                               }}
                               data-testid="input-discount-percentage"
                             />
