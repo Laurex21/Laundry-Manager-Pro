@@ -74,7 +74,25 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS segment varchar(50),
     ADD COLUMN IF NOT EXISTS churn_risk_score integer,
     ADD COLUMN IF NOT EXISTS total_revenue numeric(12, 2) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS avg_deposit_hour numeric(5, 2)
+    ADD COLUMN IF NOT EXISTS avg_deposit_hour numeric(5, 2),
+    ADD COLUMN IF NOT EXISTS loyalty_points integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS loyalty_tier varchar(20) NOT NULL DEFAULT 'bronze',
+    ADD COLUMN IF NOT EXISTS referred_by_customer_id integer
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS loyalty_points (
+      id serial PRIMARY KEY,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      client_id integer NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      points integer NOT NULL,
+      reason varchar(100) NOT NULL,
+      order_id integer REFERENCES orders(id),
+      subscription_payment_id integer,
+      referred_client_id integer REFERENCES customers(id),
+      expires_at timestamp,
+      expired_at timestamp,
+      created_at timestamp DEFAULT now()
+    )
   `);
   await ensureOrderItemQuantitySupportsDecimals();
   await pool.query(`
@@ -143,10 +161,10 @@ async function ensureAuthSchema() {
       content_url varchar(500) NOT NULL,
       document_hash varchar(64) NOT NULL,
       is_required boolean NOT NULL DEFAULT true,
-      created_at timestamp DEFAULT now(),
-      CONSTRAINT legal_documents_document_type_version_unique UNIQUE (document_type, version)
+      created_at timestamp DEFAULT now()
     )
   `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_legal_documents_type_version_unique ON legal_documents(document_type, version)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS legal_acceptances (
       id serial PRIMARY KEY,

@@ -143,7 +143,7 @@ function ServiceCombobox({
           </Button>
         </FormControl>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent className="w-[max(var(--radix-popover-trigger-width),280px)] p-0" align="start">
         <Command
           filter={(itemValue, searchValue) =>
             normalizeServiceSearch(itemValue).includes(normalizeServiceSearch(searchValue)) ? 1 : 0
@@ -173,18 +173,21 @@ function ServiceCombobox({
                       onChange(service.id);
                       setOpen(false);
                     }}
+                    className="items-start py-2"
                   >
                     <Check
                       className={cn(
-                        "mr-1 h-4 w-4",
+                        "mr-1 mt-0.5 h-4 w-4 shrink-0",
                         service.id === value ? "opacity-100" : "opacity-0"
                       )}
                       aria-hidden="true"
                     />
-                    <span className="min-w-0 flex-1 truncate">{service.name}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {symbol}{Number(service.price).toFixed(2)}/{service.unit}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-sm leading-tight">{service.name}</div>
+                      <div className="text-xs text-muted-foreground leading-tight mt-0.5">
+                        {symbol}{Number(service.price).toFixed(2)}/{service.unit}
+                      </div>
+                    </div>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -682,10 +685,12 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
 
   const discountAmount = useMemo(() => {
     if (discountMode === "percentage") {
-      const pct = Math.min(100, Math.max(0, Number(watchedDiscountPct) || 0));
+      const raw = Number(watchedDiscountPct);
+      const pct = Math.min(100, Math.max(0, isNaN(raw) ? 0 : raw));
       return Math.min(subtotal, subtotal * pct / 100);
     }
-    return Math.min(subtotal, Math.max(0, Number(watchedDiscount) || 0));
+    const raw = Number(watchedDiscount);
+    return Math.min(subtotal, Math.max(0, isNaN(raw) ? 0 : raw));
   }, [discountMode, subtotal, watchedDiscount, watchedDiscountPct]);
 
   const total = useMemo(() => {
@@ -1145,10 +1150,14 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                               min="0"
                               max="100"
                               className="h-8 text-right font-mono"
-                              {...field}
-                              onChange={(event) => {
-                                const percentage = event.currentTarget.valueAsNumber;
-                                field.onChange(Number.isNaN(percentage) ? 0 : percentage);
+                              name={field.name}
+                              ref={field.ref}
+                              onBlur={field.onBlur}
+                              value={field.value ?? ""}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                field.onChange(v === "" ? "" : parseFloat(v));
                               }}
                               data-testid="input-discount-percentage"
                             />
