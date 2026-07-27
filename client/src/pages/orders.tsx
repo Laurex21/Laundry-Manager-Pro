@@ -1158,9 +1158,9 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                               onBlur={field.onBlur}
                               value={field.value ?? ""}
                               onFocus={(e) => e.target.select()}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                field.onChange(v === "" ? "" : parseFloat(v));
+                              onChange={(event) => {
+                                const percentage = event.currentTarget.valueAsNumber;
+                                field.onChange(Number.isNaN(percentage) ? 0 : percentage);
                               }}
                               data-testid="input-discount-percentage"
                             />
