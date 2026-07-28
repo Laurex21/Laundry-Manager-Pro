@@ -703,6 +703,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.delete("/api/expenditures/:id", isAuthenticated, async (req, res) => {
+    const expenditureId = Number(req.params.id);
+    if (!Number.isInteger(expenditureId) || !(await canAccessExpenditure(req, expenditureId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const expenditure = await storage.getExpenditure(expenditureId);
+    if (!expenditure?.siteId || !(await requireSiteRole(req, res, expenditure.siteId, ["owner", "manager"]))) return;
+    const deleted = await storage.deleteExpenditure(expenditureId);
+    if (!deleted) return res.status(404).json({ message: "Expenditure not found" });
+    res.json({ success: true });
+  });
+
   app.get(api.performance.get.path, isAuthenticated, async (req: any, res) => {
     const { start, end } = req.query;
     const now = new Date();

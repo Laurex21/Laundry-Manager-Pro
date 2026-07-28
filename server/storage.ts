@@ -75,6 +75,7 @@ export interface IStorage {
   getExpenditure(id: number): Promise<Expenditure | undefined>;
   createExpenditure(expenditure: InsertExpenditure): Promise<Expenditure>;
   updateExpenditure(id: number, data: Partial<InsertExpenditure>): Promise<Expenditure | undefined>;
+  deleteExpenditure(id: number): Promise<boolean>;
 
   getPublicStats(): Promise<{ totalOrders: number; totalCustomers: number; totalTransactions: number; totalLaundries: number; totalGarments: number }>;
   getStats(): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
@@ -736,6 +737,11 @@ export class DatabaseStorage implements IStorage {
   async updateExpenditure(id: number, data: Partial<InsertExpenditure>): Promise<Expenditure | undefined> {
     const [updated] = await db.update(expenditures).set(data).where(eq(expenditures.id, id)).returning();
     return updated;
+  }
+
+  async deleteExpenditure(id: number): Promise<boolean> {
+    const [deleted] = await db.delete(expenditures).where(eq(expenditures.id, id)).returning({ id: expenditures.id });
+    return !!deleted;
   }
 
   async getStats() {
