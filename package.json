@@ -24,6 +24,7 @@
     "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",
     "test:expenses-redesign": "tsx server/lib/expenses-redesign.test.ts",
     "test:dashboard-quick-links": "tsx server/lib/dashboard-quick-links.test.ts",
+    "test:inline-order-status": "tsx server/lib/inline-order-status.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"
   },

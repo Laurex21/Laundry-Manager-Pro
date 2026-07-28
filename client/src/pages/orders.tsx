@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
-import { useOrders, useCreateOrder } from "@/hooks/use-orders";
+import { useOrders, useCreateOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useServices } from "@/hooks/use-services";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createOrderWithItemsSchema } from "@shared/routes";
 import { insertCustomerSchema, type Service } from "@shared/schema";
+import { PRODUCTION_STAGE_KEYS, normalizeProductionStatus } from "@shared/production-workflow";
 import { z } from "zod";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,7 @@ import {
   Star,
   CalendarDays,
   X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +57,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -78,6 +90,18 @@ type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
 const ACTIVE_STATUSES = new Set(["pending", "received", "sorting", "washing", "drying", "ironing", "packaging", "stain_treatment"]);
 const PIPELINE_STATUSES = new Set(["received", "washing", "ready", "delivered"]);
+const ORDER_PIPELINE = PRODUCTION_STAGE_KEYS;
+const STATUS_SELECT_COLORS: Record<string, string> = {
+  received: "border-yellow-200 bg-yellow-100 text-yellow-700 dark:border-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  sorting: "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+  stain_treatment: "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+  washing: "border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  drying: "border-cyan-200 bg-cyan-100 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400",
+  ironing: "border-violet-200 bg-violet-100 text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-400",
+  packaging: "border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
+  ready: "border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
+  delivered: "border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400",
+};
 type OrderStatusFilter = "all" | "active" | "ready" | "unpaid" | "received" | "washing" | "delivered";
 type OrderPeriodFilter = "all" | "today" | "week" | "month";
 
@@ -549,7 +573,7 @@ export default function Orders() {
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
-                        <StatusBadge status={order.status} />
+                        <InlineOrderStatus order={order} />
                         {order.hasReturnedItems && (
                           <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />
                         )}
@@ -603,39 +627,120 @@ export default function Orders() {
           </div>
         ) : (
           filteredOrders.map((order: any) => (
-            <Link key={order.id} href={`/orders/${order.id}`}>
-              <Card className="border-border/50 shadow-sm active:scale-[0.99] transition-transform cursor-pointer" data-testid={`card-order-${order.id}`}>
+            <Card key={order.id} className="border-border/50 shadow-sm" data-testid={`card-order-${order.id}`}>
                 <CardContent className="p-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2">
                     {/* Left: customer + meta */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="font-semibold text-foreground truncate text-sm">{order.customer?.name || t("unknown")}</span>
-                        {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                        <span className="font-mono font-medium">#{orderDisplayId(order)}</span>
-                        <span>·</span>
-                        <span>{format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <StatusBadge status={order.status} />
-                        <StatusBadge status={order.paymentStatus} />
-                      </div>
+                      <Link href={`/orders/${order.id}`} className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="font-semibold text-foreground truncate text-sm">{order.customer?.name || t("unknown")}</span>
+                          {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-mono font-medium">#{orderDisplayId(order)}</span>
+                          <span>·</span>
+                          <span>{format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</span>
+                        </div>
+                      </Link>
                     </div>
                     {/* Right: amount + chevron */}
-                    <div className="flex items-center gap-1 shrink-0">
+                    <Link href={`/orders/${order.id}`} className="flex shrink-0 items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                       <span className="font-mono font-bold text-sm tabular-nums">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                    </Link>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-3">
+                    <InlineOrderStatus order={order} mobile />
+                    <StatusBadge status={order.paymentStatus} />
                   </div>
                 </CardContent>
               </Card>
-            </Link>
           ))
         )}
       </div>
     </div>
+  );
+}
+
+function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boolean }) {
+  const { t } = useTranslation();
+  const { mutate: updateStatus, isPending } = useUpdateOrderStatus();
+  const [confirmationStatus, setConfirmationStatus] = useState<string | null>(null);
+  const normalizedCurrentStatus = normalizeProductionStatus(order.status);
+  const currentIndex = ORDER_PIPELINE.indexOf(normalizedCurrentStatus as typeof ORDER_PIPELINE[number]);
+
+  function requestStatusChange(nextStatus: string) {
+    if (nextStatus === normalizedCurrentStatus) return;
+    const nextIndex = ORDER_PIPELINE.indexOf(nextStatus as typeof ORDER_PIPELINE[number]);
+    const isBackward = currentIndex >= 0 && nextIndex >= 0 && nextIndex < currentIndex;
+    if (nextStatus === "delivered" || isBackward) {
+      setConfirmationStatus(nextStatus);
+      return;
+    }
+    updateStatus({ id: order.id, status: nextStatus });
+  }
+
+  function confirmStatusChange() {
+    if (!confirmationStatus) return;
+    updateStatus(
+      { id: order.id, status: confirmationStatus },
+      { onSuccess: () => setConfirmationStatus(null) },
+    );
+  }
+
+  const isDelivered = order.status === "delivered";
+  const isCancelled = order.status === "cancelled" || order.status === "cancellation_requested";
+  if (isDelivered || isCancelled) return <StatusBadge status={order.status} />;
+
+  return (
+    <>
+      <Select value={normalizedCurrentStatus} onValueChange={requestStatusChange} disabled={isPending}>
+        <SelectTrigger
+          className={cn(
+            "h-9 rounded-full border px-2.5 text-xs font-semibold focus:ring-2 focus:ring-ring",
+            mobile ? "w-[154px]" : "w-[142px]",
+            STATUS_SELECT_COLORS[order.status] || "border-border bg-muted text-foreground",
+          )}
+          aria-label={t("change_order_status", { order: orderDisplayId(order) })}
+          data-testid={`select-inline-status-${order.id}`}
+        >
+          {isPending ? (
+            <span className="flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />{t("saving")}</span>
+          ) : (
+            <SelectValue />
+          )}
+        </SelectTrigger>
+        <SelectContent>
+          {ORDER_PIPELINE.map((status) => (
+            <SelectItem key={status} value={status}>{t(`stage_${status}`)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <AlertDialog open={!!confirmationStatus} onOpenChange={(open) => { if (!open && !isPending) setConfirmationStatus(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmationStatus === "delivered" ? t("confirm_delivery_title") : t("confirm_status_change_title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmationStatus === "delivered"
+                ? order.paymentStatus === "paid"
+                  ? t("confirm_delivery_description")
+                  : t("confirm_delivery_unpaid_description")
+                : t("confirm_status_change_description", { status: t(`stage_${confirmationStatus}`) })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmStatusChange} disabled={isPending}>
+              {isPending ? t("saving") : t("confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
