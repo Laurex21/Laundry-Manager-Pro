@@ -25,6 +25,7 @@
     "test:expenses-redesign": "tsx server/lib/expenses-redesign.test.ts",
     "test:dashboard-quick-links": "tsx server/lib/dashboard-quick-links.test.ts",
     "test:inline-order-status": "tsx server/lib/inline-order-status.test.ts",
+    "test:customer-credit": "tsx server/lib/customer-credit.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"
   },

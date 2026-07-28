@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCustomerSchema, type InsertCustomer } from "@shared/schema";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import {
   Plus,
   Search,
@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Users,
   UserX,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,8 +41,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
+  const searchParams = new URLSearchParams(useSearch());
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "expired" | "vip" | "none">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "expired" | "vip" | "credit" | "none">(
+    searchParams.get("filter") === "credit" ? "credit" : "all",
+  );
   const [showMembershipColumns, setShowMembershipColumns] = useState(false);
   const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({ queryKey: ["/api/customer-subscription-summaries"] });
   const [open, setOpen] = useState(false);
@@ -51,7 +55,7 @@ export default function Customers() {
   const filteredCustomers = customers?.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const sub = subscriptionSummaries[String(c.id)];
-    const matchesFilter = filter === "all" || (filter === "active" && sub?.status === "active") || (filter === "expired" && (sub?.status === "expired" || (sub?.expiryDate && new Date(sub.expiryDate) < new Date()))) || (filter === "vip" && c.segment === "vip") || (filter === "none" && !sub);
+    const matchesFilter = filter === "all" || (filter === "active" && sub?.status === "active") || (filter === "expired" && (sub?.status === "expired" || (sub?.expiryDate && new Date(sub.expiryDate) < new Date()))) || (filter === "vip" && c.segment === "vip") || (filter === "credit" && Number((c as any).creditBalance ?? 0) > 0) || (filter === "none" && !sub);
     return matchesSearch && matchesFilter;
   });
 
@@ -61,6 +65,7 @@ export default function Customers() {
     ["active", t("active_subscription")],
     ["expired", t("expired_subscription")],
     ["vip", "VIP"],
+    ["credit", t("customer_credit")],
     ["none", t("no_subscription")],
   ] as const;
 
@@ -184,6 +189,12 @@ export default function Customers() {
                 {customer.segment && (
                   <Badge variant="secondary" className="mt-1 h-5 px-1.5 text-[10px] capitalize">
                     {String(customer.segment).replace(/_/g, " ")}
+                  </Badge>
+                )}
+                {Number((customer as any).creditBalance ?? 0) > 0 && (
+                  <Badge className="mt-1 ml-1 h-5 bg-emerald-100 px-1.5 text-[10px] text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400">
+                    <Wallet className="mr-1 h-3 w-3" />
+                    {t("customer_credit")} {Number((customer as any).creditBalance).toFixed(2)}
                   </Badge>
                 )}
                 <Badge variant={subscription?.status === "active" ? "default" : "secondary"} className="mt-1 ml-1 h-5 px-1.5 text-[10px] sm:hidden">

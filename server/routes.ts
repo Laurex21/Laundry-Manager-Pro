@@ -15,6 +15,13 @@ import { registerMembershipRoutes } from "./lib/membership-routes";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
 import { awardOrderPoints, awardReferralPoints } from "./lib/loyalty";
+import {
+  addManualCredit,
+  CREDIT_REASONS,
+  CreditOperationError,
+  recordPaymentWithCredit,
+} from "./lib/customer-credit";
+import { pool } from "./db";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -644,21 +651,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post(api.payments.create.path, isAuthenticated, async (req, res) => {
-    const input = api.payments.create.input.parse(req.body);
+    const input = z.object({
+      orderId: z.coerce.number().int().positive(),
+      amount: z.coerce.string().default("0"),
+      method: z.string().min(1).max(50),
+      reference: z.string().max(255).optional(),
+      date: z.coerce.date().optional(),
+      creditToApply: z.coerce.string().default("0"),
+      surplusDisposition: z.enum(["return", "credit"]).default("return"),
+      idempotencyKey: z.string().min(16).max(80).optional(),
+    }).parse(req.body);
     const order = await storage.getOrder(input.orderId);
     if (!order || order.siteId == null || !(await canAccessSite(req, order.siteId))) return res.status(403).json({ message: "Forbidden" });
     if (NON_PAYABLE_ORDER_STATUSES.has(order.status)) {
       return res.status(400).json({ message: "Payments cannot be registered for cancelled orders" });
     }
     const employee = await actorEmployee(req, order.siteId);
-    const payment = await storage.createPayment({ ...input, collectedByEmployeeId: employee?.id ?? null } as any);
-    await trackEmployeeActivity(req, {
-      siteId: order.siteId,
-      actionType: "payment_collected",
-      orderId: input.orderId,
-      amount: input.amount,
-      metadata: { method: input.method, isAdvance: input.isAdvance ?? false },
-    });
+    const organisationId = Number((req as any).organisationId);
+    if (!Number.isInteger(organisationId)) return res.status(403).json({ message: "Organisation context required" });
+    const idempotencyKey = input.idempotencyKey ?? `server-${crypto.randomUUID()}`;
+    let payment;
+    try {
+      payment = await recordPaymentWithCredit({
+        orderId: input.orderId,
+        amountReceived: input.amount,
+        method: input.method,
+        reference: input.reference,
+        paymentDate: input.date,
+        creditToApply: input.creditToApply,
+        surplusDisposition: input.surplusDisposition,
+        idempotencyKey,
+        organisationId,
+        siteId: order.siteId,
+        actorUserId: (req.session as any)?.userId ?? null,
+        collectedByEmployeeId: employee?.id ?? null,
+      });
+    } catch (error) {
+      if (error instanceof CreditOperationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+      throw error;
+    }
+    if (!payment.idempotentReplay) {
+      await trackEmployeeActivity(req, {
+        siteId: order.siteId,
+        actionType: "payment_collected",
+        orderId: input.orderId,
+        amount: payment.cashApplied ?? input.amount,
+        metadata: {
+          method: input.method,
+          creditApplied: payment.creditApplied ?? "0",
+          creditAdded: payment.creditAdded ?? "0",
+        },
+      });
+    }
     res.status(201).json(payment);
   });
 
@@ -666,6 +712,102 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const payments = await storage.getPaymentsByOrder(Number(req.params.id));
     res.json(payments);
+  });
+
+  app.get("/api/customers/:id/credit", isAuthenticated, async (req: any, res) => {
+    const customerId = Number(req.params.id);
+    const organisationId = Number(req.organisationId);
+    if (!Number.isInteger(customerId) || !Number.isInteger(organisationId)) {
+      return res.status(400).json({ message: "Invalid customer or organisation" });
+    }
+    if (!(await canAccessCustomer(req, customerId))) return res.status(403).json({ message: "Forbidden" });
+
+    const result = await pool.query(
+      `SELECT c.id, c.name, c.credit_balance, c.total_credit_added, c.total_credit_used
+       FROM customers c
+       JOIN sites s ON s.id = c.site_id
+       WHERE c.id = $1 AND s.organisation_id = $2`,
+      [customerId, organisationId],
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Customer not found" });
+    const history = await pool.query(
+      `SELECT ct.*, s.name AS site_name, o.id AS linked_order_id,
+              NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '') AS created_by_name
+       FROM credit_transactions ct
+       JOIN sites s ON s.id = ct.site_id
+       LEFT JOIN orders o ON o.id = ct.order_id
+       LEFT JOIN users u ON u.id = ct.created_by
+       WHERE ct.customer_id = $1 AND ct.organisation_id = $2
+       ORDER BY ct.created_at DESC, ct.id DESC
+       LIMIT 100`,
+      [customerId, organisationId],
+    );
+    const customer = result.rows[0];
+    res.json({
+      customerName: customer.name,
+      creditBalance: customer.credit_balance,
+      totalCreditAdded: customer.total_credit_added,
+      totalCreditUsed: customer.total_credit_used,
+      history: history.rows,
+    });
+  });
+
+  app.post("/api/customers/:id/credit", isAuthenticated, async (req: any, res) => {
+    const customerId = Number(req.params.id);
+    const organisationId = Number(req.organisationId);
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
+    if (!Number.isInteger(customerId) || !Number.isInteger(organisationId)) {
+      return res.status(400).json({ message: "Invalid customer or organisation" });
+    }
+    if (!(await canAccessCustomer(req, customerId))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
+    const body = z.object({
+      amount: z.coerce.string(),
+      reason: z.enum(CREDIT_REASONS),
+      notes: z.string().max(500).optional(),
+      idempotencyKey: z.string().min(16).max(80),
+    }).parse(req.body);
+    try {
+      const transaction = await addManualCredit({
+        customerId,
+        amount: body.amount,
+        reason: body.reason,
+        notes: body.notes,
+        organisationId,
+        siteId,
+        actorUserId: (req.session as any)?.userId ?? null,
+        idempotencyKey: body.idempotencyKey,
+      });
+      res.status(201).json(transaction);
+    } catch (error) {
+      if (error instanceof CreditOperationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.get("/api/analytics/credit-summary", isAuthenticated, async (req: any, res) => {
+    const organisationId = Number(req.organisationId);
+    if (!Number.isInteger(organisationId)) return res.status(403).json({ message: "Organisation context required" });
+    const result = await pool.query(
+      `SELECT COUNT(*) FILTER (WHERE c.credit_balance > 0)::int AS clients_with_credit,
+              COALESCE(SUM(c.credit_balance), 0)::text AS total_credit_balance,
+              COALESCE(SUM(c.total_credit_added), 0)::text AS total_ever_credited,
+              COALESCE(SUM(c.total_credit_used), 0)::text AS total_ever_used
+       FROM customers c
+       JOIN sites s ON s.id = c.site_id
+       WHERE s.organisation_id = $1`,
+      [organisationId],
+    );
+    const summary = result.rows[0];
+    res.json({
+      clientsWithCredit: summary.clients_with_credit,
+      totalCreditBalance: summary.total_credit_balance,
+      totalEverCredited: summary.total_ever_credited,
+      totalEverUsed: summary.total_ever_used,
+    });
   });
 
   app.get(api.expenditures.list.path, isAuthenticated, async (req: any, res) => {

@@ -722,7 +722,7 @@ export function generateThermalPaymentReceipt(
   customer: any,
   items: any[],
   garments: any[],
-  payment: { amount: string; method: string; date: string; newStatus: string; agentName?: string },
+  payment: { amount: string; method: string; date: string; newStatus: string; agentName?: string; creditApplied?: string; creditAdded?: string; creditBalance?: string; amountReceived?: string; changeReturned?: string },
   allPayments: any[],
   entryDate: string,
   discount: number,
@@ -733,7 +733,7 @@ export function generateThermalPaymentReceipt(
   const lang = settings.receiptLanguage || "en";
   const subtotal = orderSubtotal(items);
   const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
-  const currentPaymentAmount = Number(payment.amount || 0);
+  const currentPaymentAmount = Number(payment.amount || 0) + Number(payment.creditApplied || 0);
   const totalPaid = allPayments.length > 0
     ? allPayments.reduce((sum: number, paid: any) => sum + Number(paid.amount), 0)
     : currentPaymentAmount;
@@ -773,7 +773,7 @@ export function generatePaymentReceipt(
   customer: any,
   items: any[],
   garments: any[],
-  payment: { amount: string; method: string; date: string; newStatus: string; agentName?: string },
+  payment: { amount: string; method: string; date: string; newStatus: string; agentName?: string; creditApplied?: string; creditAdded?: string; creditBalance?: string; amountReceived?: string; changeReturned?: string },
   allPayments: any[],
   entryDate: string,
   pickupDate: string,
@@ -812,7 +812,7 @@ export function generatePaymentReceipt(
 
   const subtotalAmount = orderSubtotal(items);
   const orderTotal = orderTotalFromParts(subtotalAmount, discount, pickupCost);
-  const currentPaymentAmount = Number(payment.amount || 0);
+  const currentPaymentAmount = Number(payment.amount || 0) + Number(payment.creditApplied || 0);
   const totalPaid = allPayments.length > 0
     ? allPayments.reduce((sum: number, p: any) => sum + Number(p.amount), 0)
     : currentPaymentAmount;
@@ -922,6 +922,11 @@ export function generatePaymentReceipt(
         <div class="summary-row total"><span>${label("Order Total", "Total commande", lang)}</span><span>${symbol}${orderTotal.toFixed(2)}</span></div>
         ${previousPaid > 0 ? `<div class="summary-row" style="margin-top:4px;"><span style="color:#64748b;">${label("Previously Paid", "Déjà payé", lang)}</span><span style="color:#16a34a;">-${symbol}${previousPaid.toFixed(2)}</span></div>` : ""}
         <div class="summary-row" style="margin-top:4px;"><span style="color:#64748b;">${label("This Payment", "Ce paiement", lang)}</span><span style="color:#16a34a;">-${symbol}${currentPaymentAmount.toFixed(2)}</span></div>
+        ${Number(payment.amountReceived || 0) > Number(payment.amount || 0) ? `<div class="summary-row"><span>${label("Amount received", "Montant reçu", lang)}</span><span>${symbol}${Number(payment.amountReceived).toFixed(2)}</span></div>` : ""}
+        ${Number(payment.changeReturned || 0) > 0 ? `<div class="summary-row"><span>${label("Change returned", "Monnaie rendue", lang)}</span><span>${symbol}${Number(payment.changeReturned).toFixed(2)}</span></div>` : ""}
+        ${Number(payment.creditApplied || 0) > 0 ? `<div class="summary-row"><span>${label("Customer credit used", "Avoir client utilisé", lang)}</span><span>-${symbol}${Number(payment.creditApplied).toFixed(2)}</span></div>` : ""}
+        ${Number(payment.creditAdded || 0) > 0 ? `<div class="summary-row"><span>${label("Added to customer credit", "Ajouté à l'avoir client", lang)}</span><span>+${symbol}${Number(payment.creditAdded).toFixed(2)}</span></div>` : ""}
+        ${Number(payment.creditBalance || 0) > 0 ? `<div class="summary-row"><span>${label("Available customer credit", "Avoir client disponible", lang)}</span><span>${symbol}${Number(payment.creditBalance).toFixed(2)}</span></div>` : ""}
         ${remaining > 0 ? `<div class="summary-row" style="border-top:1px solid #fca5a5;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;">${symbol}${remaining.toFixed(2)}</span></div>` : `<div class="summary-row" style="border-top:1px solid #86efac;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>`}
       </div>
     </div>
