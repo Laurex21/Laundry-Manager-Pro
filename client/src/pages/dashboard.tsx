@@ -20,6 +20,7 @@ import { useWhatsAppLauncher, whatsappRequestFromUrl } from "@/components/whatsa
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 function dateLocaleFor(language: string) {
   if (language.startsWith("fr")) return fr;
@@ -82,7 +83,7 @@ export default function Dashboard() {
 
       {/* Operations command strip */}
       <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-row sm:items-center sm:gap-px bg-muted/20 border border-border/50 rounded-lg p-1 w-full min-w-0">
-        <Link href="/orders" className="contents sm:inline-flex">
+        <Link href="/orders?status=ready" className="contents sm:inline-flex">
           <Button size="sm" className="h-7 text-xs px-3 rounded-md font-medium w-full sm:w-auto" data-testid="button-new-order">
             <Plus className="w-3.5 h-3.5 mr-1.5" />{t('new_order')}
           </Button>
@@ -171,10 +172,18 @@ export default function Dashboard() {
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {QUEUE_STAGES.map(({ key, colorCls }) => (
-              <Link href="/orders" key={key}>
-                <div className={`rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow min-w-0 ${colorCls}`}>
+              <Link
+                href={`/orders?status=${key}`}
+                key={key}
+                className={`group rounded-lg border px-3 py-2.5 min-w-0 transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${colorCls}`}
+                aria-label={`${t(`stage_${key}` as any)}: ${ordersByStatus[key] ?? 0}`}
+              >
+                <div>
                   <p className="text-xl font-bold tabular-nums leading-none">{ordersByStatus[key] ?? 0}</p>
-                  <p className="text-[11px] mt-1 font-medium opacity-75">{t(`stage_${key}` as any)}</p>
+                  <p className="mt-1 flex items-center justify-between text-[11px] font-medium opacity-75">
+                    {t(`stage_${key}` as any)}
+                    <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  </p>
                 </div>
               </Link>
             ))}
@@ -190,10 +199,10 @@ export default function Dashboard() {
             <CalendarDays className="w-3 h-3" />{t('today')}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <MetricCard label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
+            <MetricCard href="/orders?period=today" label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
             <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
-            <MetricCard label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
-            <MetricCard label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
+            <MetricCard href="/orders?status=received" label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
+            <MetricCard href="/orders?status=ready" label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
           </div>
         </div>
 
@@ -203,7 +212,7 @@ export default function Dashboard() {
             <TrendingUp className="w-3 h-3" />{t('this_week')}
           </p>
           <div className="grid grid-cols-2 gap-2">
-            <MetricCard label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
+            <MetricCard href="/orders?period=week" label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
             <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
           </div>
         </div>
@@ -214,9 +223,9 @@ export default function Dashboard() {
             <CalendarDays className="w-3 h-3" />{t('this_month')}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <MetricCard label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
+            <MetricCard href="/orders?period=month" label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
             <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
-            <MetricCard label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
+            <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
             <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
           </div>
         </div>
@@ -434,7 +443,7 @@ export default function Dashboard() {
   );
 }
 
-function MetricCard({ label, value, icon: Icon, color, ...props }: any) {
+function MetricCard({ label, value, icon: Icon, color, href, ...props }: any) {
   const iconCls: Record<string, string> = {
     neutral: "text-muted-foreground",
     green:   "text-emerald-600 dark:text-emerald-400",
@@ -445,14 +454,30 @@ function MetricCard({ label, value, icon: Icon, color, ...props }: any) {
     orange:  "text-orange-600 dark:text-orange-400",
     indigo:  "text-indigo-600 dark:text-indigo-400",
   };
-  return (
-    <div className="rounded-lg border border-border/50 bg-card p-3 min-w-0" {...props}>
+  const content = (
+    <div className={cn(
+      "rounded-lg border border-border/50 bg-card p-3 min-w-0",
+      href && "group h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:border-border hover:shadow-sm"
+    )} {...props}>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[11px] text-muted-foreground leading-tight truncate">{label}</p>
-        <Icon className={`w-3 h-3 flex-shrink-0 ${iconCls[color] ?? iconCls.neutral}`} />
+        <div className="flex items-center gap-1">
+          <Icon className={`w-3 h-3 flex-shrink-0 ${iconCls[color] ?? iconCls.neutral}`} aria-hidden="true" />
+          {href && <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />}
+        </div>
       </div>
       <p className="text-lg font-semibold tabular-nums leading-none">{value}</p>
     </div>
+  );
+  if (!href) return content;
+  return (
+    <Link
+      href={href}
+      className="block h-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      aria-label={`${label}: ${value}`}
+    >
+      {content}
+    </Link>
   );
 }
 

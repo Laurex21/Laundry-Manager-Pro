@@ -93,7 +93,12 @@ export function useUpdateOrderStatus() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.orders.get.path, data.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({ title: "Updated", description: "Order status updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 }
