@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/select";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { CustomerMembershipTab } from "@/components/customer-membership-tab";
+import { CustomerCreditTab } from "@/components/customer-credit-tab";
 
 const VIP_THRESHOLD = 50000;
 
@@ -328,6 +329,7 @@ export default function CustomerDetail() {
           <TabsTrigger className="min-h-10" value="preferences" data-testid="tab-preferences">{t("preferences")}</TabsTrigger>
           <TabsTrigger className="min-h-10" value="history" data-testid="tab-history">{t("order_history")}</TabsTrigger>
           <TabsTrigger className="min-h-10" value="membership" data-testid="tab-membership">{t("membership")}</TabsTrigger>
+          <TabsTrigger className="min-h-10" value="credit" data-testid="tab-credit">{t("customer_credit")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="contact">
@@ -420,6 +422,9 @@ export default function CustomerDetail() {
         </TabsContent>
         <TabsContent value="membership">
           <CustomerMembershipTab customerId={customerId} />
+        </TabsContent>
+        <TabsContent value="credit">
+          <CustomerCreditTab customerId={customerId} />
         </TabsContent>
       </Tabs>
 

@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
   AlertCircle, AlertTriangle, Info, Building2, MapPin, UserCheck,
-  TrendingUp, CalendarDays, Package, CreditCard
+  TrendingUp, CalendarDays, Package, CreditCard, Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +41,13 @@ export default function Dashboard() {
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
   const { data: behaviorData } = useQuery<any>({ queryKey: ["/api/analytics/customer-behavior", "month"], queryFn: () => fetch("/api/analytics/customer-behavior?period=month", { credentials: "include" }).then((res) => res.json()) });
   const { data: storageWaiting } = useQuery<any[]>({ queryKey: ["/api/analytics/storage-occupancy"] });
+  const { data: creditSummary } = useQuery<any>({
+    queryKey: ["/api/analytics/credit-summary"],
+    queryFn: () => fetch("/api/analytics/credit-summary", { credentials: "include" }).then((res) => {
+      if (!res.ok) throw new Error("Failed to load credit summary");
+      return res.json();
+    }),
+  });
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
@@ -220,6 +227,18 @@ export default function Dashboard() {
             <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
           </div>
         </div>
+        {Number(creditSummary?.totalCreditBalance ?? 0) > 0 && (
+          <Link href="/customers?filter=credit">
+            <div className="cursor-pointer" data-testid="card-credit-liability">
+              <MetricCard
+                label={t("credit_to_honor", { count: creditSummary.clientsWithCredit })}
+                value={`${symbol}${Number(creditSummary.totalCreditBalance).toFixed(2)}`}
+                icon={Wallet}
+                color="emerald"
+              />
+            </div>
+          </Link>
+        )}
       </div>
 
       {/* Sites overview (owner / all-sites mode) */}

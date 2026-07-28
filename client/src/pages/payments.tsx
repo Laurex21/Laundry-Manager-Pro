@@ -18,6 +18,7 @@ import {
   ClipboardList,
   ArrowRight,
   Search,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,8 @@ export default function Payments() {
   const [method, setMethod] = useState("Cash");
   const [paymentDate, setPaymentDate] = useState(todayInputDate);
   const [reference, setReference] = useState("");
+  const [creditToApply, setCreditToApply] = useState("0");
+  const [surplusDisposition, setSurplusDisposition] = useState<"return" | "credit">("return");
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
     paymentId?: number;
@@ -68,6 +71,11 @@ export default function Payments() {
     customerName: string;
     totalAmount: string;
     newStatus: string;
+    creditApplied?: string;
+    creditAdded?: string;
+    creditBalance?: string;
+    amountReceived?: string;
+    changeReturned?: string;
   } | null>(null);
 
   const { data: orderPayments } = usePaymentsByOrder(selectedOrderId || 0);
@@ -92,6 +100,16 @@ export default function Payments() {
     if (!selectedOrderId || !allOrders) return null;
     return allOrders.find((o: any) => o.id === selectedOrderId) || null;
   }, [selectedOrderId, allOrders]);
+  const selectedCustomerId = (selectedOrder as any)?.customer?.id ?? (selectedOrder as any)?.customerId ?? 0;
+  const { data: creditData } = useQuery<any>({
+    queryKey: ["/api/customers", selectedCustomerId, "credit"],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${selectedCustomerId}/credit`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load customer credit");
+      return res.json();
+    },
+    enabled: !!selectedCustomerId,
+  });
 
   const totalPaid = useMemo(() => {
     if (!orderPayments) return 0;
@@ -100,10 +118,18 @@ export default function Payments() {
 
   const totalAmount = selectedOrder ? Number(selectedOrder.totalAmount) : 0;
   const remainingBalance = Math.max(0, totalAmount - totalPaid);
+  const availableCredit = Number(creditData?.creditBalance ?? 0);
+  const maxCreditApplicable = Math.min(availableCredit, remainingBalance);
+  const appliedCredit = Math.min(Math.max(Number(creditToApply) || 0, 0), maxCreditApplicable);
+  const remainingAfterCredit = Math.max(0, remainingBalance - appliedCredit);
+  const amountReceived = Math.max(0, Number(amount) || 0);
+  const surplus = Math.max(0, amountReceived - remainingAfterCredit);
 
   const handleSelectOrder = useCallback((orderId: number) => {
     setSelectedOrderId(orderId);
     setAmount("");
+    setCreditToApply("0");
+    setSurplusDisposition("return");
     setPaymentDate(todayInputDate());
     setSuccessPayment(null);
   }, []);
@@ -111,33 +137,50 @@ export default function Payments() {
   const amountError = useMemo(() => {
     const val = Number(amount);
     if (amount && val <= 0) return t("amount_gt_zero");
-    if (amount && val > remainingBalance) return t("amount_exceeds_balance");
     return null;
-  }, [amount, remainingBalance, t]);
+  }, [amount, t]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedOrderId || !selectedOrder || NON_PAYABLE_ORDER_STATUSES.has(selectedOrder.status) || amountError || !amount || !paymentDate) return;
+    if (!selectedOrderId || !selectedOrder || NON_PAYABLE_ORDER_STATUSES.has(selectedOrder.status) || amountError || !paymentDate) return;
+    if (amountReceived <= 0 && appliedCredit <= 0) return;
 
-    const paidAmount = Number(amount);
-    const newTotalPaid = totalPaid + paidAmount;
+    const paidAmount = Math.min(amountReceived, remainingAfterCredit);
+    const newTotalPaid = totalPaid + paidAmount + appliedCredit;
     const newStatus = newTotalPaid >= totalAmount ? "paid" : "partial";
+    const idempotencyKey = `payment-${selectedOrderId}-${crypto.randomUUID()}`;
 
     createPayment(
-      { orderId: selectedOrderId, amount, method, date: new Date(`${paymentDate}T00:00:00`), reference: reference || undefined },
+      {
+        orderId: selectedOrderId,
+        amount: amount || "0",
+        method,
+        date: new Date(`${paymentDate}T00:00:00`),
+        reference: reference || undefined,
+        creditToApply: appliedCredit.toFixed(2),
+        surplusDisposition,
+        idempotencyKey,
+      },
       {
         onSuccess: (createdPayment: any) => {
           setSuccessPayment({
             orderId: selectedOrderId,
             paymentId: createdPayment?.id,
-            amount: paidAmount.toFixed(2),
+            amount: createdPayment?.cashApplied ?? paidAmount.toFixed(2),
             method,
             date: createdPayment?.date || new Date().toISOString(),
             customerName: (selectedOrder as any)?.customer?.name || t("order_number", { id: orderDisplayId(selectedOrder as any) || selectedOrderId }),
             totalAmount: totalAmount.toFixed(2),
             newStatus,
+            creditApplied: createdPayment?.creditApplied,
+            creditAdded: createdPayment?.creditAdded,
+            creditBalance: createdPayment?.creditBalance,
+            amountReceived: createdPayment?.amountReceived,
+            changeReturned: createdPayment?.changeReturned,
           });
           setAmount("");
+          setCreditToApply("0");
+          setSurplusDisposition("return");
           setPaymentDate(todayInputDate());
           setReference("");
           setSelectedOrderId(null);
@@ -185,6 +228,11 @@ export default function Payments() {
         date: successPayment.date,
         newStatus: successPayment.newStatus,
         agentName: currentPayment?.collectedByEmployee?.name,
+        creditApplied: successPayment.creditApplied,
+        creditAdded: successPayment.creditAdded,
+        creditBalance: successPayment.creditBalance,
+        amountReceived: successPayment.amountReceived,
+        changeReturned: successPayment.changeReturned,
       };
 
       if (action === "thermal") {
@@ -224,14 +272,14 @@ export default function Payments() {
   }
 
   const presets = useMemo(() => {
-    if (remainingBalance <= 0) return [];
+    if (remainingAfterCredit <= 0) return [];
     return [
-      { label: "25%", value: (remainingBalance * 0.25).toFixed(2) },
-      { label: "50%", value: (remainingBalance * 0.5).toFixed(2) },
-      { label: "75%", value: (remainingBalance * 0.75).toFixed(2) },
-      { label: t("pay_full_balance"), value: remainingBalance.toFixed(2) },
+      { label: "25%", value: (remainingAfterCredit * 0.25).toFixed(2) },
+      { label: "50%", value: (remainingAfterCredit * 0.5).toFixed(2) },
+      { label: "75%", value: (remainingAfterCredit * 0.75).toFixed(2) },
+      { label: t("pay_full_balance"), value: remainingAfterCredit.toFixed(2) },
     ];
-  }, [remainingBalance, t]);
+  }, [remainingAfterCredit, t]);
 
   return (
     <div className="space-y-6 page-fade-in">
@@ -332,7 +380,7 @@ export default function Payments() {
                 <button
                   type="button"
                   className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
-                  onClick={() => { setSelectedOrderId(null); setAmount(""); }}
+                  onClick={() => { setSelectedOrderId(null); setAmount(""); setCreditToApply("0"); }}
                 >
                   {t("change")}
                 </button>
@@ -362,6 +410,44 @@ export default function Payments() {
                   </div>
                 </div>
 
+                {availableCredit > 0 && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20" data-testid="customer-credit-panel">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-emerald-600" />
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{t("credit_available")}</p>
+                          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                            {symbol}{availableCredit.toFixed(2)} {t("on_account")}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCreditToApply(maxCreditApplicable.toFixed(2))}
+                        data-testid="button-use-max-credit"
+                      >
+                        {t("use_all")}
+                      </Button>
+                    </div>
+                    <div className="mt-3">
+                      <label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">{t("credit_to_apply")}</label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={maxCreditApplicable}
+                        step="0.01"
+                        value={creditToApply}
+                        onChange={(event) => setCreditToApply(event.target.value)}
+                        className="mt-1 bg-background"
+                        data-testid="input-credit-to-apply"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {t("amount")}
@@ -374,9 +460,8 @@ export default function Payments() {
                       <Input
                         type="number"
                         step="0.01"
-                        min="0.01"
-                        max={remainingBalance}
-                        placeholder={remainingBalance.toFixed(2)}
+                        min="0"
+                        placeholder={remainingAfterCredit.toFixed(2)}
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         className={`border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 font-mono flex-1 ${amountError ? "border-destructive" : ""}`}
@@ -404,6 +489,31 @@ export default function Payments() {
                   )}
                   {amountError && <p className="text-xs text-destructive">{amountError}</p>}
                 </div>
+
+                {appliedCredit > 0 && (
+                  <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>{t("credit_applied")}</span><strong>-{symbol}{appliedCredit.toFixed(2)}</strong></div>
+                    <div className="flex justify-between"><span>{t("remaining_to_pay")}</span><strong>{symbol}{remainingAfterCredit.toFixed(2)}</strong></div>
+                  </div>
+                )}
+
+                {surplus > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/50 dark:bg-amber-950/20" data-testid="payment-surplus-panel">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">
+                      {t("surplus_detected")}: {symbol}{surplus.toFixed(2)}
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="radio" checked={surplusDisposition === "return"} onChange={() => setSurplusDisposition("return")} />
+                        {t("return_change")}
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input type="radio" checked={surplusDisposition === "credit"} onChange={() => setSurplusDisposition("credit")} />
+                        {t("credit_to_account")}
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -468,12 +578,12 @@ export default function Payments() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isPending || !amount || !paymentDate || !!amountError}
+                  disabled={isPending || (amountReceived <= 0 && appliedCredit <= 0) || !paymentDate || !!amountError}
                   data-testid="button-submit-payment"
                 >
                   {isPending
                     ? t("saving")
-                    : `${t("record_payment_of")} ${symbol}${Number(amount || 0).toFixed(2)}`}
+                    : `${t("record_payment_of")} ${symbol}${(Math.min(amountReceived, remainingAfterCredit) + appliedCredit).toFixed(2)}`}
                 </Button>
 
                 {orderPayments && orderPayments.length > 0 && (

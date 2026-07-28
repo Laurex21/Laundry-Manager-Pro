@@ -32,9 +32,15 @@ export const customers = pgTable("customers", {
   referredByCustomerId: integer("referred_by_customer_id"),
   avgDepositHour: decimal("avg_deposit_hour", { precision: 5, scale: 2 }),
   siteId: integer("site_id"),
+  creditBalance: decimal("credit_balance", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalCreditAdded: decimal("total_credit_added", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalCreditUsed: decimal("total_credit_used", { precision: 12, scale: 2 }).default("0").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_clients_last_visit").on(table.lastVisitAt),
+  index("idx_customers_positive_credit")
+    .on(table.creditBalance)
+    .where(sql`${table.creditBalance} > 0`),
 ]);
 
 export const services = pgTable("services", {
@@ -115,7 +121,12 @@ export const payments = pgTable("payments", {
   reference: varchar("reference", { length: 255 }),
   date: timestamp("date").defaultNow(),
   isAdvance: boolean("is_advance").default(false),
-});
+  idempotencyKey: varchar("idempotency_key", { length: 100 }),
+}, (table) => [
+  uniqueIndex("idx_payments_idempotency_key")
+    .on(table.idempotencyKey)
+    .where(sql`${table.idempotencyKey} IS NOT NULL`),
+]);
 
 export const garmentItems = pgTable("garment_items", {
   id: serial("id").primaryKey(),
@@ -297,6 +308,30 @@ export const sites = pgTable("sites", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const creditTransactions = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  siteId: integer("site_id").notNull().references(() => sites.id),
+  customerId: integer("customer_id").notNull().references(() => customers.id),
+  orderId: integer("order_id").references(() => orders.id),
+  paymentId: integer("payment_id").references(() => payments.id),
+  type: varchar("type", { length: 10 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  reason: varchar("reason", { length: 50 }).notNull(),
+  balanceBefore: decimal("balance_before", { precision: 12, scale: 2 }).notNull(),
+  balanceAfter: decimal("balance_after", { precision: 12, scale: 2 }).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by"),
+  idempotencyKey: varchar("idempotency_key", { length: 120 }).notNull(),
+  reversalOfId: integer("reversal_of_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_credit_tx_customer").on(table.customerId, table.createdAt),
+  index("idx_credit_tx_org_site").on(table.organisationId, table.siteId),
+  index("idx_credit_tx_order").on(table.orderId),
+  uniqueIndex("idx_credit_tx_idempotency").on(table.idempotencyKey),
+]);
 
 export const subscriptionPlans = pgTable("subscription_plans", {
   id: serial("id").primaryKey(),
@@ -529,6 +564,7 @@ export const legalAcceptances = pgTable("legal_acceptances", {
 // Relations
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
+  creditTransactions: many(creditTransactions),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -557,6 +593,29 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   order: one(orders, {
     fields: [payments.orderId],
     references: [orders.id],
+  }),
+}));
+
+export const creditTransactionsRelations = relations(creditTransactions, ({ one }) => ({
+  customer: one(customers, {
+    fields: [creditTransactions.customerId],
+    references: [customers.id],
+  }),
+  order: one(orders, {
+    fields: [creditTransactions.orderId],
+    references: [orders.id],
+  }),
+  payment: one(payments, {
+    fields: [creditTransactions.paymentId],
+    references: [payments.id],
+  }),
+  site: one(sites, {
+    fields: [creditTransactions.siteId],
+    references: [sites.id],
+  }),
+  organisation: one(organisations, {
+    fields: [creditTransactions.organisationId],
+    references: [organisations.id],
   }),
 }));
 
@@ -610,6 +669,9 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
   churnRiskScore: true,
   totalRevenue: true,
   avgDepositHour: true,
+  creditBalance: true,
+  totalCreditAdded: true,
+  totalCreditUsed: true,
 });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({
