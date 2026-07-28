@@ -27,6 +27,8 @@ import {
   MessageCircle,
   Eye,
   Star,
+  CalendarDays,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +77,24 @@ import { useToast } from "@/hooks/use-toast";
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
 const ACTIVE_STATUSES = new Set(["pending", "received", "sorting", "washing", "drying", "ironing", "packaging", "stain_treatment"]);
+const PIPELINE_STATUSES = new Set(["received", "washing", "ready", "delivered"]);
+type OrderStatusFilter = "all" | "active" | "ready" | "unpaid" | "received" | "washing" | "delivered";
+type OrderPeriodFilter = "all" | "today" | "week" | "month";
+
+function dashboardOrderFilters(): { status: OrderStatusFilter; period: OrderPeriodFilter } {
+  const params = new URLSearchParams(window.location.search);
+  const statusParam = params.get("status") || "all";
+  const periodParam = params.get("period") || "all";
+  const status: OrderStatusFilter =
+    statusParam === "active" || statusParam === "unpaid" || PIPELINE_STATUSES.has(statusParam)
+      ? statusParam as OrderStatusFilter
+      : "all";
+  const period: OrderPeriodFilter =
+    periodParam === "today" || periodParam === "week" || periodParam === "month"
+      ? periodParam
+      : "all";
+  return { status, period };
+}
 
 function normalizeWhatsAppPhone(phone?: string | null): string {
   const digits = String(phone || "").replace(/\D/g, "");
@@ -265,7 +285,9 @@ function buildOrderConfirmationWhatsAppMessage({
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "ready" | "unpaid">("all");
+  const initialDashboardFilters = useMemo(dashboardOrderFilters, []);
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(initialDashboardFilters.status);
+  const [periodFilter, setPeriodFilter] = useState<OrderPeriodFilter>(initialDashboardFilters.period);
   const [open, setOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
@@ -319,15 +341,43 @@ export default function Orders() {
     if (statusFilter === "active") result = result.filter((o: any) => ACTIVE_STATUSES.has(o.status));
     if (statusFilter === "ready") result = result.filter((o: any) => o.status === "ready");
     if (statusFilter === "unpaid") result = result.filter((o: any) => o.paymentStatus === "unpaid" || o.paymentStatus === "partial");
+    if (PIPELINE_STATUSES.has(statusFilter) && statusFilter !== "ready") {
+      result = result.filter((o: any) => o.status === statusFilter);
+    }
+    if (periodFilter !== "all") {
+      const now = new Date();
+      const start = new Date(now);
+      if (periodFilter === "today") start.setHours(0, 0, 0, 0);
+      if (periodFilter === "week") {
+        start.setDate(start.getDate() - 7);
+        start.setHours(0, 0, 0, 0);
+      }
+      if (periodFilter === "month") {
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+      }
+      result = result.filter((o: any) => {
+        const entryDate = new Date(o.entryDate || o.createdAt || 0);
+        return o.status !== "cancelled" && entryDate >= start && entryDate <= now;
+      });
+    }
     return result;
-  }, [orders, search, statusFilter]);
+  }, [orders, search, statusFilter, periodFilter]);
 
-  const chips: { key: typeof statusFilter; labelKey: string; count: number; color: string }[] = [
+  const chips: { key: OrderStatusFilter; labelKey: string; count: number; color: string }[] = [
     { key: "all",    labelKey: "all",           count: summary.total,  color: "bg-muted text-foreground" },
     { key: "active", labelKey: "orders_active", count: summary.active, color: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
     { key: "ready",  labelKey: "orders_ready",  count: summary.ready,  color: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" },
     { key: "unpaid", labelKey: "orders_unpaid", count: summary.unpaid, color: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
   ];
+  if (PIPELINE_STATUSES.has(statusFilter) && !chips.some((chip) => chip.key === statusFilter)) {
+    chips.push({
+      key: statusFilter,
+      labelKey: `stage_${statusFilter}`,
+      count: orders?.filter((order: any) => order.status === statusFilter).length || 0,
+      color: "bg-primary/10 text-primary",
+    });
+  }
 
   return (
     <div className="space-y-5 page-fade-in">
@@ -411,6 +461,19 @@ export default function Orders() {
             </span>
           </button>
         ))}
+        {periodFilter !== "all" && (
+          <button
+            type="button"
+            onClick={() => setPeriodFilter("all")}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={t("clear_period_filter")}
+            data-testid="button-clear-dashboard-period"
+          >
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+            {periodFilter === "today" ? t("today") : periodFilter === "week" ? t("this_week") : t("this_month")}
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {/* Operations toolbar */}

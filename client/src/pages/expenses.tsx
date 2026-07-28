@@ -42,6 +42,11 @@ function getCurrentPeriod() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function getInitialPeriod() {
+  const value = new URLSearchParams(window.location.search).get("period");
+  return value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : getCurrentPeriod();
+}
+
 function shiftPeriod(period: string, offset: number) {
   const [year, month] = period.split("-").map(Number);
   const shifted = new Date(year, month - 1 + offset, 1);
@@ -62,7 +67,7 @@ export default function Expenses() {
   const [open, setOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expenditure | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expenditure | null>(null);
-  const [period, setPeriod] = useState(getCurrentPeriod);
+  const [period, setPeriod] = useState(getInitialPeriod);
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
