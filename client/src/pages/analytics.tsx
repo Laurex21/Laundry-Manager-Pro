@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -107,11 +107,104 @@ function AnalyticsContent() {
         </CardContent>
       </Card>
 
+      <CustomerCreditAnalyticsSection />
       <WasteSection />
       <CustomerBehaviorSection period={period} />
       <PerformanceScoreSection />
       <ProductionDelaysSection />
       <AdvancedAnalyticsSection period={period} />
+    </div>
+  );
+}
+
+function CustomerCreditAnalyticsSection() {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: ["/api/analytics/credit-summary"],
+    queryFn: async () => {
+      const response = await fetch("/api/analytics/credit-summary", { credentials: "include" });
+      if (!response.ok) throw new Error("Unable to load customer credit analytics");
+      return response.json();
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-72 rounded-xl" />;
+
+  const outstanding = Number(data?.totalCreditBalance ?? 0);
+  const credited = Number(data?.totalEverCredited ?? 0);
+  const used = Number(data?.totalEverUsed ?? 0);
+  const clients = Number(data?.clientsWithCredit ?? 0);
+  const utilization = credited > 0 ? Math.min(100, (used / credited) * 100) : 0;
+  const formatMoney = (value: number) => `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+  return (
+    <section aria-labelledby="customer-credit-analytics-title" data-testid="section-customer-credit-analytics">
+      <Card className="overflow-hidden border-amber-200 shadow-sm dark:border-amber-900/60">
+        <CardHeader className="border-b border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-amber-100 p-2.5 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                <Wallet className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <CardTitle id="customer-credit-analytics-title">{t("customer_credit_analytics")}</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">{t("customer_credit_liability_note")}</p>
+                <Badge variant="secondary" className="mt-2">{t("organisation_all_time")}</Badge>
+              </div>
+            </div>
+            <Button asChild variant="outline" className="w-full gap-2 bg-background sm:w-auto" data-testid="button-view-credit-customers">
+              <Link href="/customers?filter=credit">
+                {t("view_credit_customers")}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-5">
+          {isError ? (
+            <p className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+              {t("customer_credit_analytics_error")}
+            </p>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <CreditAnalyticsMetric label={t("credit_outstanding_liability")} value={formatMoney(outstanding)} emphasis />
+                <CreditAnalyticsMetric label={t("customers_with_credit_balance")} value={clients.toLocaleString()} />
+                <CreditAnalyticsMetric label={t("total_credited")} value={formatMoney(credited)} />
+                <CreditAnalyticsMetric label={t("total_used")} value={formatMoney(used)} />
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium">{t("credit_utilization_rate")}</span>
+                  <span className="font-mono font-semibold">{utilization.toFixed(1)}%</span>
+                </div>
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-label={t("credit_utilization_rate")}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(utilization)}
+                >
+                  <div className="h-full rounded-full bg-emerald-600" style={{ width: `${utilization}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{t("credit_utilization_explanation")}</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function CreditAnalyticsMetric({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className={`rounded-lg border p-4 ${emphasis ? "border-amber-300 bg-amber-50/70 dark:border-amber-800 dark:bg-amber-950/20" : "bg-card"}`}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-xl font-bold font-display ${emphasis ? "text-amber-800 dark:text-amber-300" : ""}`}>{value}</p>
     </div>
   );
 }
