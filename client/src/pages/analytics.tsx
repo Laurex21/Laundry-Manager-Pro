@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -180,6 +180,10 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
         siteBenchmarks={data.siteBenchmarks || []}
         metrics={m}
       />
+      <PredictiveIntelligence
+        intelligence={data.predictiveIntelligence}
+        confidence={data.confidence}
+      />
     </div>
   );
 }
@@ -215,6 +219,150 @@ interface ScenarioMetrics {
   orders: number;
   fixedCosts?: number;
   variableCosts?: number;
+}
+
+interface PredictiveAlert {
+  code: "delivery_risk" | "demand_spike" | "collection_pressure" | "margin_pressure" | "discount_leakage" | "machine_underload" | "quality_risk";
+  severity: "high" | "medium" | "low";
+  value: number;
+  evidence: Record<string, number | string | string[] | null>;
+  href: string;
+}
+
+interface PredictiveIntelligenceData {
+  alerts: PredictiveAlert[];
+  generatedAt: string;
+  forecastEligible: boolean;
+  signalsEvaluated: number;
+  methodology: string;
+}
+
+function PredictiveIntelligence({
+  intelligence,
+  confidence,
+}: {
+  intelligence?: PredictiveIntelligenceData;
+  confidence?: { level?: string; score?: number };
+}) {
+  const { t, i18n } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const alerts = intelligence?.alerts || [];
+  const formatMoney = (value: number) => `${symbol}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const formatEvidence = (alert: PredictiveAlert) => {
+    switch (alert.code) {
+      case "delivery_risk":
+        return t("predictive_evidence_delivery", { count: Number(alert.evidence.delayedOrders || 0) });
+      case "demand_spike":
+        return t("predictive_evidence_demand", {
+          count: alert.value,
+          projected: alert.evidence.projectedDailyAverage,
+          baseline: alert.evidence.historicalDailyAverage,
+        });
+      case "collection_pressure":
+        return t("predictive_evidence_collection", {
+          amount: formatMoney(alert.value),
+          ratio: alert.evidence.outstandingRatio,
+        });
+      case "margin_pressure":
+        return t("predictive_evidence_margin", { ratio: alert.evidence.marginPct });
+      case "discount_leakage":
+        return t("predictive_evidence_discount", {
+          amount: formatMoney(alert.value),
+          ratio: alert.evidence.discountRatio,
+        });
+      case "machine_underload":
+        return t("predictive_evidence_machine", {
+          ratio: alert.evidence.loadEfficiency,
+          cycles: alert.evidence.cycles,
+        });
+      case "quality_risk":
+        return t("predictive_evidence_quality", {
+          ratio: alert.evidence.qualityRate,
+          incidents: alert.evidence.incidents,
+        });
+    }
+  };
+
+  return (
+    <section aria-labelledby="predictive-intelligence-title" className="space-y-4" data-testid="section-predictive-intelligence">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Radar className="h-5 w-5 text-cyan-700 dark:text-cyan-300" aria-hidden="true" />
+            <h2 id="predictive-intelligence-title" className="text-xl font-bold font-display">{t("predictive_intelligence")}</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">{t("predictive_intelligence_help")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Badge variant="secondary">{t("signals_evaluated", { count: intelligence?.signalsEvaluated || 0 })}</Badge>
+          <Badge variant={confidence?.level === "high" ? "default" : "outline"}>
+            {t("data_confidence")}: {t(`confidence_${confidence?.level || "insufficient"}`)}
+          </Badge>
+        </div>
+      </div>
+
+      {!intelligence?.forecastEligible && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200" role="status">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>{t("predictive_history_notice")}</p>
+        </div>
+      )}
+
+      {alerts.length ? (
+        <ol className="grid gap-4 lg:grid-cols-2">
+          {alerts.map((alert, index) => (
+            <li key={`${alert.code}-${index}`}>
+              <Card className={`h-full shadow-sm ${alert.severity === "high" ? "border-red-300 dark:border-red-900" : "border-amber-200 dark:border-amber-900"}`}>
+                <CardContent className="flex h-full flex-col p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`rounded-lg p-2 ${alert.severity === "high" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"}`}>
+                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {t(`severity_${alert.severity}`)}
+                        </p>
+                        <h3 className="mt-1 font-semibold">{t(`predictive_${alert.code}_title`)}</h3>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
+                  </div>
+                  <p className="mt-3 text-sm text-muted-foreground">{formatEvidence(alert)}</p>
+                  <div className="mt-4 rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("recommended_action")}</p>
+                    <p className="mt-1 text-sm">{t(`predictive_${alert.code}_action`)}</p>
+                  </div>
+                  <Button asChild variant="outline" className="mt-4 min-h-11 w-full justify-between whitespace-normal">
+                    <Link href={alert.href}>
+                      {t("review_underlying_data")}
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <Card className="border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <CardContent className="flex items-start gap-3 p-5 text-emerald-900 dark:text-emerald-200">
+            <CheckCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <h3 className="font-semibold">{t("no_predictive_alerts")}</h3>
+              <p className="mt-1 text-sm">{t("no_predictive_alerts_help")}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        {t("predictive_methodology_note")}
+        {intelligence?.generatedAt ? ` · ${new Date(intelligence.generatedAt).toLocaleString(i18n.language)}` : ""}
+      </p>
+    </section>
+  );
 }
 
 function PhaseTwoDecisionTools({

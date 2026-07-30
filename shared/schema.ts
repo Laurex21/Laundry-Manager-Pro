@@ -227,6 +227,36 @@ export const machineUsage = pgTable("machine_usage", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const productionCycles = pgTable("production_cycles", {
+  id: serial("id").primaryKey(),
+  machineId: integer("machine_id").notNull().references(() => machines.id),
+  siteId: integer("site_id").notNull(),
+  stage: varchar("stage", { length: 20 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("preparing"),
+  capacityKg: decimal("capacity_kg", { precision: 10, scale: 2 }).notNull(),
+  totalWeightKg: decimal("total_weight_kg", { precision: 10, scale: 2 }).notNull().default("0"),
+  plannedDurationMinutes: integer("planned_duration_minutes").notNull().default(0),
+  actualDurationMinutes: integer("actual_duration_minutes"),
+  startedBy: varchar("started_by"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_production_cycles_site_status").on(table.siteId, table.status),
+  index("idx_production_cycles_machine_status").on(table.machineId, table.status),
+]);
+
+export const productionCycleOrders = pgTable("production_cycle_orders", {
+  id: serial("id").primaryKey(),
+  cycleId: integer("cycle_id").notNull().references(() => productionCycles.id, { onDelete: "cascade" }),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  weightKg: decimal("weight_kg", { precision: 10, scale: 2 }).notNull(),
+  addedAt: timestamp("added_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_production_cycle_order_unique").on(table.cycleId, table.orderId),
+  index("idx_production_cycle_orders_order").on(table.orderId),
+]);
+
 export const plans = pgTable("plans", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
@@ -742,6 +772,8 @@ export type EmployeeAttendance = typeof employeeAttendance.$inferSelect;
 export type InsertEmployeeAttendance = z.infer<typeof insertEmployeeAttendanceSchema>;
 
 export type MachineUsage = typeof machineUsage.$inferSelect;
+export type ProductionCycle = typeof productionCycles.$inferSelect;
+export type ProductionCycleOrder = typeof productionCycleOrders.$inferSelect;
 export type InsertMachineUsage = z.infer<typeof insertMachineUsageSchema>;
 
 export type Plan = typeof plans.$inferSelect;

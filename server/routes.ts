@@ -944,6 +944,271 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(201).json(usage);
   });
 
+  app.get("/api/production-cycles", isAuthenticated, async (req: any, res) => {
+    const siteIds = scopedSites(req);
+    if (!siteIds.length) return res.json([]);
+    const result = await pool.query(
+      `SELECT pc.id, pc.machine_id AS "machineId", pc.site_id AS "siteId",
+         pc.stage, pc.status, pc.capacity_kg AS "capacityKg",
+         pc.total_weight_kg AS "totalWeightKg",
+         pc.planned_duration_minutes AS "plannedDurationMinutes",
+         pc.actual_duration_minutes AS "actualDurationMinutes",
+         pc.started_at AS "startedAt", pc.completed_at AS "completedAt",
+         m.name AS "machineName",
+         COALESCE(json_agg(json_build_object(
+           'id', pco.id, 'orderId', o.id, 'customerName', c.name,
+           'weightKg', pco.weight_kg, 'status', o.status
+         ) ORDER BY pco.added_at) FILTER (WHERE pco.id IS NOT NULL), '[]') AS orders
+       FROM production_cycles pc
+       JOIN machines m ON m.id = pc.machine_id
+       LEFT JOIN production_cycle_orders pco ON pco.cycle_id = pc.id
+       LEFT JOIN orders o ON o.id = pco.order_id
+       LEFT JOIN customers c ON c.id = o.customer_id
+       WHERE pc.site_id = ANY($1::int[]) AND pc.status IN ('preparing', 'running')
+       GROUP BY pc.id, m.name
+       ORDER BY CASE pc.status WHEN 'running' THEN 0 ELSE 1 END, pc.created_at`,
+      [siteIds],
+    );
+    res.json(result.rows);
+  });
+
+  app.post("/api/production-cycles", isAuthenticated, async (req: any, res) => {
+    const machineId = Number(req.body.machineId);
+    const stage = z.enum(["washing", "drying"]).parse(req.body.stage);
+    const plannedDurationMinutes = Math.max(0, Number(req.body.plannedDurationMinutes || 0));
+    if (!(await canAccessMachine(req, machineId))) return res.status(403).json({ message: "Forbidden" });
+    const machine = await storage.getMachine(machineId);
+    if (!machine?.siteId || Number(machine.capacityKg) <= 0) {
+      return res.status(400).json({ message: "Machine capacity must be greater than zero" });
+    }
+    if ((stage === "washing" && machine.type !== "washer") || (stage === "drying" && machine.type !== "dryer")) {
+      return res.status(400).json({ message: "Machine type does not match the production stage" });
+    }
+    try {
+      const result = await pool.query(
+        `INSERT INTO production_cycles
+          (machine_id, site_id, stage, status, capacity_kg, planned_duration_minutes)
+         VALUES ($1, $2, $3, 'preparing', $4, $5)
+         RETURNING id`,
+        [machineId, machine.siteId, stage, machine.capacityKg, plannedDurationMinutes],
+      );
+      res.status(201).json({ id: result.rows[0].id });
+    } catch (error: any) {
+      if (error?.code === "23505") return res.status(409).json({ message: "This machine already has an active cycle" });
+      throw error;
+    }
+  });
+
+  app.post("/api/production-cycles/:id/orders", isAuthenticated, async (req: any, res) => {
+    const cycleId = Number(req.params.id);
+    const orderId = Number(req.body.orderId);
+    const weightKg = Number(req.body.weightKg);
+    if (!Number.isInteger(orderId) || !Number.isFinite(weightKg) || weightKg <= 0) {
+      return res.status(400).json({ message: "A valid order and positive weight are required" });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Serialize cycle assignment for one order so two operators cannot place it
+      // into different active machine loads at the same time.
+      await client.query("SELECT pg_advisory_xact_lock($1)", [orderId]);
+      const cycleResult = await client.query(
+        `SELECT pc.*, m.capacity_kg
+         FROM production_cycles pc JOIN machines m ON m.id = pc.machine_id
+         WHERE pc.id = $1 FOR UPDATE`,
+        [cycleId],
+      );
+      const cycle = cycleResult.rows[0];
+      if (!cycle || !scopedSites(req).includes(Number(cycle.site_id))) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Cycle not found" });
+      }
+      if (cycle.status !== "preparing") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Orders can only be added while a cycle is being prepared" });
+      }
+      const orderResult = await client.query(
+        `SELECT id, site_id, status FROM orders WHERE id = $1 FOR UPDATE`,
+        [orderId],
+      );
+      const order = orderResult.rows[0];
+      const allowedStatuses = cycle.stage === "washing" ? ["received", "stain_treatment"] : ["washing"];
+      if (!order || Number(order.site_id) !== Number(cycle.site_id) || !allowedStatuses.includes(order.status)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Order is not eligible for this cycle" });
+      }
+      const activeElsewhere = await client.query(
+        `SELECT 1 FROM production_cycle_orders pco
+         JOIN production_cycles pc ON pc.id = pco.cycle_id
+         WHERE pco.order_id = $1 AND pc.status IN ('preparing', 'running') AND pc.id <> $2
+         LIMIT 1`,
+        [orderId, cycleId],
+      );
+      if (activeElsewhere.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Order already belongs to another active cycle" });
+      }
+      const existingWeight = await client.query(
+        `SELECT COALESCE(weight_kg, 0)::text AS weight
+         FROM production_cycle_orders WHERE cycle_id = $1 AND order_id = $2`,
+        [cycleId, orderId],
+      );
+      const nextWeight = Number(cycle.total_weight_kg) - Number(existingWeight.rows[0]?.weight || 0) + weightKg;
+      if (nextWeight > Number(cycle.capacity_kg)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Machine capacity would be exceeded" });
+      }
+      await client.query(
+        `INSERT INTO production_cycle_orders (cycle_id, order_id, weight_kg)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (cycle_id, order_id) DO UPDATE SET weight_kg = EXCLUDED.weight_kg`,
+        [cycleId, orderId, weightKg],
+      );
+      await client.query(
+        `UPDATE production_cycles
+         SET total_weight_kg = (SELECT COALESCE(SUM(weight_kg), 0) FROM production_cycle_orders WHERE cycle_id = $1)
+         WHERE id = $1`,
+        [cycleId],
+      );
+      await client.query("COMMIT");
+      res.json({ success: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete("/api/production-cycles/:id/orders/:orderId", isAuthenticated, async (req: any, res) => {
+    const cycleId = Number(req.params.id);
+    const orderId = Number(req.params.orderId);
+    const result = await pool.query(
+      `WITH accessible AS (
+         SELECT id FROM production_cycles
+         WHERE id = $1 AND site_id = ANY($3::int[]) AND status = 'preparing'
+       ), removed AS (
+         DELETE FROM production_cycle_orders
+         WHERE cycle_id IN (SELECT id FROM accessible) AND order_id = $2
+         RETURNING cycle_id
+       )
+       UPDATE production_cycles pc
+       SET total_weight_kg = (
+         SELECT COALESCE(SUM(weight_kg), 0) FROM production_cycle_orders WHERE cycle_id = pc.id
+       )
+       WHERE pc.id IN (SELECT cycle_id FROM removed)
+       RETURNING pc.id`,
+      [cycleId, orderId, scopedSites(req)],
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Cycle order not found" });
+    res.json({ success: true });
+  });
+
+  app.post("/api/production-cycles/:id/start", isAuthenticated, async (req: any, res) => {
+    const cycleId = Number(req.params.id);
+    const userId = (req.session as any)?.userId || null;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cycleResult = await client.query(
+        `SELECT * FROM production_cycles WHERE id = $1 FOR UPDATE`,
+        [cycleId],
+      );
+      const cycle = cycleResult.rows[0];
+      if (!cycle || !scopedSites(req).includes(Number(cycle.site_id))) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Cycle not found" });
+      }
+      if (cycle.status !== "preparing" || Number(cycle.total_weight_kg) <= 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "A prepared cycle needs at least one order before starting" });
+      }
+      await client.query(
+        `UPDATE production_cycles SET status = 'running', started_at = NOW(), started_by = $2 WHERE id = $1`,
+        [cycleId, userId],
+      );
+      await client.query(
+        `UPDATE orders SET status = $2, updated_at = NOW()
+         WHERE id IN (SELECT order_id FROM production_cycle_orders WHERE cycle_id = $1)`,
+        [cycleId, cycle.stage],
+      );
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by, notes)
+         SELECT order_id, $2, $3, 'Production cycle #' || $1
+         FROM production_cycle_orders WHERE cycle_id = $1`,
+        [cycleId, cycle.stage, userId],
+      );
+      await client.query("COMMIT");
+      res.json({ success: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/production-cycles/:id/complete", isAuthenticated, async (req: any, res) => {
+    const cycleId = Number(req.params.id);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cycleResult = await client.query(
+        `SELECT * FROM production_cycles WHERE id = $1 FOR UPDATE`,
+        [cycleId],
+      );
+      const cycle = cycleResult.rows[0];
+      if (!cycle || !scopedSites(req).includes(Number(cycle.site_id))) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Cycle not found" });
+      }
+      if (cycle.status !== "running") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Only a running cycle can be completed" });
+      }
+      const nextStatus = cycle.stage === "washing" ? "drying" : "ironing";
+      const actualDuration = Math.max(1, Math.round((Date.now() - new Date(cycle.started_at).getTime()) / 60000));
+      await client.query(
+        `UPDATE production_cycles
+         SET status = 'completed', completed_at = NOW(), actual_duration_minutes = $2
+         WHERE id = $1`,
+        [cycleId, actualDuration],
+      );
+      await client.query(
+        `INSERT INTO machine_usage
+          (machine_id, site_id, usage_date, weight_processed, cycle_duration_minutes)
+         VALUES ($1, $2, NOW(), $3, $4)`,
+        [cycle.machine_id, cycle.site_id, cycle.total_weight_kg, actualDuration],
+      );
+      await client.query(
+        `UPDATE machines
+         SET cycle_count = cycle_count + 1,
+             total_kg_processed = total_kg_processed + $2
+         WHERE id = $1`,
+        [cycle.machine_id, cycle.total_weight_kg],
+      );
+      await client.query(
+        `UPDATE orders SET status = $2, updated_at = NOW()
+         WHERE id IN (SELECT order_id FROM production_cycle_orders WHERE cycle_id = $1)`,
+        [cycleId, nextStatus],
+      );
+      await client.query(
+        `INSERT INTO order_status_history (order_id, status, changed_by, notes)
+         SELECT order_id, $2, started_by, 'Completed production cycle #' || $1
+         FROM production_cycle_orders, production_cycles
+         WHERE production_cycle_orders.cycle_id = $1 AND production_cycles.id = $1`,
+        [cycleId, nextStatus],
+      );
+      await client.query("COMMIT");
+      res.json({ success: true, nextStatus, actualDurationMinutes: actualDuration });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
   app.get("/api/employees", isAuthenticated, async (req: any, res) => {
     const employees = await storage.getEmployees(scopedSites(req), (req.session as any).userId);
     res.json(employees);
@@ -1267,6 +1532,101 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         completionRate: siteOrders > 0 ? (number(row.delivered_orders) / siteOrders) * 100 : null,
       };
     });
+    const projectedOrders = forecast.reduce((sum, day) => sum + number(day.orders), 0);
+    const forecastAverage = projectedOrders / Math.max(1, forecast.filter((day) => day.orders != null).length);
+    const historyActiveDays = forecastHistory.filter((row) => row.orders > 0);
+    const historicalDailyAverage = historyActiveDays.length
+      ? historyActiveDays.reduce((sum, row) => sum + row.orders, 0) / historyActiveDays.length
+      : 0;
+    const demandSpikeDays = forecast
+      .filter((day) => day.orders != null && historicalDailyAverage > 0 && number(day.orders) >= historicalDailyAverage * 1.25)
+      .map((day) => day.date);
+    const outstandingRatio = number(current.order_value) > 0
+      ? (number(current.outstanding) / number(current.order_value)) * 100
+      : null;
+    const discountRatio = number(current.order_value) > 0
+      ? (number(current.discounts) / number(current.order_value)) * 100
+      : null;
+    const marginPct = revenue > 0 ? ((revenue - expenses) / revenue) * 100 : null;
+    const predictiveAlerts: Array<{
+      code: string;
+      severity: "high" | "medium" | "low";
+      value: number;
+      evidence: Record<string, number | string | string[] | null>;
+      href: string;
+    }> = [];
+
+    if (number(current.delayed_orders) > 0) {
+      predictiveAlerts.push({
+        code: "delivery_risk",
+        severity: "high",
+        value: number(current.delayed_orders),
+        evidence: { delayedOrders: number(current.delayed_orders) },
+        href: "/orders?status=active",
+      });
+    }
+    if (forecastCoverageDays >= 14 && demandSpikeDays.length > 0) {
+      predictiveAlerts.push({
+        code: "demand_spike",
+        severity: demandSpikeDays.length >= 3 ? "high" : "medium",
+        value: demandSpikeDays.length,
+        evidence: {
+          days: demandSpikeDays,
+          projectedDailyAverage: Math.round(forecastAverage * 10) / 10,
+          historicalDailyAverage: Math.round(historicalDailyAverage * 10) / 10,
+        },
+        href: "/orders?period=week",
+      });
+    }
+    if (outstandingRatio != null && outstandingRatio >= 25) {
+      predictiveAlerts.push({
+        code: "collection_pressure",
+        severity: outstandingRatio >= 50 ? "high" : "medium",
+        value: number(current.outstanding),
+        evidence: { outstandingRatio: Math.round(outstandingRatio * 10) / 10 },
+        href: "/payments",
+      });
+    }
+    if (marginPct != null && marginPct < 10) {
+      predictiveAlerts.push({
+        code: "margin_pressure",
+        severity: marginPct < 0 ? "high" : "medium",
+        value: Math.round(marginPct * 10) / 10,
+        evidence: { marginPct: Math.round(marginPct * 10) / 10, revenue, expenses },
+        href: "/expenses",
+      });
+    }
+    if (discountRatio != null && discountRatio >= 5) {
+      predictiveAlerts.push({
+        code: "discount_leakage",
+        severity: discountRatio >= 10 ? "high" : "medium",
+        value: number(current.discounts),
+        evidence: { discountRatio: Math.round(discountRatio * 10) / 10 },
+        href: "/orders",
+      });
+    }
+    if (loadEfficiency != null && number(machine.cycles) >= 3 && loadEfficiency < 60) {
+      predictiveAlerts.push({
+        code: "machine_underload",
+        severity: loadEfficiency < 40 ? "high" : "medium",
+        value: Math.round(loadEfficiency * 10) / 10,
+        evidence: { loadEfficiency: Math.round(loadEfficiency * 10) / 10, cycles: number(machine.cycles) },
+        href: "/machines",
+      });
+    }
+    if (qualityRate != null && totalOrders >= 5 && qualityRate < 95) {
+      predictiveAlerts.push({
+        code: "quality_risk",
+        severity: qualityRate < 90 ? "high" : "medium",
+        value: Math.round(qualityRate * 10) / 10,
+        evidence: { qualityRate: Math.round(qualityRate * 10) / 10, incidents: qualityIncidents },
+        href: "/orders",
+      });
+    }
+    predictiveAlerts.sort((a, b) => {
+      const rank = { high: 3, medium: 2, low: 1 };
+      return rank[b.severity] - rank[a.severity];
+    });
 
     res.json({
       period,
@@ -1275,7 +1635,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         revenue,
         expenses,
         profit: revenue - expenses,
-        marginPct: revenue > 0 ? ((revenue - expenses) / revenue) * 100 : null,
+        marginPct,
         orders: totalOrders,
         deliveredOrders: number(current.delivered_orders),
         delayedOrders: number(current.delayed_orders),
@@ -1316,6 +1676,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         method: "weekday_average_56d_with_14d_trend",
       },
       siteBenchmarks,
+      predictiveIntelligence: {
+        alerts: predictiveAlerts,
+        generatedAt: now,
+        forecastEligible: forecastCoverageDays >= 14,
+        signalsEvaluated: 7,
+        methodology: "explainable_threshold_rules_v1",
+      },
       confidence: {
         level: confidenceLevel,
         score: confidenceScore,
