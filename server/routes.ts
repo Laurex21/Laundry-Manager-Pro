@@ -1066,7 +1066,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const durationMs = Math.max(86400000, now.getTime() - start.getTime());
     const previousStart = new Date(start.getTime() - durationMs);
 
-    const [ordersResult, previousResult, machineResult, teamResult, qualityResult] = await Promise.all([
+    const organisationSiteIds = orgScopedSites(req);
+    const [ordersResult, previousResult, machineResult, teamResult, qualityResult, forecastResult, benchmarkResult] = await Promise.all([
       pool.query(
         `WITH scoped_orders AS (
            SELECT o.*,
@@ -1150,6 +1151,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
          WHERE o.site_id = ANY($1::int[]) AND gi.returned_at >= $2 AND gi.returned_at <= $3`,
         [siteIds, start, now],
       ),
+      pool.query(
+        `SELECT
+           DATE(o.entry_date) AS business_date,
+           EXTRACT(ISODOW FROM o.entry_date)::int AS weekday,
+           COUNT(*) FILTER (WHERE o.status <> 'cancelled')::int AS orders,
+           COALESCE(SUM(o.total_amount) FILTER (WHERE o.status <> 'cancelled'), 0)::text AS order_value
+         FROM orders o
+         WHERE o.site_id = ANY($1::int[])
+           AND o.entry_date >= $2::timestamp - INTERVAL '56 days'
+           AND o.entry_date < $2::timestamp
+         GROUP BY DATE(o.entry_date), EXTRACT(ISODOW FROM o.entry_date)
+         ORDER BY business_date`,
+        [siteIds, now],
+      ),
+      pool.query(
+        `SELECT
+           s.id AS site_id,
+           s.name AS site_name,
+           COUNT(o.id) FILTER (WHERE o.status <> 'cancelled')::int AS orders,
+           COUNT(o.id) FILTER (WHERE o.status = 'delivered')::int AS delivered_orders,
+           COALESCE(SUM(o.total_amount) FILTER (WHERE o.status <> 'cancelled'), 0)::text AS order_value,
+           COALESCE((SELECT SUM(p.amount)
+             FROM payments p
+             JOIN orders po ON po.id = p.order_id
+             WHERE po.site_id = s.id AND p.date >= $2 AND p.date <= $3 AND po.status <> 'cancelled'), 0)::text AS revenue,
+           COALESCE((SELECT SUM(e.amount)
+             FROM expenditures e
+             WHERE e.site_id = s.id AND e.date >= $2 AND e.date <= $3), 0)::text AS expenses
+         FROM sites s
+         LEFT JOIN orders o ON o.site_id = s.id AND o.entry_date >= $2 AND o.entry_date <= $3
+         WHERE s.id = ANY($1::int[]) AND s.is_active = TRUE
+         GROUP BY s.id, s.name
+         ORDER BY s.name`,
+        [organisationSiteIds, start, now],
+      ),
     ]);
 
     const current = ordersResult.rows[0];
@@ -1183,6 +1219,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ];
     const confidenceScore = Math.round((coverageSignals.filter(Boolean).length / coverageSignals.length) * 100);
     const confidenceLevel = confidenceScore >= 80 ? "high" : confidenceScore >= 40 ? "partial" : "insufficient";
+    const forecastHistory = forecastResult.rows.map((row) => ({
+      date: String(row.business_date),
+      weekday: number(row.weekday),
+      orders: number(row.orders),
+      orderValue: number(row.order_value),
+    }));
+    const recentCutoff = new Date(now.getTime() - 14 * 86400000);
+    const earlierCutoff = new Date(now.getTime() - 28 * 86400000);
+    const recentOrders = forecastHistory
+      .filter((row) => new Date(row.date) >= recentCutoff)
+      .reduce((sum, row) => sum + row.orders, 0);
+    const earlierOrders = forecastHistory
+      .filter((row) => new Date(row.date) >= earlierCutoff && new Date(row.date) < recentCutoff)
+      .reduce((sum, row) => sum + row.orders, 0);
+    const trendFactor = earlierOrders > 0 ? Math.min(1.3, Math.max(0.7, recentOrders / earlierOrders)) : 1;
+    const forecast = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + index + 1);
+      const weekday = date.getDay() === 0 ? 7 : date.getDay();
+      const comparable = forecastHistory.filter((row) => row.weekday === weekday);
+      const predictedOrders = comparable.length
+        ? Math.max(0, Math.round((comparable.reduce((sum, row) => sum + row.orders, 0) / comparable.length) * trendFactor))
+        : null;
+      const averageOrderValue = comparable.reduce((sum, row) => sum + row.orderValue, 0)
+        / Math.max(1, comparable.reduce((sum, row) => sum + row.orders, 0));
+      return {
+        date: date.toISOString().slice(0, 10),
+        orders: predictedOrders,
+        revenue: predictedOrders == null ? null : Math.round(predictedOrders * averageOrderValue),
+      };
+    });
+    const forecastCoverageDays = forecastHistory.filter((row) => row.orders > 0).length;
+    const siteBenchmarks = benchmarkResult.rows.map((row) => {
+      const siteRevenue = number(row.revenue);
+      const siteExpenses = number(row.expenses);
+      const siteOrders = number(row.orders);
+      return {
+        siteId: number(row.site_id),
+        siteName: row.site_name,
+        orders: siteOrders,
+        deliveredOrders: number(row.delivered_orders),
+        revenue: siteRevenue,
+        expenses: siteExpenses,
+        profit: siteRevenue - siteExpenses,
+        marginPct: siteRevenue > 0 ? ((siteRevenue - siteExpenses) / siteRevenue) * 100 : null,
+        averageOrderValue: siteOrders > 0 ? number(row.order_value) / siteOrders : null,
+        completionRate: siteOrders > 0 ? (number(row.delivered_orders) / siteOrders) * 100 : null,
+      };
+    });
 
     res.json({
       period,
@@ -1225,6 +1309,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         { key: "ready", count: number(current.ready) },
         { key: "delivered", count: number(current.delivered) },
       ],
+      forecast: {
+        days: forecast,
+        coverageDays: forecastCoverageDays,
+        confidence: forecastCoverageDays >= 28 ? "high" : forecastCoverageDays >= 14 ? "partial" : "insufficient",
+        method: "weekday_average_56d_with_14d_trend",
+      },
+      siteBenchmarks,
       confidence: {
         level: confidenceLevel,
         score: confidenceScore,

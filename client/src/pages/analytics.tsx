@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -173,6 +173,259 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
           [t("paid_hours"), Number(m.paidHours || 0) > 0 ? Number(m.paidHours).toFixed(1) : t("insufficient_data")],
           [t("orders_per_paid_hour"), m.productivityPerHour == null ? t("insufficient_data") : Number(m.productivityPerHour).toFixed(2)],
         ]} />
+      </div>
+
+      <PhaseTwoDecisionTools
+        forecast={data.forecast}
+        siteBenchmarks={data.siteBenchmarks || []}
+        metrics={m}
+      />
+    </div>
+  );
+}
+
+interface ForecastDay {
+  date: string;
+  orders: number | null;
+  revenue: number | null;
+}
+
+interface ForecastData {
+  days: ForecastDay[];
+  coverageDays: number;
+  confidence: "high" | "partial" | "insufficient";
+}
+
+interface SiteBenchmark {
+  siteId: number;
+  siteName: string;
+  orders: number;
+  deliveredOrders: number;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  marginPct: number | null;
+  averageOrderValue: number | null;
+  completionRate: number | null;
+}
+
+interface ScenarioMetrics {
+  revenue: number;
+  expenses: number;
+  orders: number;
+  fixedCosts?: number;
+  variableCosts?: number;
+}
+
+function PhaseTwoDecisionTools({
+  forecast,
+  siteBenchmarks,
+  metrics,
+}: {
+  forecast?: ForecastData;
+  siteBenchmarks: SiteBenchmark[];
+  metrics: ScenarioMetrics;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section aria-labelledby="phase-two-decision-tools-title" className="space-y-4" data-testid="section-phase-two-decision-tools">
+      <div>
+        <h2 id="phase-two-decision-tools-title" className="text-xl font-bold font-display">
+          {t("decision_planning")}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t("decision_planning_help")}
+        </p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <DemandForecast forecast={forecast} />
+        <SiteBenchmarking sites={siteBenchmarks} />
+      </div>
+      <WhatIfSimulator metrics={metrics} />
+    </section>
+  );
+}
+
+function DemandForecast({ forecast }: { forecast?: ForecastData }) {
+  const { t, i18n } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const days = forecast?.days || [];
+  const hasForecast = forecast?.confidence !== "insufficient" && days.some((day) => day.orders != null);
+  const projectedOrders = days.reduce((sum, day) => sum + Number(day.orders || 0), 0);
+  const projectedOrderValue = days.reduce((sum, day) => sum + Number(day.revenue || 0), 0);
+  const chartData = days.map((day) => ({
+    ...day,
+    label: new Date(`${day.date}T12:00:00`).toLocaleDateString(i18n.language, { weekday: "short", day: "numeric" }),
+  }));
+
+  return (
+    <Card className="shadow-sm" data-testid="card-demand-forecast">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarRange className="h-4 w-4" aria-hidden="true" />
+          {t("seven_day_forecast")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("seven_day_forecast_help")}</p>
+      </CardHeader>
+      <CardContent>
+        {!hasForecast ? (
+          <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">{t("insufficient_data")}</p>
+            <p className="mt-1">{t("forecast_needs_history", { days: forecast?.coverageDays || 0 })}</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <CreditAnalyticsMetric label={t("projected_orders")} value={projectedOrders.toLocaleString()} />
+              <CreditAnalyticsMetric label={t("projected_order_value")} value={`${symbol}${projectedOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
+            </div>
+            <div className="h-52" role="img" aria-label={t("forecast_chart_accessible", { count: projectedOrders })}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 8, right: 4, left: -24, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value: number) => [value, t("orders")]} />
+                  <Bar dataKey="orders" fill="#0891b2" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>{t("forecast_history_coverage", { days: forecast?.coverageDays || 0 })}</span>
+              <Badge variant="secondary">{t(`confidence_${forecast?.confidence || "insufficient"}`)}</Badge>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SiteBenchmarking({ sites }: { sites: SiteBenchmark[] }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const rankedSites = [...sites].sort((a, b) => Number(b.marginPct ?? -Infinity) - Number(a.marginPct ?? -Infinity));
+
+  return (
+    <Card className="shadow-sm" data-testid="card-site-benchmarking">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Building2 className="h-4 w-4" aria-hidden="true" />
+          {t("site_benchmarking")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("site_benchmarking_help")}</p>
+      </CardHeader>
+      <CardContent>
+        {rankedSites.length < 2 ? (
+          <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+            {t("benchmark_requires_multiple_sites")}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th scope="col" className="pb-2 pr-3 font-medium">{t("site")}</th>
+                  <th scope="col" className="pb-2 px-3 text-right font-medium">{t("orders")}</th>
+                  <th scope="col" className="pb-2 px-3 text-right font-medium">{t("margin")}</th>
+                  <th scope="col" className="pb-2 px-3 text-right font-medium">{t("average_order_value")}</th>
+                  <th scope="col" className="pb-2 pl-3 text-right font-medium">{t("completion_rate")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankedSites.map((site, index) => (
+                  <tr key={site.siteId} className="border-b last:border-0">
+                    <th scope="row" className="py-3 pr-3 text-left font-medium">
+                      <span className="mr-2 text-xs text-muted-foreground">#{index + 1}</span>
+                      {site.siteName}
+                    </th>
+                    <td className="px-3 py-3 text-right font-mono">{site.orders}</td>
+                    <td className="px-3 py-3 text-right font-mono">{site.marginPct == null ? t("insufficient_data") : `${site.marginPct.toFixed(1)}%`}</td>
+                    <td className="px-3 py-3 text-right font-mono">{site.averageOrderValue == null ? t("insufficient_data") : `${symbol}${site.averageOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</td>
+                    <td className="py-3 pl-3 text-right font-mono">{site.completionRate == null ? t("insufficient_data") : `${site.completionRate.toFixed(1)}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WhatIfSimulator({ metrics }: { metrics: ScenarioMetrics }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const [priceChange, setPriceChange] = useState(0);
+  const [volumeChange, setVolumeChange] = useState(0);
+  const [costChange, setCostChange] = useState(0);
+  const projectedRevenue = metrics.revenue * (1 + priceChange / 100) * (1 + volumeChange / 100);
+  const fixedCosts = Number(metrics.fixedCosts || 0);
+  const variableCosts = Number(metrics.variableCosts ?? Math.max(0, metrics.expenses - fixedCosts));
+  const projectedExpenses = fixedCosts + variableCosts * (1 + costChange / 100) * (1 + volumeChange / 100);
+  const projectedProfit = projectedRevenue - projectedExpenses;
+  const currentProfit = metrics.revenue - metrics.expenses;
+  const profitDelta = projectedProfit - currentProfit;
+  const projectedOrders = Math.max(0, Math.round(metrics.orders * (1 + volumeChange / 100)));
+  const money = (value: number) => `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  return (
+    <Card className="shadow-sm" data-testid="card-what-if-simulator">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          {t("what_if_simulator")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("what_if_simulator_help")}</p>
+      </CardHeader>
+      <CardContent className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <fieldset className="space-y-5">
+          <legend className="sr-only">{t("scenario_assumptions")}</legend>
+          <ScenarioSlider id="price-change" label={t("average_price_change")} value={priceChange} min={-20} max={30} onChange={setPriceChange} />
+          <ScenarioSlider id="volume-change" label={t("order_volume_change")} value={volumeChange} min={-30} max={50} onChange={setVolumeChange} />
+          <ScenarioSlider id="cost-change" label={t("unit_cost_change")} value={costChange} min={-30} max={30} onChange={setCostChange} />
+        </fieldset>
+        <div className="rounded-lg border bg-muted/20 p-4" aria-live="polite">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("projected_scenario")}</p>
+          <div className="mt-4 space-y-3">
+            <MetricLine label={t("projected_orders")} value={projectedOrders.toLocaleString()} />
+            <MetricLine label={t("projected_revenue")} value={money(projectedRevenue)} />
+            <MetricLine label={t("projected_expenses")} value={money(projectedExpenses)} />
+            <MetricLine label={t("projected_profit")} value={money(projectedProfit)} />
+            <div className="border-t pt-3">
+              <MetricLine label={t("profit_impact")} value={`${profitDelta >= 0 ? "+" : ""}${money(profitDelta)}`} />
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">{t("scenario_not_forecast")}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScenarioSlider({ id, label, value, min, max, onChange }: { id: string; label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor={id} className="text-sm font-medium">{label}</label>
+        <output htmlFor={id} className="min-w-14 rounded-md border bg-background px-2 py-1 text-center font-mono text-sm">{value > 0 ? "+" : ""}{value}%</output>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-11 w-full cursor-pointer accent-primary"
+      />
+      <div className="flex justify-between text-xs text-muted-foreground" aria-hidden="true">
+        <span>{min}%</span>
+        <span>{max}%</span>
       </div>
     </div>
   );
