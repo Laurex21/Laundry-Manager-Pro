@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,12 +28,7 @@ export default function Analytics() {
 
 function AnalyticsContent() {
   const { t } = useTranslation();
-  const { hasFeature } = useAuth();
-  const { getSymbol } = useCurrency();
-  const symbol = getSymbol();
   const [period, setPeriod] = useState("month");
-
-  const { data: kpis, isLoading } = useQuery<any>({ queryKey: ["/api/analytics/kpis", period], queryFn: () => fetch(`/api/analytics/kpis?period=${period}`, { credentials: "include" }).then(r => r.json()) });
 
   const periods = [
     { key: "day", label: t("period_day") },
@@ -41,15 +36,6 @@ function AnalyticsContent() {
     { key: "month", label: t("period_month") },
     { key: "year", label: t("period_year") },
   ];
-
-  if (isLoading) {
-    return (
-      <div className="space-y-8">
-        <Skeleton className="h-10 w-64" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 page-fade-in">
@@ -65,55 +51,438 @@ function AnalyticsContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label={t("total_kg_label")} value={kpis?.totalKg || 0} />
-        <KpiCard label={t("total_orders")} value={kpis?.totalOrders || 0} />
-        <KpiCard label={t("avg_kg_order")} value={(kpis?.avgWeightPerOrder || 0).toFixed(1)} />
-        <KpiCard label={t("total_revenue")} value={`${symbol}${(kpis?.totalRevenue || 0).toFixed(0)}`} />
-        <KpiCard label={t("total_expenses_label")} value={`${symbol}${(kpis?.totalExpenses || 0).toFixed(0)}`} />
-        <KpiCard label={t("net_profit")} value={`${symbol}${(kpis?.profit || 0).toFixed(0)}`} color={kpis?.profit >= 0 ? "text-green-600" : "text-red-600"} />
-        <KpiCard label={t("cost_per_kg")} value={`${symbol}${(kpis?.costPerKg || 0).toFixed(2)}`} />
-        <KpiCard label={t("profit_per_kg")} value={`${symbol}${(kpis?.profitPerKg || 0).toFixed(2)}`} color={kpis?.profitPerKg >= 0 ? "text-green-600" : "text-red-600"} />
-      </div>
-
-      <Card className="shadow-sm" data-testid="card-break-even">
-        <CardHeader><CardTitle>{t("break_even")}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">{t("break_even_point")}: {(kpis?.breakEvenKg || 0).toFixed(0)} kg</div>
-            <div className="h-3 bg-muted rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${kpis?.totalKg >= kpis?.breakEvenKg ? "bg-green-500" : "bg-red-500"}`}
-                style={{ width: `${Math.min(100, kpis?.breakEvenKg > 0 ? (kpis?.totalKg / kpis?.breakEvenKg) * 100 : 0)}%` }} />
-            </div>
-            <div className="text-sm">
-              {kpis?.totalKg >= kpis?.breakEvenKg
-                ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {t("above_break_even")}</span>
-                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {t("need_more_kg", { count: Math.round((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)) })}</span>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-sm" data-testid="card-operational-kpis">
-        <CardHeader><CardTitle>{t("operational_kpis")}</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm"><span>{t("machine_utilization")}</span><span>{(kpis?.machineUtilization || 0).toFixed(0)}%</span></div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, kpis?.machineUtilization || 0)}%` }} />
-            </div>
-          </div>
-          <div className="text-sm"><span className="text-muted-foreground">{t("employee_productivity")}:</span> {(kpis?.employeeProductivity || 0).toFixed(1)} {t("kg_per_person")}</div>
-        </CardContent>
-      </Card>
+      <ExecutiveDecisionCockpit period={period} />
 
       <CustomerCreditAnalyticsSection />
       <WasteSection />
       <CustomerBehaviorSection period={period} />
-      <PerformanceScoreSection />
       <ProductionDelaysSection />
       <AdvancedAnalyticsSection period={period} />
     </div>
+  );
+}
+
+function ExecutiveDecisionCockpit({ period }: { period: string }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: ["/api/analytics/decision-cockpit", period],
+    queryFn: async () => {
+      const response = await fetch(`/api/analytics/decision-cockpit?period=${period}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Unable to load decision cockpit");
+      return response.json();
+    },
+  });
+
+  if (isLoading) return <div className="space-y-4"><Skeleton className="h-40 rounded-xl" /><Skeleton className="h-72 rounded-xl" /></div>;
+  if (isError || !data?.metrics) return <Card><CardContent className="p-6 text-destructive" role="alert">{t("decision_cockpit_error")}</CardContent></Card>;
+
+  const m = data.metrics;
+  const money = (value: unknown) => `${symbol}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const pct = (value: unknown) => value == null ? t("insufficient_data") : `${Number(value).toFixed(1)}%`;
+  const delta = (value: unknown) => value == null ? undefined : Number(value);
+  const actions = [
+    Number(m.delayedOrders) > 0 ? { severity: "high", text: t("action_delayed_orders", { count: m.delayedOrders }), href: "/orders?status=active" } : null,
+    Number(m.outstandingPayments) > 0 ? { severity: "medium", text: t("action_collect_outstanding", { amount: money(m.outstandingPayments) }), href: "/payments" } : null,
+    m.machineLoadEfficiency != null && Number(m.machineLoadEfficiency) < 60 ? { severity: "medium", text: t("action_improve_machine_load", { value: Number(m.machineLoadEfficiency).toFixed(0) }), href: "/machines" } : null,
+    Number(m.returnedItems) > 0 ? { severity: "medium", text: t("action_review_returns", { count: m.returnedItems }), href: "/orders" } : null,
+    Number(m.profit) < 0 ? { severity: "high", text: t("action_costs_exceed_revenue"), href: "/expenses" } : null,
+  ].filter(Boolean) as { severity: string; text: string; href: string }[];
+
+  return (
+    <div className="space-y-5" data-testid="section-executive-decision-cockpit">
+      <section aria-labelledby="decision-summary-title" className="overflow-hidden rounded-xl border bg-slate-950 text-white shadow-sm">
+        <div className="grid gap-5 p-5 lg:grid-cols-[1.5fr_1fr] lg:p-6">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">{t("decision_cockpit")}</p>
+              <Badge className={data.confidence?.level === "high" ? "bg-emerald-500 text-white" : data.confidence?.level === "partial" ? "bg-amber-400 text-slate-950" : "bg-red-500 text-white"}>
+                {t("data_confidence")}: {t(`confidence_${data.confidence?.level || "insufficient"}`)} · {data.confidence?.score || 0}%
+              </Badge>
+            </div>
+            <h2 id="decision-summary-title" className="mt-3 text-2xl font-bold font-display sm:text-3xl">{t("decision_summary_title")}</h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">{t("decision_summary_subtitle")}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-400">{t("net_operating_result")}</p>
+            <p className={`mt-1 text-3xl font-bold ${Number(m.profit) >= 0 ? "text-emerald-300" : "text-red-300"}`}>{money(m.profit)}</p>
+            <p className="mt-1 text-sm text-slate-300">{t("margin")}: {pct(m.marginPct)}</p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="attention-title">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="attention-title" className="text-lg font-semibold">{t("decisions_requiring_attention")}</h2>
+          <Badge variant={actions.length ? "destructive" : "secondary"}>{actions.length}</Badge>
+        </div>
+        {actions.length ? (
+          <ul className="grid gap-3 lg:grid-cols-2">
+            {actions.map((action, index) => (
+              <li key={`${action.text}-${index}`}>
+                <Button asChild variant="outline" className="h-auto min-h-12 w-full justify-between whitespace-normal p-3 text-left">
+                  <Link href={action.href}>
+                    <span className="flex items-start gap-2">
+                      <AlertTriangle className={`mt-0.5 h-4 w-4 ${action.severity === "high" ? "text-red-600" : "text-amber-600"}`} aria-hidden="true" />
+                      {action.text}
+                    </span>
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
+            <CheckCircle className="h-4 w-4" aria-hidden="true" /> {t("no_urgent_decisions")}
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="management-metrics-title">
+        <h2 id="management-metrics-title" className="sr-only">{t("management_metrics")}</h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <DecisionMetric icon={<Banknote />} label={t("revenue_collected")} value={money(m.revenue)} delta={delta(m.revenueDeltaPct)} />
+          <DecisionMetric icon={<Activity />} label={t("orders_received")} value={Number(m.orders || 0).toLocaleString()} delta={delta(m.orderDeltaPct)} />
+          <DecisionMetric icon={<Clock3 />} label={t("orders_at_delay_risk")} value={Number(m.delayedOrders || 0).toLocaleString()} tone={Number(m.delayedOrders) > 0 ? "danger" : "good"} />
+          <DecisionMetric icon={<Wallet />} label={t("outstanding_payments")} value={money(m.outstandingPayments)} tone={Number(m.outstandingPayments) > 0 ? "warning" : "good"} />
+          <DecisionMetric icon={<ShieldCheck />} label={t("quality_rate")} value={pct(m.qualityRate)} tone={Number(m.qualityRate ?? 100) < 95 ? "warning" : "good"} />
+        </div>
+      </section>
+
+      <LaundryOperationsFlow stages={data.stages || []} />
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <DecisionModule title={t("profitability")} icon={<Banknote />} items={[
+          [t("total_revenue"), money(m.revenue)],
+          [t("total_expenses_label"), money(m.expenses)],
+          [t("contribution_margin"), pct(m.contributionMarginRatio)],
+          [t("break_even_revenue"), m.breakEvenRevenue == null ? t("insufficient_data") : money(m.breakEvenRevenue)],
+          [t("discounts"), money(m.discounts)],
+        ]} />
+        <DecisionModule title={t("capacity_efficiency")} icon={<Gauge />} items={[
+          [t("machine_load_efficiency"), pct(m.machineLoadEfficiency)],
+          [t("machine_cycles"), Number(m.machineCycles || 0).toLocaleString()],
+          [t("processed_weight"), Number(m.machineWeight || 0) > 0 ? `${Number(m.machineWeight).toFixed(1)} kg` : t("insufficient_data")],
+          [t("operating_time"), Number(m.machineOperatingMinutes || 0) > 0 ? `${Math.round(Number(m.machineOperatingMinutes) / 60)} h` : t("insufficient_data")],
+        ]} />
+        <DecisionModule title={t("team_output")} icon={<Users />} items={[
+          [t("active_employees"), Number(m.activeEmployees || 0).toLocaleString()],
+          [t("completed_orders"), Number(m.deliveredOrders || 0).toLocaleString()],
+          [t("paid_hours"), Number(m.paidHours || 0) > 0 ? Number(m.paidHours).toFixed(1) : t("insufficient_data")],
+          [t("orders_per_paid_hour"), m.productivityPerHour == null ? t("insufficient_data") : Number(m.productivityPerHour).toFixed(2)],
+        ]} />
+      </div>
+
+      <PhaseTwoDecisionTools
+        forecast={data.forecast}
+        siteBenchmarks={data.siteBenchmarks || []}
+        metrics={m}
+      />
+    </div>
+  );
+}
+
+interface ForecastDay {
+  date: string;
+  orders: number | null;
+  revenue: number | null;
+}
+
+interface ForecastData {
+  days: ForecastDay[];
+  coverageDays: number;
+  confidence: "high" | "partial" | "insufficient";
+}
+
+interface SiteBenchmark {
+  siteId: number;
+  siteName: string;
+  orders: number;
+  deliveredOrders: number;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  marginPct: number | null;
+  averageOrderValue: number | null;
+  completionRate: number | null;
+}
+
+interface ScenarioMetrics {
+  revenue: number;
+  expenses: number;
+  orders: number;
+  fixedCosts?: number;
+  variableCosts?: number;
+}
+
+function PhaseTwoDecisionTools({
+  forecast,
+  siteBenchmarks,
+  metrics,
+}: {
+  forecast?: ForecastData;
+  siteBenchmarks: SiteBenchmark[];
+  metrics: ScenarioMetrics;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section aria-labelledby="phase-two-decision-tools-title" className="space-y-4" data-testid="section-phase-two-decision-tools">
+      <div>
+        <h2 id="phase-two-decision-tools-title" className="text-xl font-bold font-display">
+          {t("decision_planning")}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t("decision_planning_help")}
+        </p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <DemandForecast forecast={forecast} />
+        <SiteBenchmarking sites={siteBenchmarks} />
+      </div>
+      <WhatIfSimulator metrics={metrics} />
+    </section>
+  );
+}
+
+function DemandForecast({ forecast }: { forecast?: ForecastData }) {
+  const { t, i18n } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const days = forecast?.days || [];
+  const hasForecast = forecast?.confidence !== "insufficient" && days.some((day) => day.orders != null);
+  const projectedOrders = days.reduce((sum, day) => sum + Number(day.orders || 0), 0);
+  const projectedOrderValue = days.reduce((sum, day) => sum + Number(day.revenue || 0), 0);
+  const chartData = days.map((day) => ({
+    ...day,
+    label: new Date(`${day.date}T12:00:00`).toLocaleDateString(i18n.language, { weekday: "short", day: "numeric" }),
+  }));
+
+  return (
+    <Card className="shadow-sm" data-testid="card-demand-forecast">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarRange className="h-4 w-4" aria-hidden="true" />
+          {t("seven_day_forecast")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("seven_day_forecast_help")}</p>
+      </CardHeader>
+      <CardContent>
+        {!hasForecast ? (
+          <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">{t("insufficient_data")}</p>
+            <p className="mt-1">{t("forecast_needs_history", { days: forecast?.coverageDays || 0 })}</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <CreditAnalyticsMetric label={t("projected_orders")} value={projectedOrders.toLocaleString()} />
+              <CreditAnalyticsMetric label={t("projected_order_value")} value={`${symbol}${projectedOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
+            </div>
+            <div className="h-52" role="img" aria-label={t("forecast_chart_accessible", { count: projectedOrders })}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 8, right: 4, left: -24, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value: number) => [value, t("orders")]} />
+                  <Bar dataKey="orders" fill="#0891b2" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>{t("forecast_history_coverage", { days: forecast?.coverageDays || 0 })}</span>
+              <Badge variant="secondary">{t(`confidence_${forecast?.confidence || "insufficient"}`)}</Badge>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SiteBenchmarking({ sites }: { sites: SiteBenchmark[] }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const rankedSites = [...sites].sort((a, b) => Number(b.marginPct ?? -Infinity) - Number(a.marginPct ?? -Infinity));
+
+  return (
+    <Card className="shadow-sm" data-testid="card-site-benchmarking">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Building2 className="h-4 w-4" aria-hidden="true" />
+          {t("site_benchmarking")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("site_benchmarking_help")}</p>
+      </CardHeader>
+      <CardContent>
+        {rankedSites.length < 2 ? (
+          <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+            {t("benchmark_requires_multiple_sites")}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th scope="col" className="pb-2 pr-3 font-medium">{t("site")}</th>
+                  <th scope="col" className="pb-2 px-3 text-right font-medium">{t("orders")}</th>
+                  <th scope="col" className="pb-2 px-3 text-right font-medium">{t("margin")}</th>
+                  <th scope="col" className="pb-2 px-3 text-right font-medium">{t("average_order_value")}</th>
+                  <th scope="col" className="pb-2 pl-3 text-right font-medium">{t("completion_rate")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankedSites.map((site, index) => (
+                  <tr key={site.siteId} className="border-b last:border-0">
+                    <th scope="row" className="py-3 pr-3 text-left font-medium">
+                      <span className="mr-2 text-xs text-muted-foreground">#{index + 1}</span>
+                      {site.siteName}
+                    </th>
+                    <td className="px-3 py-3 text-right font-mono">{site.orders}</td>
+                    <td className="px-3 py-3 text-right font-mono">{site.marginPct == null ? t("insufficient_data") : `${site.marginPct.toFixed(1)}%`}</td>
+                    <td className="px-3 py-3 text-right font-mono">{site.averageOrderValue == null ? t("insufficient_data") : `${symbol}${site.averageOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</td>
+                    <td className="py-3 pl-3 text-right font-mono">{site.completionRate == null ? t("insufficient_data") : `${site.completionRate.toFixed(1)}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WhatIfSimulator({ metrics }: { metrics: ScenarioMetrics }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const [priceChange, setPriceChange] = useState(0);
+  const [volumeChange, setVolumeChange] = useState(0);
+  const [costChange, setCostChange] = useState(0);
+  const projectedRevenue = metrics.revenue * (1 + priceChange / 100) * (1 + volumeChange / 100);
+  const fixedCosts = Number(metrics.fixedCosts || 0);
+  const variableCosts = Number(metrics.variableCosts ?? Math.max(0, metrics.expenses - fixedCosts));
+  const projectedExpenses = fixedCosts + variableCosts * (1 + costChange / 100) * (1 + volumeChange / 100);
+  const projectedProfit = projectedRevenue - projectedExpenses;
+  const currentProfit = metrics.revenue - metrics.expenses;
+  const profitDelta = projectedProfit - currentProfit;
+  const projectedOrders = Math.max(0, Math.round(metrics.orders * (1 + volumeChange / 100)));
+  const money = (value: number) => `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  return (
+    <Card className="shadow-sm" data-testid="card-what-if-simulator">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          {t("what_if_simulator")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("what_if_simulator_help")}</p>
+      </CardHeader>
+      <CardContent className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <fieldset className="space-y-5">
+          <legend className="sr-only">{t("scenario_assumptions")}</legend>
+          <ScenarioSlider id="price-change" label={t("average_price_change")} value={priceChange} min={-20} max={30} onChange={setPriceChange} />
+          <ScenarioSlider id="volume-change" label={t("order_volume_change")} value={volumeChange} min={-30} max={50} onChange={setVolumeChange} />
+          <ScenarioSlider id="cost-change" label={t("unit_cost_change")} value={costChange} min={-30} max={30} onChange={setCostChange} />
+        </fieldset>
+        <div className="rounded-lg border bg-muted/20 p-4" aria-live="polite">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("projected_scenario")}</p>
+          <div className="mt-4 space-y-3">
+            <MetricLine label={t("projected_orders")} value={projectedOrders.toLocaleString()} />
+            <MetricLine label={t("projected_revenue")} value={money(projectedRevenue)} />
+            <MetricLine label={t("projected_expenses")} value={money(projectedExpenses)} />
+            <MetricLine label={t("projected_profit")} value={money(projectedProfit)} />
+            <div className="border-t pt-3">
+              <MetricLine label={t("profit_impact")} value={`${profitDelta >= 0 ? "+" : ""}${money(profitDelta)}`} />
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">{t("scenario_not_forecast")}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScenarioSlider({ id, label, value, min, max, onChange }: { id: string; label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label htmlFor={id} className="text-sm font-medium">{label}</label>
+        <output htmlFor={id} className="min-w-14 rounded-md border bg-background px-2 py-1 text-center font-mono text-sm">{value > 0 ? "+" : ""}{value}%</output>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-11 w-full cursor-pointer accent-primary"
+      />
+      <div className="flex justify-between text-xs text-muted-foreground" aria-hidden="true">
+        <span>{min}%</span>
+        <span>{max}%</span>
+      </div>
+    </div>
+  );
+}
+
+function DecisionMetric({ icon, label, value, delta, tone }: { icon: React.ReactNode; label: string; value: string; delta?: number; tone?: "danger" | "warning" | "good" }) {
+  const toneClass = tone === "danger" ? "text-red-600" : tone === "warning" ? "text-amber-700 dark:text-amber-400" : tone === "good" ? "text-emerald-600" : "";
+  return (
+    <Card className="shadow-sm">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between text-muted-foreground"><span className="[&_svg]:h-4 [&_svg]:w-4">{icon}</span>{delta != null && <span className={`text-xs font-medium ${delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>{delta >= 0 ? "+" : ""}{delta.toFixed(1)}%</span>}</div>
+        <p className="mt-3 text-xs font-medium text-muted-foreground">{label}</p>
+        <p className={`mt-1 text-xl font-bold font-display ${toneClass}`}>{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LaundryOperationsFlow({ stages }: { stages: { key: string; count: number }[] }) {
+  const { t } = useTranslation();
+  const max = Math.max(1, ...stages.map((stage) => Number(stage.count || 0)));
+  return (
+    <section aria-labelledby="laundry-flow-title">
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle id="laundry-flow-title">{t("laundry_operations_flow")}</CardTitle>
+          <p className="text-sm text-muted-foreground">{t("laundry_operations_flow_help")}</p>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid gap-2 md:grid-cols-6">
+            {stages.map((stage, index) => (
+              <li key={stage.key} className="relative rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{t(`stage_${stage.key}`, { defaultValue: stage.key })}</span>
+                  <span className="font-mono text-lg font-bold">{stage.count}</span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  <div className="h-full rounded-full bg-cyan-600" style={{ width: `${Math.max(5, (stage.count / max) * 100)}%` }} />
+                </div>
+                {index < stages.length - 1 && <ArrowRight className="absolute -right-3 top-1/2 z-10 hidden h-4 w-4 -translate-y-1/2 text-muted-foreground md:block" aria-hidden="true" />}
+              </li>
+            ))}
+          </ol>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function DecisionModule({ title, icon, items }: { title: string; icon: React.ReactNode; items: [string, string][] }) {
+  return (
+    <Card className="shadow-sm">
+      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><span className="[&_svg]:h-4 [&_svg]:w-4" aria-hidden="true">{icon}</span>{title}</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        {items.map(([label, value]) => <MetricLine key={label} label={label} value={value} />)}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -384,7 +753,7 @@ function KpiCard({ label, value, color }: { label: string; value: any; color?: s
   return (
     <Card className="shadow-sm">
       <CardContent className="p-5">
-        <p className="text-sm text-muted-foreground mb-1">{label}</p>
+        <p className="mb-1 text-sm text-muted-foreground">{label}</p>
         <p className={`text-2xl font-bold font-display ${color || ""}`}>{value}</p>
       </CardContent>
     </Card>
@@ -459,25 +828,6 @@ function WasteAlerts() {
       </CardContent>
     </Card>
   );
-}
-
-function PerformanceScoreSection() {
-  const { t } = useTranslation();
-  const { hasFeature } = useAuth();
-
-  if (!hasFeature("performance")) {
-    return (
-      <Card className="shadow-sm" data-testid="card-performance-locked">
-        <CardHeader><CardTitle>{t("performance_score")}</CardTitle></CardHeader>
-        <CardContent className="text-center py-6">
-          <p className="text-muted-foreground mb-4">{t("business_plan_required")}</p>
-          <Link href="/subscriptions"><Button variant="outline" data-testid="button-upgrade-performance">{t("upgrade")}</Button></Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <PerformanceScore />;
 }
 
 function AdvancedAnalyticsSection({ period }: { period: string }) {
@@ -777,43 +1127,6 @@ function ProductionDelaysSection() {
               </div>
             </div>
           ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PerformanceScore() {
-  const { t } = useTranslation();
-  const { data: score } = useQuery<any>({ queryKey: ["/api/analytics/performance-score"] });
-
-  const gradeColors: Record<string, string> = { A: "text-green-600", B: "text-blue-600", C: "text-yellow-600", D: "text-orange-600", F: "text-red-600" };
-  const gradeColor = gradeColors[score?.grade] || "text-gray-600";
-
-  return (
-    <Card className="shadow-sm" data-testid="card-performance-score">
-      <CardHeader><CardTitle>{t("performance_score")}</CardTitle></CardHeader>
-      <CardContent>
-        <div className="flex items-center gap-8 mb-6">
-          <div className="text-center">
-            <div className={`text-6xl font-bold ${gradeColor}`}>{score?.grade || "-"}</div>
-            <div className="text-sm text-muted-foreground">{score?.total || 0} / 100</div>
-          </div>
-          <div className="flex-1 space-y-3">
-            {[
-              { labelKey: "machine_usage", value: score?.machineUsage || 0 },
-              { labelKey: "cost_efficiency", value: score?.costEfficiency || 0 },
-              { labelKey: "productivity", value: score?.productivity || 0 },
-              { labelKey: "waste_level", value: score?.wasteLevel || 0 },
-            ].map(item => (
-              <div key={item.labelKey} className="space-y-1">
-                <div className="flex justify-between text-sm"><span>{t(item.labelKey)}</span><span>{item.value}%</span></div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${item.value}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </CardContent>
     </Card>

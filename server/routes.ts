@@ -1050,6 +1050,285 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(data);
   });
 
+  app.get("/api/analytics/decision-cockpit", isAuthenticated, async (req: any, res) => {
+    const period = z.enum(["day", "week", "month", "year"]).catch("month").parse(req.query.period);
+    const siteIds = scopedSites(req);
+    if (!siteIds.length) return res.json({ period, metrics: {}, stages: [], confidence: { level: "insufficient", score: 0 } });
+
+    const now = new Date();
+    const start = period === "day"
+      ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      : period === "week"
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+        : period === "year"
+          ? new Date(now.getFullYear(), 0, 1)
+          : new Date(now.getFullYear(), now.getMonth(), 1);
+    const durationMs = Math.max(86400000, now.getTime() - start.getTime());
+    const previousStart = new Date(start.getTime() - durationMs);
+
+    const organisationSiteIds = orgScopedSites(req);
+    const [ordersResult, previousResult, machineResult, teamResult, qualityResult, forecastResult, benchmarkResult] = await Promise.all([
+      pool.query(
+        `WITH scoped_orders AS (
+           SELECT o.*,
+             COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.order_id = o.id), 0) AS paid
+           FROM orders o
+           WHERE o.site_id = ANY($1::int[]) AND o.entry_date >= $2 AND o.entry_date <= $3
+         ), scoped_expenses AS (
+           SELECT amount, LOWER(COALESCE(category, '')) AS category
+           FROM expenditures
+           WHERE site_id = ANY($1::int[]) AND date >= $2 AND date <= $3
+         )
+         SELECT
+           COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS total_orders,
+           COUNT(*) FILTER (WHERE status = 'delivered')::int AS delivered_orders,
+           (SELECT COUNT(*) FROM orders live
+             WHERE live.site_id = ANY($1::int[]) AND live.status NOT IN ('cancelled','delivered')
+               AND live.pickup_date IS NOT NULL AND live.pickup_date < $3)::int AS delayed_orders,
+           COALESCE(SUM(total_amount) FILTER (WHERE status <> 'cancelled'), 0)::text AS order_value,
+           COALESCE((SELECT SUM(GREATEST(live.total_amount - COALESCE((
+             SELECT SUM(lp.amount) FROM payments lp WHERE lp.order_id = live.id
+           ), 0), 0)) FROM orders live
+             WHERE live.site_id = ANY($1::int[]) AND live.status <> 'cancelled'), 0)::text AS outstanding,
+           COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders po ON po.id = p.order_id
+             WHERE po.site_id = ANY($1::int[]) AND p.date >= $2 AND p.date <= $3 AND po.status <> 'cancelled'), 0)::text AS revenue,
+           COALESCE((SELECT SUM(amount) FROM scoped_expenses), 0)::text AS expenses,
+           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE category IN ('loyer','rent','salaire','salary','salaires')), 0)::text AS fixed_costs,
+           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE category NOT IN ('loyer','rent','salaire','salary','salaires')), 0)::text AS variable_costs,
+           COALESCE(SUM(discount_amount) FILTER (WHERE status <> 'cancelled'), 0)::text AS discounts,
+           (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status = 'received')::int AS received,
+           (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status IN ('washing','stain_treatment'))::int AS washing,
+           (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status = 'drying')::int AS drying,
+           (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status = 'ironing')::int AS ironing,
+           (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status = 'ready')::int AS ready,
+           (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status = 'delivered'
+             AND live.delivered_at >= $2 AND live.delivered_at <= $3)::int AS delivered,
+           COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled,
+           COUNT(*) FILTER (WHERE pickup_date IS NOT NULL)::int AS promised_date_coverage
+         FROM scoped_orders`,
+        [siteIds, start, now],
+      ),
+      pool.query(
+        `SELECT
+           COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders o ON o.id = p.order_id
+             WHERE o.site_id = ANY($1::int[]) AND p.date >= $2 AND p.date < $3 AND o.status <> 'cancelled'), 0)::text AS revenue,
+           COALESCE((SELECT SUM(e.amount) FROM expenditures e
+             WHERE e.site_id = ANY($1::int[]) AND e.date >= $2 AND e.date < $3), 0)::text AS expenses,
+           (SELECT COUNT(*) FROM orders o
+             WHERE o.site_id = ANY($1::int[]) AND o.entry_date >= $2 AND o.entry_date < $3 AND o.status <> 'cancelled')::int AS orders`,
+        [siteIds, previousStart, start],
+      ),
+      pool.query(
+        `SELECT
+           COUNT(mu.id)::int AS cycles,
+           COUNT(*) FILTER (WHERE COALESCE(mu.weight_processed, 0) > 0)::int AS weighted_cycles,
+           COALESCE(SUM(mu.weight_processed), 0)::text AS weight,
+           COALESCE(SUM(mu.cycle_duration_minutes), 0)::int AS operating_minutes,
+           COALESCE(SUM(m.capacity_kg), 0)::text AS cycle_capacity,
+           (SELECT COUNT(*) FROM machines m2 WHERE m2.site_id = ANY($1::int[]) AND m2.status = 'active')::int AS active_machines
+         FROM machine_usage mu
+         JOIN machines m ON m.id = mu.machine_id
+         WHERE mu.site_id = ANY($1::int[]) AND mu.usage_date >= $2 AND mu.usage_date <= $3`,
+        [siteIds, start, now],
+      ),
+      pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM employees e WHERE e.site_id = ANY($1::int[]) AND e.status = 'active')::int AS active_employees,
+           COUNT(*) FILTER (WHERE ea.action_type = 'order_delivered')::int AS completed_actions,
+           COALESCE(SUM(ea.weight_kg), 0)::text AS tracked_weight,
+           COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (att.check_out_at - att.check_in_at)) / 3600)
+             FROM employee_attendance att
+             WHERE att.site_id = ANY($1::int[]) AND att.work_date >= $2 AND att.work_date <= $3
+               AND att.check_in_at IS NOT NULL AND att.check_out_at IS NOT NULL), 0)::float8 AS paid_hours
+         FROM employee_activities ea
+         WHERE ea.site_id = ANY($1::int[]) AND ea.action_date >= $2 AND ea.action_date <= $3`,
+        [siteIds, start, now],
+      ),
+      pool.query(
+        `SELECT COUNT(gi.id)::int AS returned_items
+         FROM garment_items gi
+         JOIN orders o ON o.id = gi.order_id
+         WHERE o.site_id = ANY($1::int[]) AND gi.returned_at >= $2 AND gi.returned_at <= $3`,
+        [siteIds, start, now],
+      ),
+      pool.query(
+        `SELECT
+           DATE(o.entry_date) AS business_date,
+           EXTRACT(ISODOW FROM o.entry_date)::int AS weekday,
+           COUNT(*) FILTER (WHERE o.status <> 'cancelled')::int AS orders,
+           COALESCE(SUM(o.total_amount) FILTER (WHERE o.status <> 'cancelled'), 0)::text AS order_value
+         FROM orders o
+         WHERE o.site_id = ANY($1::int[])
+           AND o.entry_date >= $2::timestamp - INTERVAL '56 days'
+           AND o.entry_date < $2::timestamp
+         GROUP BY DATE(o.entry_date), EXTRACT(ISODOW FROM o.entry_date)
+         ORDER BY business_date`,
+        [siteIds, now],
+      ),
+      pool.query(
+        `SELECT
+           s.id AS site_id,
+           s.name AS site_name,
+           COUNT(o.id) FILTER (WHERE o.status <> 'cancelled')::int AS orders,
+           COUNT(o.id) FILTER (WHERE o.status = 'delivered')::int AS delivered_orders,
+           COALESCE(SUM(o.total_amount) FILTER (WHERE o.status <> 'cancelled'), 0)::text AS order_value,
+           COALESCE((SELECT SUM(p.amount)
+             FROM payments p
+             JOIN orders po ON po.id = p.order_id
+             WHERE po.site_id = s.id AND p.date >= $2 AND p.date <= $3 AND po.status <> 'cancelled'), 0)::text AS revenue,
+           COALESCE((SELECT SUM(e.amount)
+             FROM expenditures e
+             WHERE e.site_id = s.id AND e.date >= $2 AND e.date <= $3), 0)::text AS expenses
+         FROM sites s
+         LEFT JOIN orders o ON o.site_id = s.id AND o.entry_date >= $2 AND o.entry_date <= $3
+         WHERE s.id = ANY($1::int[]) AND s.is_active = TRUE
+         GROUP BY s.id, s.name
+         ORDER BY s.name`,
+        [organisationSiteIds, start, now],
+      ),
+    ]);
+
+    const current = ordersResult.rows[0];
+    const previous = previousResult.rows[0];
+    const machine = machineResult.rows[0];
+    const team = teamResult.rows[0];
+    const quality = qualityResult.rows[0];
+    const number = (value: unknown) => Number(value || 0);
+    const delta = (currentValue: number, previousValue: number) =>
+      previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : null;
+
+    const revenue = number(current.revenue);
+    const expenses = number(current.expenses);
+    const fixedCosts = number(current.fixed_costs);
+    const variableCosts = number(current.variable_costs);
+    const contribution = revenue - variableCosts;
+    const contributionMarginRatio = revenue > 0 ? contribution / revenue : 0;
+    const breakEvenRevenue = fixedCosts > 0 && contributionMarginRatio > 0 ? fixedCosts / contributionMarginRatio : null;
+    const totalOrders = number(current.total_orders);
+    const loadEfficiency = number(machine.cycle_capacity) > 0 ? (number(machine.weight) / number(machine.cycle_capacity)) * 100 : null;
+    const productivityPerHour = number(team.paid_hours) > 0 ? number(team.completed_actions) / number(team.paid_hours) : null;
+    const qualityIncidents = number(quality.returned_items) + number(current.cancelled);
+    const qualityRate = totalOrders > 0 ? Math.max(0, 100 - (qualityIncidents / totalOrders) * 100) : null;
+
+    const coverageSignals = [
+      totalOrders > 0,
+      number(current.promised_date_coverage) >= Math.max(1, totalOrders * 0.7),
+      number(machine.cycles) > 0 && number(machine.weighted_cycles) >= number(machine.cycles) * 0.7,
+      number(team.paid_hours) > 0,
+      expenses > 0,
+    ];
+    const confidenceScore = Math.round((coverageSignals.filter(Boolean).length / coverageSignals.length) * 100);
+    const confidenceLevel = confidenceScore >= 80 ? "high" : confidenceScore >= 40 ? "partial" : "insufficient";
+    const forecastHistory = forecastResult.rows.map((row) => ({
+      date: String(row.business_date),
+      weekday: number(row.weekday),
+      orders: number(row.orders),
+      orderValue: number(row.order_value),
+    }));
+    const recentCutoff = new Date(now.getTime() - 14 * 86400000);
+    const earlierCutoff = new Date(now.getTime() - 28 * 86400000);
+    const recentOrders = forecastHistory
+      .filter((row) => new Date(row.date) >= recentCutoff)
+      .reduce((sum, row) => sum + row.orders, 0);
+    const earlierOrders = forecastHistory
+      .filter((row) => new Date(row.date) >= earlierCutoff && new Date(row.date) < recentCutoff)
+      .reduce((sum, row) => sum + row.orders, 0);
+    const trendFactor = earlierOrders > 0 ? Math.min(1.3, Math.max(0.7, recentOrders / earlierOrders)) : 1;
+    const forecast = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + index + 1);
+      const weekday = date.getDay() === 0 ? 7 : date.getDay();
+      const comparable = forecastHistory.filter((row) => row.weekday === weekday);
+      const predictedOrders = comparable.length
+        ? Math.max(0, Math.round((comparable.reduce((sum, row) => sum + row.orders, 0) / comparable.length) * trendFactor))
+        : null;
+      const averageOrderValue = comparable.reduce((sum, row) => sum + row.orderValue, 0)
+        / Math.max(1, comparable.reduce((sum, row) => sum + row.orders, 0));
+      return {
+        date: date.toISOString().slice(0, 10),
+        orders: predictedOrders,
+        revenue: predictedOrders == null ? null : Math.round(predictedOrders * averageOrderValue),
+      };
+    });
+    const forecastCoverageDays = forecastHistory.filter((row) => row.orders > 0).length;
+    const siteBenchmarks = benchmarkResult.rows.map((row) => {
+      const siteRevenue = number(row.revenue);
+      const siteExpenses = number(row.expenses);
+      const siteOrders = number(row.orders);
+      return {
+        siteId: number(row.site_id),
+        siteName: row.site_name,
+        orders: siteOrders,
+        deliveredOrders: number(row.delivered_orders),
+        revenue: siteRevenue,
+        expenses: siteExpenses,
+        profit: siteRevenue - siteExpenses,
+        marginPct: siteRevenue > 0 ? ((siteRevenue - siteExpenses) / siteRevenue) * 100 : null,
+        averageOrderValue: siteOrders > 0 ? number(row.order_value) / siteOrders : null,
+        completionRate: siteOrders > 0 ? (number(row.delivered_orders) / siteOrders) * 100 : null,
+      };
+    });
+
+    res.json({
+      period,
+      range: { start, end: now },
+      metrics: {
+        revenue,
+        expenses,
+        profit: revenue - expenses,
+        marginPct: revenue > 0 ? ((revenue - expenses) / revenue) * 100 : null,
+        orders: totalOrders,
+        deliveredOrders: number(current.delivered_orders),
+        delayedOrders: number(current.delayed_orders),
+        outstandingPayments: number(current.outstanding),
+        orderValue: number(current.order_value),
+        discounts: number(current.discounts),
+        revenueDeltaPct: delta(revenue, number(previous.revenue)),
+        expenseDeltaPct: delta(expenses, number(previous.expenses)),
+        orderDeltaPct: delta(totalOrders, number(previous.orders)),
+        fixedCosts,
+        variableCosts,
+        contributionMarginRatio: contributionMarginRatio > 0 ? contributionMarginRatio * 100 : null,
+        breakEvenRevenue,
+        machineCycles: number(machine.cycles),
+        machineWeight: number(machine.weight),
+        machineOperatingMinutes: number(machine.operating_minutes),
+        activeMachines: number(machine.active_machines),
+        machineLoadEfficiency: loadEfficiency,
+        activeEmployees: number(team.active_employees),
+        paidHours: number(team.paid_hours),
+        completedActions: number(team.completed_actions),
+        productivityPerHour,
+        returnedItems: number(quality.returned_items),
+        qualityRate,
+      },
+      stages: [
+        { key: "received", count: number(current.received) },
+        { key: "washing", count: number(current.washing) },
+        { key: "drying", count: number(current.drying) },
+        { key: "ironing", count: number(current.ironing) },
+        { key: "ready", count: number(current.ready) },
+        { key: "delivered", count: number(current.delivered) },
+      ],
+      forecast: {
+        days: forecast,
+        coverageDays: forecastCoverageDays,
+        confidence: forecastCoverageDays >= 28 ? "high" : forecastCoverageDays >= 14 ? "partial" : "insufficient",
+        method: "weekday_average_56d_with_14d_trend",
+      },
+      siteBenchmarks,
+      confidence: {
+        level: confidenceLevel,
+        score: confidenceScore,
+        coverage: {
+          promisedDates: totalOrders > 0 ? (number(current.promised_date_coverage) / totalOrders) * 100 : 0,
+          machineWeights: number(machine.cycles) > 0 ? (number(machine.weighted_cycles) / number(machine.cycles)) * 100 : 0,
+          attendanceHours: number(team.paid_hours) > 0,
+          expenseRecords: expenses > 0,
+        },
+      },
+    });
+  });
+
   app.get("/api/analytics/waste", isAuthenticated, async (req: any, res) => {
     const alerts = await storage.getWasteAlerts(scopedSites(req));
     res.json(alerts);

@@ -27,6 +27,7 @@
     "test:inline-order-status": "tsx server/lib/inline-order-status.test.ts",
     "test:customer-credit": "tsx server/lib/customer-credit.test.ts",
     "test:customer-credit-analytics": "tsx server/lib/customer-credit-analytics.test.ts",
+    "test:analytics-decision-cockpit": "tsx server/lib/analytics-decision-cockpit.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"
   },
