@@ -118,7 +118,7 @@ export default function Payments() {
 
   const totalAmount = selectedOrder ? Number(selectedOrder.totalAmount) : 0;
   const remainingBalance = Math.max(0, totalAmount - totalPaid);
-  const availableCredit = Number(creditData?.creditBalance ?? 0);
+  const availableCredit = Number(creditData?.creditBalance ?? (selectedOrder as any)?.customer?.creditBalance ?? 0);
   const maxCreditApplicable = Math.min(availableCredit, remainingBalance);
   const appliedCredit = Math.min(Math.max(Number(creditToApply) || 0, 0), maxCreditApplicable);
   const remainingAfterCredit = Math.max(0, remainingBalance - appliedCredit);
@@ -411,7 +411,12 @@ export default function Payments() {
                 </div>
 
                 {availableCredit > 0 && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20" data-testid="customer-credit-panel">
+                  <div
+                    className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                    role="status"
+                    aria-live="polite"
+                    data-testid="customer-credit-panel"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <Wallet className="h-4 w-4 text-emerald-600" />

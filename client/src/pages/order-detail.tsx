@@ -547,6 +547,9 @@ export default function OrderDetail() {
                   data-testid="input-stage-duration"
                 />
               </div>
+              <p className="text-xs text-muted-foreground sm:col-span-3" role="note" data-testid="stage-machine-save-hint">
+                {t("machine_assignment_save_hint")}
+              </p>
             </div>
           )}
         </CardContent>

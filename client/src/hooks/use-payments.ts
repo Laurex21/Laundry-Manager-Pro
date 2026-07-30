@@ -42,6 +42,11 @@ export function useCreatePayment() {
       queryClient.invalidateQueries({ queryKey: ['/api/orders', variables.orderId, 'payments'] });
       queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.orders.get.path, variables.orderId] });
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === "/api/customers" && query.queryKey[2] === "credit",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/credit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Success", description: "Payment recorded successfully" });
     },

@@ -331,6 +331,9 @@ function buildThermalReceiptHtml(args: {
   showLogo?: boolean;
   paymentLine?: string;
   methodLine?: string;
+  creditApplied?: number;
+  creditAdded?: number;
+  creditBalance?: number;
   agentName?: string;
   agentLabel?: string;
 }): string {
@@ -431,6 +434,9 @@ function buildThermalReceiptHtml(args: {
     ${thermalLine("TOTAL", thermalMoney(args.orderTotal, args.symbol), true)}
     ${thermalLine("ADVANCE PAID", thermalMoney(args.totalPaid, args.symbol), true)}
     ${thermalLine("BALANCE DUE", thermalMoney(args.balance, args.symbol), true)}
+    ${Number(args.creditApplied || 0) > 0 ? thermalLine(label("Customer credit used", "Avoir client utilisé", args.lang), `-${thermalMoney(args.creditApplied || 0, args.symbol)}`) : ""}
+    ${Number(args.creditAdded || 0) > 0 ? thermalLine(label("Added to customer credit", "Ajouté à l'avoir client", args.lang), `+${thermalMoney(args.creditAdded || 0, args.symbol)}`) : ""}
+    ${Number(args.creditBalance || 0) > 0 || Number(args.creditApplied || 0) > 0 || Number(args.creditAdded || 0) > 0 ? thermalLine(label("Available customer credit", "Avoir client disponible", args.lang), thermalMoney(args.creditBalance || 0, args.symbol), true) : ""}
     ${paidInFull ? `<div class="paid">PAID IN FULL</div>` : ""}
     ${thermalDivider()}
     <div class="footer">${escapeHtml(args.footerNote)}</div>
@@ -519,6 +525,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
   const totalPaid = (order.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
   const balance = Math.max(0, orderTotal - totalPaid);
+  const availableCredit = Number(customer.creditBalance || 0);
   const paymentsHtml = (order.payments || []).length
     ? buildPaymentHistoryHtml(order.payments || [], orderTotal, symbol, lang, order.entryDate)
     : `<div style="font-size:12px;color:#94a3b8;font-style:italic;">${label("No payments recorded", "Aucun paiement enregistré", lang)}</div>`;
@@ -636,6 +643,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
         ${balance > 0
           ? `<div class="summary-row" style="border-top:2px solid #fca5a5;margin-top:8px;padding-top:10px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;font-size:15px;">${symbol}${balance.toFixed(2)}</span></div>`
           : totalPaid > 0 ? `<div class="summary-row" style="border-top:2px solid #86efac;margin-top:8px;padding-top:10px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>` : ""}
+        ${availableCredit > 0 ? `<div class="summary-row" style="border-top:1px solid #a7f3d0;margin-top:8px;padding-top:10px;"><span style="font-weight:700;color:#047857;">${label("Available customer credit (not applied)", "Avoir client disponible (non utilisé)", lang)}</span><span style="color:#047857;font-weight:700;">${symbol}${availableCredit.toFixed(2)}</span></div>` : ""}
       </div>
     </div>
 
@@ -685,6 +693,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
   const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
   const totalPaid = (order.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
   const balance = Math.max(0, orderTotal - totalPaid);
+  const availableCredit = Number(customer.creditBalance || 0);
   const html = buildThermalReceiptHtml({
     title: label("Thermal Receipt", "Ticket thermique", lang),
     orderId: displayOrderId,
@@ -707,6 +716,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
     lang,
     logoBase64: settings.logoBase64,
     showLogo: settings.showLogo,
+    creditBalance: availableCredit,
     agentName: agentFirstName(order.createdByEmployee),
     agentLabel: label("Agent", "Agent", lang),
   });
@@ -762,6 +772,9 @@ export function generateThermalPaymentReceipt(
     showLogo: settings.showLogo,
     paymentLine: thermalMoney(currentPaymentAmount, symbol),
     methodLine: payment.method,
+    creditApplied: Number(payment.creditApplied || 0),
+    creditAdded: Number(payment.creditAdded || 0),
+    creditBalance: Number(payment.creditBalance || 0),
     agentName: agentFirstName(payment.agentName),
     agentLabel: label("Agent", "Agent", lang),
   });
@@ -926,7 +939,7 @@ export function generatePaymentReceipt(
         ${Number(payment.changeReturned || 0) > 0 ? `<div class="summary-row"><span>${label("Change returned", "Monnaie rendue", lang)}</span><span>${symbol}${Number(payment.changeReturned).toFixed(2)}</span></div>` : ""}
         ${Number(payment.creditApplied || 0) > 0 ? `<div class="summary-row"><span>${label("Customer credit used", "Avoir client utilisé", lang)}</span><span>-${symbol}${Number(payment.creditApplied).toFixed(2)}</span></div>` : ""}
         ${Number(payment.creditAdded || 0) > 0 ? `<div class="summary-row"><span>${label("Added to customer credit", "Ajouté à l'avoir client", lang)}</span><span>+${symbol}${Number(payment.creditAdded).toFixed(2)}</span></div>` : ""}
-        ${Number(payment.creditBalance || 0) > 0 ? `<div class="summary-row"><span>${label("Available customer credit", "Avoir client disponible", lang)}</span><span>${symbol}${Number(payment.creditBalance).toFixed(2)}</span></div>` : ""}
+        ${Number(payment.creditBalance || 0) > 0 || Number(payment.creditApplied || 0) > 0 || Number(payment.creditAdded || 0) > 0 ? `<div class="summary-row"><span>${label("Available customer credit", "Avoir client disponible", lang)}</span><span>${symbol}${Number(payment.creditBalance || 0).toFixed(2)}</span></div>` : ""}
         ${remaining > 0 ? `<div class="summary-row" style="border-top:1px solid #fca5a5;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#dc2626;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#dc2626;font-weight:700;">${symbol}${remaining.toFixed(2)}</span></div>` : `<div class="summary-row" style="border-top:1px solid #86efac;margin-top:6px;padding-top:8px;"><span style="font-weight:700;color:#16a34a;">${label("Balance Due", "Solde dû", lang)}</span><span style="color:#16a34a;font-weight:700;">${label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}</span></div>`}
       </div>
     </div>

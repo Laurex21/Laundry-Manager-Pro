@@ -9,6 +9,11 @@ const routes = readFileSync(join(root, "server/routes.ts"), "utf8");
 const migration = readFileSync(join(root, "migrations/20260728_customer_credit.sql"), "utf8");
 const paymentsPage = readFileSync(join(root, "client/src/pages/payments.tsx"), "utf8");
 const creditTab = readFileSync(join(root, "client/src/components/customer-credit-tab.tsx"), "utf8");
+const ordersPage = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
+const paymentHooks = readFileSync(join(root, "client/src/hooks/use-payments.ts"), "utf8");
+const receipt = readFileSync(join(root, "client/src/lib/receipt.ts"), "utf8");
+const orderDetail = readFileSync(join(root, "client/src/pages/order-detail.tsx"), "utf8");
+const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
 
 assert.match(schema, /creditBalance: decimal\("credit_balance"/);
 assert.match(schema, /export const creditTransactions = pgTable\("credit_transactions"/);
@@ -37,8 +42,19 @@ assert.match(routes, /app\.get\("\/api\/customers\/:id\/credit"/);
 assert.match(routes, /app\.post\("\/api\/customers\/:id\/credit"/);
 
 assert.match(paymentsPage, /input-credit-to-apply/);
+assert.match(paymentsPage, /selectedOrder as any\)\?\.customer\?\.creditBalance/);
+assert.match(paymentsPage, /aria-live="polite"[\s\S]*customer-credit-panel/);
 assert.match(paymentsPage, /payment-surplus-panel/);
 assert.match(paymentsPage, /surplusDisposition/);
+assert.match(ordersPage, /new-order-customer-credit-alert/);
+assert.match(ordersPage, /customer_credit_payment_prompt/);
+assert.match(paymentHooks, /query\.queryKey\[2\] === "credit"/);
+assert.match(paymentHooks, /analytics\/credit-summary/);
+assert.match(receipt, /Available customer credit \(not applied\)/);
+assert.match(receipt, /creditApplied: Number\(payment\.creditApplied/);
+assert.match(receipt, /creditBalance: Number\(payment\.creditBalance/);
+assert.match(orderDetail, /stage-machine-save-hint/);
+assert.match(i18n, /machine_assignment_save_hint/);
 assert.match(creditTab, /userRole === "owner" \|\| userRole === "manager"/);
 assert.match(creditTab, /credit-transaction-/);
 
