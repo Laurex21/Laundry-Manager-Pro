@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,12 +28,7 @@ export default function Analytics() {
 
 function AnalyticsContent() {
   const { t } = useTranslation();
-  const { hasFeature } = useAuth();
-  const { getSymbol } = useCurrency();
-  const symbol = getSymbol();
   const [period, setPeriod] = useState("month");
-
-  const { data: kpis, isLoading } = useQuery<any>({ queryKey: ["/api/analytics/kpis", period], queryFn: () => fetch(`/api/analytics/kpis?period=${period}`, { credentials: "include" }).then(r => r.json()) });
 
   const periods = [
     { key: "day", label: t("period_day") },
@@ -41,15 +36,6 @@ function AnalyticsContent() {
     { key: "month", label: t("period_month") },
     { key: "year", label: t("period_year") },
   ];
-
-  if (isLoading) {
-    return (
-      <div className="space-y-8">
-        <Skeleton className="h-10 w-64" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[...Array(8)].map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 page-fade-in">
@@ -65,55 +51,185 @@ function AnalyticsContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label={t("total_kg_label")} value={kpis?.totalKg || 0} />
-        <KpiCard label={t("total_orders")} value={kpis?.totalOrders || 0} />
-        <KpiCard label={t("avg_kg_order")} value={(kpis?.avgWeightPerOrder || 0).toFixed(1)} />
-        <KpiCard label={t("total_revenue")} value={`${symbol}${(kpis?.totalRevenue || 0).toFixed(0)}`} />
-        <KpiCard label={t("total_expenses_label")} value={`${symbol}${(kpis?.totalExpenses || 0).toFixed(0)}`} />
-        <KpiCard label={t("net_profit")} value={`${symbol}${(kpis?.profit || 0).toFixed(0)}`} color={kpis?.profit >= 0 ? "text-green-600" : "text-red-600"} />
-        <KpiCard label={t("cost_per_kg")} value={`${symbol}${(kpis?.costPerKg || 0).toFixed(2)}`} />
-        <KpiCard label={t("profit_per_kg")} value={`${symbol}${(kpis?.profitPerKg || 0).toFixed(2)}`} color={kpis?.profitPerKg >= 0 ? "text-green-600" : "text-red-600"} />
-      </div>
-
-      <Card className="shadow-sm" data-testid="card-break-even">
-        <CardHeader><CardTitle>{t("break_even")}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">{t("break_even_point")}: {(kpis?.breakEvenKg || 0).toFixed(0)} kg</div>
-            <div className="h-3 bg-muted rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${kpis?.totalKg >= kpis?.breakEvenKg ? "bg-green-500" : "bg-red-500"}`}
-                style={{ width: `${Math.min(100, kpis?.breakEvenKg > 0 ? (kpis?.totalKg / kpis?.breakEvenKg) * 100 : 0)}%` }} />
-            </div>
-            <div className="text-sm">
-              {kpis?.totalKg >= kpis?.breakEvenKg
-                ? <span className="text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {t("above_break_even")}</span>
-                : <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> {t("need_more_kg", { count: Math.round((kpis?.breakEvenKg || 0) - (kpis?.totalKg || 0)) })}</span>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-sm" data-testid="card-operational-kpis">
-        <CardHeader><CardTitle>{t("operational_kpis")}</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm"><span>{t("machine_utilization")}</span><span>{(kpis?.machineUtilization || 0).toFixed(0)}%</span></div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, kpis?.machineUtilization || 0)}%` }} />
-            </div>
-          </div>
-          <div className="text-sm"><span className="text-muted-foreground">{t("employee_productivity")}:</span> {(kpis?.employeeProductivity || 0).toFixed(1)} {t("kg_per_person")}</div>
-        </CardContent>
-      </Card>
+      <ExecutiveDecisionCockpit period={period} />
 
       <CustomerCreditAnalyticsSection />
       <WasteSection />
       <CustomerBehaviorSection period={period} />
-      <PerformanceScoreSection />
       <ProductionDelaysSection />
       <AdvancedAnalyticsSection period={period} />
     </div>
+  );
+}
+
+function ExecutiveDecisionCockpit({ period }: { period: string }) {
+  const { t } = useTranslation();
+  const { getSymbol } = useCurrency();
+  const symbol = getSymbol();
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: ["/api/analytics/decision-cockpit", period],
+    queryFn: async () => {
+      const response = await fetch(`/api/analytics/decision-cockpit?period=${period}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Unable to load decision cockpit");
+      return response.json();
+    },
+  });
+
+  if (isLoading) return <div className="space-y-4"><Skeleton className="h-40 rounded-xl" /><Skeleton className="h-72 rounded-xl" /></div>;
+  if (isError || !data?.metrics) return <Card><CardContent className="p-6 text-destructive" role="alert">{t("decision_cockpit_error")}</CardContent></Card>;
+
+  const m = data.metrics;
+  const money = (value: unknown) => `${symbol}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const pct = (value: unknown) => value == null ? t("insufficient_data") : `${Number(value).toFixed(1)}%`;
+  const delta = (value: unknown) => value == null ? undefined : Number(value);
+  const actions = [
+    Number(m.delayedOrders) > 0 ? { severity: "high", text: t("action_delayed_orders", { count: m.delayedOrders }), href: "/orders?status=active" } : null,
+    Number(m.outstandingPayments) > 0 ? { severity: "medium", text: t("action_collect_outstanding", { amount: money(m.outstandingPayments) }), href: "/payments" } : null,
+    m.machineLoadEfficiency != null && Number(m.machineLoadEfficiency) < 60 ? { severity: "medium", text: t("action_improve_machine_load", { value: Number(m.machineLoadEfficiency).toFixed(0) }), href: "/machines" } : null,
+    Number(m.returnedItems) > 0 ? { severity: "medium", text: t("action_review_returns", { count: m.returnedItems }), href: "/orders" } : null,
+    Number(m.profit) < 0 ? { severity: "high", text: t("action_costs_exceed_revenue"), href: "/expenses" } : null,
+  ].filter(Boolean) as { severity: string; text: string; href: string }[];
+
+  return (
+    <div className="space-y-5" data-testid="section-executive-decision-cockpit">
+      <section aria-labelledby="decision-summary-title" className="overflow-hidden rounded-xl border bg-slate-950 text-white shadow-sm">
+        <div className="grid gap-5 p-5 lg:grid-cols-[1.5fr_1fr] lg:p-6">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">{t("decision_cockpit")}</p>
+              <Badge className={data.confidence?.level === "high" ? "bg-emerald-500 text-white" : data.confidence?.level === "partial" ? "bg-amber-400 text-slate-950" : "bg-red-500 text-white"}>
+                {t("data_confidence")}: {t(`confidence_${data.confidence?.level || "insufficient"}`)} · {data.confidence?.score || 0}%
+              </Badge>
+            </div>
+            <h2 id="decision-summary-title" className="mt-3 text-2xl font-bold font-display sm:text-3xl">{t("decision_summary_title")}</h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">{t("decision_summary_subtitle")}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-400">{t("net_operating_result")}</p>
+            <p className={`mt-1 text-3xl font-bold ${Number(m.profit) >= 0 ? "text-emerald-300" : "text-red-300"}`}>{money(m.profit)}</p>
+            <p className="mt-1 text-sm text-slate-300">{t("margin")}: {pct(m.marginPct)}</p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="attention-title">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="attention-title" className="text-lg font-semibold">{t("decisions_requiring_attention")}</h2>
+          <Badge variant={actions.length ? "destructive" : "secondary"}>{actions.length}</Badge>
+        </div>
+        {actions.length ? (
+          <ul className="grid gap-3 lg:grid-cols-2">
+            {actions.map((action, index) => (
+              <li key={`${action.text}-${index}`}>
+                <Button asChild variant="outline" className="h-auto min-h-12 w-full justify-between whitespace-normal p-3 text-left">
+                  <Link href={action.href}>
+                    <span className="flex items-start gap-2">
+                      <AlertTriangle className={`mt-0.5 h-4 w-4 ${action.severity === "high" ? "text-red-600" : "text-amber-600"}`} aria-hidden="true" />
+                      {action.text}
+                    </span>
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300">
+            <CheckCircle className="h-4 w-4" aria-hidden="true" /> {t("no_urgent_decisions")}
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="management-metrics-title">
+        <h2 id="management-metrics-title" className="sr-only">{t("management_metrics")}</h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <DecisionMetric icon={<Banknote />} label={t("revenue_collected")} value={money(m.revenue)} delta={delta(m.revenueDeltaPct)} />
+          <DecisionMetric icon={<Activity />} label={t("orders_received")} value={Number(m.orders || 0).toLocaleString()} delta={delta(m.orderDeltaPct)} />
+          <DecisionMetric icon={<Clock3 />} label={t("orders_at_delay_risk")} value={Number(m.delayedOrders || 0).toLocaleString()} tone={Number(m.delayedOrders) > 0 ? "danger" : "good"} />
+          <DecisionMetric icon={<Wallet />} label={t("outstanding_payments")} value={money(m.outstandingPayments)} tone={Number(m.outstandingPayments) > 0 ? "warning" : "good"} />
+          <DecisionMetric icon={<ShieldCheck />} label={t("quality_rate")} value={pct(m.qualityRate)} tone={Number(m.qualityRate ?? 100) < 95 ? "warning" : "good"} />
+        </div>
+      </section>
+
+      <LaundryOperationsFlow stages={data.stages || []} />
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <DecisionModule title={t("profitability")} icon={<Banknote />} items={[
+          [t("total_revenue"), money(m.revenue)],
+          [t("total_expenses_label"), money(m.expenses)],
+          [t("contribution_margin"), pct(m.contributionMarginRatio)],
+          [t("break_even_revenue"), m.breakEvenRevenue == null ? t("insufficient_data") : money(m.breakEvenRevenue)],
+          [t("discounts"), money(m.discounts)],
+        ]} />
+        <DecisionModule title={t("capacity_efficiency")} icon={<Gauge />} items={[
+          [t("machine_load_efficiency"), pct(m.machineLoadEfficiency)],
+          [t("machine_cycles"), Number(m.machineCycles || 0).toLocaleString()],
+          [t("processed_weight"), Number(m.machineWeight || 0) > 0 ? `${Number(m.machineWeight).toFixed(1)} kg` : t("insufficient_data")],
+          [t("operating_time"), Number(m.machineOperatingMinutes || 0) > 0 ? `${Math.round(Number(m.machineOperatingMinutes) / 60)} h` : t("insufficient_data")],
+        ]} />
+        <DecisionModule title={t("team_output")} icon={<Users />} items={[
+          [t("active_employees"), Number(m.activeEmployees || 0).toLocaleString()],
+          [t("completed_orders"), Number(m.deliveredOrders || 0).toLocaleString()],
+          [t("paid_hours"), Number(m.paidHours || 0) > 0 ? Number(m.paidHours).toFixed(1) : t("insufficient_data")],
+          [t("orders_per_paid_hour"), m.productivityPerHour == null ? t("insufficient_data") : Number(m.productivityPerHour).toFixed(2)],
+        ]} />
+      </div>
+    </div>
+  );
+}
+
+function DecisionMetric({ icon, label, value, delta, tone }: { icon: React.ReactNode; label: string; value: string; delta?: number; tone?: "danger" | "warning" | "good" }) {
+  const toneClass = tone === "danger" ? "text-red-600" : tone === "warning" ? "text-amber-700 dark:text-amber-400" : tone === "good" ? "text-emerald-600" : "";
+  return (
+    <Card className="shadow-sm">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between text-muted-foreground"><span className="[&_svg]:h-4 [&_svg]:w-4">{icon}</span>{delta != null && <span className={`text-xs font-medium ${delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>{delta >= 0 ? "+" : ""}{delta.toFixed(1)}%</span>}</div>
+        <p className="mt-3 text-xs font-medium text-muted-foreground">{label}</p>
+        <p className={`mt-1 text-xl font-bold font-display ${toneClass}`}>{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LaundryOperationsFlow({ stages }: { stages: { key: string; count: number }[] }) {
+  const { t } = useTranslation();
+  const max = Math.max(1, ...stages.map((stage) => Number(stage.count || 0)));
+  return (
+    <section aria-labelledby="laundry-flow-title">
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle id="laundry-flow-title">{t("laundry_operations_flow")}</CardTitle>
+          <p className="text-sm text-muted-foreground">{t("laundry_operations_flow_help")}</p>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid gap-2 md:grid-cols-6">
+            {stages.map((stage, index) => (
+              <li key={stage.key} className="relative rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium">{t(`stage_${stage.key}`, { defaultValue: stage.key })}</span>
+                  <span className="font-mono text-lg font-bold">{stage.count}</span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                  <div className="h-full rounded-full bg-cyan-600" style={{ width: `${Math.max(5, (stage.count / max) * 100)}%` }} />
+                </div>
+                {index < stages.length - 1 && <ArrowRight className="absolute -right-3 top-1/2 z-10 hidden h-4 w-4 -translate-y-1/2 text-muted-foreground md:block" aria-hidden="true" />}
+              </li>
+            ))}
+          </ol>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function DecisionModule({ title, icon, items }: { title: string; icon: React.ReactNode; items: [string, string][] }) {
+  return (
+    <Card className="shadow-sm">
+      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><span className="[&_svg]:h-4 [&_svg]:w-4" aria-hidden="true">{icon}</span>{title}</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        {items.map(([label, value]) => <MetricLine key={label} label={label} value={value} />)}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -384,7 +500,7 @@ function KpiCard({ label, value, color }: { label: string; value: any; color?: s
   return (
     <Card className="shadow-sm">
       <CardContent className="p-5">
-        <p className="text-sm text-muted-foreground mb-1">{label}</p>
+        <p className="mb-1 text-sm text-muted-foreground">{label}</p>
         <p className={`text-2xl font-bold font-display ${color || ""}`}>{value}</p>
       </CardContent>
     </Card>
@@ -459,25 +575,6 @@ function WasteAlerts() {
       </CardContent>
     </Card>
   );
-}
-
-function PerformanceScoreSection() {
-  const { t } = useTranslation();
-  const { hasFeature } = useAuth();
-
-  if (!hasFeature("performance")) {
-    return (
-      <Card className="shadow-sm" data-testid="card-performance-locked">
-        <CardHeader><CardTitle>{t("performance_score")}</CardTitle></CardHeader>
-        <CardContent className="text-center py-6">
-          <p className="text-muted-foreground mb-4">{t("business_plan_required")}</p>
-          <Link href="/subscriptions"><Button variant="outline" data-testid="button-upgrade-performance">{t("upgrade")}</Button></Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <PerformanceScore />;
 }
 
 function AdvancedAnalyticsSection({ period }: { period: string }) {
@@ -777,43 +874,6 @@ function ProductionDelaysSection() {
               </div>
             </div>
           ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PerformanceScore() {
-  const { t } = useTranslation();
-  const { data: score } = useQuery<any>({ queryKey: ["/api/analytics/performance-score"] });
-
-  const gradeColors: Record<string, string> = { A: "text-green-600", B: "text-blue-600", C: "text-yellow-600", D: "text-orange-600", F: "text-red-600" };
-  const gradeColor = gradeColors[score?.grade] || "text-gray-600";
-
-  return (
-    <Card className="shadow-sm" data-testid="card-performance-score">
-      <CardHeader><CardTitle>{t("performance_score")}</CardTitle></CardHeader>
-      <CardContent>
-        <div className="flex items-center gap-8 mb-6">
-          <div className="text-center">
-            <div className={`text-6xl font-bold ${gradeColor}`}>{score?.grade || "-"}</div>
-            <div className="text-sm text-muted-foreground">{score?.total || 0} / 100</div>
-          </div>
-          <div className="flex-1 space-y-3">
-            {[
-              { labelKey: "machine_usage", value: score?.machineUsage || 0 },
-              { labelKey: "cost_efficiency", value: score?.costEfficiency || 0 },
-              { labelKey: "productivity", value: score?.productivity || 0 },
-              { labelKey: "waste_level", value: score?.wasteLevel || 0 },
-            ].map(item => (
-              <div key={item.labelKey} className="space-y-1">
-                <div className="flex justify-between text-sm"><span>{t(item.labelKey)}</span><span>{item.value}%</span></div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${item.value}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </CardContent>
     </Card>
