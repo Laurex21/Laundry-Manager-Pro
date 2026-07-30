@@ -1267,6 +1267,101 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         completionRate: siteOrders > 0 ? (number(row.delivered_orders) / siteOrders) * 100 : null,
       };
     });
+    const projectedOrders = forecast.reduce((sum, day) => sum + number(day.orders), 0);
+    const forecastAverage = projectedOrders / Math.max(1, forecast.filter((day) => day.orders != null).length);
+    const historyActiveDays = forecastHistory.filter((row) => row.orders > 0);
+    const historicalDailyAverage = historyActiveDays.length
+      ? historyActiveDays.reduce((sum, row) => sum + row.orders, 0) / historyActiveDays.length
+      : 0;
+    const demandSpikeDays = forecast
+      .filter((day) => day.orders != null && historicalDailyAverage > 0 && number(day.orders) >= historicalDailyAverage * 1.25)
+      .map((day) => day.date);
+    const outstandingRatio = number(current.order_value) > 0
+      ? (number(current.outstanding) / number(current.order_value)) * 100
+      : null;
+    const discountRatio = number(current.order_value) > 0
+      ? (number(current.discounts) / number(current.order_value)) * 100
+      : null;
+    const marginPct = revenue > 0 ? ((revenue - expenses) / revenue) * 100 : null;
+    const predictiveAlerts: Array<{
+      code: string;
+      severity: "high" | "medium" | "low";
+      value: number;
+      evidence: Record<string, number | string | string[] | null>;
+      href: string;
+    }> = [];
+
+    if (number(current.delayed_orders) > 0) {
+      predictiveAlerts.push({
+        code: "delivery_risk",
+        severity: "high",
+        value: number(current.delayed_orders),
+        evidence: { delayedOrders: number(current.delayed_orders) },
+        href: "/orders?status=active",
+      });
+    }
+    if (forecastCoverageDays >= 14 && demandSpikeDays.length > 0) {
+      predictiveAlerts.push({
+        code: "demand_spike",
+        severity: demandSpikeDays.length >= 3 ? "high" : "medium",
+        value: demandSpikeDays.length,
+        evidence: {
+          days: demandSpikeDays,
+          projectedDailyAverage: Math.round(forecastAverage * 10) / 10,
+          historicalDailyAverage: Math.round(historicalDailyAverage * 10) / 10,
+        },
+        href: "/orders?period=week",
+      });
+    }
+    if (outstandingRatio != null && outstandingRatio >= 25) {
+      predictiveAlerts.push({
+        code: "collection_pressure",
+        severity: outstandingRatio >= 50 ? "high" : "medium",
+        value: number(current.outstanding),
+        evidence: { outstandingRatio: Math.round(outstandingRatio * 10) / 10 },
+        href: "/payments",
+      });
+    }
+    if (marginPct != null && marginPct < 10) {
+      predictiveAlerts.push({
+        code: "margin_pressure",
+        severity: marginPct < 0 ? "high" : "medium",
+        value: Math.round(marginPct * 10) / 10,
+        evidence: { marginPct: Math.round(marginPct * 10) / 10, revenue, expenses },
+        href: "/expenses",
+      });
+    }
+    if (discountRatio != null && discountRatio >= 5) {
+      predictiveAlerts.push({
+        code: "discount_leakage",
+        severity: discountRatio >= 10 ? "high" : "medium",
+        value: number(current.discounts),
+        evidence: { discountRatio: Math.round(discountRatio * 10) / 10 },
+        href: "/orders",
+      });
+    }
+    if (loadEfficiency != null && number(machine.cycles) >= 3 && loadEfficiency < 60) {
+      predictiveAlerts.push({
+        code: "machine_underload",
+        severity: loadEfficiency < 40 ? "high" : "medium",
+        value: Math.round(loadEfficiency * 10) / 10,
+        evidence: { loadEfficiency: Math.round(loadEfficiency * 10) / 10, cycles: number(machine.cycles) },
+        href: "/machines",
+      });
+    }
+    if (qualityRate != null && totalOrders >= 5 && qualityRate < 95) {
+      predictiveAlerts.push({
+        code: "quality_risk",
+        severity: qualityRate < 90 ? "high" : "medium",
+        value: Math.round(qualityRate * 10) / 10,
+        evidence: { qualityRate: Math.round(qualityRate * 10) / 10, incidents: qualityIncidents },
+        href: "/orders",
+      });
+    }
+    predictiveAlerts.sort((a, b) => {
+      const rank = { high: 3, medium: 2, low: 1 };
+      return rank[b.severity] - rank[a.severity];
+    });
 
     res.json({
       period,
@@ -1275,7 +1370,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         revenue,
         expenses,
         profit: revenue - expenses,
-        marginPct: revenue > 0 ? ((revenue - expenses) / revenue) * 100 : null,
+        marginPct,
         orders: totalOrders,
         deliveredOrders: number(current.delivered_orders),
         delayedOrders: number(current.delayed_orders),
@@ -1316,6 +1411,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         method: "weekday_average_56d_with_14d_trend",
       },
       siteBenchmarks,
+      predictiveIntelligence: {
+        alerts: predictiveAlerts,
+        generatedAt: now,
+        forecastEligible: forecastCoverageDays >= 14,
+        signalsEvaluated: 7,
+        methodology: "explainable_threshold_rules_v1",
+      },
       confidence: {
         level: confidenceLevel,
         score: confidenceScore,
