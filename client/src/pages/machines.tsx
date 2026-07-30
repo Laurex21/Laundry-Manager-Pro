@@ -25,6 +25,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Machine } from "@shared/schema";
+import { ProductionCycleBoard } from "@/components/production-cycle-board";
 
 export default function Machines() {
   const { t } = useTranslation();
@@ -54,6 +55,8 @@ export default function Machines() {
         onDelete={setDeleteTarget}
         onUsage={setUsageTarget}
       />
+
+      <ProductionCycleBoard />
 
       <MachineDialog open={open} onOpenChange={setOpen} machine={editing} />
       <MachineUsageDialog
