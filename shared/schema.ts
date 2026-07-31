@@ -84,6 +84,8 @@ export const orders = pgTable("orders", {
   cancellationReviewedBy: varchar("cancellation_reviewed_by"),
   cancellationReviewedAt: timestamp("cancellation_reviewed_at"),
   cancellationRejectionNote: text("cancellation_rejection_note"),
+  correctedFromOrderId: integer("corrected_from_order_id"),
+  correctionReason: text("correction_reason"),
   siteId: integer("site_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -93,6 +95,7 @@ export const orders = pgTable("orders", {
     .where(sql`${table.status} = 'ready'`),
   index("idx_orders_created_at").on(table.createdAt),
   index("idx_orders_delivered_at").on(table.deliveredAt),
+  index("idx_orders_corrected_from").on(table.correctedFromOrderId),
 ]);
 
 export const orderItems = pgTable("order_items", {
@@ -111,6 +114,20 @@ export const orderStatusHistory = pgTable("order_status_history", {
   changedBy: varchar("changed_by"),
   notes: text("notes"),
 });
+
+export const orderCorrections = pgTable("order_corrections", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  siteId: integer("site_id").notNull(),
+  reason: text("reason").notNull(),
+  beforeSnapshot: jsonb("before_snapshot").notNull(),
+  afterSnapshot: jsonb("after_snapshot").notNull(),
+  changedBy: varchar("changed_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_order_corrections_order_created").on(table.orderId, table.createdAt),
+  index("idx_order_corrections_site").on(table.siteId),
+]);
 
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
@@ -606,6 +623,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   payments: many(payments),
   garmentItems: many(garmentItems),
   statusHistory: many(orderStatusHistory),
+  corrections: many(orderCorrections),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -659,6 +677,13 @@ export const garmentItemsRelations = relations(garmentItems, ({ one }) => ({
 export const orderStatusHistoryRelations = relations(orderStatusHistory, ({ one }) => ({
   order: one(orders, {
     fields: [orderStatusHistory.orderId],
+    references: [orders.id],
+  }),
+}));
+
+export const orderCorrectionsRelations = relations(orderCorrections, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderCorrections.orderId],
     references: [orders.id],
   }),
 }));
@@ -800,7 +825,7 @@ export type InsertLegalAcceptance = z.infer<typeof insertLegalAcceptanceSchema>;
 
 export type OrderWithCustomer = Order & { customer: Customer };
 export type PaymentWithEmployee = Payment & { collectedByEmployee?: Employee | null };
-export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: PaymentWithEmployee[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[], createdByEmployee?: Employee | null };
+export type OrderWithDetails = OrderWithCustomer & { items: (OrderItem & { service: Service })[], payments: PaymentWithEmployee[], garmentItems: GarmentItem[], statusHistory?: OrderStatusHistoryEntry[], corrections?: (typeof orderCorrections.$inferSelect)[], createdByEmployee?: Employee | null };
 export type SubscriptionWithPlan = Subscription & { plan: Plan };
 
 export const calculatorLeads = pgTable("calculator_leads", {
