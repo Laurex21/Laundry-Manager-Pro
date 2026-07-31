@@ -598,7 +598,10 @@ export default function Payments() {
                 </Button>
 
                 <AlertDialog open={showSurplusConfirmation} onOpenChange={setShowSurplusConfirmation}>
-                  <AlertDialogContent data-testid="payment-surplus-dialog">
+                  <AlertDialogContent
+                    className="w-[calc(100%_-_2rem)] max-w-xl overflow-hidden"
+                    data-testid="payment-surplus-dialog"
+                  >
                     <AlertDialogHeader>
                       <AlertDialogTitle>{t("overpayment_detected")}</AlertDialogTitle>
                       <AlertDialogDescription>
@@ -608,7 +611,7 @@ export default function Payments() {
                         })}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <div className="rounded-md border bg-muted/40 p-3 text-sm" aria-live="polite">
+                    <div className="min-w-0 rounded-md border bg-muted/40 p-3 text-sm" aria-live="polite">
                       <div className="flex justify-between gap-4">
                         <span>{t("amount_due")}</span>
                         <strong>{symbol}{remainingAfterCredit.toFixed(2)}</strong>
@@ -622,8 +625,9 @@ export default function Payments() {
                         <strong>{symbol}{surplus.toFixed(2)}</strong>
                       </div>
                     </div>
-                    <AlertDialogFooter>
+                    <AlertDialogFooter className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 sm:space-x-0">
                       <AlertDialogCancel
+                        className="mt-0 h-auto min-h-10 whitespace-normal px-3 py-2 text-center leading-tight"
                         disabled={isPending}
                         data-testid="button-correct-payment-amount"
                       >
@@ -632,6 +636,7 @@ export default function Payments() {
                       <Button
                         type="button"
                         variant="outline"
+                        className="h-auto min-h-10 whitespace-normal px-3 py-2 text-center leading-tight"
                         disabled={isPending}
                         onClick={() => {
                           setShowSurplusConfirmation(false);
@@ -642,6 +647,7 @@ export default function Payments() {
                         {t("return_change")}
                       </Button>
                       <AlertDialogAction
+                        className="h-auto min-h-10 whitespace-normal px-3 py-2 text-center leading-tight"
                         disabled={isPending}
                         onClick={() => {
                           recordPayment("credit");
