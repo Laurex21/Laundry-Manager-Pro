@@ -27,6 +27,11 @@ assert.match(service, /INSERT INTO order_corrections/);
 assert.match(service, /before_snapshot, after_snapshot/);
 assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? Number\(service\.price\)/);
 assert.match(service, /Replaced by corrected order/);
+assert.match(
+  service,
+  /order\.customer_id, actorEmployeeId, "received", order\.total_amount/,
+  "A corrected replacement must restart at the received stage",
+);
 assert.doesNotMatch(service, /DELETE FROM orders/);
 
 assert.match(routes, /\/api\/orders\/:id\/correction-eligibility/);

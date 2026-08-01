@@ -248,7 +248,7 @@ export async function createCorrectedOrderCopy(
        VALUES ($1, $2, $3, $4, 'unpaid', NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
-        order.customer_id, actorEmployeeId, order.status, order.total_amount, order.pickup_date,
+        order.customer_id, actorEmployeeId, "received", order.total_amount, order.pickup_date,
         order.discount, order.discount_pct, order.discount_amount, order.original_price,
         order.pickup_cost, siteId, orderId, reason,
       ],
@@ -280,7 +280,7 @@ export async function createCorrectedOrderCopy(
     await client.query(
       `INSERT INTO order_status_history (order_id, status, changed_by, notes)
        VALUES ($1, 'cancelled', $3, $4), ($2, $5, $3, $6)`,
-      [orderId, newOrderId, actorUserId, `Replaced by corrected order #${newOrderId}: ${reason}`, order.status, `Corrected copy of order #${orderId}: ${reason}`],
+      [orderId, newOrderId, actorUserId, `Replaced by corrected order #${newOrderId}: ${reason}`, "received", `Corrected copy of order #${orderId}: ${reason}`],
     );
     await client.query("COMMIT");
     return { orderId: newOrderId, correctedFromOrderId: orderId };
