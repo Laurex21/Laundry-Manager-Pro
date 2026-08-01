@@ -31,6 +31,7 @@ import {
   CalendarDays,
   X,
   Loader2,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -830,6 +831,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
 
   const selectedCustomer = customers?.find((c: any) => c.id === Number(watchedCustomerId));
   const customerDiscountPct = Number(selectedCustomer?.defaultDiscountPct || 0);
+  const selectedCustomerCredit = Number((selectedCustomer as any)?.creditBalance ?? 0);
 
   const subtotal = useMemo(() => {
     return (watchedItems || []).reduce((acc, item) => {
@@ -1106,6 +1108,22 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 />
               </div>
             </div>
+            {selectedCustomerCredit > 0 && (
+              <div
+                className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:p-4"
+                role="status"
+                aria-live="polite"
+                data-testid="new-order-customer-credit-alert"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <Wallet className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-semibold">{t("customer_has_credit", { amount: `${symbol}${selectedCustomerCredit.toFixed(2)}` })}</p>
+                    <p className="mt-0.5 text-xs text-emerald-800 dark:text-emerald-300">{t("customer_credit_payment_prompt")}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:bg-blue-950/20 sm:p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="shrink-0 text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
             <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-start lg:gap-4">

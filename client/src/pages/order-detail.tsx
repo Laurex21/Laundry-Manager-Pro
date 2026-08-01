@@ -32,6 +32,7 @@ import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
+import { OrderCorrectionActions } from "@/components/order-correction-actions";
 
 const PIPELINE_STAGES = PRODUCTION_STAGES;
 
@@ -54,6 +55,26 @@ function normalizeWhatsAppPhone(phone?: string | null): string {
   if (digits.startsWith("237")) return digits;
   if (digits.startsWith("6")) return `237${digits}`;
   return digits;
+}
+
+function correctionSummary(entry: any, t: (key: string, options?: any) => string, symbol: string): string[] {
+  const before = entry.beforeSnapshot || {};
+  const after = entry.afterSnapshot || {};
+  const beforeOrder = before.order || {};
+  const afterOrder = after.order || {};
+  const changes: string[] = [];
+  if (beforeOrder.customer_id !== afterOrder.customer_id) changes.push(t("correction_customer_changed"));
+  if (String(beforeOrder.entry_date || "") !== String(afterOrder.entry_date || "")) changes.push(t("correction_entry_date_changed"));
+  if (String(beforeOrder.pickup_date || "") !== String(afterOrder.pickup_date || "")) changes.push(t("correction_pickup_date_changed"));
+  if (Number(beforeOrder.total_amount || 0) !== Number(afterOrder.total_amount || 0)) {
+    changes.push(t("correction_total_changed", {
+      before: `${symbol}${Number(beforeOrder.total_amount || 0).toFixed(2)}`,
+      after: `${symbol}${Number(afterOrder.total_amount || 0).toFixed(2)}`,
+    }));
+  }
+  if (JSON.stringify(before.items || []) !== JSON.stringify(after.items || [])) changes.push(t("correction_services_changed"));
+  if (JSON.stringify(before.garments || []) !== JSON.stringify(after.garments || [])) changes.push(t("correction_garments_changed"));
+  return changes.length ? changes : [t("correction_metadata_changed")];
 }
 
 export default function OrderDetail() {
@@ -383,8 +404,18 @@ export default function OrderDetail() {
           )}
           <StatusBadge status={order.status} />
           <StatusBadge status={order.paymentStatus} />
+          <OrderCorrectionActions order={order} isManager={isManager} />
         </div>
       </div>
+
+      {order.correctedFromOrderId && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/20 dark:text-blue-200" role="status">
+          {t("corrected_from_order")}{" "}
+          <Link href={`/orders/${order.correctedFromOrderId}`} className="font-semibold underline underline-offset-2">
+            #{order.correctedFromOrderId}
+          </Link>
+        </div>
+      )}
 
       {order.status === "cancellation_requested" && (
         <Card className="border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10" data-testid="cancellation-requested-alert">
@@ -547,6 +578,9 @@ export default function OrderDetail() {
                   data-testid="input-stage-duration"
                 />
               </div>
+              <p className="text-xs text-muted-foreground sm:col-span-3" role="note" data-testid="stage-machine-save-hint">
+                {t("machine_assignment_save_hint")}
+              </p>
             </div>
           )}
         </CardContent>
@@ -685,6 +719,29 @@ export default function OrderDetail() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {order.corrections && order.corrections.length > 0 && (
+        <Card data-testid="order-correction-history">
+          <CardHeader><CardTitle className="text-base">{t("correction_history")}</CardTitle></CardHeader>
+          <CardContent>
+            <ol className="space-y-3">
+              {order.corrections.map((entry: any) => (
+                <li key={entry.id} className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">{entry.reason}</p>
+                    <time className="text-xs text-muted-foreground" dateTime={entry.createdAt || undefined}>
+                      {entry.createdAt ? formatBusinessDateTime(entry.createdAt) : ""}
+                    </time>
+                  </div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                    {correctionSummary(entry, t, symbol).map((change) => <li key={change}>{change}</li>)}
+                  </ul>
+                </li>
+              ))}
+            </ol>
           </CardContent>
         </Card>
       )}

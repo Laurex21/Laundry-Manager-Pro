@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useOrders } from "@/hooks/use-orders";
 import { usePaymentsByOrder, useCreatePayment } from "@/hooks/use-payments";
@@ -23,6 +23,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -61,7 +71,8 @@ export default function Payments() {
   const [paymentDate, setPaymentDate] = useState(todayInputDate);
   const [reference, setReference] = useState("");
   const [creditToApply, setCreditToApply] = useState("0");
-  const [surplusDisposition, setSurplusDisposition] = useState<"return" | "credit">("return");
+  const [showSurplusConfirmation, setShowSurplusConfirmation] = useState(false);
+  const paymentSubmissionLock = useRef(false);
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
     paymentId?: number;
@@ -118,7 +129,7 @@ export default function Payments() {
 
   const totalAmount = selectedOrder ? Number(selectedOrder.totalAmount) : 0;
   const remainingBalance = Math.max(0, totalAmount - totalPaid);
-  const availableCredit = Number(creditData?.creditBalance ?? 0);
+  const availableCredit = Number(creditData?.creditBalance ?? (selectedOrder as any)?.customer?.creditBalance ?? 0);
   const maxCreditApplicable = Math.min(availableCredit, remainingBalance);
   const appliedCredit = Math.min(Math.max(Number(creditToApply) || 0, 0), maxCreditApplicable);
   const remainingAfterCredit = Math.max(0, remainingBalance - appliedCredit);
@@ -129,7 +140,6 @@ export default function Payments() {
     setSelectedOrderId(orderId);
     setAmount("");
     setCreditToApply("0");
-    setSurplusDisposition("return");
     setPaymentDate(todayInputDate());
     setSuccessPayment(null);
   }, []);
@@ -140,10 +150,11 @@ export default function Payments() {
     return null;
   }, [amount, t]);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function recordPayment(disposition: "return" | "credit") {
     if (!selectedOrderId || !selectedOrder || NON_PAYABLE_ORDER_STATUSES.has(selectedOrder.status) || amountError || !paymentDate) return;
     if (amountReceived <= 0 && appliedCredit <= 0) return;
+    if (paymentSubmissionLock.current || isPending) return;
+    paymentSubmissionLock.current = true;
 
     const paidAmount = Math.min(amountReceived, remainingAfterCredit);
     const newTotalPaid = totalPaid + paidAmount + appliedCredit;
@@ -158,11 +169,12 @@ export default function Payments() {
         date: new Date(`${paymentDate}T00:00:00`),
         reference: reference || undefined,
         creditToApply: appliedCredit.toFixed(2),
-        surplusDisposition,
+        surplusDisposition: disposition,
         idempotencyKey,
       },
       {
         onSuccess: (createdPayment: any) => {
+          paymentSubmissionLock.current = false;
           setSuccessPayment({
             orderId: selectedOrderId,
             paymentId: createdPayment?.id,
@@ -180,13 +192,25 @@ export default function Payments() {
           });
           setAmount("");
           setCreditToApply("0");
-          setSurplusDisposition("return");
           setPaymentDate(todayInputDate());
           setReference("");
           setSelectedOrderId(null);
         },
+        onError: () => {
+          paymentSubmissionLock.current = false;
+          if (surplus > 0) setShowSurplusConfirmation(true);
+        },
       }
     );
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (surplus > 0) {
+      setShowSurplusConfirmation(true);
+      return;
+    }
+    recordPayment("return");
   }
 
   const [receiptLoading, setReceiptLoading] = useState(false);
@@ -411,7 +435,12 @@ export default function Payments() {
                 </div>
 
                 {availableCredit > 0 && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20" data-testid="customer-credit-panel">
+                  <div
+                    className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                    role="status"
+                    aria-live="polite"
+                    data-testid="customer-credit-panel"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <Wallet className="h-4 w-4 text-emerald-600" />
@@ -497,24 +526,6 @@ export default function Payments() {
                   </div>
                 )}
 
-                {surplus > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/50 dark:bg-amber-950/20" data-testid="payment-surplus-panel">
-                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">
-                      {t("surplus_detected")}: {symbol}{surplus.toFixed(2)}
-                    </p>
-                    <div className="mt-3 space-y-2 text-sm">
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input type="radio" checked={surplusDisposition === "return"} onChange={() => setSurplusDisposition("return")} />
-                        {t("return_change")}
-                      </label>
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input type="radio" checked={surplusDisposition === "credit"} onChange={() => setSurplusDisposition("credit")} />
-                        {t("credit_to_account")}
-                      </label>
-                    </div>
-                  </div>
-                )}
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -585,6 +596,69 @@ export default function Payments() {
                     ? t("saving")
                     : `${t("record_payment_of")} ${symbol}${(Math.min(amountReceived, remainingAfterCredit) + appliedCredit).toFixed(2)}`}
                 </Button>
+
+                <AlertDialog open={showSurplusConfirmation} onOpenChange={setShowSurplusConfirmation}>
+                  <AlertDialogContent
+                    className="w-[calc(100%_-_2rem)] max-w-xl overflow-hidden"
+                    data-testid="payment-surplus-dialog"
+                  >
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t("overpayment_detected")}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t("overpayment_credit_question", {
+                          surplus: `${symbol}${surplus.toFixed(2)}`,
+                          customer: (selectedOrder as any)?.customer?.name || t("customer"),
+                        })}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="min-w-0 rounded-md border bg-muted/40 p-3 text-sm" aria-live="polite">
+                      <div className="flex justify-between gap-4">
+                        <span>{t("amount_due")}</span>
+                        <strong>{symbol}{remainingAfterCredit.toFixed(2)}</strong>
+                      </div>
+                      <div className="mt-1 flex justify-between gap-4">
+                        <span>{t("amount_received")}</span>
+                        <strong>{symbol}{amountReceived.toFixed(2)}</strong>
+                      </div>
+                      <div className="mt-1 flex justify-between gap-4 text-emerald-700 dark:text-emerald-300">
+                        <span>{t("credit_to_add")}</span>
+                        <strong>{symbol}{surplus.toFixed(2)}</strong>
+                      </div>
+                    </div>
+                    <AlertDialogFooter className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 sm:space-x-0">
+                      <AlertDialogCancel
+                        className="mt-0 h-auto min-h-10 whitespace-normal px-3 py-2 text-center leading-tight"
+                        disabled={isPending}
+                        data-testid="button-correct-payment-amount"
+                      >
+                        {t("correct_payment_amount")}
+                      </AlertDialogCancel>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-auto min-h-10 whitespace-normal px-3 py-2 text-center leading-tight"
+                        disabled={isPending}
+                        onClick={() => {
+                          setShowSurplusConfirmation(false);
+                          recordPayment("return");
+                        }}
+                        data-testid="button-return-surplus"
+                      >
+                        {t("return_change")}
+                      </Button>
+                      <AlertDialogAction
+                        className="h-auto min-h-10 whitespace-normal px-3 py-2 text-center leading-tight"
+                        disabled={isPending}
+                        onClick={() => {
+                          recordPayment("credit");
+                        }}
+                        data-testid="button-credit-surplus"
+                      >
+                        {t("credit_to_account")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 {orderPayments && orderPayments.length > 0 && (
                   <div className="pt-2 border-t border-border space-y-1.5">

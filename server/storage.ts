@@ -3,6 +3,7 @@ import {
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
   machines, employees, employeeActivities, employeeAttendance, machineUsage,
   plans, subscriptions, subscriptionPayments, orderStatusHistory,
+  orderCorrections,
   businessSettings, organisations, sites, siteMembers, siteInvitations,
   type Customer, type InsertCustomer,
   type Service, type InsertService,
@@ -307,6 +308,7 @@ export class DatabaseStorage implements IStorage {
     }));
     const orderGarments = await db.select().from(garmentItems).where(eq(garmentItems.orderId, id));
     const history = await db.select().from(orderStatusHistory).where(eq(orderStatusHistory.orderId, id)).orderBy(orderStatusHistory.changedAt);
+    const corrections = await db.select().from(orderCorrections).where(eq(orderCorrections.orderId, id)).orderBy(desc(orderCorrections.createdAt));
 
     return {
       ...orderWithNumber,
@@ -315,6 +317,7 @@ export class DatabaseStorage implements IStorage {
       payments: paymentsWithEmployees,
       garmentItems: orderGarments,
       statusHistory: history,
+      corrections,
       createdByEmployee: order.createdByEmployeeId ? employeeMap.get(order.createdByEmployeeId) || null : null,
     };
   }

@@ -22,6 +22,12 @@ import {
   recordPaymentWithCredit,
 } from "./lib/customer-credit";
 import { pool } from "./db";
+import {
+  createCorrectedOrderCopy,
+  editOrderControlled,
+  getOrderCorrectionEligibility,
+  OrderCorrectionError,
+} from "./lib/order-corrections";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -510,6 +516,87 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
       throw err;
+    }
+  });
+
+  const controlledOrderEditSchema = z.object({
+    customerId: z.coerce.number().int().positive(),
+    entryDate: z.coerce.date(),
+    pickupDate: z.coerce.date().nullable(),
+    reason: z.string().trim().min(5).max(500),
+    items: z.array(z.object({
+      serviceId: z.coerce.number().int().positive(),
+      quantity: z.coerce.number().positive().max(100000),
+    })).min(1),
+    garments: z.array(z.object({
+      itemName: z.string().trim().min(1).max(200),
+      quantity: z.coerce.number().int().positive().max(10000),
+    })).max(500),
+  });
+
+  app.get("/api/orders/:id/correction-eligibility", isAuthenticated, async (req: any, res) => {
+    const order = await storage.getOrder(Number(req.params.id));
+    if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
+    if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
+    try {
+      res.json(await getOrderCorrectionEligibility(order.id, order.siteId));
+    } catch (error) {
+      if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
+  });
+
+  app.patch("/api/orders/:id/correct", isAuthenticated, async (req: any, res) => {
+    const order = await storage.getOrder(Number(req.params.id));
+    if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
+    if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
+    try {
+      const input = controlledOrderEditSchema.parse(req.body);
+      const result = await editOrderControlled(
+        order.id,
+        order.siteId,
+        (req.session as any)?.userId ?? null,
+        input,
+      );
+      await trackEmployeeActivity(req, {
+        siteId: order.siteId,
+        actionType: "order_corrected",
+        orderId: order.id,
+        metadata: { reason: input.reason },
+      });
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
+  });
+
+  app.post("/api/orders/:id/corrected-copy", isAuthenticated, async (req: any, res) => {
+    const order = await storage.getOrder(Number(req.params.id));
+    if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
+    if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
+    try {
+      const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).parse(req.body);
+      const employee = await actorEmployee(req, order.siteId);
+      const result = await createCorrectedOrderCopy(
+        order.id,
+        order.siteId,
+        (req.session as any)?.userId ?? null,
+        employee?.id ?? null,
+        reason,
+      );
+      await trackEmployeeActivity(req, {
+        siteId: order.siteId,
+        actionType: "order_corrected",
+        orderId: result.orderId,
+        metadata: { reason, correctedFromOrderId: order.id },
+      });
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
     }
   });
 

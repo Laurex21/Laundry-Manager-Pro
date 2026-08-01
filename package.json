@@ -29,6 +29,7 @@
     "test:customer-credit-analytics": "tsx server/lib/customer-credit-analytics.test.ts",
     "test:analytics-decision-cockpit": "tsx server/lib/analytics-decision-cockpit.test.ts",
     "test:production-cycles": "tsx server/lib/production-cycles.test.ts",
+    "test:controlled-order-corrections": "tsx server/lib/controlled-order-corrections.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push"
   },
