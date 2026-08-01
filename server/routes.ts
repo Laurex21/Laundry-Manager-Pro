@@ -542,7 +542,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(await getOrderCorrectionEligibility(order.id, order.siteId));
     } catch (error) {
       if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
-      throw error;
+      const reference = `OC-${Date.now().toString(36).toUpperCase()}`;
+      console.error(`[${reference}] Order correction eligibility failed`, error);
+      return res.status(500).json({ message: `Unable to verify order correction. Reference: ${reference}` });
     }
   });
 

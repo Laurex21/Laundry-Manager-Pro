@@ -17,21 +17,35 @@ export type ControlledOrderEditInput = {
 };
 
 async function dependencies(client: PoolClient, orderId: number) {
+  const availabilityResult = await client.query(
+    `SELECT
+       to_regclass('public.payments') IS NOT NULL AS payments,
+       to_regclass('public.credit_transactions') IS NOT NULL AS credit_transactions,
+       to_regclass('public.subscription_transactions') IS NOT NULL AS subscription_transactions,
+       to_regclass('public.production_cycle_orders') IS NOT NULL AS production_cycle_orders,
+       to_regclass('public.production_cycles') IS NOT NULL AS production_cycles,
+       to_regclass('public.machine_usage') IS NOT NULL AS machine_usage,
+       to_regclass('public.loyalty_points') IS NOT NULL AS loyalty_points,
+       to_regclass('public.order_status_history') IS NOT NULL AS order_status_history,
+       to_regclass('public.order_corrections') IS NOT NULL AS order_corrections`,
+  );
+  const available = availabilityResult.rows[0];
+  const check = (enabled: boolean, sql: string) => enabled ? `EXISTS(${sql})` : "false";
   const result = await client.query(
     `SELECT
-       EXISTS(SELECT 1 FROM payments WHERE order_id = $1) AS has_payments,
-       EXISTS(SELECT 1 FROM credit_transactions WHERE order_id = $1) AS has_credit,
-       EXISTS(SELECT 1 FROM subscription_transactions WHERE order_id = $1) AS has_subscription,
-       EXISTS(SELECT 1 FROM production_cycle_orders WHERE order_id = $1) AS has_cycles,
-       EXISTS(
+       ${check(available.payments, "SELECT 1 FROM payments WHERE order_id = $1")} AS has_payments,
+       ${check(available.credit_transactions, "SELECT 1 FROM credit_transactions WHERE order_id = $1")} AS has_credit,
+       ${check(available.subscription_transactions, "SELECT 1 FROM subscription_transactions WHERE order_id = $1")} AS has_subscription,
+       ${check(available.production_cycle_orders, "SELECT 1 FROM production_cycle_orders WHERE order_id = $1")} AS has_cycles,
+       ${check(available.production_cycle_orders && available.production_cycles, `
          SELECT 1 FROM production_cycle_orders pco
          JOIN production_cycles pc ON pc.id = pco.cycle_id
          WHERE pco.order_id = $1 AND pc.status IN ('preparing', 'running')
-       ) AS has_active_cycles,
-       EXISTS(SELECT 1 FROM machine_usage WHERE order_id = $1) AS has_machine_usage,
-       EXISTS(SELECT 1 FROM loyalty_points WHERE order_id = $1) AS has_loyalty,
-       EXISTS(SELECT 1 FROM order_status_history WHERE order_id = $1 AND status <> 'received') AS has_status_progress,
-       EXISTS(SELECT 1 FROM order_corrections WHERE order_id = $1) AS has_corrections`,
+       `)} AS has_active_cycles,
+       ${check(available.machine_usage, "SELECT 1 FROM machine_usage WHERE order_id = $1")} AS has_machine_usage,
+       ${check(available.loyalty_points, "SELECT 1 FROM loyalty_points WHERE order_id = $1")} AS has_loyalty,
+       ${check(available.order_status_history, "SELECT 1 FROM order_status_history WHERE order_id = $1 AND status <> 'received'")} AS has_status_progress,
+       ${check(available.order_corrections, "SELECT 1 FROM order_corrections WHERE order_id = $1")} AS has_corrections`,
     [orderId],
   );
   return result.rows[0];

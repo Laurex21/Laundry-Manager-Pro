@@ -10,6 +10,7 @@ const migration = readFileSync(join(root, "migrations/20260730_controlled_order_
 const component = readFileSync(join(root, "client/src/components/order-correction-actions.tsx"), "utf8");
 const translations = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
 const orderDetail = readFileSync(join(root, "client/src/pages/order-detail.tsx"), "utf8");
+const auth = readFileSync(join(root, "server/replit_integrations/auth/replitAuth.ts"), "utf8");
 
 assert.match(schema, /correctedFromOrderId: integer\("corrected_from_order_id"\)/);
 assert.match(schema, /export const orderCorrections = pgTable\("order_corrections"/);
@@ -25,6 +26,9 @@ assert.match(service, /deps\.has_subscription/);
 assert.match(service, /deps\.has_cycles/);
 assert.match(service, /customer_organisation_id|organisation_id/);
 assert.match(service, /INSERT INTO order_corrections/);
+assert.match(service, /to_regclass\('public\.production_cycle_orders'\)/);
+assert.match(service, /available\.production_cycle_orders && available\.production_cycles/);
+assert.match(service, /enabled \? `EXISTS\(\$\{sql\}\)` : "false"/);
 assert.match(service, /before_snapshot, after_snapshot/);
 assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? Number\(service\.price\)/);
 assert.match(service, /Replaced by corrected order/);
@@ -36,6 +40,8 @@ assert.match(
 assert.doesNotMatch(service, /DELETE FROM orders/);
 
 assert.match(routes, /\/api\/orders\/:id\/correction-eligibility/);
+assert.match(routes, /Order correction eligibility failed/);
+assert.match(routes, /Reference: \$\{reference\}/);
 assert.match(routes, /\/api\/orders\/:id\/correct"/);
 assert.match(routes, /\/api\/orders\/:id\/corrected-copy/);
 assert.match(routes, /requireSiteRole\(req, res, order\.siteId, \["owner", "manager"\]\)/);
@@ -55,5 +61,7 @@ assert.match(translations, /unknown_error:/);
 assert.match(orderDetail, /OrderCorrectionActions/);
 assert.match(orderDetail, /data-testid="order-correction-history"/);
 assert.match(orderDetail, /correctionSummary/);
+assert.match(auth, /CREATE TABLE IF NOT EXISTS production_cycles/);
+assert.match(auth, /CREATE TABLE IF NOT EXISTS production_cycle_orders/);
 
 console.log("Controlled order correction regression checks passed");
