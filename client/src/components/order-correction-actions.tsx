@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Copy, Loader2, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, Copy, Loader2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -35,10 +35,17 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
   const [items, setItems] = useState<EditableItem[]>([]);
   const [garments, setGarments] = useState<EditableGarment[]>([]);
 
-  const { data: eligibility } = useQuery<any>({
+  const {
+    data: eligibility,
+    error: eligibilityError,
+    isError: eligibilityIsError,
+    isLoading: eligibilityIsLoading,
+    refetch: refetchEligibility,
+  } = useQuery<any>({
     queryKey: ["/api/orders", order.id, "correction-eligibility"],
     queryFn: async () => readJson(await fetch(`/api/orders/${order.id}/correction-eligibility`, { credentials: "include" })),
     enabled: isManager,
+    retry: false,
   });
   const { data: customers = [] } = useQuery<any[]>({ queryKey: ["/api/customers"], enabled: editOpen });
   const { data: services = [] } = useQuery<any[]>({ queryKey: ["/api/services"], enabled: editOpen });
@@ -102,11 +109,34 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
     onError: (error: Error) => toast({ title: t("order_correction_failed"), description: error.message, variant: "destructive" }),
   });
 
-  if (!isManager) return null;
+  if (!isManager) {
+    return (
+      <p className="max-w-md text-xs text-muted-foreground" role="note" data-testid="order-correction-role-restricted">
+        <ShieldCheck className="mr-1 inline h-4 w-4" aria-hidden="true" />
+        {t("order_correction_manager_only")}
+      </p>
+    );
+  }
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2" data-testid="order-correction-actions">
+        {eligibilityIsLoading && (
+          <p className="flex items-center text-xs text-muted-foreground" role="status" data-testid="order-correction-loading">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+            {t("checking_order_correction")}
+          </p>
+        )}
+        {eligibilityIsError && (
+          <div className="flex max-w-xl flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive" role="alert" data-testid="order-correction-error">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{t("order_correction_check_failed", { message: eligibilityError instanceof Error ? eligibilityError.message : t("unknown_error") })}</span>
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => refetchEligibility()}>
+              <RefreshCw className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+              {t("retry")}
+            </Button>
+          </div>
+        )}
         {eligibility?.canEdit && (
           <Button type="button" variant="outline" size="sm" onClick={() => setEditOpen(true)} data-testid="button-correct-order">
             <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
