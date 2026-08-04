@@ -17,7 +17,7 @@ export function generateSubscriberReceiptHTML(data: any, thermalWidth?: 58 | 80)
   const kgRate = usageRate(plan.includedWeightKg, subscription.remainingKg);
   const piecesRate = usageRate(plan.includedPieces, subscription.remainingPieces);
   const ordersRate = usageRate(plan.maxOrders, subscription.remainingOrders);
-  const garmentRows = garments.map((garment: any) => `<tr><td style="padding:4px 0">${esc(garment.itemName)}</td><td align="center">${esc(garment.quantity)}</td></tr>`).join("");
+  const garmentRows = garments.map((garment: any) => `<tr><td style="padding:4px 0">${esc(garment.itemName)}${garment.color ? ` · ${esc(garment.color)}` : ""}</td><td align="center">${esc(garment.quantity)}</td></tr>`).join("");
   const rateRows = [
     kgRate == null ? "" : `<div>Kg : ${number(Number(plan.includedWeightKg) - Number(subscription.remainingKg || 0))}/${number(plan.includedWeightKg)} (${number(kgRate)} %)</div>`,
     piecesRate == null ? "" : `<div>Pièces : ${number(Number(plan.includedPieces) - Number(subscription.remainingPieces || 0))}/${number(plan.includedPieces)} (${number(piecesRate)} %)</div>`,

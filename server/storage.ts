@@ -59,7 +59,7 @@ export interface IStorage {
 
   getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order>;
+  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null }[]): Promise<Order>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
@@ -322,7 +322,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number }[]): Promise<Order> {
+  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null }[]): Promise<Order> {
     await ensureOrderItemQuantitySupportsDecimals();
     const created = await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
@@ -352,7 +352,7 @@ export class DatabaseStorage implements IStorage {
 
       if (garments && garments.length > 0) {
         for (const garment of garments) {
-          await tx.insert(garmentItems).values({ orderId: order.id, itemName: garment.itemName, quantity: garment.quantity });
+          await tx.insert(garmentItems).values({ orderId: order.id, itemName: garment.itemName, quantity: garment.quantity, color: garment.color || null });
         }
       }
 

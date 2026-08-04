@@ -86,6 +86,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { useToast } from "@/hooks/use-toast";
+import { GARMENT_COLORS, GARMENT_COLOR_VALUES } from "@/lib/garment-colors";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
@@ -898,6 +899,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
       garmentItems: (data.garmentItems || []).filter(g => g.itemName.trim() !== "").map(g => ({
         itemName: g.itemName.trim(),
         quantity: Number(g.quantity),
+        color: g.color?.trim() || null,
       })),
       machineUsages: (data.machineUsages || []).filter(m => Number(m.machineId) > 0).map(m => ({
         machineId: Number(m.machineId),
@@ -1207,7 +1209,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                   <div className="rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground" aria-live="polite" data-testid="text-total-registered-garments">
                     {t("total_registered_items", "Total registered items")}: <span className="font-mono text-foreground">{totalRegisteredGarments}</span>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1 })}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1, color: "" })}>
                     <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
                   </Button>
                 </div>
@@ -1215,7 +1217,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
 
               {garmentFields.map((field, index) => (
-                <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.25rem] items-end gap-2 rounded-lg border border-border/50 bg-muted/20 p-2 sm:gap-3 sm:p-3">
+                <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.75rem] items-end gap-2 rounded-lg border border-border/50 bg-muted/20 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,0.7fr)_4.5rem_2.75rem] sm:gap-3 sm:p-3">
                   <FormField
                     control={form.control}
                     name={`garmentItems.${index}.itemName`}
@@ -1228,6 +1230,26 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                         <FormMessage />
                       </FormItem>
                     )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`garmentItems.${index}.color`}
+                    render={({ field }) => {
+                      const isCustom = Boolean(field.value && !GARMENT_COLOR_VALUES.has(field.value));
+                      return <FormItem className="col-span-2 min-w-0 sm:col-span-1">
+                        <FormLabel className="text-xs">{t("garment_color")}</FormLabel>
+                        <Select value={isCustom ? "other" : (field.value || "none")} onValueChange={(value) => field.onChange(value === "none" ? "" : value === "other" ? t("custom_color_default") : value)}>
+                          <FormControl><SelectTrigger data-testid={`select-garment-color-${index}`}><SelectValue placeholder={t("select_color")} /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">{t("no_color")}</SelectItem>
+                            {GARMENT_COLORS.map((color) => <SelectItem key={color.value} value={color.value}>{t(`color_${color.value}`)}</SelectItem>)}
+                            <SelectItem value="other">{t("color_other")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {isCustom && <Input aria-label={t("custom_color")} value={field.value || ""} maxLength={40} onChange={(event) => field.onChange(event.target.value)} placeholder={t("custom_color_placeholder")} />}
+                        <FormMessage />
+                      </FormItem>;
+                    }}
                   />
                   <FormField
                     control={form.control}

@@ -44,6 +44,7 @@ export const createOrderWithItemsSchema = z.object({
   garmentItems: z.array(z.object({
     itemName: z.string(),
     quantity: z.number(),
+    color: z.string().trim().max(40).optional().nullable(),
   })).optional().default([]),
   machineUsages: z.array(z.object({
     machineId: z.number().min(1),

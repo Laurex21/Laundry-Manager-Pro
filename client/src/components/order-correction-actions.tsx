@@ -11,9 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { GARMENT_COLORS, GARMENT_COLOR_VALUES } from "@/lib/garment-colors";
 
 type EditableItem = { serviceId: number; quantity: number };
-type EditableGarment = { itemName: string; quantity: number };
+type EditableGarment = { itemName: string; quantity: number; color?: string | null };
 
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
@@ -57,7 +58,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
     setPickupDate(String(order.pickupDate || "").slice(0, 10));
     setReason("");
     setItems((order.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: Number(item.quantity) })));
-    setGarments((order.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity) })));
+    setGarments((order.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "" })));
   }, [editOpen, order]);
 
   const activeServices = useMemo(() => services.filter((service: any) => service.active !== false), [services]);
@@ -79,7 +80,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
         pickupDate: pickupDate ? new Date(`${pickupDate}T00:00:00`).toISOString() : null,
         reason: reason.trim(),
         items,
-        garments: garments.map((garment) => ({ ...garment, itemName: garment.itemName.trim() })),
+        garments: garments.map((garment) => ({ ...garment, itemName: garment.itemName.trim(), color: garment.color?.trim() || null })),
       }),
     })),
     onSuccess: () => {
@@ -219,10 +220,18 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
             <fieldset className="space-y-3 rounded-lg border p-3">
               <legend className="px-1 text-sm font-semibold">{t("garments")}</legend>
               {garments.map((garment, index) => (
-                <div key={index} className="grid gap-2 sm:grid-cols-[1fr_120px_auto] sm:items-end">
+                <div key={index} className="grid gap-2 sm:grid-cols-[1fr_160px_120px_auto] sm:items-end">
                   <div className="space-y-2">
                     <Label htmlFor={`correction-garment-${index}`}>{t("garment_type")}</Label>
                     <Input id={`correction-garment-${index}`} value={garment.itemName} onChange={(event) => setGarments((current) => current.map((entry, garmentIndex) => garmentIndex === index ? { ...entry, itemName: event.target.value } : entry))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`correction-garment-color-${index}`}>{t("garment_color")}</Label>
+                    <Select value={garment.color && GARMENT_COLOR_VALUES.has(garment.color) ? garment.color : garment.color ? "other" : "none"} onValueChange={(value) => setGarments((current) => current.map((entry, garmentIndex) => garmentIndex === index ? { ...entry, color: value === "none" ? "" : value === "other" ? t("custom_color_default") : value } : entry))}>
+                      <SelectTrigger id={`correction-garment-color-${index}`}><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="none">{t("no_color")}</SelectItem>{GARMENT_COLORS.map((color) => <SelectItem key={color.value} value={color.value}>{t(`color_${color.value}`)}</SelectItem>)}<SelectItem value="other">{t("color_other")}</SelectItem></SelectContent>
+                    </Select>
+                    {garment.color && !GARMENT_COLOR_VALUES.has(garment.color) && <Input aria-label={t("custom_color")} maxLength={40} value={garment.color} onChange={(event) => setGarments((current) => current.map((entry, garmentIndex) => garmentIndex === index ? { ...entry, color: event.target.value } : entry))} />}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor={`correction-garment-quantity-${index}`}>{t("quantity")}</Label>
@@ -233,7 +242,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
                   </Button>
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => setGarments((current) => [...current, { itemName: "", quantity: 1 }])}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setGarments((current) => [...current, { itemName: "", quantity: 1, color: "" }])}>
                 <Plus className="mr-2 h-4 w-4" aria-hidden="true" />{t("add_garment")}
               </Button>
             </fieldset>

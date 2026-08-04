@@ -33,6 +33,7 @@ import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
 import { OrderCorrectionActions } from "@/components/order-correction-actions";
+import { garmentColorSwatch, GARMENT_COLOR_VALUES } from "@/lib/garment-colors";
 
 const PIPELINE_STAGES = PRODUCTION_STAGES;
 
@@ -644,7 +645,8 @@ export default function OrderDetail() {
                     g.returnedForTreatment && !g.resolvedAt ? "bg-orange-50 dark:bg-orange-950/10 border border-orange-200" : "bg-muted/30"
                   )} data-testid={`garment-item-${g.id}`}>
                     <div className="flex items-center gap-2">
-                      <span>{g.quantity}x {g.itemName}</span>
+                      {g.color && <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" style={{ background: garmentColorSwatch(g.color) || "transparent" }} aria-hidden="true" />}
+                      <span>{g.quantity}x {g.itemName}{g.color ? ` · ${GARMENT_COLOR_VALUES.has(g.color) ? t(`color_${g.color}`) : g.color}` : ""}</span>
                       {g.returnedForTreatment && !g.resolvedAt && (
                         <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-600">
                           <RotateCcw className="w-3 h-3 mr-1" /> {t("returned_label")} {g.returnStage}

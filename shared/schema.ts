@@ -149,6 +149,7 @@ export const garmentItems = pgTable("garment_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => orders.id),
   itemName: text("item_name").notNull(),
+  color: varchar("color", { length: 40 }),
   quantity: integer("quantity").notNull().default(1),
   returnedForTreatment: boolean("returned_for_treatment").default(false),
   returnStage: text("return_stage"),

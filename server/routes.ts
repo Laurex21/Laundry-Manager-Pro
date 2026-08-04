@@ -531,6 +531,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     garments: z.array(z.object({
       itemName: z.string().trim().min(1).max(200),
       quantity: z.coerce.number().int().positive().max(10000),
+      color: z.string().trim().max(40).optional().nullable(),
     })).max(500),
   });
 

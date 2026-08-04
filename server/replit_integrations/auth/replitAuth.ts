@@ -35,6 +35,10 @@ export async function setupAuth(app: Express) {
 
 async function ensureAuthSchema() {
   await pool.query(`
+    ALTER TABLE garment_items
+    ADD COLUMN IF NOT EXISTS color varchar(40)
+  `);
+  await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
   `);

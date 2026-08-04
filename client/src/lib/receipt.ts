@@ -352,7 +352,8 @@ function buildThermalReceiptHtml(args: {
   const garmentRows = args.garments.length > 0
     ? args.garments.map((garment: any) => {
         const name = garment.itemName || garment.name || label("Item", "Article", args.lang);
-        return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}`)}</div>`;
+        const color = garment.color ? ` · ${garment.color}` : "";
+        return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}${color}`)}</div>`;
       }).join("")
     : args.items.length > 0
       ? args.items.map((item: any) => {
@@ -514,7 +515,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.color ? ` · ${escapeHtml(g.color)}` : ""}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : items.length > 0 ? items.map((item: any) => {
     const service = item.service || {};
     return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
@@ -816,7 +817,7 @@ export function generatePaymentReceipt(
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.color ? ` · ${escapeHtml(g.color)}` : ""}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : items.length > 0 ? items.map((item: any) => {
     const service = item.service || {};
     return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
