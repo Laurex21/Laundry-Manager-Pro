@@ -31,7 +31,7 @@ Business Analysis is a separate Owner/Manager section. It does not replace the c
 
 - Views assigned sites.
 - Records approved site-level financial inputs.
-- Cannot change original investment, company-wide rules, or shared-cost allocation unless explicitly granted permission.
+- Cannot change original investment, company-wide rules, or shared-cost allocation unless granted the `manage_business_analysis_settings` capability.
 
 ### Operator
 
@@ -47,6 +47,7 @@ Required setup:
 - Analysis start date.
 - Site or company assignment for each entry.
 - Itemized original investment.
+- For pre-existing businesses: opening cumulative operating profit or loss, capital already returned to the owner, and the effective date of those opening balances.
 
 Investment categories:
 
@@ -61,6 +62,8 @@ Investment categories:
 - Other investment.
 
 Owners may use a quick total when itemized history is unavailable. Historical owner-entered data is labelled **Estimated**. Data sourced directly from XPress Pro is labelled **Tracked**.
+
+If a pre-existing owner cannot provide opening cumulative profit/loss, XPress Pro calculates performance only from the analysis start date. It must not claim an actual historical break-even date; investment recovery and forecasts are labelled **Estimated from available data**.
 
 ## Financial classifications
 
@@ -81,7 +84,9 @@ The system must keep the following concepts separate:
 
 ### Operating profit
 
-`completed-order revenue - operating expenses - owner salary`
+`completed-order revenue - operating expenses`
+
+Owner salary is included once inside operating expenses and must not be subtracted a second time.
 
 Revenue recognition uses completed orders. Cancelled orders are excluded. Refunds and reversals reduce revenue in the appropriate period according to the existing transaction record.
 
@@ -93,25 +98,32 @@ The interface must explain that cash flow is not profit.
 
 ### Investment recovery
 
-- Total invested equals original investment plus later capital expenditure and owner capital injections designated as investment.
-- Recovered investment equals cumulative operating profit retained in the business after owner withdrawals.
-- Remaining investment equals total invested minus recovered investment, never below zero.
-- Break-even occurs on the first date cumulative retained operating profit covers total investment.
+- **Investment base** equals original owner-funded investment plus later owner capital injections designated as investment plus owner-funded capital expenditure. Capital expenditure funded from operating cash or loans is tracked but does not increase owner capital invested.
+- **Cumulative operating result** equals opening historical cumulative operating profit/loss plus the running sum of monthly operating profit/loss from the analysis ledger.
+- **Capital returned** is recorded only through an explicit capital-return transaction. A normal owner withdrawal does not silently change the investment base.
+- **Net investment to recover** equals investment base minus explicit capital returned, never below zero.
+- **Recovered investment** equals cumulative operating result, capped between zero and net investment to recover. Losses reduce cumulative operating result before recovery resumes.
+- **Remaining investment** equals net investment to recover minus recovered investment.
+- Break-even occurs on the first date cumulative operating result equals or exceeds net investment to recover.
 
-Owner injections and loan proceeds never count as profit or recovered investment.
+Owner injections and loan proceeds never count as profit or recovered investment. Owner withdrawals affect cash flow but do not change cumulative operating profit. If a withdrawal is a return of capital, the Owner must classify it explicitly as capital returned.
 
 ### Break-even forecast
 
-- Use a weighted average of recent monthly retained operating profit, giving recent complete months more weight.
+- Require at least three complete months with reviewed expense data.
+- Use up to the six most recent complete months. Apply linear weights from oldest to newest: 1 through N.
+- Forecast monthly recovery using weighted average monthly operating profit. Withdrawals remain a cash-flow concern and do not change the operating-profit forecast.
 - Exclude incomplete months unless the UI explicitly presents a run-rate estimate.
-- Display the period used, assumptions, and confidence level.
+- Display the period used, weights, assumptions, and confidence level.
+- Confidence is **Low** with three valid months, **Medium** with four or five, and **High** with six only when every source month is complete and reviewed. Any estimated historical opening balance caps confidence at Medium.
 - If weighted retained profit is zero or negative, display **No break-even forecast yet**.
 - Never invent a date when data is missing or performance is loss-making.
 
 ### Fixed-cost coverage
 
 - Calculate recurring fixed costs separately from variable costs.
-- Show revenue required to cover expected monthly costs.
+- Show both fixed-cost coverage and full operating break-even revenue.
+- Full operating break-even revenue equals fixed costs divided by expected contribution margin ratio. Derive that ratio from the most recent three to six complete months; if history is insufficient, require an Owner-entered estimate and label the target **Estimated**.
 - Show the current coverage percentage.
 - Derive a daily or weekly sales target using working days configured for the site.
 
@@ -215,12 +227,27 @@ Each component has one responsibility. The metrics engine consumes normalized fi
 
 ### Phase 1 — Core financial truth
 
+Phase 1 is delivered through four implementation milestones, each with its own plan and acceptance gate.
+
+#### Milestone 1A — Setup and ledgers
+
 - Setup wizard.
 - Itemized investment and capital ledger.
 - Owner salary, withdrawal, injection, and loan tracking.
+
+#### Milestone 1B — Classification and calculations
+
 - Operating profit and cash-flow calculations.
 - Investment recovery and break-even tracking.
+
+#### Milestone 1C — Permissions and multi-site analysis
+
 - Site and consolidated filters.
+- Shared-cost handling.
+- Owner, Manager, capability, and Operator enforcement.
+
+#### Milestone 1D — Dashboard and traceability
+
 - Core dashboard and drill-downs.
 
 ### Phase 2 — Guidance
