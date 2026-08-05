@@ -63,7 +63,7 @@ Investment categories:
 
 Owners may use a quick total when itemized history is unavailable. Historical owner-entered data is labelled **Estimated**. Data sourced directly from XPress Pro is labelled **Tracked**.
 
-If a pre-existing owner cannot provide opening cumulative profit/loss, XPress Pro calculates performance only from the analysis start date. It must not claim an actual historical break-even date; investment recovery and forecasts are labelled **Estimated from available data**.
+For historical break-even dating, the Owner may provide dated monthly historical results or an explicitly recorded historical break-even date with supporting notes. An opening cumulative profit/loss alone establishes recovery only as of its effective date; it cannot establish the first historical break-even date. Without dated evidence, XPress Pro must not claim an actual historical break-even date and labels recovery and forecasts **Estimated from available data**.
 
 ## Financial classifications
 
@@ -116,7 +116,7 @@ Owner injections and loan proceeds never count as profit or recovered investment
 - Exclude incomplete months unless the UI explicitly presents a run-rate estimate.
 - Display the period used, weights, assumptions, and confidence level.
 - Confidence is **Low** with three valid months, **Medium** with four or five, and **High** with six only when every source month is complete and reviewed. Any estimated historical opening balance caps confidence at Medium.
-- If weighted retained profit is zero or negative, display **No break-even forecast yet**.
+- If weighted average monthly operating profit is zero or negative, display **No break-even forecast yet**.
 - Never invent a date when data is missing or performance is loss-making.
 
 ### Fixed-cost coverage
@@ -214,7 +214,7 @@ Alerts must include the comparison period and calculation basis. Suppress prescr
 ## Components and boundaries
 
 - **Financial setup module:** captures business dates, investment, fixed-cost expectations, and historical opening data.
-- **Capital ledger:** records investment, capital expenditure, owner injections, withdrawals, loans, and repayments.
+- **Capital ledger:** records investment, capital expenditure, owner injections, withdrawals, explicit capital returns, loans, and repayments.
 - **Financial classifier:** maps source transactions into revenue, collections, expenses, capital, and financing without modifying source records.
 - **Metrics engine:** calculates profit, cash flow, recovery, coverage, and forecasts using versioned formulas.
 - **Analysis API:** enforces site permissions and returns metrics plus calculation breakdowns.
@@ -265,7 +265,7 @@ Phase 1 is delivered through four implementation milestones, each with its own p
 
 ## Testing and acceptance
 
-- Formula unit tests cover profit, cash flow, investment recovery, withdrawals, injections, loans, refunds, reversals, and negative-profit periods.
+- Formula unit tests cover profit, cash flow, investment recovery, withdrawals, explicit capital returns, injections, loans, refunds, reversals, and negative-profit periods.
 - Permission tests verify Owner, Manager, cross-site, and Operator access.
 - Integration tests reconcile dashboard totals to known orders, payments, expenses, and ledger entries.
 - Multi-site tests verify shared-cost allocation and consolidated totals.
