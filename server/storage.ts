@@ -3,7 +3,7 @@ import {
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
   machines, employees, employeeActivities, employeeAttendance, machineUsage,
   plans, subscriptions, subscriptionPayments, orderStatusHistory,
-  orderCorrections,
+  orderCorrections, creditTransactions,
   businessSettings, organisations, sites, siteMembers, siteInvitations,
   type Customer, type InsertCustomer,
   type Service, type InsertService,
@@ -1394,6 +1394,13 @@ export class DatabaseStorage implements IStorage {
     const paymentRows = await db.select().from(payments)
       .innerJoin(orders, eq(payments.orderId, orders.id))
       .where(and(orderSiteFilter, sql`${payments.date} >= ${start}`, sql`${payments.date} <= ${now}`));
+    const depositRows = await db.select().from(creditTransactions)
+      .where(and(
+        this.siteWhere(creditTransactions.siteId, siteId),
+        inArray(creditTransactions.reason, ["advance_payment", "deposit_reversal"]),
+        sql`${creditTransactions.createdAt} >= ${start}`,
+        sql`${creditTransactions.createdAt} <= ${now}`,
+      ));
     const machineRows = await db.select().from(machines).where(this.siteWhere(machines.siteId, siteId)).orderBy(machines.name);
     const usageRows = await db.select().from(machineUsage)
       .where(and(machineSiteFilter, sql`${machineUsage.usageDate} >= ${start}`, sql`${machineUsage.usageDate} <= ${now}`));
@@ -1544,6 +1551,13 @@ export class DatabaseStorage implements IStorage {
 
     const orderCount = employeesRanked.reduce((sum, employee) => sum + employee.totalOrdersHandled, 0);
     const revenue = await this.sumPaymentsInRangeBySite(start, now, siteId);
+    const signedDepositAmount = (deposit: typeof depositRows[number]) => deposit.type === "debit" ? -Number(deposit.amount || 0) : Number(deposit.amount || 0);
+    const customerDepositsCollected = depositRows.reduce((sum, deposit) => sum + signedDepositAmount(deposit), 0);
+    const customerDepositsByMethod = Object.entries(depositRows.reduce<Record<string, number>>((totals, deposit) => {
+      const method = deposit.paymentMethod || "Unspecified";
+      totals[method] = (totals[method] || 0) + signedDepositAmount(deposit);
+      return totals;
+    }, {})).map(([method, amount]) => ({ method, amount }));
     return {
       period,
       planSlug,
@@ -1551,6 +1565,8 @@ export class DatabaseStorage implements IStorage {
         totalOrdersHandled: orderCount,
         totalRevenueHandled: revenue,
         totalPaymentsCollected: employeesRanked.reduce((sum, employee) => sum + employee.totalPaymentsCollected, 0),
+        customerDepositsCollected,
+        customerDepositsByMethod,
         totalWeightProcessed: machineStats.reduce((sum, machine) => sum + machine.totalWeightProcessed, 0),
         averageOrdersPerDay: orderCount / days,
         averageRevenuePerDay: revenue / days,

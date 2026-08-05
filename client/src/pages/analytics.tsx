@@ -1105,6 +1105,7 @@ function AdvancedAnalytics({ period }: { period: string }) {
                   [t("revenue_per_employee", "Revenue / Employee"), `${symbol}${Number(summary.revenuePerEmployee || 0).toFixed(0)}`],
                   [t("revenue_per_machine", "Revenue / Machine"), `${symbol}${Number(summary.revenuePerMachine || 0).toFixed(0)}`],
                   [t("payments_collected", "Payments Collected"), `${symbol}${Number(summary.totalPaymentsCollected || 0).toFixed(0)}`],
+                  [t("customer_deposits_collected"), `${symbol}${Number(summary.customerDepositsCollected || 0).toFixed(0)}`],
                 ]} />
                 <InsightPanel icon={<Target className="w-4 h-4" />} title={t("service_profitability", "Service Profitability")} items={[
                   [t("most_profitable_service", "Most Profitable"), operations.mostProfitableService?.name],

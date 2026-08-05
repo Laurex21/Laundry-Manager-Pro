@@ -14,6 +14,8 @@ export const customers = pgTable("customers", {
   email: text("email"),
   address: text("address").notNull(),
   notes: text("notes"),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  reference: varchar("reference", { length: 255 }),
   starchLevel: text("starch_level"),
   detergentType: text("detergent_type"),
   defaultDiscountPct: decimal("default_discount_pct", { precision: 5, scale: 2 }).default("0"),
