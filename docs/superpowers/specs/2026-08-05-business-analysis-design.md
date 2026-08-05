@@ -147,11 +147,13 @@ Owner injections and loan proceeds never count as profit or recovered investment
 
 ### 2. Business Journey
 
-- Total investment.
+- Owner investment base.
 - Amount recovered.
 - Amount remaining.
 - Recovery percentage and progress bar.
 - Actual break-even date or forecast date.
+
+During Phase 1, the forecast field displays **Coming in Phase 2**. Actual recovery and any achieved break-even date remain available in Phase 1.
 
 ### 3. Monthly evolution
 
