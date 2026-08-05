@@ -13,14 +13,11 @@ const ordersPage = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8
 const paymentHooks = readFileSync(join(root, "client/src/hooks/use-payments.ts"), "utf8");
 const receipt = readFileSync(join(root, "client/src/lib/receipt.ts"), "utf8");
 const orderDetail = readFileSync(join(root, "client/src/pages/order-detail.tsx"), "utf8");
-const storage = readFileSync(join(root, "server/storage.ts"), "utf8");
 const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
-const depositMigration = readFileSync(join(root, "migrations/20260804_customer_credit_deposits.sql"), "utf8");
 
 assert.match(schema, /creditBalance: decimal\("credit_balance"/);
 assert.match(schema, /export const creditTransactions = pgTable\("credit_transactions"/);
 assert.match(schema, /idempotencyKey: varchar\("idempotency_key"/);
-assert.match(schema, /paymentMethod: varchar\("payment_method"/);
 assert.doesNotMatch(schema, /creditTransactions[\s\S]{0,300}onDelete: "cascade"/);
 
 assert.match(migration, /CHECK \(amount > 0\)/);
@@ -43,10 +40,6 @@ assert.match(routes, /requireSiteRole\(req, res, siteId, \["owner", "manager"\]\
 assert.match(routes, /JOIN sites s ON s\.id = c\.site_id[\s\S]*s\.organisation_id = \$1/);
 assert.match(routes, /app\.get\("\/api\/customers\/:id\/credit"/);
 assert.match(routes, /app\.post\("\/api\/customers\/:id\/credit"/);
-assert.match(routes, /body\.reason !== "advance_payment"[\s\S]*requireSiteRole/);
-assert.match(routes, /Payment method is required for a customer deposit/);
-assert.match(depositMigration, /ADD COLUMN IF NOT EXISTS payment_method/);
-assert.doesNotMatch(depositMigration, /DROP TABLE|TRUNCATE|DELETE FROM|UPDATE customers SET/i);
 
 assert.match(paymentsPage, /input-credit-to-apply/);
 assert.match(paymentsPage, /selectedOrder as any\)\?\.customer\?\.creditBalance/);
@@ -74,14 +67,5 @@ assert.match(orderDetail, /stage-machine-save-hint/);
 assert.match(i18n, /machine_assignment_save_hint/);
 assert.match(creditTab, /userRole === "owner" \|\| userRole === "manager"/);
 assert.match(creditTab, /credit-transaction-/);
-assert.match(creditTab, /button-add-customer-deposit/);
-assert.match(creditTab, /paymentMethod/);
-assert.match(storage, /customerDepositsCollected/);
-assert.match(storage, /inArray\(creditTransactions\.reason, \["advance_payment", "deposit_reversal"\]\)/);
-assert.match(service, /WHERE id = \$2 AND credit_balance >= \$1::numeric/);
-assert.match(service, /reversal_of_id/);
-assert.doesNotMatch(service, /deposit_reversal[\s\S]{0,500}total_credit_used/);
-assert.match(routes, /credit\/:transactionId\/reverse/);
-assert.match(storage, /const revenue = await this\.sumPaymentsInRangeBySite[\s\S]*customerDepositsCollected/);
 
 console.log("Customer credit regression checks passed");

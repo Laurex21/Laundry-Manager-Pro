@@ -266,8 +266,6 @@ export async function addManualCredit(input: {
   amount: string;
   reason: typeof CREDIT_REASONS[number];
   notes?: string | null;
-  paymentMethod?: string | null;
-  reference?: string | null;
   organisationId: number;
   siteId: number;
   actorUserId: string | null;
@@ -317,8 +315,8 @@ export async function addManualCredit(input: {
     const transaction = await client.query(
       `INSERT INTO credit_transactions
         (organisation_id, site_id, customer_id, type, amount, reason, balance_before,
-         balance_after, notes, payment_method, reference, created_by, idempotency_key)
-       VALUES ($1, $2, $3, 'credit', $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         balance_after, notes, created_by, idempotency_key)
+       VALUES ($1, $2, $3, 'credit', $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         input.organisationId,
@@ -329,8 +327,6 @@ export async function addManualCredit(input: {
         updated.rows[0].balance_before,
         updated.rows[0].balance_after,
         input.notes?.trim() || null,
-        input.paymentMethod?.trim() || null,
-        input.reference?.trim() || null,
         input.actorUserId,
         `${input.idempotencyKey}:manual`,
       ],
@@ -343,50 +339,4 @@ export async function addManualCredit(input: {
   } finally {
     client.release();
   }
-}
-
-export async function reverseCustomerDeposit(input: {
-  transactionId: number; customerId: number; reason: string; organisationId: number;
-  siteId: number; actorUserId: string | null; idempotencyKey: string;
-}) {
-  assertIdempotencyKey(input.idempotencyKey);
-  if (input.reason.trim().length < 5) throw new CreditOperationError("A reversal reason of at least 5 characters is required");
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const existing = await client.query("SELECT * FROM credit_transactions WHERE idempotency_key = $1", [`${input.idempotencyKey}:reversal`]);
-    if (existing.rowCount) { await client.query("COMMIT"); return { ...existing.rows[0], idempotentReplay: true }; }
-    const originalResult = await client.query(
-      `SELECT ct.*, s.organisation_id AS site_organisation_id FROM credit_transactions ct
-       JOIN sites s ON s.id = ct.site_id WHERE ct.id = $1 AND ct.customer_id = $2 FOR UPDATE OF ct`,
-      [input.transactionId, input.customerId],
-    );
-    const original = originalResult.rows[0];
-    if (!original) throw new CreditOperationError("Deposit transaction not found", 404);
-    if (original.site_organisation_id !== input.organisationId || original.organisation_id !== input.organisationId) throw new CreditOperationError("Deposit does not belong to this organisation", 403);
-    if (original.type !== "credit" || original.reason !== "advance_payment" || original.reversal_of_id) throw new CreditOperationError("Only an original customer deposit can be reversed");
-    const priorReversal = await client.query("SELECT id FROM credit_transactions WHERE reversal_of_id = $1", [original.id]);
-    if (priorReversal.rowCount) throw new CreditOperationError("This deposit has already been reversed", 409);
-    const updated = await client.query(
-      `UPDATE customers SET credit_balance = credit_balance - $1::numeric
-       WHERE id = $2 AND credit_balance >= $1::numeric
-       RETURNING (credit_balance + $1::numeric)::text AS balance_before, credit_balance::text AS balance_after`,
-      [original.amount, input.customerId],
-    );
-    if (!updated.rowCount) throw new CreditOperationError("This deposit cannot be reversed because the customer has already used some or all of the credit", 409);
-    const reversal = await client.query(
-      `INSERT INTO credit_transactions
-        (organisation_id, site_id, customer_id, type, amount, reason, balance_before, balance_after,
-         notes, payment_method, reference, created_by, idempotency_key, reversal_of_id)
-       VALUES ($1, $2, $3, 'debit', $4, 'deposit_reversal', $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-      [input.organisationId, input.siteId, input.customerId, original.amount, updated.rows[0].balance_before,
-       updated.rows[0].balance_after, input.reason.trim(), original.payment_method, original.reference,
-       input.actorUserId, `${input.idempotencyKey}:reversal`, original.id],
-    );
-    await client.query("COMMIT");
-    return reversal.rows[0];
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally { client.release(); }
 }

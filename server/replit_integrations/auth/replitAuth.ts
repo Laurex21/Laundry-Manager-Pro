@@ -255,11 +255,6 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_credit_tx_order ON credit_transactions(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_tx_idempotency ON credit_transactions(idempotency_key)`);
   await pool.query(`
-    ALTER TABLE credit_transactions
-    ADD COLUMN IF NOT EXISTS payment_method varchar(50),
-    ADD COLUMN IF NOT EXISTS reference varchar(255)
-  `);
-  await pool.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS corrected_from_order_id integer,
     ADD COLUMN IF NOT EXISTS correction_reason text

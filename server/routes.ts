@@ -20,7 +20,6 @@ import {
   CREDIT_REASONS,
   CreditOperationError,
   recordPaymentWithCredit,
-  reverseCustomerDeposit,
 } from "./lib/customer-credit";
 import { pool } from "./db";
 import {
@@ -852,26 +851,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Invalid customer or organisation" });
     }
     if (!(await canAccessCustomer(req, customerId))) return res.status(403).json({ message: "Forbidden" });
+    if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
     const body = z.object({
       amount: z.coerce.string(),
       reason: z.enum(CREDIT_REASONS),
       notes: z.string().max(500).optional(),
-      paymentMethod: z.string().trim().min(1).max(50).optional(),
-      reference: z.string().trim().max(255).optional(),
       idempotencyKey: z.string().min(16).max(80),
     }).parse(req.body);
-    if (body.reason !== "advance_payment" && !(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
-    if (body.reason === "advance_payment" && !body.paymentMethod) {
-      return res.status(400).json({ message: "Payment method is required for a customer deposit" });
-    }
     try {
       const transaction = await addManualCredit({
         customerId,
         amount: body.amount,
         reason: body.reason,
         notes: body.notes,
-        paymentMethod: body.paymentMethod,
-        reference: body.reference,
         organisationId,
         siteId,
         actorUserId: (req.session as any)?.userId ?? null,
@@ -882,28 +874,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (error instanceof CreditOperationError) {
         return res.status(error.statusCode).json({ message: error.message });
       }
-      throw error;
-    }
-  });
-
-  app.post("/api/customers/:id/credit/:transactionId/reverse", isAuthenticated, async (req: any, res) => {
-    const customerId = Number(req.params.id);
-    const transactionId = Number(req.params.transactionId);
-    const organisationId = Number(req.organisationId);
-    const siteId = requireWriteSite(req, res);
-    if (siteId === null) return;
-    if (![customerId, transactionId, organisationId].every(Number.isInteger)) return res.status(400).json({ message: "Invalid reversal request" });
-    if (!(await canAccessCustomer(req, customerId))) return res.status(403).json({ message: "Forbidden" });
-    if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
-    const body = z.object({ reason: z.string().trim().min(5).max(500), idempotencyKey: z.string().min(16).max(80) }).parse(req.body);
-    try {
-      const reversal = await reverseCustomerDeposit({
-        transactionId, customerId, reason: body.reason, organisationId, siteId,
-        actorUserId: (req.session as any)?.userId ?? null, idempotencyKey: body.idempotencyKey,
-      });
-      res.status(201).json(reversal);
-    } catch (error) {
-      if (error instanceof CreditOperationError) return res.status(error.statusCode).json({ message: error.message });
       throw error;
     }
   });
