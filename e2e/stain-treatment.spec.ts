@@ -152,20 +152,15 @@ test("forced price-version conflict opens a focus-trapped review dialog", async 
   await page.getByRole("combobox", { name: /service/i }).first().click();
   await page.getByText("E2E Shirt").click();
   await page.getByRole("button", { name: /add stain treatment|ajouter un traitement|adicionar tratamento/i }).click();
-  await page.route("**/api/orders", async (route) => {
-    if (route.request().method() !== "POST") return route.continue();
-    await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({
-      message: "Stain treatment prices changed",
-      code: "pricing_conflict",
-      details: {
-        expectedPricingSetVersion: "forced-e2e-version-2",
-        oldTotal: "50.00",
-        newTotal: "51.00",
-        oldRates: [{ level: "standard", unit: "piece", price: "10.00" }],
-        newRates: [{ level: "standard", unit: "piece", price: "11.00" }],
-      },
-    }) });
-  });
+  const stalePricing = await activePricing(page);
+  const changedPricing = await page.request.put("/api/stain-treatment/prices", { data: {
+    rates: stalePricing.rates.map((rate: any) => ({
+      level: rate.level,
+      unit: rate.unit,
+      price: (Number(rate.price) + 1).toFixed(2),
+    })),
+  } });
+  expect(changedPricing.ok(), await changedPricing.text()).toBeTruthy();
   await page.getByRole("button", { name: /create new order|créer.*commande|criar novo pedido/i }).click();
   const dialog = page.getByRole("alertdialog", { name: /stain treatment prices changed|tarifs de traitement ont changé|preços.*mudaram/i });
   await expect(dialog).toBeVisible();
