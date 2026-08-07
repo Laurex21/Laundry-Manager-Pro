@@ -38,6 +38,10 @@
 - `server/lib/stain-treatment-concurrency.test.ts` — real two-connection transaction-race tests.
 - `server/lib/stain-treatment-ui.test.ts` — UI wiring, translations, and accessibility-source gate.
 - `server/lib/order-refunds.test.ts` — refund, allocation, and paid-order correction tests.
+- `scripts/test-stain-postgres.ts` — safe unique-schema database harness, migration/self-heal parity, and cleanup.
+- `playwright.stain-treatment.config.ts` — isolated browser test configuration.
+- `e2e/stain-treatment.spec.ts` — desktop/mobile workflow and accessibility browser tests.
+- `scripts/seed-stain-treatment-e2e.ts` — disposable tenant/site/role fixtures.
 - `client/src/hooks/use-stain-treatment.ts` — pricing and report queries/mutations.
 - `client/src/components/orders/stain-treatment-editor.tsx` — order-form treatment selection and acknowledgement.
 - `client/src/components/settings/stain-treatment-settings.tsx` — six-rate site configuration.
@@ -74,12 +78,12 @@ Implementation is split into a money-foundation prerequisite and the stain-treat
 
 ### Pricing permission
 
-- Add the explicit membership capability `manage_stain_treatment_pricing` to the existing `site_members.capabilities` JSONB model used by Business Analysis work. Organisation Owners receive it implicitly; Managers require it explicitly; Operators can never receive it.
+- Add explicit membership capabilities `manage_stain_treatment_pricing` and `view_stain_treatment_reports` to the existing `site_members.capabilities` JSONB model used by Business Analysis work. Organisation Owners receive both implicitly; Managers require each explicitly; Operators can never receive either.
 - Settings visibility and server authorization both use effective capabilities. Hiding controls is never the security boundary.
 
 ### Refund and allocation model
 
-- Add append-only `order_refunds` and `order_refund_allocations`. A refund has organisation, site, order, positive amount, currency, reason, idempotency key, actor, timestamp, and optional source payment. Allocations link a refund to a service, treatment charge, pickup/delivery, or remain explicitly unallocated.
+- Add append-only `order_refunds` and `order_refund_allocations`. A refund has organisation, site, order, positive amount, currency, reason, idempotency key, canonical request fingerprint, actor, timestamp, and optional source payment. Allocations link a refund to a service, treatment charge, pickup/delivery, or remain explicitly unallocated. A database check requires exactly one allocation target/kind.
 - Refunds never mutate or delete payments. Total allocated amount cannot exceed the refund, and treatment allocation cannot exceed collected cash attributable to that treatment after prior refunds.
 - Paid-order corrections create either an outstanding balance, customer credit, or approved refund record according to the signed recalculated balance. No automatic external money send occurs.
 - Booked treatment revenue changes only through treatment adjustment/void; collected treatment cash changes through deterministic payment allocation and treatment-linked refunds.
@@ -88,6 +92,7 @@ Implementation is split into a money-foundation prerequisite and the stain-treat
 
 - Allocate incoming order payments in this order: discounted cleaning-service balance, non-discountable treatment, pickup/delivery, then other charges. Persist allocations in `order_payment_allocations`; do not infer historical allocations repeatedly in reports.
 - Backfill existing payments as `unallocated` because treatment did not previously exist. New orders with treatment use explicit allocation rows.
+- Payments also store tenant-scoped idempotency keys and canonical request fingerprints. Reuse with a different amount/order/payload is rejected. Payment/refund rows are locked before checking allocation sums so two transactions cannot over-allocate.
 
 ### Decimal policy
 
@@ -111,6 +116,7 @@ Implementation is split into a money-foundation prerequisite and the stain-treat
 - Modify: `client/src/hooks/use-currency.ts`
 - Modify: `package.json`
 - Modify: `package-lock.json`
+- Create: `scripts/test-stain-postgres.ts`
 
 - [ ] **Step 1: Write failing decimal and authoritative-currency tests**
 
@@ -118,11 +124,11 @@ Test canonical two-decimal strings, half-up multiplication/subtraction, `numeric
 
 - [ ] **Step 2: Write failing payment/refund allocation tests**
 
-Test append-only positive payments/refunds, idempotency, deterministic allocation order, treatment-linked refund limits, explicit unallocated refunds, already-paid correction outcomes, and the rule that no external refund is sent automatically.
+Test append-only positive payments/refunds, canonical request fingerprints, rejection of changed-payload key reuse, deterministic allocation order, exactly-one-target allocation checks, composite target tenant FKs, treatment-linked refund limits, explicit unallocated refunds, already-paid correction outcomes, and the rule that no external refund is sent automatically. Use two connections to prove locked payment/refund rows prevent concurrent over-allocation.
 
 - [ ] **Step 3: Add the direct decimal dependency and test scripts**
 
-Add `decimal.js-light` directly. Add:
+Add `decimal.js-light`, `@playwright/test`, and `@axe-core/playwright` directly. Add:
 
 ```json
 "test:order-money": "tsx server/lib/order-refunds.test.ts",
@@ -130,7 +136,9 @@ Add `decimal.js-light` directly. Add:
 "test:stain-schema": "tsx server/lib/stain-treatment-schema.test.ts",
 "test:stain-api": "tsx server/lib/stain-treatment-api.test.ts",
 "test:stain-concurrency": "tsx server/lib/stain-treatment-concurrency.test.ts",
-"test:stain-ui": "tsx server/lib/stain-treatment-ui.test.ts"
+"test:stain-ui": "tsx server/lib/stain-treatment-ui.test.ts",
+"test:stain-db": "tsx scripts/test-stain-postgres.ts",
+"test:stain-e2e": "playwright test --config playwright.stain-treatment.config.ts"
 ```
 
 Run: `npm run test:order-money`
@@ -139,7 +147,7 @@ Expected: FAIL because the foundation is absent.
 
 - [ ] **Step 4: Add currency, capability, refund, and allocation schema**
 
-Add organisation currency, `manage_stain_treatment_pricing`, append-only refund tables, and payment/refund allocation tables. Use composite tenant keys so direct SQL cannot link an order, payment, refund, or allocation across organisation/site boundaries. Mirror the migration idempotently in Replit self-heal.
+Add organisation currency, both stain-treatment capabilities, append-only refund tables, and payment/refund allocation tables. Enforce exactly one target/kind per allocation and use composite tenant keys for every target so direct SQL cannot link an order, payment, refund, or allocation across organisation/site boundaries. Mirror the migration idempotently in Replit self-heal.
 
 - [ ] **Step 5: Implement shared decimal totals and allocation service**
 
@@ -155,16 +163,16 @@ Return authenticated organisation currency and validated effective capabilities.
 
 - [ ] **Step 8: Apply the migration to a disposable PostgreSQL database**
 
-Run migration, rerun it to prove idempotent recovery, then run direct invalid inserts to prove composite tenant and allocation constraints fail.
+Implement `scripts/test-stain-postgres.ts` to hard-fail if `TEST_DATABASE_URL` is absent, matches configured production/Replit URLs, or does not identify a test database. It creates a cryptographically unique PostgreSQL schema, sets `search_path`, applies the money-foundation then treatment migration, reruns both, exercises Replit self-heal against a second clean schema, compares required tables/columns/constraints/indexes, runs the two-connection suites, and drops only the exact validated temporary schemas in `finally`.
 
-Run: `TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:order-money && npm run test:schema-guard && npm run test:tenant-isolation && npm run check`
+Run: `npm run test:stain-db && npm run test:order-money && npm run test:schema-guard && npm run test:tenant-isolation && npm run check`
 
 Expected: PASS.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add shared/order-money.ts shared/schema.ts server/lib/order-money.ts server/lib/order-refunds.test.ts migrations/20260807_order_money_foundation.sql server/replit_integrations/auth/replitAuth.ts server/replit_integrations/auth/routes.ts server/routes.ts server/lib/membership-routes.ts server/lib/order-corrections.ts client/src/hooks/use-currency.ts package.json package-lock.json
+git add shared/order-money.ts shared/schema.ts server/lib/order-money.ts server/lib/order-refunds.test.ts migrations/20260807_order_money_foundation.sql server/replit_integrations/auth/replitAuth.ts server/replit_integrations/auth/routes.ts server/routes.ts server/lib/membership-routes.ts server/lib/order-corrections.ts client/src/hooks/use-currency.ts scripts/test-stain-postgres.ts package.json package-lock.json
 git commit -m "feat: add authoritative order money foundation"
 ```
 
@@ -230,10 +238,11 @@ Require:
 
 - `stain_treatment_pricing_sets` as the lockable org/site parent and shared set version.
 - `stain_treatment_price_versions` with pricing set, organisation, site, level, unit, currency, price, effective timestamp, active state, actor, and timestamps.
-- `order_stain_treatments` with organisation, site, order, order item, level, unit, quantity, captured rate, line total, currency, pricing version, idempotency key, acknowledgement fields, creator, and timestamp.
+- Tenant-scoped `orders.idempotency_key`, `orders.request_fingerprint`, and immutable `orders.posted_at` for atomic whole-order retry and booked-report dates.
+- `order_stain_treatments` with organisation, site, order, order item, level, unit, quantity, captured rate, line total, currency, pricing version, idempotency key, acknowledgement fields, nullable `corrected_from_treatment_id`, creator, and timestamp.
 - `order_stain_treatment_adjustments` with original charge, signed quantity/amount effect, action (`adjustment` or `void`), reason, fresh acknowledgement when required, actor, and timestamp.
 - Tenant/site/date indexes, idempotency uniqueness scoped to organisation, and restrictive composite foreign keys proving `(organisation_id, site_id)`, `(order_id, site_id)`, and `(order_item_id, order_id)` consistency.
-- Partial uniqueness for one active rate per site/level/unit and database checks for valid enums, positive rates/quantities, two-decimal scale, and acknowledgement completeness.
+- Unique org/site pricing-set parent, partial uniqueness for one active rate per site/level/unit, one-way/no-self correction linkage, and database checks for valid enums, positive rates/quantities, two-decimal scale, and acknowledgement completeness.
 
 - [ ] **Step 2: Run the test to confirm failure**
 
@@ -292,11 +301,11 @@ All use authentication, derive active organisation/site, and require Owner or ef
 
 - [ ] **Step 3: Implement service operations**
 
-Export `getActiveTreatmentPrices`, `replaceTreatmentPrices`, and `resolveTreatmentPrice`. Lock the `stain_treatment_pricing_sets` parent row first, including first activation. Validate the full set, deactivate prior active children, insert/activate six children sharing the new set version, then commit. Posting and replacement always lock parent set before related order item to prevent deadlocks.
+Export `getActiveTreatmentPrices`, `replaceTreatmentPrices`, and `resolveTreatmentPrice`. In one transaction, perform `INSERT ... ON CONFLICT DO NOTHING` for the unique `(organisation_id, site_id)` pricing-set parent, then `SELECT ... FOR UPDATE` that parent, including first activation. Validate the full set, deactivate prior active children, insert/activate six children sharing the new set version, then commit. Posting and replacement always lock parent set before related order item to prevent deadlocks.
 
 - [ ] **Step 4: Implement and register focused routes**
 
-Return generic client errors and logged server references. Never return another site's history or accept organisation/site/currency from the request body. Add real two-connection tests for first activation versus activation, replacement versus replacement, and posting versus replacement.
+Return generic client errors and logged server references. Never return another site's history or accept organisation/site/currency from the request body. Add real two-connection tests here only for first activation versus activation and replacement versus replacement. Posting-versus-replacement belongs to Task 4 after posting exists.
 
 - [ ] **Step 5: Run security gates**
 
@@ -323,7 +332,7 @@ git commit -m "feat: configure fixed stain treatment rates"
 
 - [ ] **Step 1: Extend order input with safe treatment drafts**
 
-Accept only `orderItemIndex`, level, quantity, acknowledgement attestation/version when applicable, idempotency key, and an opaque server-issued `expectedPricingSetVersion`. The index resolves to the server-created order item inside the transaction; no client order-item ID is trusted during new-order creation.
+Require an order-level idempotency key and canonical request fingerprint covering tenant, customer, service lines, treatment drafts, acknowledgement, advance payment, and expected pricing-set version. Accept treatment `orderItemIndex`, level, quantity, acknowledgement attestation/version when applicable, line idempotency key, and an opaque server-issued `expectedPricingSetVersion`. The index resolves to the server-created order item inside the transaction; no client order-item ID is trusted during new-order creation.
 
 - [ ] **Step 2: Write failing posting tests**
 
@@ -335,13 +344,14 @@ Cover:
 - Aggregate overflow across multiple drafts.
 - Unsupported service units.
 - Missing prices and Very intensive acknowledgement.
-- Duplicate idempotency keys and concurrent additions.
+- Duplicate whole-order retries, changed-payload key reuse, and concurrent duplicate submissions.
 - Preview/post price changes returning 409 with a new server preview.
 - Same idempotency key retry after a pre-insert 409, and immutable replay after a successful insert.
+- Posting versus rate replacement using two real database connections.
 
 - [ ] **Step 3: Centralize the order transaction**
 
-Make order row, order items, treatment charges, totals, allocations, and initial payment state commit or roll back together. Lock pricing-set parent, then related `order_items` rows, then sum original charges plus signed append-only adjustments with database numeric arithmetic. Validate net effective quantity and insert in the same transaction. This lock order applies to posting, corrections, and service-line reductions.
+Before creating anything, look up the tenant-scoped order idempotency key. Replay only when its stored fingerprint matches the complete request; reject changed-payload reuse. Make order row, order items, treatment charges, totals, advance-payment row, payment allocations, and initial payment state commit or roll back together. Lock pricing-set parent, then related `order_items` rows, then sum original charges plus signed append-only adjustments with database numeric arithmetic. Validate net effective quantity and insert in the same transaction. This lock order applies to posting, corrections, and service-line reductions.
 
 Calculate:
 
@@ -403,11 +413,11 @@ Run coverage against cleaning-service lines only. The transaction returns `eligi
 
 Lock the related order item before treatment rows. Derive signed quantity and amount effects server-side from the original captured rate; the client never supplies amount effects. Insert a linked adjustment/void and recalculate final totals, payment allocations, status, balance, customer credit, or refund requirement through `order-money.ts`.
 
-The current correction flow deletes and reinserts order items. Change it to preserve stable item IDs when a service line remains. When a corrected-copy workflow is required, create an explicit old-item-to-new-item map, copy effective treatment lines with their captured values and acknowledgement metadata to new append-only charges, link them to originals, and include treatment/refund/allocation tables in correction snapshots and dependency checks. Never leave a treatment linked to a deleted order item.
+The current correction flow deletes and reinserts order items. Change it to preserve stable item IDs when a service line remains. When a corrected-copy workflow is required, create an explicit old-item-to-new-item map and new append-only treatment charges linked through `corrected_from_treatment_id`. Preserve original captured rate/value provenance, but never copy an old Very intensive attestation as the new charge's acknowledgement. Corrected-copy input must capture a fresh affirmative attestation, current immutable warning-text version, actor, and timestamp for every effective Very intensive line. Include treatment/refund/allocation tables in correction snapshots and dependency checks. Never leave a treatment linked to a deleted order item.
 
 - [ ] **Step 5: Update receipts**
 
-Show treatment level, quantity, unit, captured rate, and line total separately. Show the versioned warning for Very intensive treatment. Corrected receipts display original and adjustment rather than silently replacing history.
+Show treatment level, quantity, unit, captured rate, and line total separately. Show the versioned warning for Very intensive treatment. Corrected receipts display original and adjustment rather than silently replacing history. Server receipt DTOs supply canonical two-decimal strings and authoritative line totals; `subscription-receipt.ts` uses decimal helpers and the client receipt formatter displays strings without recalculating money with `Number`.
 
 - [ ] **Step 6: Run integrated financial gates**
 
@@ -515,11 +525,11 @@ git commit -m "feat: add fixed stain treatment to orders"
 
 - [ ] **Step 1: Write failing detail/report tests**
 
-Require immutable treatment and adjustment history, creator metadata, acknowledgement version/time, tenant-safe bounded/paginated report filters, booked versus collected values, distinct treated orders, separate piece/kg quantities, currency grouping, posting-date/payment-date modes, and cancellation/void/refund semantics.
+Require immutable treatment and adjustment history, creator metadata, acknowledgement version/time, tenant-safe bounded/paginated report filters, booked versus collected values, distinct treated orders, separate piece/kg quantities, currency grouping, posting-date/payment-date modes, and cancellation/void/refund semantics. Test Owner, Manager with/without `view_stain_treatment_reports`, Operator, selected-site, all-sites, and forged site filters.
 
 - [ ] **Step 2: Implement report queries**
 
-Register `GET /api/stain-treatment/report` only in this task. Exclude drafts and cancelled orders. Use order posting timestamp for booked mode and payment/allocation timestamp for collected mode. Apply treatment adjustments/voids by their effective timestamps to booked revenue and quantity. Change collected treatment cash only through persisted payment allocations and explicitly allocated treatment refunds. Define average as net booked treatment revenue divided by distinct included treated orders; never combine currencies or piece/kg quantities. Enforce site-filter derivation, date-range bounds, pagination, and Owner/authorized-Manager report access.
+Register `GET /api/stain-treatment/report` only in this task. Exclude drafts and cancelled orders. In booked mode, attribute the original charge and all later adjustments/voids to the original order posting date; an optional as-of cutoff controls whether later adjustments are included, but never moves them to a new booked date. In collected mode, use payment/allocation/refund timestamps. Change collected treatment cash only through persisted payment allocations and explicitly allocated treatment refunds. Count unique non-cancelled posted orders whose net effective treatment quantity remains positive after corrections/voids. Define average as net booked treatment revenue divided by that distinct treated-order count. Return database numeric aggregates as canonical two-decimal strings without JS arithmetic; never combine currencies or piece/kg quantities. Enforce site-filter derivation, date-range bounds, pagination, and Owner or effective `view_stain_treatment_reports` access. All-sites reports are Owner/capable-Manager organisation aggregates constrained to their authorized sites.
 
 - [ ] **Step 3: Implement order detail treatment history**
 
@@ -556,6 +566,7 @@ TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-schema
 TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-api
 TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-concurrency
 npm run test:stain-ui
+npm run test:stain-e2e
 npm run test:tenant-isolation
 npm run test:schema-guard
 npm run test:controlled-order-corrections
@@ -573,7 +584,9 @@ Expected: every command passes.
 
 Verify desktop and mobile configuration, piece/kg orders, all three levels, split levels, memberships, percentage/fixed discounts, receipts, payments, corrections, reporting, and all three languages. Never use production financial data for QA.
 
-Run browser automation for keyboard-only settings/order entry, changed-price dialog focus, first-invalid-field focus, `aria-live` announcements, untranslated-key detection, 320px mobile layout, and receipt/detail/report rendering. Save screenshots and machine-readable results as QA artifacts.
+Create `playwright.stain-treatment.config.ts` with `webServer` starting the app against the unique safe test schema created by `scripts/test-stain-postgres.ts`, `baseURL` on an unused localhost port, desktop Chromium and 320px mobile projects, trace on first retry, and artifacts under `artifacts/stain-treatment-e2e/`. Seed isolated Owner, capable Manager, unauthorized Manager, Operator, piece service, kg service, membership, and six rates through `scripts/seed-stain-treatment-e2e.ts`. `npm run test:stain-e2e` must hard-fail without safe test DB context and clean up fixtures.
+
+Automate keyboard-only settings/order entry, changed-price dialog focus, first-invalid-field focus, `aria-live` announcements, untranslated-key detection, 320px mobile layout, and receipt/detail/report rendering. Use `@axe-core/playwright` on Settings, Order, Order Detail, and Analytics and fail on serious/critical violations. Save screenshots, traces, and JSON results under the declared artifact path.
 
 - [ ] **Step 3: Run concurrency and retry checks**
 
