@@ -126,7 +126,7 @@ The order cannot be submitted when:
 
 - the applicable site rate is missing or inactive;
 - the treated quantity is zero, negative, malformed, or greater than the related service quantity;
-- cumulative non-voided treatment quantity would exceed the related service quantity;
+- net effective treated quantity after additions, reductions, replacements, and voids would be negative or exceed the related service quantity;
 - the related order item belongs to a different order, site, or organisation;
 - Very intensive treatment lacks acknowledgement;
 - the selected service uses an unsupported billing unit.
