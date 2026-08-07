@@ -19,7 +19,7 @@ Prices are independently configurable so management can reflect local chemical, 
 - Standard < Intensive < Very intensive for piece rates.
 - Standard < Intensive < Very intensive for kilogram rates.
 
-Only Owners and authorized Managers may change these rates. Changes affect new order selections only; posted order charges keep the rate captured at order time.
+Only Owners and authorized Managers may change these rates. The active rate at final posting is authoritative; posted order charges keep the rate captured at that moment.
 
 All six rates must be configured and active before a site can post stain treatment. Replacing a rate is transactional: the previous configuration remains as immutable history and a new version becomes active. The server derives organisation, site, and currency from the authenticated site context; configuration APIs and reports are tenant-scoped and never accept client-selected organisation scope.
 
@@ -42,7 +42,7 @@ Stain treatment is an optional add-on selected on the order page after the under
 5. For a kilogram service, staff enters the treated weight.
 6. XPress Pro resolves the fixed site rate and shows the calculated charge before the order is submitted.
 
-One treatment charge may cover several affected pieces from the same order line. Different levels may coexist against one order line, but the sum of all non-voided treatment quantities for that order line must never exceed its current service quantity. The server enforces this cumulative rule transactionally, including concurrent requests.
+One treatment charge may cover several affected pieces from the same order line. Different levels may coexist against one order line, but the net effective treated quantity after all posted additions, reductions, replacements, and voids for that order line must never be negative or exceed its current service quantity. The server enforces this cumulative rule transactionally for initial posting and corrections, including concurrent requests.
 
 The charge is:
 
@@ -92,7 +92,7 @@ Store each stain-treatment charge separately from the underlying service item wi
 
 The server derives organisation and site scope, currency, price, unit, and total. Clients may supply only the related order item, treatment level, treated quantity, acknowledgement attestation, and idempotency key.
 
-Money uses decimal strings throughout. Rates and totals use the currency's two-decimal minor-unit precision; kilogram quantities use two decimal places. The server multiplies using decimal arithmetic and rounds once to two decimal places using half-up rounding. The stored server-calculated line total is authoritative, and subtotal reconciliation must equal the sum of stored order-service and treatment line totals.
+Money uses decimal strings throughout. XPress Pro applies a platform-wide two-decimal money rule to every supported order currency; rates, totals, validation, storage, receipts, and reports all use two decimal places. Kilogram quantities also use two decimal places. The server multiplies using decimal arithmetic and rounds once to two decimal places using half-up rounding. The stored server-calculated line total is authoritative, and subtotal reconciliation must equal the sum of stored order-service and treatment line totals.
 
 Draft charges may be edited or removed before posting. Removing or reducing a related draft service line immediately revalidates its draft treatment quantities. Posted charges retain their captured values even if site pricing changes later. Posted values are never mutated or deleted. Corrections insert append-only adjustment or void records linked to the original charge and capture actor, mandatory reason, timestamp, acknowledgement when applicable, and the resulting balance effect. Corrected receipts show the original and adjustment. Corrections to already-paid orders recalculate the balance or refundable credit using the existing audited payment workflow.
 
@@ -136,7 +136,7 @@ Errors use clear staff-facing language and preserve the order draft. The system 
 
 ## Reporting
 
-Reports expose posted, non-cancelled treatment activity and apply append-only corrections, voids, and refunds. Drafts do not count. Treatment revenue means booked treatment revenue; collected treatment cash is reported separately from allocated payments. Revenue uses the order posting date unless the report explicitly selects payment date. Reports expose:
+Reports expose posted, non-cancelled treatment activity and apply append-only treatment corrections and voids. Drafts do not count. Treatment revenue means booked treatment revenue: it changes only when the treatment charge itself is adjusted or voided, not merely when a payment is refunded. Collected treatment cash is reported separately. A refund reduces collected treatment cash only when it is explicitly linked or allocated to treatment; an unallocated order-level refund is not attributed to treatment reporting. A money-only refund does not change treated quantity. Revenue uses the order posting date unless the report explicitly selects payment date. Reports expose:
 
 - treatment revenue by site, level, and billing unit;
 - treated quantity by level and unit;
@@ -173,9 +173,10 @@ Automated and browser tests must cover:
 - order subtotal, total, payment balance, receipt, and reporting integration;
 - membership, percentage-discount, fixed-discount, partial-coverage, and 100%-discount exclusions;
 - draft editing, related-item reduction/removal, posted adjustment/void, cancellation, refund, paid-order correction, and corrected-receipt behavior;
+- correction increases and decreases with atomic net-effective-quantity bounds;
 - Owner, Manager, and staff permission boundaries;
 - tenant-scoped configuration reads/writes and report access;
-- booked-versus-collected reporting, currency grouping, date basis, cancellation, void, correction, and refund semantics;
+- booked-versus-collected reporting, explicit treatment-refund allocation, unallocated refund behavior, currency grouping, date basis, cancellation, void, and correction semantics;
 - English, French, Portuguese, mobile, keyboard, and screen-reader behavior.
 
 ## Out of scope
