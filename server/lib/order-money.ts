@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { allocateMoney, canonicalMoney, hasStainCapability, sumMoney } from "../../shared/order-money";
+import { allocateMoney, canonicalMoney, hasStainCapability, subtractMoney, sumMoney } from "../../shared/order-money";
 export * from "../../shared/order-money";
 
 type FingerprintOptions = { moneyPaths?: readonly string[] };
@@ -74,10 +74,13 @@ export async function withMoneyTransaction<T>(source: MoneyTransactionSource, op
   }
 }
 
-type Allocation = { target: "service" | "pickup_delivery" | "unallocated"; amount: string };
+type Allocation =
+  | { target: "service" | "pickup_delivery" | "unallocated"; amount: string }
+  | { target: "treatment"; treatmentId: number; amount: string };
 type TenantInput = { organisationId: number; siteId: number; orderId: number; idempotencyKey: string };
 
 function allocationColumn(target: Allocation["target"]) {
+  if (target === "treatment") return "treatment_amount";
   return target === "service" ? "service_amount" : target === "pickup_delivery" ? "pickup_delivery_amount" : "unallocated_amount";
 }
 
@@ -86,10 +89,17 @@ async function persistAllocations(client: MoneyQueryClient, table: "order_paymen
     const amount = canonicalMoney(allocation.amount);
     if (amount === "0.00") continue;
     const column = allocationColumn(allocation.target);
-    await client.query(
-      `INSERT INTO ${table} (${parent}_id, organisation_id, site_id, ${column}) VALUES ($1, $2, $3, $4)`,
-      [parentId, tenant.organisationId, tenant.siteId, amount],
-    );
+    if (allocation.target === "treatment") {
+      await client.query(
+        `INSERT INTO ${table} (${parent}_id, organisation_id, site_id, treatment_id, ${column}) VALUES ($1, $2, $3, $4, $5)`,
+        [parentId, tenant.organisationId, tenant.siteId, allocation.treatmentId, amount],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO ${table} (${parent}_id, organisation_id, site_id, ${column}) VALUES ($1, $2, $3, $4)`,
+        [parentId, tenant.organisationId, tenant.siteId, amount],
+      );
+    }
   }
 }
 
@@ -110,7 +120,14 @@ export async function persistPaymentInTransaction(client: MoneyQueryClient, inpu
          + coalesce((SELECT sum(service_amount) FROM order_refund_allocations WHERE refund_id IN (SELECT id FROM order_refunds WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0),0)::text AS service_balance,
        greatest(coalesce(pickup_cost,0)
          - coalesce((SELECT sum(pickup_delivery_amount) FROM order_payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0)
-         + coalesce((SELECT sum(pickup_delivery_amount) FROM order_refund_allocations WHERE refund_id IN (SELECT id FROM order_refunds WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0),0)::text AS pickup_delivery_balance
+         + coalesce((SELECT sum(pickup_delivery_amount) FROM order_refund_allocations WHERE refund_id IN (SELECT id FROM order_refunds WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0),0)::text AS pickup_delivery_balance,
+       coalesce((SELECT jsonb_agg(jsonb_build_object('treatmentId',b.id,'amount',b.balance) ORDER BY b.id) FROM (
+         SELECT t.id, greatest(t.line_total + coalesce(sum(a.amount_effect),0)
+           - coalesce((SELECT sum(opa.treatment_amount) FROM order_payment_allocations opa JOIN payments p ON p.id=opa.payment_id WHERE opa.treatment_id=t.id AND p.order_id=orders.id),0)
+           + coalesce((SELECT sum(ora.treatment_amount) FROM order_refund_allocations ora JOIN order_refunds r ON r.id=ora.refund_id WHERE ora.treatment_id=t.id AND r.order_id=orders.id),0),0)::text AS balance
+         FROM order_stain_treatments t LEFT JOIN order_stain_treatment_adjustments a ON a.treatment_id=t.id
+         WHERE t.order_id=orders.id AND t.organisation_id=orders.organisation_id AND t.site_id=orders.site_id GROUP BY t.id
+       ) b WHERE b.balance::numeric>0),'[]'::jsonb) AS treatment_balances
      FROM orders WHERE id = $1 AND organisation_id = $2 AND site_id = $3 FOR UPDATE`,
     [input.orderId, input.organisationId, input.siteId],
   );
@@ -133,10 +150,20 @@ export async function persistPaymentInTransaction(client: MoneyQueryClient, inpu
     if (!raced.rowCount || raced.rows[0].request_fingerprint !== fingerprint) throw new OrderMoneyConflictError("Idempotency key was already used with a different payment request");
     return { payment: raced.rows[0], replayed: true, balance: await orderBalance(client, input) };
   }
-  const allocations = allocateMoney(amount, [
-    { target: "service", amount: order.rows[0].service_balance },
-    { target: "pickup_delivery", amount: order.rows[0].pickup_delivery_balance },
-  ]);
+  let remaining = amount;
+  const allocations: Allocation[] = [];
+  const [serviceAllocation] = allocateMoney(remaining, [{ target: "service", amount: order.rows[0].service_balance }]);
+  if (serviceAllocation) {
+    allocations.push(serviceAllocation);
+    remaining = subtractMoney(remaining, serviceAllocation.amount);
+  }
+  for (const treatment of order.rows[0].treatment_balances ?? []) {
+    const [allocated] = allocateMoney(remaining, [{ target: "service", amount: treatment.amount }]);
+    if (!allocated) break;
+    allocations.push({ target: "treatment", treatmentId: Number(treatment.treatmentId), amount: allocated.amount });
+    remaining = subtractMoney(remaining, allocated.amount);
+  }
+  allocations.push(...allocateMoney(remaining, [{ target: "pickup_delivery", amount: order.rows[0].pickup_delivery_balance }]));
   await persistAllocations(client, "order_payment_allocations", "payment", inserted.rows[0].id, input, allocations);
   const balance = await orderBalance(client, input);
   await client.query(

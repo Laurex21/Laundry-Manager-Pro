@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./stain-treatment.ts", import.meta.url), "utf8");
+const correctionSource = readFileSync(new URL("./order-corrections.ts", import.meta.url), "utf8");
 assert.match(source, /ON CONFLICT \(organisation_id, site_id\) DO NOTHING/i);
 assert.match(source, /FOR UPDATE/i);
 assert.match(source, /BEGIN/);
@@ -12,6 +13,9 @@ assert.match(source, /request_fingerprint/i);
 assert.match(source, /pricing_conflict/i);
 assert.match(source, /INSERT INTO orders[\s\S]*INSERT INTO order_items[\s\S]*INSERT INTO order_stain_treatments/i);
 assert.match(source, /persistPaymentInTransaction/);
+assert.match(correctionSource, /SELECT id, service_id FROM order_items[\s\S]*FOR UPDATE/);
+assert.match(correctionSource, /SELECT id FROM order_stain_treatments[\s\S]*FOR UPDATE/);
+assert.match(correctionSource, /order_stain_treatment_adjustments/);
 
 if (!process.env.TEST_DATABASE_URL) {
   console.log("stain treatment concurrency source gate passed; real PostgreSQL race test blocked: TEST_DATABASE_URL is unset");

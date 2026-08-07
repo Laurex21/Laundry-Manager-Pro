@@ -25,6 +25,12 @@ assert.match(receipt, /garments\.length > 0 \? garmentItemTotal\(garments\) : se
 assert.match(receipt, /Total Registered Items/);
 assert.match(receipt, /Unit Cost/);
 assert.match(receipt, /Total Cost/);
+assert.match(receipt, /stainTreatments/);
+assert.match(receipt, /capturedRate/);
+assert.match(receipt, /lineTotal/);
+assert.match(receipt, /Very intensive stain treatment/);
+assert.match(receipt, /treatment\.adjustments/);
+assert.match(receipt, /adjustment\.amountEffect/);
 assert.match(receipt, /colspan="4"/);
 assert.match(receipt, /function receiptPrintCss/);
 assert.match(receipt, /@page \{ size: A4; margin: 6mm; \}/);

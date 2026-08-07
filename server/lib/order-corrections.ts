@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
-import { calculateOrderTotals, canonicalMoney, compareMoney, fingerprintRequest, persistRefundInTransaction, subtractMoney, sumMoney } from "./order-money";
+import { calculateOrderTotals, canonicalMoney, compareMoney, fingerprintRequest, multiplyMoney, persistPaidCorrectionOutcome, persistRefundInTransaction, subtractMoney, sumMoney } from "./order-money";
 export { paidCorrectionOutcome } from "./order-money";
 
 export class OrderCorrectionError extends Error {
@@ -19,6 +19,134 @@ export type ControlledOrderEditInput = {
   garments: Array<{ itemName: string; quantity: number; color?: string | null }>;
 };
 
+export function deriveTreatmentAdjustment(input: {
+  originalQuantity: string;
+  existingQuantityEffects: string[];
+  requestedQuantityEffect?: string;
+  capturedRate: string;
+  serviceQuantity: string;
+  unit: "piece" | "kg";
+  level: string;
+  action: "adjustment" | "void";
+  reason: string;
+  acknowledgement?: { affirmed: boolean; textVersion: string };
+}) {
+  if (!input.reason.trim()) throw new OrderCorrectionError("Treatment correction reason is required");
+  const effectiveBefore = sumMoney([input.originalQuantity, ...input.existingQuantityEffects]);
+  const quantityEffect = input.action === "void" ? `-${effectiveBefore}` : canonicalMoney(input.requestedQuantityEffect ?? "0");
+  if (compareMoney(quantityEffect, "0") === 0) throw new OrderCorrectionError("Treatment correction quantity cannot be zero");
+  const effectiveAfter = sumMoney([effectiveBefore, quantityEffect]);
+  if (compareMoney(effectiveAfter, "0") < 0 || compareMoney(effectiveAfter, input.serviceQuantity) > 0) throw new OrderCorrectionError("Treatment quantity must remain within the related service quantity");
+  if (input.unit === "piece" && !Number.isInteger(Number(effectiveAfter))) throw new OrderCorrectionError("Piece treatment quantity must be a whole number");
+  if (input.level === "very_intensive" && compareMoney(quantityEffect, "0") > 0 && (!input.acknowledgement?.affirmed || !input.acknowledgement.textVersion.trim())) {
+    throw new OrderCorrectionError("Fresh Very intensive acknowledgement is required");
+  }
+  const absoluteAmount = multiplyMoney(quantityEffect.replace(/^-/, ""), input.capturedRate);
+  const amountEffect = quantityEffect.startsWith("-") ? `-${absoluteAmount}` : absoluteAmount;
+  return { quantityEffect, amountEffect, effectiveBefore, effectiveAfter };
+}
+
+export type TreatmentAdjustmentInput = {
+  action: "adjustment" | "void";
+  quantityEffect?: string;
+  reason: string;
+  idempotencyKey: string;
+  acknowledgement?: { affirmed: boolean; textVersion: string };
+};
+
+export async function adjustStainTreatment(
+  treatmentId: number,
+  siteId: number,
+  actorUserId: string,
+  input: TreatmentAdjustmentInput,
+  transactionSource: Pick<typeof pool, "connect"> = pool,
+) {
+  const client = await transactionSource.connect();
+  try {
+    await client.query("BEGIN");
+    // Global lock order: order item, then its treatment row. This serializes
+    // service reductions, simultaneous increases, and increase/void races.
+    const located = await client.query(
+      `SELECT t.order_item_id FROM order_stain_treatments t WHERE t.id=$1 AND t.site_id=$2`,
+      [treatmentId, siteId],
+    );
+    if (!located.rowCount) throw new OrderCorrectionError("Stain treatment not found", 404);
+    await client.query(`SELECT id FROM order_items WHERE id=$1 FOR UPDATE`, [located.rows[0].order_item_id]);
+    const treatmentResult = await client.query(
+      `SELECT t.*,oi.quantity AS service_quantity,o.total_amount,o.customer_id,o.payment_status,
+              (SELECT coalesce(sum(st.line_total + coalesce((SELECT sum(sa.amount_effect) FROM order_stain_treatment_adjustments sa WHERE sa.treatment_id=st.id),0)),0) FROM order_stain_treatments st WHERE st.order_id=o.id)::text AS treatment_subtotal
+       FROM order_stain_treatments t JOIN order_items oi ON oi.id=t.order_item_id AND oi.order_id=t.order_id
+       JOIN orders o ON o.id=t.order_id AND o.organisation_id=t.organisation_id AND o.site_id=t.site_id
+       WHERE t.id=$1 AND t.site_id=$2 FOR UPDATE OF t,o`,
+      [treatmentId, siteId],
+    );
+    if (!treatmentResult.rowCount) throw new OrderCorrectionError("Stain treatment not found", 404);
+    const treatment = treatmentResult.rows[0];
+    const existing = await client.query(
+      `SELECT * FROM order_stain_treatment_adjustments WHERE organisation_id=$1 AND idempotency_key=$2 FOR UPDATE`,
+      [treatment.organisation_id, input.idempotencyKey],
+    );
+    const expected = fingerprintRequest({ treatmentId, action: input.action, quantityEffect: input.quantityEffect ?? null, reason: input.reason, acknowledgement: input.acknowledgement ?? null }, { moneyPaths: ["quantityEffect"] });
+    if (existing.rowCount) {
+      const row = existing.rows[0];
+      const actual = fingerprintRequest({ treatmentId: row.treatment_id, action: row.action, quantityEffect: row.action === "void" ? null : row.quantity_effect, reason: row.reason, acknowledgement: row.acknowledgement_affirmed ? { affirmed: true, textVersion: row.acknowledgement_text_version } : null }, { moneyPaths: ["quantityEffect"] });
+      if (actual !== expected) throw new OrderCorrectionError("Idempotency key was already used with a different treatment correction", 409);
+      await client.query("COMMIT");
+      return { adjustment: row, replayed: true };
+    }
+    const effects = await client.query(`SELECT quantity_effect FROM order_stain_treatment_adjustments WHERE treatment_id=$1 ORDER BY id FOR UPDATE`, [treatmentId]);
+    const derived = deriveTreatmentAdjustment({
+      originalQuantity: treatment.quantity,
+      existingQuantityEffects: effects.rows.map((row) => String(row.quantity_effect)),
+      requestedQuantityEffect: input.quantityEffect,
+      capturedRate: treatment.captured_rate,
+      serviceQuantity: treatment.service_quantity,
+      unit: treatment.unit,
+      level: treatment.level,
+      action: input.action,
+      reason: input.reason,
+      acknowledgement: input.acknowledgement,
+    });
+    const inserted = await client.query(
+      `INSERT INTO order_stain_treatment_adjustments
+       (organisation_id,site_id,treatment_id,quantity_effect,amount_effect,action,reason,idempotency_key,acknowledgement_affirmed,acknowledgement_text_version,acknowledged_by,acknowledged_at,created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CASE WHEN $9 THEN NOW() ELSE NULL END,$11) RETURNING *`,
+      [treatment.organisation_id,siteId,treatmentId,derived.quantityEffect,derived.amountEffect,input.action,input.reason,input.idempotencyKey,input.acknowledgement?.affirmed || null,input.acknowledgement?.textVersion || null,actorUserId],
+    );
+    const totalAmount = sumMoney([treatment.total_amount, derived.amountEffect]);
+    const treatmentSubtotal = sumMoney([treatment.treatment_subtotal, derived.amountEffect]);
+    const postedResult = await client.query(
+      `SELECT coalesce((SELECT sum(amount) FROM payments WHERE order_id=$1 AND organisation_id=$2 AND site_id=$3),0)::text AS paid,
+              coalesce((SELECT sum(amount) FROM order_refunds WHERE order_id=$1 AND organisation_id=$2 AND site_id=$3),0)::text AS refunded,
+              coalesce((SELECT sum(amount) FROM credit_transactions WHERE order_id=$1 AND organisation_id=$2 AND site_id=$3 AND type='debit'),0)::text AS credit_applied`,
+      [treatment.order_id,treatment.organisation_id,siteId],
+    );
+    const posted = postedResult.rows[0];
+    const netPosted = subtractMoney(posted.paid, posted.refunded);
+    const comparison = compareMoney(totalAmount, netPosted);
+    const outcome = comparison > 0 ? { kind: "balance" as const, amount: subtractMoney(totalAmount,netPosted) }
+      : comparison === 0 ? { kind: "balanced" as const, amount: "0.00" as const }
+      : compareMoney(posted.credit_applied,"0") > 0 ? { kind: "customer_credit" as const, amount: subtractMoney(netPosted,totalAmount) }
+      : { kind: "approved_internal_refund" as const, amount: subtractMoney(netPosted,totalAmount), externalTransfer: false as const };
+    await client.query(`UPDATE orders SET total_amount=$2,payment_status=CASE WHEN $3::numeric=0 THEN 'paid' WHEN $4::numeric>0 THEN 'partial' ELSE payment_status END,updated_at=NOW() WHERE id=$1`, [treatment.order_id,totalAmount,outcome.amount,comparison]);
+    if (outcome.kind === "customer_credit" || outcome.kind === "approved_internal_refund") {
+      await persistPaidCorrectionOutcome(client, {
+        organisationId: treatment.organisation_id, siteId, orderId: treatment.order_id,
+        idempotencyKey: `${input.idempotencyKey}:financial`, kind: outcome.kind, amount: outcome.amount,
+        reason: input.reason, actorUserId, customerId: treatment.customer_id,
+        allocations: outcome.kind === "approved_internal_refund" ? [{ target: "treatment", treatmentId, amount: outcome.amount }] : undefined,
+      });
+    }
+    await client.query("COMMIT");
+    return { adjustment: inserted.rows[0], treatmentSubtotal, totalAmount, financialOutcome: outcome, replayed: false };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function dependencies(client: PoolClient, orderId: number) {
   const availabilityResult = await client.query(
     `SELECT
@@ -33,6 +161,8 @@ async function dependencies(client: PoolClient, orderId: number) {
        to_regclass('public.machine_usage') IS NOT NULL AS machine_usage,
        to_regclass('public.loyalty_points') IS NOT NULL AS loyalty_points,
        to_regclass('public.order_status_history') IS NOT NULL AS order_status_history,
+       to_regclass('public.order_stain_treatments') IS NOT NULL AS order_stain_treatments,
+       to_regclass('public.order_stain_treatment_adjustments') IS NOT NULL AS order_stain_treatment_adjustments,
        to_regclass('public.order_corrections') IS NOT NULL AS order_corrections`,
   );
   const available = availabilityResult.rows[0];
@@ -54,6 +184,7 @@ async function dependencies(client: PoolClient, orderId: number) {
        ${check(available.machine_usage, "SELECT 1 FROM machine_usage WHERE order_id = $1")} AS has_machine_usage,
        ${check(available.loyalty_points, "SELECT 1 FROM loyalty_points WHERE order_id = $1")} AS has_loyalty,
        ${check(available.order_status_history, "SELECT 1 FROM order_status_history WHERE order_id = $1 AND status <> 'received'")} AS has_status_progress,
+       ${check(available.order_stain_treatments, "SELECT 1 FROM order_stain_treatments WHERE order_id = $1")} AS has_treatments,
        ${check(available.order_corrections, "SELECT 1 FROM order_corrections WHERE order_id = $1")} AS has_corrections`,
     [orderId],
   );
@@ -64,7 +195,11 @@ async function snapshot(client: PoolClient, orderId: number) {
   const result = await client.query(
     `SELECT to_jsonb(o) AS "order",
        COALESCE((SELECT jsonb_agg(to_jsonb(oi) ORDER BY oi.id) FROM order_items oi WHERE oi.order_id = o.id), '[]'::jsonb) AS items,
-       COALESCE((SELECT jsonb_agg(to_jsonb(gi) ORDER BY gi.id) FROM garment_items gi WHERE gi.order_id = o.id), '[]'::jsonb) AS garments
+       COALESCE((SELECT jsonb_agg(to_jsonb(gi) ORDER BY gi.id) FROM garment_items gi WHERE gi.order_id = o.id), '[]'::jsonb) AS garments,
+       COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM order_stain_treatments t WHERE t.order_id = o.id), '[]'::jsonb) AS treatments,
+       COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM order_stain_treatment_adjustments a JOIN order_stain_treatments t ON t.id=a.treatment_id WHERE t.order_id=o.id), '[]'::jsonb) AS treatment_adjustments,
+       COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM order_payment_allocations a JOIN payments p ON p.id=a.payment_id WHERE p.order_id=o.id), '[]'::jsonb) AS payment_allocations,
+       COALESCE((SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM order_refund_allocations a JOIN order_refunds r ON r.id=a.refund_id WHERE r.order_id=o.id), '[]'::jsonb) AS refund_allocations
      FROM orders o WHERE o.id = $1`,
     [orderId],
   );
@@ -216,7 +351,14 @@ export async function editOrderControlled(
       Number(service.id),
       existingPrices.get(Number(service.id)) ?? String(service.price),
     ]));
-    const money = calculateOrderTotals(input.items.map((item) => ({ price: prices.get(item.serviceId) ?? "0", quantity: item.quantity })), String(order.discount_pct || 0), String(order.discount_amount || order.discount || 0), String(order.pickup_cost || 0));
+    const serviceMoney = calculateOrderTotals(input.items.map((item) => ({ price: prices.get(item.serviceId) ?? "0", quantity: item.quantity })), String(order.discount_pct || 0), String(order.discount_amount || order.discount || 0), String(order.pickup_cost || 0));
+    const treatmentTotalResult = await client.query(
+      `SELECT coalesce(sum(t.line_total + coalesce((SELECT sum(a.amount_effect) FROM order_stain_treatment_adjustments a WHERE a.treatment_id=t.id),0)),0)::text AS total
+       FROM order_stain_treatments t WHERE t.order_id=$1 AND t.organisation_id=$2 AND t.site_id=$3`,
+      [orderId,order.organisation_id,siteId],
+    );
+    const treatmentSubtotal = canonicalMoney(String(treatmentTotalResult.rows[0]?.total ?? "0"));
+    const money = { ...serviceMoney, subtotal: sumMoney([serviceMoney.subtotal, treatmentSubtotal]), total: sumMoney([serviceMoney.total, treatmentSubtotal]) };
     const before = await snapshot(client, orderId);
 
     const postedResult = hasFinancialImpact ? await client.query(
@@ -261,6 +403,21 @@ export async function editOrderControlled(
       } else {
         const inserted = await client.query(`INSERT INTO order_items (order_id,service_id,quantity,price_at_order) VALUES ($1,$2,$3,$4) RETURNING id`, [orderId,item.serviceId,item.quantity,prices.get(item.serviceId)]);
         retainedItemIds.push(Number(inserted.rows[0].id));
+      }
+    }
+    await client.query(`SELECT id FROM order_stain_treatments WHERE order_id=$1 ORDER BY id FOR UPDATE`, [orderId]);
+    const treatmentBounds = await client.query(
+      `SELECT t.order_item_id,
+         sum(t.quantity + coalesce((SELECT sum(a.quantity_effect) FROM order_stain_treatment_adjustments a WHERE a.treatment_id=t.id),0)) AS effective_quantity
+       FROM order_stain_treatments t
+       WHERE t.order_id=$1 GROUP BY t.order_item_id`,
+      [orderId],
+    );
+    const quantityByItem = new Map(retainedItemIds.map((id, index) => [id, input.items[index]?.quantity ?? 0]));
+    for (const treatment of treatmentBounds.rows) {
+      const serviceQuantity = quantityByItem.get(Number(treatment.order_item_id));
+      if (serviceQuantity == null || Number(treatment.effective_quantity) > serviceQuantity) {
+        throw new OrderCorrectionError("Treatment correction required before reducing or removing its related service", 409);
       }
     }
     await client.query(`DELETE FROM order_items WHERE order_id=$1 AND NOT (id=ANY($2::int[]))`, [orderId,retainedItemIds]);

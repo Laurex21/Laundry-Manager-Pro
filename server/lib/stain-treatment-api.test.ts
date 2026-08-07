@@ -150,10 +150,14 @@ assert.equal(canManageStainTreatmentPricing({ role: "manager", capabilities: [] 
 assert.equal(canManageStainTreatmentPricing({ role: "operator", capabilities: ["manage_stain_treatment_pricing"] }), false);
 
 const routesSource = readFileSync(new URL("./stain-treatment-routes.ts", import.meta.url), "utf8");
+const correctionSource = readFileSync(new URL("./order-corrections.ts", import.meta.url), "utf8");
 assert.match(routesSource, /GET \/api\/stain-treatment\/prices|app\.get\("\/api\/stain-treatment\/prices"/);
 assert.match(routesSource, /PUT \/api\/stain-treatment\/prices|app\.put\("\/api\/stain-treatment\/prices"/);
 assert.match(routesSource, /isAuthenticated/);
 assert.doesNotMatch(routesSource, /req\.body\.(organisationId|siteId|currency)/);
+assert.match(correctionSource, /SELECT id FROM order_stain_treatments[\s\S]*FOR UPDATE/);
+assert.match(correctionSource, /order_stain_treatment_adjustments/);
+assert.match(correctionSource, /Treatment correction required/);
 
 console.log("stain treatment pricing API tests passed");
 const { pool } = await import("../db");

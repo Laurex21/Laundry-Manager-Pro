@@ -18,9 +18,11 @@ import {
   subtractMoney,
   withMoneyTransaction,
 } from "./order-money";
+import { membershipFinancialComposition } from "./membership-financials";
 
 const schemaSource = readFileSync(join(process.cwd(), "shared/schema.ts"), "utf8");
 const treatmentMigrationSource = readFileSync(join(process.cwd(), "migrations/20260807_stain_treatment_pricing.sql"), "utf8");
+const moneyServiceSource = readFileSync(join(process.cwd(), "server/lib/order-money.ts"), "utf8");
 assert.ok(schemaSource.includes('treatmentAmount: decimal("treatment_amount"'));
 assert.ok(schemaSource.includes("order_refund_allocations_treatment_tenant_fkey"));
 assert.ok(treatmentMigrationSource.includes("num_nonnulls(service_amount, treatment_amount, pickup_delivery_amount, unallocated_amount) = 1"));
@@ -35,6 +37,10 @@ assert.equal(multiplyMoney("2.335", "3"), "7.01");
 assert.equal(subtractMoney("10", "3.456"), "6.54");
 assert.equal(eligibleServiceDiscount("100", "12.5"), "12.50");
 assert.deepEqual(composeMembershipAmount("100", "30", "10"), { covered: "30.00", discount: "7.00", due: "63.00" });
+assert.equal(membershipFinancialComposition({ eligibleServiceAmount:"100",coveredServiceAmount:"100",uncoveredServiceAmount:"0",treatmentAmount:"25",pickupDeliveryAmount:"5" }).finalAmount,"30.00");
+assert.match(moneyServiceSource, /target: "treatment"/);
+assert.match(moneyServiceSource, /treatment_balances/);
+assert.match(moneyServiceSource, /treatment_id, \$\{column\}/);
 assert.deepEqual(allocateMoney("12", [{ target: "service", amount: "10" }, { target: "pickup_delivery", amount: "5" }]), [
   { target: "service", amount: "10.00" },
   { target: "pickup_delivery", amount: "2.00" },

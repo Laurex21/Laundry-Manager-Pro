@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
-const { editOrderControlled } = await import("./order-corrections");
+const { deriveTreatmentAdjustment, editOrderControlled } = await import("./order-corrections");
 
 const root = process.cwd();
 const service = readFileSync(join(root, "server/lib/order-corrections.ts"), "utf8");
@@ -32,6 +32,21 @@ assert.match(service, /to_regclass\('public\.production_cycle_orders'\)/);
 assert.match(service, /available\.production_cycle_orders && available\.production_cycles/);
 assert.match(service, /enabled \? `EXISTS\(\$\{sql\}\)` : "false"/);
 assert.match(service, /before_snapshot, after_snapshot/);
+assert.match(service, /order_stain_treatments/);
+assert.match(service, /order_stain_treatment_adjustments/);
+assert.match(service, /order_payment_allocations/);
+assert.match(service, /order_refund_allocations/);
+assert.match(service, /FOR UPDATE/);
+assert.match(service, /Treatment correction required/);
+assert.match(service, /export async function adjustStainTreatment/);
+assert.match(service, /INSERT INTO order_stain_treatment_adjustments/);
+assert.match(service, /persistPaidCorrectionOutcome/);
+assert.doesNotMatch(service, /UPDATE order_stain_treatments/);
+assert.doesNotMatch(service, /DELETE FROM order_stain_treatments/);
+assert.deepEqual(deriveTreatmentAdjustment({ originalQuantity:"2",existingQuantityEffects:[],requestedQuantityEffect:"1",capturedRate:"5.00",serviceQuantity:"3",unit:"piece",level:"standard",action:"adjustment",reason:"Additional stain" }), { quantityEffect:"1.00",amountEffect:"5.00",effectiveBefore:"2.00",effectiveAfter:"3.00" });
+if (process.env.DEBUG_CORRECTION_TEST === "1") console.error("derived");
+assert.equal(deriveTreatmentAdjustment({ originalQuantity:"2",existingQuantityEffects:["-1"],capturedRate:"5.00",serviceQuantity:"2",unit:"piece",level:"standard",action:"void",reason:"Remove treatment" }).amountEffect, "-5.00");
+assert.throws(() => deriveTreatmentAdjustment({ originalQuantity:"2",existingQuantityEffects:[],requestedQuantityEffect:"1",capturedRate:"5.00",serviceQuantity:"3",unit:"piece",level:"very_intensive",action:"adjustment",reason:"Escalated" }), /Fresh Very intensive acknowledgement/);
 assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? String\(service\.price\)/);
 assert.match(service, /calculateOrderTotals/);
 assert.match(service, /Replaced by corrected order/);
@@ -142,3 +157,5 @@ assert.equal(unpaidTransfer.paymentStatus,"unpaid","an unpaid order may still be
 assert.ok(unpaidTransferDb.sql.some(statement => statement.includes("UPDATE orders SET customer_id")));
 
 console.log("Controlled order correction regression checks passed");
+const { pool } = await import("../db");
+await pool.end();
