@@ -39,6 +39,7 @@
     "test:stain-api": "tsx server/lib/stain-treatment-api.test.ts",
     "test:stain-concurrency": "tsx server/lib/stain-treatment-concurrency.test.ts",
     "test:stain-ui": "tsx server/lib/stain-treatment-ui.test.ts",
+    "test:stain-receipt": "tsx server/lib/stain-treatment-receipt.test.ts",
     "test:stain-db": "tsx scripts/test-stain-postgres.ts",
     "test:stain-e2e": "playwright test --config playwright.stain-treatment.config.ts",
     "test:stain-e2e:seed": "tsx scripts/seed-stain-treatment-e2e.ts setup",

@@ -114,6 +114,12 @@ const RECEIPT_PT_LABELS: Record<string, string> = {
   "This Payment": "Este Pagamento",
   "Method": "Método",
   "Order Total": "Total do Pedido",
+  "Standard stain treatment": "Tratamento de manchas padrão",
+  "Intensive stain treatment": "Tratamento de manchas intensivo",
+  "Very intensive stain treatment": "Tratamento de manchas muito intensivo",
+  "Very intensive stain treatment does not guarantee complete stain removal.": "O tratamento de manchas muito intensivo não garante a remoção completa da mancha.",
+  "Voided": "Anulado",
+  "Adjustment": "Ajuste",
 };
 
 export function label(en: string, fr: string, lang: string): string {
