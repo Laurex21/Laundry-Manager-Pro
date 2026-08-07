@@ -72,7 +72,7 @@ export function allocateMoney<T extends { target: FoundationAllocationTarget; am
     const requestedAmount = decimal(canonicalMoney(allocation.amount));
     const amount = requestedAmount.greaterThan(remaining) ? remaining : requestedAmount;
     if (amount.isZero()) continue;
-    result.push({ ...allocation, amount: canonicalMoney(amount) });
+    result.push({ ...allocation, amount: canonicalMoney(amount) } as AllocatedMoney<T>);
     remaining = remaining.minus(amount);
   }
   if (remaining.greaterThan(0)) result.push({ target: "unallocated", amount: canonicalMoney(remaining) });
