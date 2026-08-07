@@ -1,11 +1,56 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildOrderPostingFingerprint,
+  prepareTreatmentPosting,
+  pricingSetToken,
+  postOrderWithTreatments,
   getActiveTreatmentPrices,
   replaceTreatmentPrices,
   resolveTreatmentPrice,
   type PricingDatabase,
 } from "./stain-treatment";
+
+const postingServices = [
+  { serviceId: 11, unit: "piece", quantity: "2", price: "20.00" },
+  { serviceId: 12, unit: "kg", quantity: "3.50", price: "12.00" },
+] as const;
+const postingRates = [
+  { id: 1, level: "standard", unit: "piece", price: "5.00", currency: "XAF", setVersion: 3 },
+  { id: 2, level: "intensive", unit: "piece", price: "10.00", currency: "XAF", setVersion: 3 },
+  { id: 3, level: "very_intensive", unit: "piece", price: "15.00", currency: "XAF", setVersion: 3 },
+  { id: 4, level: "standard", unit: "kg", price: "3.00", currency: "XAF", setVersion: 3 },
+  { id: 5, level: "intensive", unit: "kg", price: "8.25", currency: "XAF", setVersion: 3 },
+  { id: 6, level: "very_intensive", unit: "kg", price: "9.00", currency: "XAF", setVersion: 3 },
+] as const;
+
+const piecePosting = prepareTreatmentPosting(postingServices, postingRates, [
+  { orderItemIndex: 0, level: "very_intensive", quantity: "2", idempotencyKey: "piece-line", acknowledgement: { affirmed: true, textVersion: "v1" } },
+]);
+assert.equal(piecePosting.treatmentSubtotal, "30.00");
+const kgPosting = prepareTreatmentPosting(postingServices, postingRates, [
+  { orderItemIndex: 1, level: "intensive", quantity: "3.50", idempotencyKey: "kg-line" },
+]);
+assert.equal(kgPosting.treatmentSubtotal, "28.88");
+assert.equal(prepareTreatmentPosting(postingServices, postingRates, [
+  { orderItemIndex: 0, level: "standard", quantity: "1", idempotencyKey: "split-a" },
+  { orderItemIndex: 0, level: "intensive", quantity: "1", idempotencyKey: "split-b" },
+]).treatmentSubtotal, "15.00");
+assert.throws(() => prepareTreatmentPosting(postingServices, postingRates, [
+  { orderItemIndex: 0, level: "standard", quantity: "2", idempotencyKey: "overflow-a" },
+  { orderItemIndex: 0, level: "intensive", quantity: "1", idempotencyKey: "overflow-b" },
+]), /service quantity/i);
+assert.throws(() => prepareTreatmentPosting([{ serviceId: 9, unit: "load", quantity: "1", price: "1.00" }], postingRates, [{ orderItemIndex: 0, level: "standard", quantity: "1", idempotencyKey: "bad-unit" }]), /unsupported/i);
+assert.throws(() => prepareTreatmentPosting(postingServices, postingRates.slice(1), [{ orderItemIndex: 0, level: "standard", quantity: "1", idempotencyKey: "missing-rate" }]), /price/i);
+assert.throws(() => prepareTreatmentPosting(postingServices, postingRates, [{ orderItemIndex: 0, level: "very_intensive", quantity: "1", idempotencyKey: "missing-ack" }]), /acknowledgement/i);
+
+const fingerprintPayload = {
+  organisationId: 7, siteId: 44, customerId: 5, items: [{ serviceId: 11, quantity: "2.00" }, { serviceId: 12, quantity: "3.50" }],
+  treatments: [{ orderItemIndex: 0, level: "standard", quantity: "1.00", idempotencyKey: "line-1" }, { orderItemIndex: 1, level: "intensive", quantity: "1.00", idempotencyKey: "line-2" }],
+  expectedPricingSetVersion: pricingSetToken(8, 3), advancePayment: "0", pickupCost: "0", discount: "0",
+};
+assert.equal(buildOrderPostingFingerprint(fingerprintPayload), buildOrderPostingFingerprint({ expectedPricingSetVersion: pricingSetToken(8, 3), treatments: fingerprintPayload.treatments, items: fingerprintPayload.items, customerId: 5, siteId: 44, organisationId: 7, discount: "0.00", pickupCost: "0.00", advancePayment: "0.00" }));
+assert.notEqual(buildOrderPostingFingerprint(fingerprintPayload), buildOrderPostingFingerprint({ ...fingerprintPayload, items: [...fingerprintPayload.items].reverse(), treatments: [...fingerprintPayload.treatments].reverse() }));
 
 const rates = [
   { level: "standard", unit: "piece", price: "5.00" },
@@ -28,6 +73,26 @@ class ScriptedDatabase implements PricingDatabase {
   async connect() { return this; }
   release() {}
 }
+
+const replayInput = { organisationId: 7, siteId: 44, customerId: 5, actorId: "actor-1", idempotencyKey: "whole-order-replay-1", items: [{ serviceId: 11, quantity: "2" }], treatments: [] };
+const replayFingerprint = buildOrderPostingFingerprint({
+  organisationId: 7, siteId: 44, customerId: 5, status: "received", entryDate: null, pickupDate: null,
+  discount: "0", discountPct: "0", pickupCost: "0", advancePayment: "0", advancePaymentMethod: "Cash",
+  items: replayInput.items, treatments: [], garments: [], expectedPricingSetVersion: undefined,
+});
+const replayDb = new ScriptedDatabase([
+  { rows: [] }, { rows: [] }, { rows: [{ id: 91, request_fingerprint: replayFingerprint }] },
+  { rows: [{ id: 91, customer_id: 5, status: "received", payment_status: "unpaid", cleaning_subtotal: "40.00", discount: "0.00", treatment_subtotal: "0.00", other_charges: "0.00", final_total: "40.00" }] },
+  { rows: [] }, { rows: [] },
+]);
+const replayedOrder = await postOrderWithTreatments(replayDb as any, replayInput);
+assert.equal(replayedOrder.replayed, true);
+assert.equal(replayedOrder.finalTotal, "40.00");
+assert.equal(replayDb.statements.some(({ text }) => /INSERT INTO orders/i.test(text)), false, "successful replay must remain immutable");
+
+const mismatchDb = new ScriptedDatabase([{ rows: [] }, { rows: [] }, { rows: [{ id: 91, request_fingerprint: replayFingerprint }] }, { rows: [] }]);
+await assert.rejects(() => postOrderWithTreatments(mismatchDb as any, { ...replayInput, customerId: 6 }), /different order request/i);
+assert.equal(mismatchDb.statements.at(-1)?.text, "ROLLBACK");
 
 const replacementDb = new ScriptedDatabase([
   { rows: [] }, // BEGIN
@@ -54,6 +119,7 @@ await assert.rejects(() => replaceTreatmentPrices(new ScriptedDatabase([]), { or
 const activeDb = new ScriptedDatabase([{ rows: rates.map((rate, index) => ({ id: index + 1, ...rate, currency: "XAF", set_version: 3 })) }]);
 const active = await getActiveTreatmentPrices(activeDb, { organisationId: 7, siteId: 44 });
 assert.equal(active?.version, 3);
+assert.equal(typeof active?.expectedPricingSetVersion, "string");
 assert.equal(active?.rates.length, 6);
 assert.deepEqual(activeDb.statements[0].values, [7, 44]);
 await assert.rejects(
@@ -90,3 +156,5 @@ assert.match(routesSource, /isAuthenticated/);
 assert.doesNotMatch(routesSource, /req\.body\.(organisationId|siteId|currency)/);
 
 console.log("stain treatment pricing API tests passed");
+const { pool } = await import("../db");
+await pool.end();

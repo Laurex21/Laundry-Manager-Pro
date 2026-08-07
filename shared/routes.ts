@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stainTreatmentDraftInputSchema } from './stain-treatment';
 import { 
   insertCustomerSchema, 
   insertServiceSchema, 
@@ -27,6 +28,9 @@ export const errorSchemas = {
 
 // Input schema for creating an order with items
 export const createOrderWithItemsSchema = z.object({
+  idempotencyKey: z.string().trim().min(16).max(120),
+  expectedPricingSetVersion: z.string().trim().min(1).max(240).optional(),
+  treatments: z.array(stainTreatmentDraftInputSchema).optional().default([]),
   customerId: z.number(),
   status: z.string().default("pending"),
   paymentStatus: z.string().default("unpaid"),
@@ -51,6 +55,8 @@ export const createOrderWithItemsSchema = z.object({
     weightProcessed: z.string().optional().default("0"),
     cycleDurationMinutes: z.number().optional().default(0),
   })).optional().default([]),
+}).superRefine((input, context) => {
+  if (input.treatments.length > 0 && !input.expectedPricingSetVersion) context.addIssue({ code: z.ZodIssueCode.custom, path: ["expectedPricingSetVersion"], message: "A pricing preview version is required for stain treatment" });
 });
 
 export const api = {

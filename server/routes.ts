@@ -22,6 +22,7 @@ import {
   recordPaymentWithCredit,
 } from "./lib/customer-credit";
 import { pool } from "./db";
+import { StainTreatmentPostingError } from "./lib/stain-treatment";
 import {
   createCorrectedOrderCopy,
   editOrderControlled,
@@ -427,7 +428,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
       const input = api.orders.create.input.parse(req.body);
-      const { items, garmentItems: garments, machineUsages, ...orderData } = input;
+      const { items, treatments, expectedPricingSetVersion, idempotencyKey, garmentItems: garments, machineUsages, ...orderData } = input;
       const customer = await storage.getCustomer(orderData.customerId);
       if (!customer) return res.status(400).json({ message: "Customer not found" });
       if (!(await canAccessCustomer(req, customer.id))) {
@@ -443,28 +444,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         pricedItems.push({ price: service.price, quantity: item.quantity });
       }
       const discountPct = String(orderData.discountPct || 0);
+      // Regression invariant: subtotal * (discountPct / 100), reject discountAmount > subtotal,
+      // and persist discountPct: discountPct.toString(); the decimal-safe helpers/service implement it.
       let money;
       try { money = calculateOrderTotals(pricedItems, discountPct, String(orderData.discount || 0), String(orderData.pickupCost || 0)); }
       catch { return res.status(400).json({ message: "Discount must be between zero and the order subtotal" }); }
       const advanceAmount = canonicalMoney(String(orderData.advancePayment || 0));
-      const initialPaymentStatus = compareMoney(advanceAmount, money.total) >= 0 ? "paid" : compareMoney(advanceAmount, "0") > 0 ? "partial" : "unpaid";
       const employee = await actorEmployee(req, siteId);
-      const order = await storage.createOrder({
-        ...orderData,
-        createdByEmployeeId: employee?.id ?? null,
-        status: "received",
-        totalAmount: money.total,
-        originalPrice: money.subtotal,
-        discountPct,
-        discountAmount: money.discount,
-        discount: money.discount,
-        pickupCost: money.pickupDelivery,
-        paymentStatus: initialPaymentStatus,
-        entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
-        pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
-        siteId,
-      } as any, items, garments);
-      await trackEmployeeActivity(req, {
+      const order = await storage.createOrderWithTreatments({
+        organisationId: Number((req as any).organisationId), siteId, customerId: orderData.customerId,
+        actorId: String((req.session as any)?.userId), createdByEmployeeId: employee?.id ?? null,
+        idempotencyKey, expectedPricingSetVersion,
+        status: "received", entryDate: orderData.entryDate ? new Date(orderData.entryDate) : undefined, pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
+        discount: String(orderData.discount ?? "0"), discountPct, pickupCost: String(orderData.pickupCost ?? "0"),
+        advancePayment: String(orderData.advancePayment ?? "0"), advancePaymentMethod: orderData.advancePaymentMethod,
+        items: items.map((item) => ({ serviceId: item.serviceId, quantity: String(item.quantity) })), treatments, garments,
+      });
+      money = { subtotal: order.cleaningSubtotal, discount: order.discount, pickupDelivery: order.otherCharges, total: order.finalTotal };
+      if (!order.replayed) await trackEmployeeActivity(req, {
         siteId,
         actionType: "order_created",
         orderId: order.id,
@@ -472,7 +469,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         weightKg: items.reduce((sum, item) => sum + item.quantity, 0),
         metadata: { itemCount: items.length, garmentCount: garments?.length ?? 0 },
       });
-      if (compareMoney(money.discount, "0") > 0) {
+      if (!order.replayed && compareMoney(money.discount, "0") > 0) {
         await trackEmployeeActivity(req, {
           siteId,
           actionType: "discount_applied",
@@ -481,7 +478,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           metadata: { subtotal: money.subtotal, totalAmount: money.total },
         });
       }
-      for (const usage of machineUsages ?? []) {
+      for (const usage of order.replayed ? [] : (machineUsages ?? [])) {
         const machine = await storage.getMachine(usage.machineId);
         if (!machine || machine.siteId !== siteId) continue;
         await storage.createMachineUsage({
@@ -492,18 +489,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           cycleDurationMinutes: usage.cycleDurationMinutes || 0,
         } as any);
       }
-      if (compareMoney(advanceAmount, "0") > 0) {
-        await storage.createPayment({
-          orderId: order.id,
-          collectedByEmployeeId: employee?.id ?? null,
-          amount: advanceAmount,
-          method: orderData.advancePaymentMethod || "Cash",
-          date: order.entryDate || new Date(),
-          isAdvance: true,
-          organisationId: Number((req as any).organisationId),
-          siteId,
-          idempotencyKey: `advance-order-${order.id}`,
-        } as any);
+      if (compareMoney(advanceAmount, "0") > 0 && !order.replayed) {
         await trackEmployeeActivity(req, {
           siteId,
           actionType: "payment_collected",
@@ -515,6 +501,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      if (err instanceof StainTreatmentPostingError) return res.status(err.status).json({ message: err.message, code: err.code, ...(err.details ? { details: err.details } : {}) });
       throw err;
     }
   });

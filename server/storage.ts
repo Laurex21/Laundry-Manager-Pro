@@ -29,6 +29,7 @@ import { formatReportingDay } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 import { canonicalMoney, createOrReplayPayment, sumMoney } from "./lib/order-money";
+import { postOrderWithTreatments, type PostOrderWithTreatmentsInput } from "./lib/stain-treatment";
 
 type AuthoritativePaymentInput = Pick<InsertPayment, "orderId" | "amount" | "method" | "reference" | "collectedByEmployeeId" | "isAdvance" | "date"> & {
   organisationId: number; siteId: number; idempotencyKey: string;
@@ -65,6 +66,7 @@ export interface IStorage {
   getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
   createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null }[]): Promise<Order>;
+  createOrderWithTreatments(input: PostOrderWithTreatmentsInput): Promise<any>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
@@ -364,6 +366,12 @@ export class DatabaseStorage implements IStorage {
       return orderWithNumber;
     });
     await refreshCustomerAnalyticsFromHistory(created.customerId);
+    return created;
+  }
+
+  async createOrderWithTreatments(input: PostOrderWithTreatmentsInput) {
+    const created = await postOrderWithTreatments(pool, input);
+    if (!created.replayed) await refreshCustomerAnalyticsFromHistory(input.customerId);
     return created;
   }
 
