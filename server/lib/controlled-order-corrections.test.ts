@@ -70,7 +70,7 @@ assert.match(orderDetail, /correctionSummary/);
 assert.match(auth, /CREATE TABLE IF NOT EXISTS production_cycles/);
 assert.match(auth, /CREATE TABLE IF NOT EXISTS production_cycle_orders/);
 
-type Scenario = { cash: string; credit: string; total: string; failAudit?: boolean };
+type Scenario = { paid: string; credit: string; total: string; customerId?: number; hasPayments?: boolean; failAudit?: boolean };
 function correctionDatabase(scenario: Scenario) {
   const sql: string[] = [];
   let nextItemId = 91;
@@ -79,15 +79,15 @@ function correctionDatabase(scenario: Scenario) {
     async query(text: string, values?: any[]) {
       sql.push(text);
       if (scenario.failAudit && text.includes("INSERT INTO order_corrections")) throw new Error("audit write failed");
-      if (text.includes("SELECT o.*, s.organisation_id")) return { rows: [{ id:7,site_id:2,organisation_id:1,status:"received",payment_status:"paid",customer_id:3,discount_pct:"0",discount_amount:"0",discount:"0",pickup_cost:"0",corrected_from_order_id:null,has_corrections:false }], rowCount:1 };
+      if (text.includes("SELECT o.*, s.organisation_id")) return { rows: [{ id:7,site_id:2,organisation_id:1,status:"received",payment_status:"paid",customer_id:scenario.customerId ?? 3,discount_pct:"0",discount_amount:"0",discount:"0",pickup_cost:"0",corrected_from_order_id:null,has_corrections:false }], rowCount:1 };
       if (text.includes("SELECT after_snapshot FROM order_corrections")) return completed ? { rows:[{ after_snapshot:completed }],rowCount:1 } : { rows:[],rowCount:0 };
-      if (text.includes("to_regclass('public.payments')")) return { rows:[{ payments:true,credit_transactions:true,subscription_transactions:false,production_cycle_orders:false,production_cycles:false,machine_usage:false,loyalty_points:false,order_status_history:true,order_corrections:true }], rowCount:1 };
-      if (text.includes("AS has_payments")) return { rows:[{ has_payments:true,has_credit:scenario.credit !== "0",has_subscription:false,has_cycles:false,has_active_cycles:false,has_machine_usage:false,has_loyalty:false,has_status_progress:false,has_corrections:false }], rowCount:1 };
+      if (text.includes("to_regclass('public.payments')")) return { rows:[{ payments:true,credit_transactions:true,order_refunds:true,payment_allocations:true,refund_allocations:true,subscription_transactions:false,production_cycle_orders:false,production_cycles:false,machine_usage:false,loyalty_points:false,order_status_history:true,order_corrections:true }], rowCount:1 };
+      if (text.includes("AS has_payments")) return { rows:[{ has_payments:scenario.hasPayments ?? true,has_credit:scenario.credit !== "0",has_refunds:false,has_payment_allocations:false,has_refund_allocations:false,has_subscription:false,has_cycles:false,has_active_cycles:false,has_machine_usage:false,has_loyalty:false,has_status_progress:false,has_corrections:false }], rowCount:1 };
       if (text.includes("SELECT c.id FROM customers")) return { rows:[{ id:3 }], rowCount:1 };
       if (text.includes("FROM services sv")) return { rows:[{ id:1,price:scenario.total }], rowCount:1 };
       if (text.includes("SELECT service_id, price_at_order")) return { rows:[{ service_id:1,price_at_order:scenario.total }], rowCount:1 };
       if (text.includes("SELECT to_jsonb(o)")) return { rows:[{ order:{ id:7 },items:[],garments:[] }], rowCount:1 };
-      if (text.includes("AS cash_paid")) return { rows:[{ cash_paid:scenario.cash,refunded:"0",credit_applied:scenario.credit }], rowCount:1 };
+      if (text.includes("AS posted_paid")) return { rows:[{ posted_paid:scenario.paid,refunded:"0",credit_applied:scenario.credit }], rowCount:1 };
       if (text.includes("SELECT id, service_id FROM order_items")) return { rows:[{ id:44,service_id:1 }], rowCount:1 };
       if (text.includes("SELECT credit_balance FROM customers")) return { rows:[{ credit_balance:"1.00" }], rowCount:1 };
       if (text.includes("SELECT id FROM orders") && text.includes("FOR UPDATE")) return { rows:[{ id:7 }], rowCount:1 };
@@ -105,9 +105,9 @@ function correctionDatabase(scenario: Scenario) {
 
 const correctionInput = { customerId:3,entryDate:new Date("2026-08-07"),pickupDate:null,reason:"Manager corrected paid order",idempotencyKey:"paid-correction-behavior-001",items:[{ serviceId:1,quantity:1 }],garments:[] };
 for (const [scenario,expected] of [
-  [{ cash:"10",credit:"0",total:"12" },{ kind:"balance",amount:"2.00" }],
-  [{ cash:"10",credit:"5",total:"12" },{ kind:"customer_credit",amount:"3.00" }],
-  [{ cash:"15",credit:"0",total:"12" },{ kind:"approved_internal_refund",amount:"3.00",externalTransfer:false }],
+  [{ paid:"15",credit:"5",total:"17" },{ kind:"balance",amount:"2.00" }],
+  [{ paid:"15",credit:"5",total:"12" },{ kind:"customer_credit",amount:"3.00" }],
+  [{ paid:"15",credit:"0",total:"12" },{ kind:"approved_internal_refund",amount:"3.00",externalTransfer:false }],
 ] as const) {
   const db = correctionDatabase(scenario);
   const result = await editOrderControlled(7,2,"manager-user",correctionInput,db.source as any);
@@ -117,15 +117,28 @@ for (const [scenario,expected] of [
   assert.equal(db.sql.filter(statement => statement.includes("INSERT INTO order_corrections")).length,1);
 }
 
-const rollbackDb = correctionDatabase({ cash:"15",credit:"0",total:"12",failAudit:true });
+const rollbackDb = correctionDatabase({ paid:"15",credit:"0",total:"12",failAudit:true });
 await assert.rejects(editOrderControlled(7,2,"manager-user",correctionInput,rollbackDb.source as any),/audit write failed/);
 assert.ok(rollbackDb.sql.includes("ROLLBACK") && !rollbackDb.sql.includes("COMMIT"));
-const replayDb = correctionDatabase({ cash:"10",credit:"0",total:"12" });
+const replayDb = correctionDatabase({ paid:"10",credit:"0",total:"12" });
 const first = await editOrderControlled(7,2,"manager-user",correctionInput,replayDb.source as any);
 const mutationCount = replayDb.sql.filter(statement => /UPDATE orders SET|UPDATE order_items SET|INSERT INTO order_corrections/.test(statement)).length;
 assert.deepEqual(await editOrderControlled(7,2,"manager-user",correctionInput,replayDb.source as any),first);
 assert.equal(replayDb.sql.filter(statement => /UPDATE orders SET|UPDATE order_items SET|INSERT INTO order_corrections/.test(statement)).length,mutationCount,"completed correction replay must not mutate again");
 await assert.rejects(editOrderControlled(7,2,"manager-user",{ ...correctionInput,reason:"Different correction payload" },replayDb.source as any),/different correction request/);
 assert.match(routes, /requireSiteRole\(req, res, order\.siteId, \["owner", "manager"\]\)/, "paid corrections are role-authorized before mutation");
+
+const transferDb = correctionDatabase({ paid:"10",credit:"4",total:"12",customerId:3 });
+await assert.rejects(
+  editOrderControlled(7,2,"manager-user",{ ...correctionInput,customerId:4,idempotencyKey:"cross-customer-transfer" },transferDb.source as any),
+  /customer cannot be changed/i,
+);
+assert.equal(transferDb.sql.filter(statement => /UPDATE orders SET|UPDATE customers SET|INSERT INTO credit_transactions|INSERT INTO order_refunds|INSERT INTO order_corrections/.test(statement)).length,0,"rejected customer transfer must not mutate money, order, or audit state");
+assert.ok(transferDb.sql.includes("ROLLBACK") && !transferDb.sql.includes("COMMIT"));
+
+const unpaidTransferDb = correctionDatabase({ paid:"0",credit:"0",total:"12",customerId:3,hasPayments:false });
+const unpaidTransfer = await editOrderControlled(7,2,"manager-user",{ ...correctionInput,customerId:4,idempotencyKey:undefined },unpaidTransferDb.source as any);
+assert.equal(unpaidTransfer.paymentStatus,"unpaid","an unpaid order may still be reassigned");
+assert.ok(unpaidTransferDb.sql.some(statement => statement.includes("UPDATE orders SET customer_id")));
 
 console.log("Controlled order correction regression checks passed");

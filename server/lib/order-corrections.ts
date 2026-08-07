@@ -24,6 +24,9 @@ async function dependencies(client: PoolClient, orderId: number) {
     `SELECT
        to_regclass('public.payments') IS NOT NULL AS payments,
        to_regclass('public.credit_transactions') IS NOT NULL AS credit_transactions,
+       to_regclass('public.order_refunds') IS NOT NULL AS order_refunds,
+       to_regclass('public.order_payment_allocations') IS NOT NULL AS payment_allocations,
+       to_regclass('public.order_refund_allocations') IS NOT NULL AS refund_allocations,
        to_regclass('public.subscription_transactions') IS NOT NULL AS subscription_transactions,
        to_regclass('public.production_cycle_orders') IS NOT NULL AS production_cycle_orders,
        to_regclass('public.production_cycles') IS NOT NULL AS production_cycles,
@@ -38,6 +41,9 @@ async function dependencies(client: PoolClient, orderId: number) {
     `SELECT
        ${check(available.payments, "SELECT 1 FROM payments WHERE order_id = $1")} AS has_payments,
        ${check(available.credit_transactions, "SELECT 1 FROM credit_transactions WHERE order_id = $1")} AS has_credit,
+       ${check(available.order_refunds, "SELECT 1 FROM order_refunds WHERE order_id = $1")} AS has_refunds,
+       ${check(available.payment_allocations, "SELECT 1 FROM order_payment_allocations opa JOIN payments p ON p.id=opa.payment_id WHERE p.order_id = $1")} AS has_payment_allocations,
+       ${check(available.refund_allocations, "SELECT 1 FROM order_refund_allocations ora JOIN order_refunds r ON r.id=ora.refund_id WHERE r.order_id = $1")} AS has_refund_allocations,
        ${check(available.subscription_transactions, "SELECT 1 FROM subscription_transactions WHERE order_id = $1")} AS has_subscription,
        ${check(available.production_cycle_orders, "SELECT 1 FROM production_cycle_orders WHERE order_id = $1")} AS has_cycles,
        ${check(available.production_cycle_orders && available.production_cycles, `
@@ -160,6 +166,7 @@ export async function editOrderControlled(
     const deps = await dependencies(client, orderId);
     const isUnusedCorrectedCopy = !!order.corrected_from_order_id && !order.has_corrections;
     const hasFinancialImpact = deps.has_payments || deps.has_credit;
+    const hasMoneyActivity = hasFinancialImpact || deps.has_refunds || deps.has_payment_allocations || deps.has_refund_allocations;
     if (
       (order.status !== "received" && !isUnusedCorrectedCopy)
       || deps.has_subscription
@@ -173,6 +180,9 @@ export async function editOrderControlled(
     }
     if (hasFinancialImpact && !input.idempotencyKey) {
       throw new OrderCorrectionError("Paid corrections require an idempotency key", 400);
+    }
+    if (hasMoneyActivity && Number(input.customerId) !== Number(order.customer_id)) {
+      throw new OrderCorrectionError("Customer cannot be changed after a payment, credit, refund, or allocation has been recorded", 409);
     }
 
     const customerResult = await client.query(
@@ -211,13 +221,15 @@ export async function editOrderControlled(
 
     const postedResult = hasFinancialImpact ? await client.query(
       `SELECT
-         coalesce((SELECT sum(p.amount) FROM payments p WHERE p.order_id=$1 AND p.organisation_id=$2 AND p.site_id=$3),0)::text AS cash_paid,
+         coalesce((SELECT sum(p.amount) FROM payments p WHERE p.order_id=$1 AND p.organisation_id=$2 AND p.site_id=$3),0)::text AS posted_paid,
          coalesce((SELECT sum(r.amount) FROM order_refunds r WHERE r.order_id=$1 AND r.organisation_id=$2 AND r.site_id=$3),0)::text AS refunded,
          coalesce((SELECT sum(ct.amount) FROM credit_transactions ct WHERE ct.order_id=$1 AND ct.organisation_id=$2 AND ct.site_id=$3 AND ct.type='debit'),0)::text AS credit_applied`,
       [orderId, order.organisation_id, siteId],
-    ) : { rows: [{ cash_paid: "0", refunded: "0", credit_applied: "0" }] };
+    ) : { rows: [{ posted_paid: "0", refunded: "0", credit_applied: "0" }] };
     const posted = postedResult.rows[0];
-    const netPosted = subtractMoney(sumMoney([posted.cash_paid, posted.credit_applied]), posted.refunded);
+    // Credit-funded payments are already represented in payments.amount. The credit
+    // ledger remains provenance for disposition, not an additional posted amount.
+    const netPosted = subtractMoney(posted.posted_paid, posted.refunded);
     const comparison = compareMoney(money.total, netPosted);
     const financialOutcome = !hasFinancialImpact
       ? { kind: "unpaid" as const, amount: money.total }

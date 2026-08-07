@@ -2,19 +2,21 @@ import { createHash } from "node:crypto";
 import { allocateMoney, canonicalMoney, hasStainCapability, sumMoney } from "../../shared/order-money";
 export * from "../../shared/order-money";
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
+type FingerprintOptions = { moneyPaths?: readonly string[] };
+
+function canonicalize(value: unknown, moneyPaths: ReadonlySet<string>, path = ""): unknown {
+  if (moneyPaths.has(path)) return canonicalMoney(value as string | number);
+  if (Array.isArray(value)) return value.map((item) => canonicalize(item, moneyPaths, `${path}[]`));
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonicalize(item)]));
-  }
-  if (typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value)) {
-    try { return canonicalMoney(value); } catch { return value; }
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => [key, canonicalize(item, moneyPaths, path ? `${path}.${key}` : key)]));
   }
   return value;
 }
 
-export function fingerprintRequest(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(canonicalize(payload))).digest("hex");
+export function fingerprintRequest(payload: unknown, options: FingerprintOptions = {}): string {
+  return createHash("sha256").update(JSON.stringify(canonicalize(payload, new Set(options.moneyPaths ?? [])))).digest("hex");
 }
 
 export type PaidCorrectionOutcome =
@@ -97,7 +99,10 @@ export async function persistPaymentInTransaction(client: MoneyQueryClient, inpu
 }) {
   const amount = canonicalMoney(input.amount);
   if (amount === "0.00") throw new Error("Payment amount must be positive");
-  const fingerprint = fingerprintRequest({ orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate?.toISOString() ?? null, isAdvance: !!input.isAdvance, context: input.fingerprintContext ?? null });
+  const fingerprint = fingerprintRequest(
+    { orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate?.toISOString() ?? null, isAdvance: !!input.isAdvance, context: input.fingerprintContext ?? null },
+    { moneyPaths: ["amount", "context.creditToApply"] },
+  );
   const order = await client.query(
     `SELECT id,
        greatest(coalesce(original_price,total_amount)-coalesce(discount_amount,discount,0)
@@ -152,7 +157,10 @@ export async function persistRefundInTransaction(client: MoneyQueryClient, input
 }) {
   const amount = canonicalMoney(input.amount);
   if (amount === "0.00") throw new Error("Refund amount must be positive");
-  const fingerprint = fingerprintRequest({ orderId: input.orderId, amount, reason: input.reason, status: input.status, allocations: input.allocations });
+  const fingerprint = fingerprintRequest(
+    { orderId: input.orderId, amount, reason: input.reason, status: input.status, allocations: input.allocations },
+    { moneyPaths: ["amount", "allocations[].amount"] },
+  );
   const order = await client.query(`SELECT id FROM orders WHERE id=$1 AND organisation_id=$2 AND site_id=$3 FOR UPDATE`, [input.orderId, input.organisationId, input.siteId]);
   if (!order.rowCount) throw new Error("Order not found for tenant");
   const replay = await client.query(`SELECT * FROM order_refunds WHERE organisation_id=$1 AND site_id=$2 AND idempotency_key=$3 FOR UPDATE`, [input.organisationId, input.siteId, input.idempotencyKey]);
@@ -195,7 +203,10 @@ export async function persistPaidCorrectionOutcome(client: MoneyQueryClient, inp
   customerId?: number; allocations?: Allocation[];
 }) {
   const outcome = paidCorrectionOutcome(input.kind, input.amount);
-  const correctionFingerprint = fingerprintRequest({ kind: outcome.kind, amount: outcome.amount, reason: input.reason, customerId: input.customerId ?? null });
+  const correctionFingerprint = fingerprintRequest(
+    { kind: outcome.kind, amount: outcome.amount, reason: input.reason, customerId: input.customerId ?? null },
+    { moneyPaths: ["amount"] },
+  );
   const order = await client.query(`SELECT id FROM orders WHERE id=$1 AND organisation_id=$2 AND site_id=$3 FOR UPDATE`, [input.orderId,input.organisationId,input.siteId]);
   if (!order.rowCount) throw new Error("Order not found for tenant");
   const replay = await client.query(

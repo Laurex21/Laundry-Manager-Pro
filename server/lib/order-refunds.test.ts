@@ -41,10 +41,20 @@ assert.deepEqual(paidCorrectionOutcome("balanced", "99"), { kind: "balanced", am
 assert.throws(() => paidCorrectionOutcome("balance", "-1"), /bounds/);
 assert.throws(() => paidCorrectionOutcome("customer_credit", "100000000"), /bounds/);
 
-const a = fingerprintRequest({ amount: "1.0", method: "cash", allocations: [{ target: "service", amount: "1" }] });
-const b = fingerprintRequest({ allocations: [{ amount: "1.00", target: "service" }], method: "cash", amount: "1.00" });
+assert.notEqual(fingerprintRequest({ reference: "001" }), fingerprintRequest({ reference: "1" }));
+assert.notEqual(fingerprintRequest({ amount: "1.0" }), fingerprintRequest({ amount: "1.00" }), "generic strings remain exact");
+const moneyFields = { moneyPaths: ["amount", "allocations[].amount"] };
+assert.equal(fingerprintRequest({ amount: "1" }, moneyFields), fingerprintRequest({ amount: "1.0" }, moneyFields));
+assert.equal(fingerprintRequest({ amount: "1.0" }, moneyFields), fingerprintRequest({ amount: "1.00" }, moneyFields));
+const a = fingerprintRequest({ amount: "1.0", method: "cash", allocations: [{ target: "service", amount: "1" }] }, moneyFields);
+const b = fingerprintRequest({ allocations: [{ amount: "1.00", target: "service" }], method: "cash", amount: "1.00" }, moneyFields);
 assert.equal(a, b);
-assert.notEqual(a, fingerprintRequest({ amount: "2", method: "cash" }));
+assert.notEqual(a, fingerprintRequest({ amount: "2", method: "cash" }, moneyFields));
+assert.notEqual(
+  fingerprintRequest({ allocations: [{ target: "service", amount: "1" }, { target: "pickup_delivery", amount: "2" }] }, moneyFields),
+  fingerprintRequest({ allocations: [{ target: "pickup_delivery", amount: "2" }, { target: "service", amount: "1" }] }, moneyFields),
+  "array ordering is part of the request contract",
+);
 
 assert.equal(hasStainCapability("owner", []), true);
 assert.equal(hasStainCapability("manager", ["manage_stain_treatment_pricing"]), true);
