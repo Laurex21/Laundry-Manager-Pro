@@ -33,6 +33,10 @@ assert.ok(migration.includes("preserve_order_posted_at"));
 assert.ok(migration.includes("order_stain_treatments_corrected_from_tenant_fkey"));
 assert.ok(migration.includes("order_stain_treatments_append_only"));
 assert.ok(migration.includes("num_nonnulls(service_amount, treatment_amount, pickup_delivery_amount, unallocated_amount) = 1"));
+for (const source of [schema, migration]) {
+  assert.ok(source.includes("^[A-Z]{3,10}$"), "treatment currencies must accept authoritative values such as FCFA");
+}
+assert.ok(migration.includes("ALTER COLUMN currency TYPE varchar(10)"), "self-heal must widen existing treatment currency columns");
 assert.ok(selfHeal.includes("await ensureStainTreatmentSchema()"));
 assert.ok(selfHeal.includes("export async function ensureStainTreatmentSchema"));
 assert.ok(selfHeal.includes("applyStainTreatmentSchema"));

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS stain_treatment_pricing_sets (
 
 CREATE TABLE IF NOT EXISTS stain_treatment_price_versions (
  id serial PRIMARY KEY, pricing_set_id integer NOT NULL, organisation_id integer NOT NULL, site_id integer NOT NULL,
- set_version integer NOT NULL, level varchar(30) NOT NULL, unit varchar(10) NOT NULL, currency varchar(3) NOT NULL,
+ set_version integer NOT NULL, level varchar(30) NOT NULL, unit varchar(10) NOT NULL, currency varchar(10) NOT NULL,
  price numeric(10,2) NOT NULL, effective_at timestamp NOT NULL DEFAULT now(), active boolean NOT NULL DEFAULT true,
  created_by varchar NOT NULL, created_at timestamp NOT NULL DEFAULT now(),
  CONSTRAINT stain_treatment_price_versions_identity UNIQUE(id,organisation_id,site_id),
@@ -34,17 +34,20 @@ CREATE TABLE IF NOT EXISTS stain_treatment_price_versions (
  CONSTRAINT stain_treatment_price_versions_set_tenant_fkey FOREIGN KEY(pricing_set_id,organisation_id,site_id) REFERENCES stain_treatment_pricing_sets(id,organisation_id,site_id),
  CONSTRAINT stain_treatment_price_versions_level_check CHECK(level IN ('standard','intensive','very_intensive')),
  CONSTRAINT stain_treatment_price_versions_unit_check CHECK(unit IN ('piece','kg')),
- CONSTRAINT stain_treatment_price_versions_currency_check CHECK(currency ~ '^[A-Z]{3}$'),
+ CONSTRAINT stain_treatment_price_versions_currency_check CHECK(currency ~ '^[A-Z]{3,10}$'),
  CONSTRAINT stain_treatment_price_versions_price_check CHECK(price > 0 AND price <= 99999999.99 AND price=round(price,2)),
  CONSTRAINT stain_treatment_price_versions_version_check CHECK(set_version > 0)
 );
+ALTER TABLE stain_treatment_price_versions ALTER COLUMN currency TYPE varchar(10);
+ALTER TABLE stain_treatment_price_versions DROP CONSTRAINT IF EXISTS stain_treatment_price_versions_currency_check;
+ALTER TABLE stain_treatment_price_versions ADD CONSTRAINT stain_treatment_price_versions_currency_check CHECK(currency ~ '^[A-Z]{3,10}$');
 CREATE UNIQUE INDEX IF NOT EXISTS stain_treatment_active_rate_key ON stain_treatment_price_versions(organisation_id,site_id,level,unit) WHERE active;
 CREATE INDEX IF NOT EXISTS idx_stain_treatment_price_versions_site_effective ON stain_treatment_price_versions(organisation_id,site_id,effective_at);
 
 CREATE TABLE IF NOT EXISTS order_stain_treatments (
  id serial PRIMARY KEY, organisation_id integer NOT NULL, site_id integer NOT NULL, order_id integer NOT NULL, order_item_id integer NOT NULL,
  level varchar(30) NOT NULL, unit varchar(10) NOT NULL, quantity numeric(10,2) NOT NULL, captured_rate numeric(10,2) NOT NULL,
- line_total numeric(10,2) NOT NULL, currency varchar(3) NOT NULL, pricing_version_id integer NOT NULL, pricing_set_version integer NOT NULL,
+ line_total numeric(10,2) NOT NULL, currency varchar(10) NOT NULL, pricing_version_id integer NOT NULL, pricing_set_version integer NOT NULL,
  idempotency_key varchar(120) NOT NULL, acknowledgement_affirmed boolean, acknowledgement_text_version varchar(120), acknowledged_by varchar,
  acknowledged_at timestamp, corrected_from_treatment_id integer, created_by varchar NOT NULL, created_at timestamp NOT NULL DEFAULT now(),
  CONSTRAINT order_stain_treatments_identity UNIQUE(id,organisation_id,site_id),
@@ -55,11 +58,14 @@ CREATE TABLE IF NOT EXISTS order_stain_treatments (
  CONSTRAINT order_stain_treatments_corrected_from_tenant_fkey FOREIGN KEY(corrected_from_treatment_id,organisation_id,site_id) REFERENCES order_stain_treatments(id,organisation_id,site_id),
  CONSTRAINT order_stain_treatments_level_check CHECK(level IN ('standard','intensive','very_intensive')),
  CONSTRAINT order_stain_treatments_unit_check CHECK(unit IN ('piece','kg')),
- CONSTRAINT order_stain_treatments_currency_check CHECK(currency ~ '^[A-Z]{3}$'),
+ CONSTRAINT order_stain_treatments_currency_check CHECK(currency ~ '^[A-Z]{3,10}$'),
  CONSTRAINT order_stain_treatments_amount_check CHECK(quantity > 0 AND quantity=round(quantity,2) AND (unit <> 'piece' OR quantity=trunc(quantity)) AND captured_rate > 0 AND captured_rate=round(captured_rate,2) AND line_total > 0 AND line_total=round(quantity*captured_rate,2)),
  CONSTRAINT order_stain_treatments_acknowledgement_check CHECK((level <> 'very_intensive' AND acknowledgement_affirmed IS NULL AND acknowledgement_text_version IS NULL AND acknowledged_by IS NULL AND acknowledged_at IS NULL) OR (level='very_intensive' AND acknowledgement_affirmed IS TRUE AND acknowledgement_text_version IS NOT NULL AND acknowledged_by IS NOT NULL AND acknowledged_at IS NOT NULL)),
  CONSTRAINT order_stain_treatments_correction_check CHECK(corrected_from_treatment_id IS NULL OR corrected_from_treatment_id <> id)
 );
+ALTER TABLE order_stain_treatments ALTER COLUMN currency TYPE varchar(10);
+ALTER TABLE order_stain_treatments DROP CONSTRAINT IF EXISTS order_stain_treatments_currency_check;
+ALTER TABLE order_stain_treatments ADD CONSTRAINT order_stain_treatments_currency_check CHECK(currency ~ '^[A-Z]{3,10}$');
 CREATE UNIQUE INDEX IF NOT EXISTS order_stain_treatments_corrected_from_key ON order_stain_treatments(corrected_from_treatment_id) WHERE corrected_from_treatment_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_order_stain_treatments_tenant_date ON order_stain_treatments(organisation_id,site_id,created_at);
 CREATE INDEX IF NOT EXISTS idx_order_stain_treatments_order_item ON order_stain_treatments(order_id,order_item_id);

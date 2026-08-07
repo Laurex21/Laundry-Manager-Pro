@@ -29,6 +29,7 @@ import {
   OrderCorrectionError,
 } from "./lib/order-corrections";
 import { calculateOrderTotals, canonicalMoney, compareMoney } from "./lib/order-money";
+import { registerStainTreatmentRoutes } from "./lib/stain-treatment-routes";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -289,6 +290,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerMembershipRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
+  registerStainTreatmentRoutes(app);
   seedDatabase().catch(console.error);
   startTemporalIntelligenceJob();
 
