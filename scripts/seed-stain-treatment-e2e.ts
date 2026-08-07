@@ -14,6 +14,10 @@ export type StainE2EState = {
   schema: string;
   baseUrl: string;
   orderId?: number;
+  customerId?: number;
+  pieceServiceId?: number;
+  kgServiceId?: number;
+  customerSubscriptionId?: number;
   credentials: Record<"owner" | "capableManager" | "manager" | "operator", { email: string; password: string }>;
 };
 
@@ -97,6 +101,7 @@ async function seedRows(pool: pg.Pool, schema: string, state: StainE2EState) {
       `INSERT INTO customers(site_id,name,phone,address) VALUES ($1,'E2E Customer','000-E2E','Test only') RETURNING id`,
       [siteId],
     );
+    state.customerId = customer.rows[0].id;
     const pricingSet = await client.query(
       `INSERT INTO stain_treatment_pricing_sets(organisation_id,site_id,current_version) VALUES ($1,$2,1) RETURNING id`,
       [organisationId, siteId],
@@ -112,9 +117,9 @@ async function seedRows(pool: pg.Pool, schema: string, state: StainE2EState) {
       rateIds.set(`${level}:${unit}`, inserted.rows[0].id);
     }
     // Seed a membership plan so the order UI exercises the rule that treatment is never discounted.
-    await client.query(
+    const plan = await client.query(
       `INSERT INTO subscription_plans(organisation_id,name,status,billing_cycle,duration_days,recurring_price,discount_percentage)
-       VALUES ($1,'E2E Member','active','monthly',30,100,10)`,
+       VALUES ($1,'E2E Member','active','monthly',30,100,10) RETURNING id`,
       [organisationId],
     );
     const order = await client.query(
@@ -125,6 +130,18 @@ async function seedRows(pool: pg.Pool, schema: string, state: StainE2EState) {
     state.orderId = order.rows[0].id;
     const pieceService = services.rows.find((row) => row.unit === "piece").id;
     const kgService = services.rows.find((row) => row.unit === "kg").id;
+    state.pieceServiceId = pieceService;
+    state.kgServiceId = kgService;
+    await client.query(
+      `INSERT INTO subscription_plan_services(subscription_plan_id,service_id) VALUES ($1,$2),($1,$3)`,
+      [plan.rows[0].id, pieceService, kgService],
+    );
+    const subscription = await client.query(
+      `INSERT INTO customer_subscriptions(organisation_id,customer_id,subscription_plan_id,membership_number,status,start_date,expiry_date,remaining_kg,remaining_pieces,remaining_orders)
+       VALUES ($1,$2,$3,'E2E-MEMBER-001','active',current_date,current_date + 30,20,20,20) RETURNING id`,
+      [organisationId, customer.rows[0].id, plan.rows[0].id],
+    );
+    state.customerSubscriptionId = subscription.rows[0].id;
     const items = await client.query(
       `INSERT INTO order_items(order_id,service_id,quantity,price_at_order) VALUES ($1,$2,2,40),($1,$3,1,25) RETURNING id,service_id`,
       [state.orderId, pieceService, kgService],

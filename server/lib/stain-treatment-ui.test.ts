@@ -12,6 +12,8 @@ const orders = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
 const orderHook = readFileSync(join(root, "client/src/hooks/use-orders.ts"), "utf8");
 const detail = readFileSync(join(root, "client/src/pages/order-detail.tsx"), "utf8");
 const analytics = readFileSync(join(root, "client/src/pages/analytics.tsx"), "utf8");
+const browserGate = readFileSync(join(root, "e2e/stain-treatment.spec.ts"), "utf8");
+const browserSeed = readFileSync(join(root, "scripts/seed-stain-treatment-e2e.ts"), "utf8");
 
 assert.match(hook, /\/api\/stain-treatment\/prices/);
 assert.match(hook, /invalidateQueries\(\{ queryKey: STAIN_TREATMENT_SETTINGS_KEY \}\)/);
@@ -57,6 +59,22 @@ assert.match(analytics, /view_stain_treatment_reports/);
 assert.match(analytics, /bookedRevenue/);
 assert.match(analytics, /collectedRevenue/);
 assert.match(analytics, /acknowledgementExceptions/);
+assert.match(browserGate, /postCoveredOrder/);
+assert.match(browserGate, /pieceServiceId/);
+assert.match(browserGate, /kgServiceId/);
+assert.match(browserGate, /level: "standard"/);
+assert.match(browserGate, /level: "intensive"/);
+assert.match(browserGate, /level: "very_intensive"/);
+assert.match(browserGate, /fixed: "5\.00"/);
+assert.match(browserGate, /percentage: 10/);
+assert.match(browserGate, /advancePayment/);
+assert.match(browserGate, /subscriptions\/apply-to-order/);
+assert.match(browserGate, /paid-correction/);
+assert.match(browserGate, /menu-item-lang-\$\{language\}/);
+assert.match(browserGate, /code: "pricing_conflict"/);
+assert.doesNotMatch(browserGate, /if \(await dialog\.count\(\)\)/);
+assert.match(browserSeed, /INSERT INTO customer_subscriptions/);
+assert.match(browserSeed, /INSERT INTO subscription_plan_services/);
 
 [
   "stain_treatment_settings", "stain_treatment_standard", "stain_treatment_intensive",

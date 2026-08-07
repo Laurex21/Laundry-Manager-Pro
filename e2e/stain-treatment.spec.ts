@@ -20,6 +20,54 @@ async function expectNoSeriousAxeViolations(page: Page) {
   expect(result.violations.filter((item) => item.impact === "serious" || item.impact === "critical")).toEqual([]);
 }
 
+function requiredSeedIds() {
+  expect(state.customerId).toBeTruthy();
+  expect(state.pieceServiceId).toBeTruthy();
+  expect(state.kgServiceId).toBeTruthy();
+  expect(state.customerSubscriptionId).toBeTruthy();
+  return {
+    customerId: state.customerId!,
+    pieceServiceId: state.pieceServiceId!,
+    kgServiceId: state.kgServiceId!,
+    customerSubscriptionId: state.customerSubscriptionId!,
+  };
+}
+
+async function activePricing(page: Page) {
+  const response = await page.request.get("/api/stain-treatment/prices");
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return response.json();
+}
+
+async function postCoveredOrder(page: Page, discount: { fixed?: string; percentage?: number }, suffix: string, advancePayment = "25.00") {
+  const ids = requiredSeedIds();
+  const pricing = await activePricing(page);
+  const response = await page.request.post("/api/orders", { data: {
+    customerId: ids.customerId,
+    idempotencyKey: `stain-e2e-order-${suffix}`,
+    expectedPricingSetVersion: pricing.expectedPricingSetVersion,
+    discount: discount.fixed ?? "0",
+    discountPct: discount.percentage ?? 0,
+    pickupCost: "5.00",
+    advancePayment,
+    advancePaymentMethod: "Cash",
+    items: [
+      { serviceId: ids.pieceServiceId, quantity: 2 },
+      { serviceId: ids.kgServiceId, quantity: 1 },
+    ],
+    garmentItems: [],
+    machineUsages: [],
+    treatments: [
+      { orderItemIndex: 0, level: "standard", quantity: "1", idempotencyKey: `${suffix}-piece-standard` },
+      { orderItemIndex: 0, level: "intensive", quantity: "1", idempotencyKey: `${suffix}-piece-intensive` },
+      { orderItemIndex: 1, level: "standard", quantity: "0.5", idempotencyKey: `${suffix}-kg-standard` },
+      { orderItemIndex: 1, level: "very_intensive", quantity: "0.5", idempotencyKey: `${suffix}-kg-very`, acknowledgement: { affirmed: true, textVersion: "stain-removal-not-guaranteed-v1" } },
+    ],
+  } });
+  expect(response.status(), await response.text()).toBe(201);
+  return response.json();
+}
+
 test("Owner and capable Manager can configure all six fixed rates", async ({ page }, testInfo) => {
   await login(page, "owner");
   await page.goto("/settings");
@@ -49,32 +97,85 @@ test("unauthorized Manager and Operator cannot access pricing controls", async (
   expect(operatorForbidden.status()).toBe(403);
 });
 
-test("piece and kg order editor exposes three levels and Very intensive acknowledgement", async ({ page }, testInfo) => {
+test("piece/kg splits, all levels, fixed and percentage discounts, payments, membership and corrections post successfully", async ({ page }) => {
+  await login(page, "owner");
+  const ids = requiredSeedIds();
+  const fixed = await postCoveredOrder(page, { fixed: "5.00" }, `fixed-${Date.now()}`);
+  const fixedDetailResponse = await page.request.get(`/api/orders/${fixed.id}`);
+  expect(fixedDetailResponse.ok(), await fixedDetailResponse.text()).toBeTruthy();
+  const fixedDetail = await fixedDetailResponse.json();
+  expect(fixedDetail.stainTreatments).toHaveLength(4);
+  expect(new Set(fixedDetail.stainTreatments.map((line: any) => line.level))).toEqual(new Set(["standard", "intensive", "very_intensive"]));
+  expect(new Set(fixedDetail.stainTreatments.map((line: any) => line.unit))).toEqual(new Set(["piece", "kg"]));
+  const advanceResponse = await page.request.get(`/api/orders/${fixed.id}/payments`);
+  expect(advanceResponse.ok(), await advanceResponse.text()).toBeTruthy();
+  expect((await advanceResponse.json()).some((payment: any) => payment.isAdvance && String(payment.amount) === "25.00")).toBeTruthy();
+
+  const membershipOrder = await postCoveredOrder(page, {}, `membership-${Date.now()}`, "0.00");
+  const membership = await page.request.post("/api/subscriptions/apply-to-order", { data: { customerSubscriptionId: ids.customerSubscriptionId, orderId: membershipOrder.id } });
+  expect(membership.ok(), await membership.text()).toBeTruthy();
+  const membershipPayload = await membership.json();
+  expect(String(membershipPayload.coverage.treatmentAmount)).not.toBe("0.00");
+  expect(String(membershipPayload.coverage.finalAmount)).not.toBe("0.00");
+
+  const percentage = await postCoveredOrder(page, { percentage: 10 }, `percentage-${Date.now()}`);
+  expect(String(percentage.discount)).not.toBe("0.00");
+
+  const correction = await page.request.post(`/api/orders/${state.orderId}/paid-correction`, { data: {
+    customerId: ids.customerId,
+    entryDate: new Date().toISOString(),
+    pickupDate: null,
+    reason: "E2E verified paid correction",
+    idempotencyKey: `stain-e2e-correction-${Date.now()}`,
+    items: [{ serviceId: ids.pieceServiceId, quantity: 2 }, { serviceId: ids.kgServiceId, quantity: 1 }],
+    garments: [],
+  } });
+  expect(correction.status(), await correction.text()).toBe(201);
+});
+
+test("EN, FR and PT render stain treatment controls", async ({ page }) => {
+  await login(page, "owner");
+  await page.goto("/orders");
+  for (const [language, expected] of [["en", /Add stain treatment/i], ["fr", /Ajouter un traitement/i], ["pt", /Adicionar tratamento/i]] as const) {
+    await page.getByTestId("button-language-toggle").click();
+    await page.getByTestId(`menu-item-lang-${language}`).click();
+    await expect(page.getByText(expected).first()).toBeVisible();
+  }
+});
+
+test("forced price-version conflict opens a focus-trapped review dialog", async ({ page }) => {
   await login(page, "owner");
   await page.goto("/orders");
   await page.getByRole("button", { name: /new order|nouvelle commande|novo pedido/i }).first().click();
-  await expect(page.getByText(/E2E Shirt/)).toBeVisible();
-  await expect(page.getByText(/E2E Wash by kg/)).toBeVisible();
+  await page.getByRole("combobox", { name: /customers|clients|clientes/i }).click();
+  await page.getByText("E2E Customer").click();
+  await page.getByRole("combobox", { name: /service/i }).first().click();
+  await page.getByText("E2E Shirt").click();
   await page.getByRole("button", { name: /add stain treatment|ajouter un traitement|adicionar tratamento/i }).click();
-  await expect(page.getByText(/Standard/).first()).toBeVisible();
-  await expect(page.getByText(/Intensive|Intensif|Intensivo/).first()).toBeVisible();
-  await expect(page.getByText(/Very intensive|Très intensif|Muito intensivo/).first()).toBeVisible();
-  await expect(page.locator('[aria-live="polite"]')).toContainText(/subtotal|sous-total/i);
-  await expectNoSeriousAxeViolations(page);
-  await page.screenshot({ path: testInfo.outputPath("order-stain-editor.png"), fullPage: true });
+  await page.route("**/api/orders", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({
+      message: "Stain treatment prices changed",
+      code: "pricing_conflict",
+      details: {
+        expectedPricingSetVersion: "forced-e2e-version-2",
+        oldTotal: "50.00",
+        newTotal: "51.00",
+        oldRates: [{ level: "standard", unit: "piece", price: "10.00" }],
+        newRates: [{ level: "standard", unit: "piece", price: "11.00" }],
+      },
+    }) });
+  });
+  await page.getByRole("button", { name: /create new order|créer.*commande|criar novo pedido/i }).click();
+  const dialog = page.getByRole("alertdialog", { name: /stain treatment prices changed|tarifs de traitement ont changé|preços.*mudaram/i });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(":focus")).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(dialog.locator(":focus")).toBeVisible();
 });
 
-test("price-change dialog traps focus and receipt, detail, and report surfaces render", async ({ page }) => {
+test("receipt, detail, and report surfaces render", async ({ page }) => {
   await login(page, "owner");
-  await page.goto("/orders");
-  const dialog = page.getByRole("alertdialog", { name: /stain treatment prices changed|tarifs de traitement ont changé|preços.*mudaram/i });
-  // The dialog is server-conflict driven; when present its accessible focus contract is mandatory.
-  if (await dialog.count()) {
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator(":focus")).toBeVisible();
-    await page.keyboard.press("Tab");
-    await expect(dialog.locator(":focus")).toBeVisible();
-  }
   await page.goto("/analytics");
   await expect(page.getByTestId("stain-treatment-analytics")).toBeVisible();
   await expect(page.getByText(/Standard/).first()).toBeVisible();
