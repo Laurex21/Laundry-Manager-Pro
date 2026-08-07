@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   allocateMoney,
   canonicalMoney,
@@ -16,6 +18,13 @@ import {
   subtractMoney,
   withMoneyTransaction,
 } from "./order-money";
+
+const schemaSource = readFileSync(join(process.cwd(), "shared/schema.ts"), "utf8");
+const treatmentMigrationSource = readFileSync(join(process.cwd(), "migrations/20260807_stain_treatment_pricing.sql"), "utf8");
+assert.ok(schemaSource.includes('treatmentAmount: decimal("treatment_amount"'));
+assert.ok(schemaSource.includes("order_refund_allocations_treatment_tenant_fkey"));
+assert.ok(treatmentMigrationSource.includes("num_nonnulls(service_amount, treatment_amount, pickup_delivery_amount, unallocated_amount) = 1"));
+assert.ok(treatmentMigrationSource.includes("validate_refund_allocation_total"));
 
 assert.equal(canonicalMoney("1.005"), "1.01");
 assert.equal(canonicalMoney("99999999.99"), "99999999.99");

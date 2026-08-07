@@ -86,6 +86,9 @@ export const orders = pgTable("orders", {
   cancellationRejectionNote: text("cancellation_rejection_note"),
   correctedFromOrderId: integer("corrected_from_order_id"),
   correctionReason: text("correction_reason"),
+  idempotencyKey: varchar("idempotency_key", { length: 120 }),
+  requestFingerprint: varchar("request_fingerprint", { length: 64 }),
+  postedAt: timestamp("posted_at").notNull().defaultNow(),
   siteId: integer("site_id").notNull(),
   organisationId: integer("organisation_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -99,6 +102,8 @@ export const orders = pgTable("orders", {
   index("idx_orders_delivered_at").on(table.deliveredAt),
   index("idx_orders_corrected_from").on(table.correctedFromOrderId),
   uniqueIndex("orders_tenant_identity").on(table.id, table.organisationId, table.siteId),
+  uniqueIndex("orders_organisation_id_site_id_idempotency_key_key").on(table.organisationId, table.siteId, table.idempotencyKey).where(sql`${table.idempotencyKey} IS NOT NULL`),
+  check("orders_request_fingerprint_check", sql`${table.requestFingerprint} IS NULL OR ${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
 
 export const orderItems = pgTable("order_items", {
@@ -107,7 +112,9 @@ export const orderItems = pgTable("order_items", {
   serviceId: integer("service_id").notNull().references(() => services.id),
   quantity: decimal("quantity", { precision: 10, scale: 2, mode: "number" }).notNull(),
   priceAtOrder: decimal("price_at_order", { precision: 10, scale: 2 }).notNull(),
-});
+}, (table) => [
+  uniqueIndex("order_items_id_order_id_key").on(table.id, table.orderId),
+]);
 
 export const orderStatusHistory = pgTable("order_status_history", {
   id: serial("id").primaryKey(),
@@ -583,6 +590,115 @@ export const VALID_SITE_MEMBER_CAPABILITIES = [
   "view_stain_treatment_reports",
 ] as const;
 
+export const stainTreatmentPricingSets = pgTable("stain_treatment_pricing_sets", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  siteId: integer("site_id").notNull(),
+  currentVersion: integer("current_version").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("stain_treatment_pricing_sets_organisation_id_site_id_key").on(table.organisationId, table.siteId),
+  uniqueIndex("stain_treatment_pricing_sets_id_organisation_id_site_id_key").on(table.id, table.organisationId, table.siteId),
+  foreignKey({ name: "stain_treatment_pricing_sets_site_tenant_fkey", columns: [table.siteId, table.organisationId], foreignColumns: [sites.id, sites.organisationId] }),
+  check("stain_treatment_pricing_sets_version_check", sql`${table.currentVersion} >= 0`),
+]);
+
+export const stainTreatmentPriceVersions = pgTable("stain_treatment_price_versions", {
+  id: serial("id").primaryKey(),
+  pricingSetId: integer("pricing_set_id").notNull(),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
+  setVersion: integer("set_version").notNull(),
+  level: varchar("level", { length: 30 }).notNull(),
+  unit: varchar("unit", { length: 10 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  effectiveAt: timestamp("effective_at").notNull().defaultNow(),
+  active: boolean("active").notNull().default(true),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("stain_treatment_price_versions_identity").on(table.id, table.organisationId, table.siteId),
+  uniqueIndex("stain_treatment_price_versions_version_identity").on(table.id, table.organisationId, table.siteId, table.setVersion),
+  uniqueIndex("stain_treatment_price_versions_set_level_unit_key").on(table.pricingSetId, table.setVersion, table.level, table.unit),
+  uniqueIndex("stain_treatment_active_rate_key").on(table.organisationId, table.siteId, table.level, table.unit).where(sql`${table.active}`),
+  index("idx_stain_treatment_price_versions_site_effective").on(table.organisationId, table.siteId, table.effectiveAt),
+  foreignKey({ name: "stain_treatment_price_versions_set_tenant_fkey", columns: [table.pricingSetId, table.organisationId, table.siteId], foreignColumns: [stainTreatmentPricingSets.id, stainTreatmentPricingSets.organisationId, stainTreatmentPricingSets.siteId] }),
+  check("stain_treatment_price_versions_level_check", sql`${table.level} IN ('standard','intensive','very_intensive')`),
+  check("stain_treatment_price_versions_unit_check", sql`${table.unit} IN ('piece','kg')`),
+  check("stain_treatment_price_versions_currency_check", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  check("stain_treatment_price_versions_price_check", sql`${table.price} > 0 AND ${table.price} <= 99999999.99 AND ${table.price} = round(${table.price}, 2)`),
+  check("stain_treatment_price_versions_version_check", sql`${table.setVersion} > 0`),
+]);
+
+export const orderStainTreatments = pgTable("order_stain_treatments", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
+  orderId: integer("order_id").notNull(),
+  orderItemId: integer("order_item_id").notNull(),
+  level: varchar("level", { length: 30 }).notNull(),
+  unit: varchar("unit", { length: 10 }).notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  capturedRate: decimal("captured_rate", { precision: 10, scale: 2 }).notNull(),
+  lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  pricingVersionId: integer("pricing_version_id").notNull(),
+  pricingSetVersion: integer("pricing_set_version").notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 120 }).notNull(),
+  acknowledgementAffirmed: boolean("acknowledgement_affirmed"),
+  acknowledgementTextVersion: varchar("acknowledgement_text_version", { length: 120 }),
+  acknowledgedBy: varchar("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  correctedFromTreatmentId: integer("corrected_from_treatment_id"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("order_stain_treatments_identity").on(table.id, table.organisationId, table.siteId),
+  uniqueIndex("order_stain_treatments_organisation_id_idempotency_key_key").on(table.organisationId, table.idempotencyKey),
+  uniqueIndex("order_stain_treatments_corrected_from_key").on(table.correctedFromTreatmentId).where(sql`${table.correctedFromTreatmentId} IS NOT NULL`),
+  index("idx_order_stain_treatments_tenant_date").on(table.organisationId, table.siteId, table.createdAt),
+  index("idx_order_stain_treatments_order_item").on(table.orderId, table.orderItemId),
+  foreignKey({ name: "order_stain_treatments_order_tenant_fkey", columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
+  foreignKey({ name: "order_stain_treatments_item_order_fkey", columns: [table.orderItemId, table.orderId], foreignColumns: [orderItems.id, orderItems.orderId] }),
+  foreignKey({ name: "order_stain_treatments_pricing_version_tenant_fkey", columns: [table.pricingVersionId, table.organisationId, table.siteId, table.pricingSetVersion], foreignColumns: [stainTreatmentPriceVersions.id, stainTreatmentPriceVersions.organisationId, stainTreatmentPriceVersions.siteId, stainTreatmentPriceVersions.setVersion] }),
+  foreignKey({ name: "order_stain_treatments_corrected_from_tenant_fkey", columns: [table.correctedFromTreatmentId, table.organisationId, table.siteId], foreignColumns: [table.id, table.organisationId, table.siteId] }),
+  check("order_stain_treatments_level_check", sql`${table.level} IN ('standard','intensive','very_intensive')`),
+  check("order_stain_treatments_unit_check", sql`${table.unit} IN ('piece','kg')`),
+  check("order_stain_treatments_currency_check", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  check("order_stain_treatments_amount_check", sql`${table.quantity} > 0 AND ${table.quantity} = round(${table.quantity}, 2) AND (${table.unit} <> 'piece' OR ${table.quantity} = trunc(${table.quantity})) AND ${table.capturedRate} > 0 AND ${table.capturedRate} = round(${table.capturedRate}, 2) AND ${table.lineTotal} > 0 AND ${table.lineTotal} = round(${table.quantity} * ${table.capturedRate}, 2)`),
+  check("order_stain_treatments_acknowledgement_check", sql`(${table.level} <> 'very_intensive' AND ${table.acknowledgementAffirmed} IS NULL AND ${table.acknowledgementTextVersion} IS NULL AND ${table.acknowledgedBy} IS NULL AND ${table.acknowledgedAt} IS NULL) OR (${table.level} = 'very_intensive' AND ${table.acknowledgementAffirmed} IS TRUE AND ${table.acknowledgementTextVersion} IS NOT NULL AND ${table.acknowledgedBy} IS NOT NULL AND ${table.acknowledgedAt} IS NOT NULL)`),
+  check("order_stain_treatments_correction_check", sql`${table.correctedFromTreatmentId} IS NULL OR ${table.correctedFromTreatmentId} <> ${table.id}`),
+]);
+
+export const orderStainTreatmentAdjustments = pgTable("order_stain_treatment_adjustments", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
+  treatmentId: integer("treatment_id").notNull(),
+  quantityEffect: decimal("quantity_effect", { precision: 10, scale: 2 }).notNull(),
+  amountEffect: decimal("amount_effect", { precision: 10, scale: 2 }).notNull(),
+  action: varchar("action", { length: 20 }).notNull(),
+  reason: text("reason").notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 120 }).notNull(),
+  acknowledgementAffirmed: boolean("acknowledgement_affirmed"),
+  acknowledgementTextVersion: varchar("acknowledgement_text_version", { length: 120 }),
+  acknowledgedBy: varchar("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("order_stain_treatment_adjustments_organisation_id_idempotency_key_key").on(table.organisationId, table.idempotencyKey),
+  uniqueIndex("order_stain_treatment_adjustments_single_void").on(table.treatmentId).where(sql`${table.action} = 'void'`),
+  index("idx_order_stain_treatment_adjustments_tenant_date").on(table.organisationId, table.siteId, table.createdAt),
+  foreignKey({ name: "order_stain_treatment_adjustments_treatment_tenant_fkey", columns: [table.treatmentId, table.organisationId, table.siteId], foreignColumns: [orderStainTreatments.id, orderStainTreatments.organisationId, orderStainTreatments.siteId] }),
+  check("order_stain_treatment_adjustments_action_check", sql`${table.action} IN ('adjustment','void')`),
+  check("order_stain_treatment_adjustments_effect_check", sql`${table.quantityEffect} <> 0 AND ${table.quantityEffect} = round(${table.quantityEffect}, 2) AND ${table.amountEffect} <> 0 AND ${table.amountEffect} = round(${table.amountEffect}, 2)`),
+  check("order_stain_treatment_adjustments_reason_check", sql`length(btrim(${table.reason})) > 0`),
+  check("order_stain_treatment_adjustments_acknowledgement_check", sql`(${table.acknowledgementAffirmed} IS NULL AND ${table.acknowledgementTextVersion} IS NULL AND ${table.acknowledgedBy} IS NULL AND ${table.acknowledgedAt} IS NULL) OR (${table.acknowledgementAffirmed} IS TRUE AND ${table.acknowledgementTextVersion} IS NOT NULL AND ${table.acknowledgedBy} IS NOT NULL AND ${table.acknowledgedAt} IS NOT NULL)`),
+]);
+
 export const orderRefunds = pgTable("order_refunds", {
   id: serial("id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
@@ -610,13 +726,16 @@ export const orderPaymentAllocations = pgTable("order_payment_allocations", {
   organisationId: integer("organisation_id").notNull(),
   siteId: integer("site_id").notNull(),
   serviceAmount: decimal("service_amount", { precision: 10, scale: 2 }),
+  treatmentId: integer("treatment_id"),
+  treatmentAmount: decimal("treatment_amount", { precision: 10, scale: 2 }),
   pickupDeliveryAmount: decimal("pickup_delivery_amount", { precision: 10, scale: 2 }),
   unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   foreignKey({ name: "order_payment_allocations_payment_id_organisation_id_site_id_fkey", columns: [table.paymentId, table.organisationId, table.siteId], foreignColumns: [payments.id, payments.organisationId, payments.siteId] }),
-  check("order_payment_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
-  check("order_payment_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
+  foreignKey({ name: "order_payment_allocations_treatment_tenant_fkey", columns: [table.treatmentId, table.organisationId, table.siteId], foreignColumns: [orderStainTreatments.id, orderStainTreatments.organisationId, orderStainTreatments.siteId] }),
+  check("order_payment_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.treatmentAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1 AND (${table.treatmentAmount} IS NULL OR ${table.treatmentId} IS NOT NULL) AND (${table.treatmentAmount} IS NOT NULL OR ${table.treatmentId} IS NULL)`),
+  check("order_payment_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.treatmentAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
 ]);
 
 export const orderRefundAllocations = pgTable("order_refund_allocations", {
@@ -625,13 +744,16 @@ export const orderRefundAllocations = pgTable("order_refund_allocations", {
   organisationId: integer("organisation_id").notNull(),
   siteId: integer("site_id").notNull(),
   serviceAmount: decimal("service_amount", { precision: 10, scale: 2 }),
+  treatmentId: integer("treatment_id"),
+  treatmentAmount: decimal("treatment_amount", { precision: 10, scale: 2 }),
   pickupDeliveryAmount: decimal("pickup_delivery_amount", { precision: 10, scale: 2 }),
   unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   foreignKey({ name: "order_refund_allocations_refund_id_organisation_id_site_id_fkey", columns: [table.refundId, table.organisationId, table.siteId], foreignColumns: [orderRefunds.id, orderRefunds.organisationId, orderRefunds.siteId] }),
-  check("order_refund_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
-  check("order_refund_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
+  foreignKey({ name: "order_refund_allocations_treatment_tenant_fkey", columns: [table.treatmentId, table.organisationId, table.siteId], foreignColumns: [orderStainTreatments.id, orderStainTreatments.organisationId, orderStainTreatments.siteId] }),
+  check("order_refund_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.treatmentAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1 AND (${table.treatmentAmount} IS NULL OR ${table.treatmentId} IS NOT NULL) AND (${table.treatmentAmount} IS NOT NULL OR ${table.treatmentId} IS NULL)`),
+  check("order_refund_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.treatmentAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
 ]);
 
 export const siteInvitations = pgTable("site_invitations", {
@@ -782,6 +904,29 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
   }),
   members: many(siteMembers),
   invitations: many(siteInvitations),
+  stainTreatmentPricingSets: many(stainTreatmentPricingSets),
+}));
+
+export const stainTreatmentPricingSetsRelations = relations(stainTreatmentPricingSets, ({ one, many }) => ({
+  organisation: one(organisations, { fields: [stainTreatmentPricingSets.organisationId], references: [organisations.id] }),
+  site: one(sites, { fields: [stainTreatmentPricingSets.siteId], references: [sites.id] }),
+  versions: many(stainTreatmentPriceVersions),
+}));
+
+export const stainTreatmentPriceVersionsRelations = relations(stainTreatmentPriceVersions, ({ one, many }) => ({
+  pricingSet: one(stainTreatmentPricingSets, { fields: [stainTreatmentPriceVersions.pricingSetId], references: [stainTreatmentPricingSets.id] }),
+  treatments: many(orderStainTreatments),
+}));
+
+export const orderStainTreatmentsRelations = relations(orderStainTreatments, ({ one, many }) => ({
+  order: one(orders, { fields: [orderStainTreatments.orderId], references: [orders.id] }),
+  orderItem: one(orderItems, { fields: [orderStainTreatments.orderItemId], references: [orderItems.id] }),
+  pricingVersion: one(stainTreatmentPriceVersions, { fields: [orderStainTreatments.pricingVersionId], references: [stainTreatmentPriceVersions.id] }),
+  adjustments: many(orderStainTreatmentAdjustments),
+}));
+
+export const orderStainTreatmentAdjustmentsRelations = relations(orderStainTreatmentAdjustments, ({ one }) => ({
+  treatment: one(orderStainTreatments, { fields: [orderStainTreatmentAdjustments.treatmentId], references: [orderStainTreatments.id] }),
 }));
 
 // Insert schemas
@@ -835,6 +980,10 @@ export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, creat
 export const insertSiteMemberSchema = createInsertSchema(siteMembers).omit({ id: true, createdAt: true });
 export const insertSiteInvitationSchema = createInsertSchema(siteInvitations).omit({ id: true, createdAt: true });
 export const insertLegalAcceptanceSchema = createInsertSchema(legalAcceptances).omit({ id: true, acceptedAt: true });
+export const insertStainTreatmentPricingSetSchema = createInsertSchema(stainTreatmentPricingSets).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStainTreatmentPriceVersionSchema = createInsertSchema(stainTreatmentPriceVersions).omit({ id: true, createdAt: true });
+export const insertOrderStainTreatmentSchema = createInsertSchema(orderStainTreatments).omit({ id: true, createdAt: true });
+export const insertOrderStainTreatmentAdjustmentSchema = createInsertSchema(orderStainTreatmentAdjustments).omit({ id: true, createdAt: true });
 
 // Types
 export type Customer = typeof customers.$inferSelect;
@@ -896,6 +1045,14 @@ export type InsertSite = z.infer<typeof insertSiteSchema>;
 export type LegalDocument = typeof legalDocuments.$inferSelect;
 export type LegalAcceptance = typeof legalAcceptances.$inferSelect;
 export type InsertLegalAcceptance = z.infer<typeof insertLegalAcceptanceSchema>;
+export type StainTreatmentPricingSet = typeof stainTreatmentPricingSets.$inferSelect;
+export type InsertStainTreatmentPricingSet = z.infer<typeof insertStainTreatmentPricingSetSchema>;
+export type StainTreatmentPriceVersion = typeof stainTreatmentPriceVersions.$inferSelect;
+export type InsertStainTreatmentPriceVersion = z.infer<typeof insertStainTreatmentPriceVersionSchema>;
+export type OrderStainTreatment = typeof orderStainTreatments.$inferSelect;
+export type InsertOrderStainTreatment = z.infer<typeof insertOrderStainTreatmentSchema>;
+export type OrderStainTreatmentAdjustment = typeof orderStainTreatmentAdjustments.$inferSelect;
+export type InsertOrderStainTreatmentAdjustment = z.infer<typeof insertOrderStainTreatmentAdjustmentSchema>;
 
 export type OrderWithCustomer = Order & { customer: Customer };
 export type PaymentWithEmployee = Payment & { collectedByEmployee?: Employee | null };

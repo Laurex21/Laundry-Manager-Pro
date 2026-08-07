@@ -5,6 +5,7 @@ import { join } from "node:path";
 import pg from "pg";
 import { applyOrderMoneyFoundation } from "../server/lib/order-money-foundation";
 import { createOrReplayPayment, OrderMoneyConflictError } from "../server/lib/order-money";
+import { applyStainTreatmentSchema } from "../server/lib/stain-treatment-schema";
 
 const testUrl = process.env.TEST_DATABASE_URL;
 if (!testUrl) throw new Error("TEST_DATABASE_URL is required; refusing to use a default database");
@@ -23,11 +24,13 @@ const validSchema = /^stain_money_[0-9a-f]{24}$/;
 assert.match(schemaA, validSchema); assert.match(schemaB, validSchema);
 const pool = new pg.Pool({ connectionString: testUrl, max: 4 });
 const migration = await readFile(join(process.cwd(), "migrations/20260807_order_money_foundation.sql"), "utf8");
+const treatmentMigration = await readFile(join(process.cwd(), "migrations/20260807_stain_treatment_pricing.sql"), "utf8");
 
 const base = `
  CREATE TABLE organisations(id serial PRIMARY KEY,name varchar(255) NOT NULL,owner_id varchar NOT NULL,created_at timestamp DEFAULT now());
  CREATE TABLE sites(id serial PRIMARY KEY,organisation_id integer NOT NULL REFERENCES organisations(id),name varchar(255) NOT NULL);
  CREATE TABLE customers(id serial PRIMARY KEY,site_id integer);
+ CREATE TABLE services(id serial PRIMARY KEY,unit text NOT NULL DEFAULT 'piece');
  CREATE TABLE orders(
    id serial PRIMARY KEY,
    customer_id integer NOT NULL REFERENCES customers(id),
@@ -39,6 +42,7 @@ const base = `
    pickup_cost numeric(10,2) NOT NULL DEFAULT 0
  );
  CREATE TABLE payments(id serial PRIMARY KEY,order_id integer NOT NULL REFERENCES orders(id),collected_by_employee_id integer,amount numeric(10,2) NOT NULL,method varchar(50) NOT NULL,reference varchar(255),date timestamp DEFAULT now(),is_advance boolean DEFAULT false,idempotency_key varchar(100));
+ CREATE TABLE order_items(id serial PRIMARY KEY,order_id integer NOT NULL REFERENCES orders(id),service_id integer NOT NULL REFERENCES services(id),quantity numeric(10,2) NOT NULL,price_at_order numeric(10,2) NOT NULL);
  CREATE TABLE site_members(id serial PRIMARY KEY,site_id integer NOT NULL REFERENCES sites(id),user_id varchar NOT NULL,role varchar(50) NOT NULL);
  CREATE TABLE membership_subscription_payments(id serial PRIMARY KEY,organisation_id integer NOT NULL REFERENCES organisations(id),amount numeric(12,2) NOT NULL);
  CREATE TABLE credit_transactions(id serial PRIMARY KEY,organisation_id integer NOT NULL REFERENCES organisations(id),amount numeric(12,2) NOT NULL);
@@ -63,9 +67,14 @@ async function setup(schema: string, rerun: boolean) {
       INSERT INTO order_payment_allocations(payment_id,unallocated_amount) VALUES (1,2);
       INSERT INTO order_refund_allocations(refund_id,unallocated_amount) VALUES (1,1);
     `);
-    if (rerun) await applyOrderMoneyFoundation(client);
+    if (rerun) {
+      await applyOrderMoneyFoundation(client);
+      await applyStainTreatmentSchema(client);
+      await applyStainTreatmentSchema(client);
+    }
     else {
       await client.query(migration);
+      await client.query(treatmentMigration);
       await client.query(`
         INSERT INTO order_refunds(organisation_id,site_id,order_id,amount,reason,status,idempotency_key,request_fingerprint)
         VALUES (1,1,1,1,'legacy correction','approved_internal','legacy-refund','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
@@ -106,6 +115,12 @@ try {
     } finally { client.release(); }
   };
   await Promise.all([concurrentFoundation(), concurrentFoundation()]);
+  const concurrentTreatmentFoundation = async () => {
+    const client = await pool.connect();
+    try { await client.query(`SET search_path TO "${schemaB}"`); await applyStainTreatmentSchema(client); }
+    finally { client.release(); }
+  };
+  await Promise.all([concurrentTreatmentFoundation(), concurrentTreatmentFoundation()]);
   assert.deepEqual(await signature(schemaA), await signature(schemaB), "migration and Replit self-heal schema must match");
   const seed = await pool.connect();
   try {
@@ -135,6 +150,12 @@ try {
     await assert.rejects(seed.query(`DELETE FROM order_refunds WHERE id=1`));
     await assert.rejects(seed.query(`UPDATE organisations SET currency='ZAR' WHERE id=1`));
     await seed.query(`INSERT INTO payments(order_id,organisation_id,site_id,amount,method,idempotency_key,request_fingerprint) VALUES (1,1,1,10,'cash','race','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')`);
+    await seed.query(`INSERT INTO services(unit) VALUES ('piece'); INSERT INTO order_items(order_id,service_id,quantity,price_at_order) VALUES (1,1,1,10)`);
+    await seed.query(`INSERT INTO stain_treatment_pricing_sets(organisation_id,site_id,current_version) VALUES (1,1,1)`);
+    await seed.query(`INSERT INTO stain_treatment_price_versions(pricing_set_id,organisation_id,site_id,set_version,level,unit,currency,price,created_by) VALUES (1,1,1,1,'standard','piece','ZAR',10,'tester')`);
+    await seed.query(`INSERT INTO order_stain_treatments(organisation_id,site_id,order_id,order_item_id,level,unit,quantity,captured_rate,line_total,currency,pricing_version_id,pricing_set_version,idempotency_key,created_by) VALUES (1,1,1,1,'standard','piece',1,10,10,'ZAR',1,1,'treatment-one','tester')`);
+    await seed.query(`INSERT INTO order_refunds(organisation_id,site_id,order_id,amount,reason,status,idempotency_key,request_fingerprint) VALUES (1,1,1,5,'treatment refund','approved_internal','treatment-refund','cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc')`);
+    await assert.rejects(seed.query(`INSERT INTO order_refund_allocations(refund_id,organisation_id,site_id,treatment_id,treatment_amount) VALUES (3,1,1,1,6)`));
   } finally { seed.release(); }
   const race = async () => {
     const client = await pool.connect();
@@ -146,6 +167,16 @@ try {
   };
   const outcomes = await Promise.all([race(), race()]);
   assert.deepEqual(outcomes.sort(), ["ok", "rejected"]);
+  const treatmentRace = async () => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN"); await client.query(`SET LOCAL search_path TO "${schemaA}"`);
+      await client.query(`INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,treatment_id,treatment_amount) VALUES (3,1,1,1,7)`);
+      await client.query("COMMIT"); return "ok";
+    } catch { await client.query("ROLLBACK"); return "rejected"; } finally { client.release(); }
+  };
+  const treatmentOutcomes = await Promise.all([treatmentRace(), treatmentRace()]);
+  assert.deepEqual(treatmentOutcomes.sort(), ["ok", "rejected"]);
   console.log("Order money PostgreSQL foundation checks passed");
 } finally {
   for (const schema of [schemaA, schemaB, schemaC]) {

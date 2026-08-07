@@ -3,8 +3,6 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { pool } from "../../db";
 import { ensureOrderItemQuantitySupportsDecimals } from "../../lib/order-item-quantity-schema";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
@@ -320,6 +318,7 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
   await ensureOrderMoneyFoundation();
+  await ensureStainTreatmentSchema();
 
   // One-time data correction: kapnangsilva@gmail.com was accidentally
   // onboarded as a staff member, overwriting their admin credentials.
@@ -337,6 +336,17 @@ async function ensureAuthSchema() {
 export async function ensureOrderMoneyFoundation() {
   const { applyOrderMoneyFoundation } = await import("../../lib/order-money-foundation");
   await applyOrderMoneyFoundation(pool);
+}
+
+/**
+ * Applies the exact idempotent treatment migration used in production. The SQL
+ * contains CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, and guarded
+ * DO $$ BEGIN blocks so partially provisioned Replit databases self-heal
+ * without dropping, truncating, or rewriting posted financial history.
+ */
+export async function ensureStainTreatmentSchema(database: { query(sql: string): Promise<unknown> } = pool) {
+  const { applyStainTreatmentSchema } = await import("../../lib/stain-treatment-schema");
+  await applyStainTreatmentSchema(database);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
