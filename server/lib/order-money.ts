@@ -93,13 +93,20 @@ async function persistAllocations(client: MoneyQueryClient, table: "order_paymen
 
 export async function persistPaymentInTransaction(client: MoneyQueryClient, input: TenantInput & {
   amount: string; method: string; reference?: string | null; collectedByEmployeeId?: number | null;
-  paymentDate?: Date; isAdvance?: boolean; allocations: Allocation[]; fingerprintContext?: unknown;
+  paymentDate?: Date; isAdvance?: boolean; fingerprintContext?: unknown;
 }) {
   const amount = canonicalMoney(input.amount);
   if (amount === "0.00") throw new Error("Payment amount must be positive");
-  const fingerprint = fingerprintRequest({ orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate?.toISOString() ?? null, isAdvance: !!input.isAdvance, allocations: input.allocations, context: input.fingerprintContext ?? null });
+  const fingerprint = fingerprintRequest({ orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate?.toISOString() ?? null, isAdvance: !!input.isAdvance, context: input.fingerprintContext ?? null });
   const order = await client.query(
-    `SELECT id FROM orders WHERE id = $1 AND organisation_id = $2 AND site_id = $3 FOR UPDATE`,
+    `SELECT id,
+       greatest(coalesce(original_price,total_amount)-coalesce(discount_amount,discount,0)
+         - coalesce((SELECT sum(service_amount) FROM order_payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0)
+         + coalesce((SELECT sum(service_amount) FROM order_refund_allocations WHERE refund_id IN (SELECT id FROM order_refunds WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0),0)::text AS service_balance,
+       greatest(coalesce(pickup_cost,0)
+         - coalesce((SELECT sum(pickup_delivery_amount) FROM order_payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0)
+         + coalesce((SELECT sum(pickup_delivery_amount) FROM order_refund_allocations WHERE refund_id IN (SELECT id FROM order_refunds WHERE order_id=orders.id AND organisation_id=orders.organisation_id AND site_id=orders.site_id)),0),0)::text AS pickup_delivery_balance
+     FROM orders WHERE id = $1 AND organisation_id = $2 AND site_id = $3 FOR UPDATE`,
     [input.orderId, input.organisationId, input.siteId],
   );
   if (!order.rowCount) throw new Error("Order not found for tenant");
@@ -121,9 +128,18 @@ export async function persistPaymentInTransaction(client: MoneyQueryClient, inpu
     if (!raced.rowCount || raced.rows[0].request_fingerprint !== fingerprint) throw new OrderMoneyConflictError("Idempotency key was already used with a different payment request");
     return { payment: raced.rows[0], replayed: true, balance: await orderBalance(client, input) };
   }
-  const allocations = allocateMoney(amount, input.allocations);
+  const allocations = allocateMoney(amount, [
+    { target: "service", amount: order.rows[0].service_balance },
+    { target: "pickup_delivery", amount: order.rows[0].pickup_delivery_balance },
+  ]);
   await persistAllocations(client, "order_payment_allocations", "payment", inserted.rows[0].id, input, allocations);
-  return { payment: inserted.rows[0], allocations, replayed: false, balance: await orderBalance(client, input) };
+  const balance = await orderBalance(client, input);
+  await client.query(
+    `UPDATE orders SET payment_status=CASE WHEN $2::numeric=0 THEN 'paid' ELSE 'partial' END, updated_at=NOW()
+     WHERE id=$1 AND organisation_id=$3 AND site_id=$4`,
+    [input.orderId,balance,input.organisationId,input.siteId],
+  );
+  return { payment: inserted.rows[0], allocations, replayed: false, balance };
 }
 
 export async function createOrReplayPayment(source: MoneyTransactionSource, input: Parameters<typeof persistPaymentInTransaction>[1]) {

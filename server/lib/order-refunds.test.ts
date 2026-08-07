@@ -66,7 +66,7 @@ const transactionSource = {
     return {
       async query(text: string) {
         transactionLog.push(text);
-        if (text.includes("FROM orders") && text.includes("FOR UPDATE")) return { rows: [{ id: 7 }], rowCount: 1 };
+        if (text.includes("FROM orders") && text.includes("FOR UPDATE")) return { rows: [{ id: 7, service_balance: "4.00", pickup_delivery_balance: "1.00" }], rowCount: 1 };
         if (text.includes("FROM payments") && text.includes("idempotency_key")) return { rows: [], rowCount: 0 };
         if (text.includes("INSERT INTO payments")) return { rows: [{ id: 11, request_fingerprint: "f".repeat(64) }], rowCount: 1 };
         if (text.includes("INSERT INTO order_payment_allocations")) return { rows: [], rowCount: 1 };
@@ -79,12 +79,42 @@ const transactionSource = {
 };
 const livePayment = await createOrReplayPayment(transactionSource, {
   organisationId: 1, siteId: 2, orderId: 7, idempotencyKey: "live-payment-test-key",
-  amount: "5", method: "cash", allocations: [{ target: "service", amount: "4" }],
+  amount: "5", method: "cash",
 });
 assert.equal(livePayment.replayed, false);
 assert.ok(transactionLog.includes("BEGIN") && transactionLog.includes("COMMIT"));
 assert.ok(transactionLog.some((sql) => sql.includes("request_fingerprint")));
 assert.ok(transactionLog.filter((sql) => sql.includes("INSERT INTO order_payment_allocations")).length === 2);
+assert.ok(transactionLog.findIndex((sql) => sql.includes("UPDATE orders SET payment_status")) < transactionLog.indexOf("COMMIT"));
+
+const paymentFingerprint = fingerprintRequest({ orderId: 7, amount: "5.00", method: "cash", reference: null, paymentDate: null, isAdvance: false, context: null });
+const replayLog: string[] = [];
+const replayedPayment = await createOrReplayPayment({ async connect() { return {
+  async query(text: string) {
+    replayLog.push(text);
+    if (text.includes("FROM orders") && text.includes("FOR UPDATE")) return { rows:[{ id:7,service_balance:"4.00",pickup_delivery_balance:"1.00" }],rowCount:1 };
+    if (text.includes("FROM payments") && text.includes("idempotency_key")) return { rows:[{ id:11,request_fingerprint:paymentFingerprint }],rowCount:1 };
+    if (text.includes(" AS balance")) return { rows:[{ balance:"5.00" }],rowCount:1 };
+    return { rows:[],rowCount:null };
+  }, release() {},
+}; } }, { organisationId:1,siteId:2,orderId:7,idempotencyKey:"live-payment-test-key",amount:"5",method:"cash" });
+assert.equal(replayedPayment.replayed,true);
+assert.ok(!replayLog.some((sql) => sql.includes("UPDATE orders SET payment_status")),"payment replay must not reapply status");
+
+const atomicLog: string[] = [];
+await assert.rejects(createOrReplayPayment({ async connect() { return {
+  async query(text: string) {
+    atomicLog.push(text);
+    if (text.includes("FROM orders") && text.includes("FOR UPDATE")) return { rows:[{ id:7,service_balance:"5.00",pickup_delivery_balance:"0.00" }],rowCount:1 };
+    if (text.includes("FROM payments") && text.includes("idempotency_key")) return { rows:[],rowCount:0 };
+    if (text.includes("INSERT INTO payments")) return { rows:[{ id:12 }],rowCount:1 };
+    if (text.includes("INSERT INTO order_payment_allocations")) return { rows:[],rowCount:1 };
+    if (text.includes(" AS balance")) return { rows:[{ balance:"0.00" }],rowCount:1 };
+    if (text.includes("UPDATE orders SET payment_status")) throw new Error("status update failed");
+    return { rows:[],rowCount:null };
+  }, release() {},
+}; } }, { organisationId:1,siteId:2,orderId:7,idempotencyKey:"atomic-payment-test",amount:"5",method:"cash" }),/status update failed/);
+assert.ok(atomicLog.includes("ROLLBACK") && !atomicLog.includes("COMMIT"));
 
 const rollbackLog: string[] = [];
 await assert.rejects(withMoneyTransaction({ async connect() { return {

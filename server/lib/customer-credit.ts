@@ -118,7 +118,7 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
         organisationId: input.organisationId, siteId: input.siteId, orderId: input.orderId,
         collectedByEmployeeId: input.collectedByEmployeeId, amount: amounts.cash_applied,
         method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate,
-        idempotencyKey: `${input.idempotencyKey}:cash`, allocations: [{ target: "unallocated", amount: amounts.cash_applied }], fingerprintContext,
+        idempotencyKey: `${input.idempotencyKey}:cash`, fingerprintContext,
       });
       cashPayment = result.payment;
       if (result.replayed) {
@@ -133,7 +133,7 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
         organisationId: input.organisationId, siteId: input.siteId, orderId: input.orderId,
         collectedByEmployeeId: input.collectedByEmployeeId, amount: amounts.credit_requested,
         method: "Client Credit", paymentDate: input.paymentDate,
-        idempotencyKey: `${input.idempotencyKey}:credit`, allocations: [{ target: "unallocated", amount: amounts.credit_requested }], fingerprintContext,
+        idempotencyKey: `${input.idempotencyKey}:credit`, fingerprintContext,
       });
       creditPayment = paymentResult.payment;
       if (paymentResult.replayed) {

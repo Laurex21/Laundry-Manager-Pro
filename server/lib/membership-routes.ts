@@ -19,15 +19,25 @@ import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
+const moneyInput = (positive: boolean) => z.union([z.string(), z.number()]).transform((value, ctx) => {
+  try {
+    const amount = canonicalMoney(String(value));
+    if (positive ? compareMoney(amount, "0") <= 0 : compareMoney(amount, "0") < 0) throw new Error("Invalid amount");
+    return amount;
+  } catch {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid monetary amount" });
+    return z.NEVER;
+  }
+});
 
 const planInput = z.object({
   name: z.string().trim().min(1).max(100), description: z.string().nullish(),
   status: z.enum(statuses).default("active"), billingCycle: z.enum(cycles),
-  durationDays: z.coerce.number().int().positive(), recurringPrice: z.coerce.number().positive(),
-  activationFee: z.coerce.number().min(0).optional(), includedWeightKg: z.coerce.number().positive().nullish(),
+  durationDays: z.coerce.number().int().positive(), recurringPrice: moneyInput(true),
+  activationFee: moneyInput(false).optional(), includedWeightKg: z.coerce.number().positive().nullish(),
   includedPieces: z.coerce.number().int().positive().nullish(), maxOrders: z.coerce.number().int().positive().nullish(),
   allowCarryForward: z.boolean().optional(), carryForwardLimit: z.coerce.number().min(0).nullish(),
-  overagePricePerKg: z.coerce.number().min(0).nullish(), overagePricePerPiece: z.coerce.number().min(0).nullish(),
+  overagePricePerKg: moneyInput(false).nullish(), overagePricePerPiece: moneyInput(false).nullish(),
   pickupIncluded: z.boolean().optional(), deliveryIncluded: z.boolean().optional(), expressIncluded: z.boolean().optional(),
   priorityQueue: z.boolean().optional(), discountPercentage: z.coerce.number().min(0).max(100).optional(),
   autoRenew: z.boolean().optional(), gracePeriodDays: z.coerce.number().int().min(0).optional(),
@@ -375,7 +385,7 @@ export function registerMembershipRoutes(app: Express) {
     const order = { ...row.order, orderNumber: siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id };
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
-    const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
+    const coverage = { coveredAmount: canonicalMoney(row.transaction.amountCovered ?? "0"), extraAmount: canonicalMoney(row.transaction.extraAmountCharged ?? "0"), savingsAchieved: canonicalMoney(row.transaction.amountCovered ?? "0"), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
     const format = z.enum(["a4", "thermal58", "thermal80"]).catch("a4").parse(req.query.format);
     const data = { ...row, order, items, garments, settings, coverage };
     const html = format === "thermal58" ? generateSubscriberThermalReceiptHTML(data, 58) : format === "thermal80" ? generateSubscriberThermalReceiptHTML(data, 80) : generateSubscriberReceiptHTML(data);
@@ -427,7 +437,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId))) return res.status(400).json({ message: "Invalid service selection" });
     const created = await db.transaction(async (tx) => {
       const { serviceIds, ...values } = input;
-      const [plan] = await tx.insert(subscriptionPlans).values({ ...values, organisationId, recurringPrice: String(values.recurringPrice), activationFee: String(values.activationFee ?? 0), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : String(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : String(values.overagePricePerPiece) }).returning();
+      const [plan] = await tx.insert(subscriptionPlans).values({ ...values, organisationId, recurringPrice: canonicalMoney(values.recurringPrice), activationFee: canonicalMoney(values.activationFee ?? "0"), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : canonicalMoney(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : canonicalMoney(values.overagePricePerPiece) }).returning();
       if (serviceIds.length) await tx.insert(subscriptionPlanServices).values(serviceIds.map((serviceId) => ({ subscriptionPlanId: plan.id, serviceId })));
       return plan;
     });
@@ -441,7 +451,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!plan) return res.status(404).json({ message: "Plan not found" });
     const included = await db.select({ id: services.id, name: services.name }).from(subscriptionPlanServices).innerJoin(services, eq(subscriptionPlanServices.serviceId, services.id)).innerJoin(sites, eq(services.siteId, sites.id)).where(and(eq(subscriptionPlanServices.subscriptionPlanId, id), eq(sites.organisationId, organisationId!)));
     const subscribers = await db.select({ subscription: customerSubscriptions, customerName: customers.name }).from(customerSubscriptions).innerJoin(customers, eq(customerSubscriptions.customerId, customers.id)).where(and(eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.subscriptionPlanId, id), eq(customerSubscriptions.status, "active")));
-    res.json({ ...plan, services: included, subscriberCount: subscribers.length, subscribers, monthlyRevenue: Number(plan.recurringPrice) * subscribers.length });
+    res.json({ ...plan, recurringPrice: canonicalMoney(plan.recurringPrice), activationFee: canonicalMoney(plan.activationFee ?? "0"), services: included, subscriberCount: subscribers.length, subscribers, monthlyRevenue: multiplyMoney(plan.recurringPrice, String(subscribers.length)) });
   });
 
   app.put("/api/subscription-plans/:id", isAuthenticated, async (req: any, res) => {
@@ -455,7 +465,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId!))) return res.status(400).json({ message: "Invalid service selection" });
     const updated = await db.transaction(async (tx) => {
       const { serviceIds, ...values } = input;
-      const [plan] = await tx.update(subscriptionPlans).set({ ...values, recurringPrice: String(values.recurringPrice), activationFee: String(values.activationFee ?? 0), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : String(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : String(values.overagePricePerPiece), updatedAt: new Date() }).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId!))).returning();
+      const [plan] = await tx.update(subscriptionPlans).set({ ...values, recurringPrice: canonicalMoney(values.recurringPrice), activationFee: canonicalMoney(values.activationFee ?? "0"), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : canonicalMoney(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : canonicalMoney(values.overagePricePerPiece), updatedAt: new Date() }).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId!))).returning();
       await tx.delete(subscriptionPlanServices).where(eq(subscriptionPlanServices.subscriptionPlanId, id));
       if (serviceIds.length) await tx.insert(subscriptionPlanServices).values(serviceIds.map((serviceId) => ({ subscriptionPlanId: id, serviceId })));
       return plan;
@@ -516,21 +526,21 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId, siteScope(req)))) return res.status(404).json({ message: "Customer not found" });
-    const input = z.object({ subscriptionPlanId: z.coerce.number().int().positive(), startDate: z.string().date(), notes: z.string().nullish(), paymentMethod: z.string().optional(), activationFeeAmount: z.coerce.number().min(0).optional() }).parse(req.body);
+    const input = z.object({ subscriptionPlanId: z.coerce.number().int().positive(), startDate: z.string().date(), notes: z.string().nullish(), paymentMethod: z.string().optional(), activationFeeAmount: moneyInput(false).optional() }).parse(req.body);
     const [plan] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, input.subscriptionPlanId), eq(subscriptionPlans.organisationId, organisationId), eq(subscriptionPlans.status, "active"), isNull(subscriptionPlans.deletedAt))).limit(1);
     if (!plan) return res.status(400).json({ message: "Invalid subscription plan" });
     const membershipNumber = `XP-${organisationId}-${Date.now()}`; const expiryDate = addDays(input.startDate, plan.durationDays);
     const subscription = await db.transaction(async (tx) => {
       const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes }).returning();
-      const fee = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
-      if (fee > 0) await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(fee), paymentMethod: input.paymentMethod ?? "cash", status: "completed" });
+      const fee = canonicalMoney(input.activationFeeAmount ?? plan.activationFee ?? "0");
+      if (compareMoney(fee, "0") > 0) await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: fee, paymentMethod: input.paymentMethod ?? "cash", status: "completed" });
       await tx.insert(membershipCards).values({ customerSubscriptionId: created.id, cardNumber: membershipNumber, barcode: membershipNumber, expiryDate });
       return created;
     });
     await createPendingSubscriptionNotification(subscription.id, organisationId, "welcome").catch((error) => console.error("[Subscriptions] Welcome notification failed", error));
     await createPendingSubscriptionNotification(subscription.id, organisationId, "card_ready").catch((error) => console.error("[Subscriptions] Card notification failed", error));
-    const activationAmount = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
-    if (activationAmount > 0) {
+    const activationAmount = canonicalMoney(input.activationFeeAmount ?? plan.activationFee ?? "0");
+    if (compareMoney(activationAmount, "0") > 0) {
       await createPendingSubscriptionNotification(subscription.id, organisationId, "payment_confirmed", { amount: activationAmount }).catch((error) => console.error("[Subscriptions] Payment notification failed", error));
     }
     invalidateSubscriptionDashboard(organisationId);
@@ -549,7 +559,7 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/subscriptions/:id/renew", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
-    const input = z.object({ paymentMethod: z.string().optional(), amount: z.coerce.number().positive().optional() }).parse(req.body ?? {});
+    const input = z.object({ paymentMethod: z.string().optional(), amount: moneyInput(true).optional() }).parse(req.body ?? {});
     const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1), eq(subscriptionPlans.organisationId, organisationId ?? -1))).limit(1);
     if (!row) return res.status(404).json({ message: "Subscription not found" });
     const expiryDate = addDays(new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date(), row.plan.durationDays);
@@ -557,11 +567,11 @@ export function registerMembershipRoutes(app: Express) {
       const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
       const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
       if (!updated) return null;
-      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount ?? Number(row.plan.recurringPrice)), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }).returning();
+      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: canonicalMoney(input.amount ?? row.plan.recurringPrice), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }).returning();
       return { subscription: updated, payment };
     });
     if (!renewed) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
-    await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: Number(renewed.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
+    await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: canonicalMoney(renewed.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
     await awardRenewalPoints(renewed.payment.id, row.subscription.customerId, organisationId)
       .catch((error) => console.error("[Loyalty] Renewal points award failed", error));
     invalidateSubscriptionDashboard(organisationId);

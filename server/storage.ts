@@ -704,12 +704,7 @@ export class DatabaseStorage implements IStorage {
       paymentDate: insertPayment.date ?? undefined,
       isAdvance: insertPayment.isAdvance ?? false,
       amount: canonicalMoney(insertPayment.amount),
-      allocations: [{ target: "unallocated", amount: canonicalMoney(insertPayment.amount) }],
     });
-    await pool.query(
-      `UPDATE orders SET payment_status = CASE WHEN $2::numeric = 0 THEN 'paid' ELSE 'partial' END WHERE id=$1 AND organisation_id=$3 AND site_id=$4`,
-      [insertPayment.orderId, result.balance, insertPayment.organisationId, insertPayment.siteId],
-    );
     return result.payment as Payment;
   }
 

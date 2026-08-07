@@ -104,13 +104,13 @@ try {
     await assert.rejects(seed.query(`INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,service_amount,pickup_delivery_amount) VALUES (1,1,1,1,1)`));
     await assert.rejects(seed.query(`INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,service_amount) VALUES (1,2,2,1)`));
     const scopedPool = { connect: async () => { const client = await pool.connect(); await client.query(`SET search_path TO "${schemaA}"`); return client; } };
-    const paymentInput = { organisationId:1,siteId:1,orderId:1,idempotencyKey:"behavioral-payment-key",amount:"5",method:"cash",allocations:[{ target:"service" as const,amount:"4" }] };
+    const paymentInput = { organisationId:1,siteId:1,orderId:1,idempotencyKey:"behavioral-payment-key",amount:"5",method:"cash" };
     const created = await createOrReplayPayment(scopedPool, paymentInput);
     assert.equal(created.replayed, false); assert.deepEqual(created.allocations, [{ target:"service",amount:"4.00"},{ target:"unallocated",amount:"1.00" }]);
     assert.equal((await createOrReplayPayment(scopedPool, paymentInput)).replayed, true);
     await assert.rejects(createOrReplayPayment(scopedPool, { ...paymentInput, amount:"6" }), OrderMoneyConflictError);
     const rollbackKey = "behavioral-rollback-key";
-    await assert.rejects(createOrReplayPayment(scopedPool, { ...paymentInput, idempotencyKey: rollbackKey, allocations: [{ target:"service",amount:"-1" }] }));
+    await assert.rejects(createOrReplayPayment(scopedPool, { ...paymentInput, idempotencyKey: rollbackKey, amount:"-1" }));
     assert.equal((await seed.query(`SELECT count(*)::int AS count FROM payments WHERE idempotency_key=$1`, [rollbackKey])).rows[0].count, 0);
     await seed.query(`INSERT INTO order_refunds(organisation_id,site_id,order_id,amount,reason,status,idempotency_key,request_fingerprint) VALUES (1,1,1,1,'correction','approved_internal','internal-only','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`);
     await assert.rejects(seed.query(`UPDATE order_refunds SET amount=2 WHERE id=1`));

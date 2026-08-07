@@ -226,6 +226,17 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS idempotency_key varchar(100)
   `);
   await pool.query(`
+    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_orders_id_fk;
+    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fkey;
+    DO $$ DECLARE legacy_fk record; BEGIN
+      FOR legacy_fk IN
+        SELECT c.conname FROM pg_constraint c
+        WHERE c.conrelid='payments'::regclass AND c.contype='f' AND array_length(c.conkey,1)=1
+          AND c.conkey[1]=(SELECT attnum FROM pg_attribute WHERE attrelid='payments'::regclass AND attname='order_id')
+      LOOP EXECUTE format('ALTER TABLE payments DROP CONSTRAINT %I', legacy_fk.conname); END LOOP;
+    END $$
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS credit_transactions (
       id serial PRIMARY KEY,
       organisation_id integer NOT NULL REFERENCES organisations(id),

@@ -74,11 +74,13 @@ type Scenario = { cash: string; credit: string; total: string; failAudit?: boole
 function correctionDatabase(scenario: Scenario) {
   const sql: string[] = [];
   let nextItemId = 91;
+  let completed: any = null;
   const client = {
-    async query(text: string) {
+    async query(text: string, values?: any[]) {
       sql.push(text);
       if (scenario.failAudit && text.includes("INSERT INTO order_corrections")) throw new Error("audit write failed");
       if (text.includes("SELECT o.*, s.organisation_id")) return { rows: [{ id:7,site_id:2,organisation_id:1,status:"received",payment_status:"paid",customer_id:3,discount_pct:"0",discount_amount:"0",discount:"0",pickup_cost:"0",corrected_from_order_id:null,has_corrections:false }], rowCount:1 };
+      if (text.includes("SELECT after_snapshot FROM order_corrections")) return completed ? { rows:[{ after_snapshot:completed }],rowCount:1 } : { rows:[],rowCount:0 };
       if (text.includes("to_regclass('public.payments')")) return { rows:[{ payments:true,credit_transactions:true,subscription_transactions:false,production_cycle_orders:false,production_cycles:false,machine_usage:false,loyalty_points:false,order_status_history:true,order_corrections:true }], rowCount:1 };
       if (text.includes("AS has_payments")) return { rows:[{ has_payments:true,has_credit:scenario.credit !== "0",has_subscription:false,has_cycles:false,has_active_cycles:false,has_machine_usage:false,has_loyalty:false,has_status_progress:false,has_corrections:false }], rowCount:1 };
       if (text.includes("SELECT c.id FROM customers")) return { rows:[{ id:3 }], rowCount:1 };
@@ -92,6 +94,7 @@ function correctionDatabase(scenario: Scenario) {
       if (text.includes("FROM order_refunds") && text.includes("idempotency_key")) return { rows:[], rowCount:0 };
       if (text.includes("INSERT INTO order_refunds")) return { rows:[{ id:51 }], rowCount:1 };
       if (text.includes(" AS balance")) return { rows:[{ balance:"0" }], rowCount:1 };
+      if (text.includes("INSERT INTO order_corrections")) { completed = values?.[4]; return { rows:[],rowCount:1 }; }
       if (text.includes("RETURNING id")) return { rows:[{ id:nextItemId++ }], rowCount:1 };
       return { rows:[], rowCount:text.startsWith("SELECT") ? 0 : 1 };
     },
@@ -117,6 +120,12 @@ for (const [scenario,expected] of [
 const rollbackDb = correctionDatabase({ cash:"15",credit:"0",total:"12",failAudit:true });
 await assert.rejects(editOrderControlled(7,2,"manager-user",correctionInput,rollbackDb.source as any),/audit write failed/);
 assert.ok(rollbackDb.sql.includes("ROLLBACK") && !rollbackDb.sql.includes("COMMIT"));
+const replayDb = correctionDatabase({ cash:"10",credit:"0",total:"12" });
+const first = await editOrderControlled(7,2,"manager-user",correctionInput,replayDb.source as any);
+const mutationCount = replayDb.sql.filter(statement => /UPDATE orders SET|UPDATE order_items SET|INSERT INTO order_corrections/.test(statement)).length;
+assert.deepEqual(await editOrderControlled(7,2,"manager-user",correctionInput,replayDb.source as any),first);
+assert.equal(replayDb.sql.filter(statement => /UPDATE orders SET|UPDATE order_items SET|INSERT INTO order_corrections/.test(statement)).length,mutationCount,"completed correction replay must not mutate again");
+await assert.rejects(editOrderControlled(7,2,"manager-user",{ ...correctionInput,reason:"Different correction payload" },replayDb.source as any),/different correction request/);
 assert.match(routes, /requireSiteRole\(req, res, order\.siteId, \["owner", "manager"\]\)/, "paid corrections are role-authorized before mutation");
 
 console.log("Controlled order correction regression checks passed");

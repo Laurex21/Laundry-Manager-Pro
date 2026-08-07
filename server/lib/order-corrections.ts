@@ -134,6 +134,29 @@ export async function editOrderControlled(
     );
     const order = orderResult.rows[0];
     if (!order) throw new OrderCorrectionError("Order not found", 404);
+    const requestFingerprint = input.idempotencyKey ? fingerprintRequest({
+      orderId,
+      customerId: input.customerId,
+      entryDate: input.entryDate.toISOString(),
+      pickupDate: input.pickupDate?.toISOString() ?? null,
+      reason: input.reason,
+      items: input.items,
+      garments: input.garments.map((garment) => ({ ...garment, color: garment.color ?? null })),
+    }) : null;
+    if (input.idempotencyKey) {
+      const completed = await client.query(
+        `SELECT after_snapshot FROM order_corrections
+         WHERE order_id=$1 AND site_id=$2 AND after_snapshot->>'idempotencyKey'=$3
+         ORDER BY id LIMIT 1 FOR UPDATE`,
+        [orderId,siteId,input.idempotencyKey],
+      );
+      if (completed.rowCount) {
+        const recorded = completed.rows[0].after_snapshot;
+        if (recorded?.requestFingerprint !== requestFingerprint) throw new OrderCorrectionError("Idempotency key was already used with a different correction request", 409);
+        await client.query("COMMIT");
+        return recorded.correctionResult;
+      }
+    }
     const deps = await dependencies(client, orderId);
     const isUnusedCorrectedCopy = !!order.corrected_from_order_id && !order.has_corrections;
     const hasFinancialImpact = deps.has_payments || deps.has_credit;
@@ -259,8 +282,12 @@ export async function editOrderControlled(
         await client.query(`UPDATE customers SET credit_balance=$2,total_credit_added=total_credit_added+$3 WHERE id=$1 AND site_id=$4`, [input.customerId,creditAfter,financialOutcome.amount,siteId]);
       }
     }
+    const correctionResult = { orderId, totalAmount: money.total, paymentStatus: !hasFinancialImpact ? "unpaid" : comparison > 0 ? "partial" : "paid", financialOutcome };
     const after = await snapshot(client, orderId);
-    after.financialOutcome = { ...financialOutcome, netPosted, idempotencyKey: input.idempotencyKey ?? null, requestFingerprint: fingerprintRequest({ orderId, input }) };
+    after.financialOutcome = { ...financialOutcome, netPosted };
+    after.idempotencyKey = input.idempotencyKey ?? null;
+    after.requestFingerprint = requestFingerprint;
+    after.correctionResult = correctionResult;
     await client.query(
       `INSERT INTO order_corrections (order_id, site_id, reason, before_snapshot, after_snapshot, changed_by)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -272,7 +299,7 @@ export async function editOrderControlled(
       [orderId, order.status, actorUserId, `Order corrected: ${input.reason}`],
     );
     await client.query("COMMIT");
-    return { orderId, totalAmount: money.total, paymentStatus: !hasFinancialImpact ? "unpaid" : comparison > 0 ? "partial" : "paid", financialOutcome };
+    return correctionResult;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

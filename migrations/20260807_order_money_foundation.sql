@@ -69,6 +69,15 @@ ALTER TABLE payments ALTER COLUMN idempotency_key SET NOT NULL;
 ALTER TABLE payments ALTER COLUMN request_fingerprint SET NOT NULL;
 ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_request_fingerprint_valid;
 ALTER TABLE payments ADD CONSTRAINT payments_request_fingerprint_valid CHECK (request_fingerprint ~ '^[0-9a-f]{64}$');
+ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_orders_id_fk;
+ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fkey;
+DO $$ DECLARE legacy_fk record; BEGIN
+  FOR legacy_fk IN
+    SELECT c.conname FROM pg_constraint c
+    WHERE c.conrelid='payments'::regclass AND c.contype='f' AND array_length(c.conkey,1)=1
+      AND c.conkey[1]=(SELECT attnum FROM pg_attribute WHERE attrelid='payments'::regclass AND attname='order_id')
+  LOOP EXECUTE format('ALTER TABLE payments DROP CONSTRAINT %I', legacy_fk.conname); END LOOP;
+END $$;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='payments'::regclass AND conname='payments_order_tenant_fkey') THEN
     ALTER TABLE payments ADD CONSTRAINT payments_order_tenant_fkey FOREIGN KEY (order_id,organisation_id,site_id) REFERENCES orders(id,organisation_id,site_id);

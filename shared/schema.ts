@@ -134,7 +134,7 @@ export const orderCorrections = pgTable("order_corrections", {
 
 export const payments = pgTable("payments", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull().references(() => orders.id),
+  orderId: integer("order_id").notNull(),
   collectedByEmployeeId: integer("collected_by_employee_id"),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   method: varchar("method", { length: 50 }).notNull(),

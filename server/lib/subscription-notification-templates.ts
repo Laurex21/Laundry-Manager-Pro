@@ -4,7 +4,7 @@ export const NOTIFICATION_TEMPLATES = {
   expired: (first: string, plan: string, business: string) => `Bonjour ${first},\n\nVotre abonnement ${plan} a expiré.\n\nRéabonnez-vous pour continuer à bénéficier de vos avantages.\n— ${business}`,
   usage_80: (first: string, plan: string, remainingKg: number, business: string) => `Bonjour ${first},\n\nVous avez consommé 80% de votre forfait ${plan}.\nIl vous reste ${remainingKg} kg.\n\nPensez à renouveler si besoin.\n— ${business}`,
   usage_100: (first: string, plan: string, business: string) => `Bonjour ${first},\n\nVous avez utilisé tout votre forfait ${plan}.\n\nLes commandes supplémentaires seront facturées au tarif dépassement.\nContactez-nous pour renouveler.\n— ${business}`,
-  payment_confirmed: (first: string, plan: string, amount: number, currency: string, business: string) => `Bonjour ${first},\n\nPaiement reçu : ${amount.toLocaleString("fr-FR")} ${currency}\nAbonnement : ${plan}\n\nMerci pour votre fidélité !\n— ${business}`,
+  payment_confirmed: (first: string, plan: string, amount: string, currency: string, business: string) => `Bonjour ${first},\n\nPaiement reçu : ${amount} ${currency}\nAbonnement : ${plan}\n\nMerci pour votre fidélité !\n— ${business}`,
   card_ready: (first: string, number: string, business: string) => `Bonjour ${first},\n\nVotre carte de membre est prête !\nN° : ${number}\n\nPrésentez-la lors de vos prochaines visites.\n— ${business}`,
 };
 
