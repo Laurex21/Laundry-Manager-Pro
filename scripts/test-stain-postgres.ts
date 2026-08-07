@@ -40,6 +40,13 @@ async function setup(schema: string, rerun: boolean) {
     await client.query(`CREATE SCHEMA "${schema}"`);
     await client.query(`SET search_path TO "${schema}"`);
     await client.query(base);
+    if (rerun) {
+      await client.query(`
+        CREATE TABLE order_refunds(id serial PRIMARY KEY, order_id integer);
+        CREATE TABLE order_payment_allocations(id serial PRIMARY KEY, payment_id integer);
+        CREATE TABLE order_refund_allocations(id serial PRIMARY KEY, refund_id integer);
+      `);
+    }
     await client.query(`INSERT INTO organisations(name,owner_id) VALUES ('legacy','owner'); INSERT INTO sites(organisation_id,name) VALUES (1,'legacy'); INSERT INTO customers(site_id) VALUES (1); INSERT INTO orders(customer_id,site_id,total_amount) VALUES (1,1,10); INSERT INTO payments(order_id,amount,method) VALUES (1,2,'cash')`);
     if (rerun) await applyOrderMoneyFoundation(client);
     else await client.query(migration);
@@ -48,7 +55,7 @@ async function setup(schema: string, rerun: boolean) {
 
 async function signature(schema: string) {
   const [columns, indexes, constraints, triggers, functions] = await Promise.all([
-    pool.query(`SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema=$1 ORDER BY table_name,ordinal_position`, [schema]),
+    pool.query(`SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema=$1 ORDER BY table_name,column_name`, [schema]),
     pool.query(`SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname=$1 ORDER BY tablename,indexname`, [schema]),
     pool.query(`SELECT c.conrelid::regclass::text AS table_name,c.conname,c.contype,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname=$1 ORDER BY 1,2`, [schema]),
     pool.query(`SELECT event_object_table,trigger_name,event_manipulation,action_statement FROM information_schema.triggers WHERE trigger_schema=$1 ORDER BY 1,2,3`, [schema]),
@@ -83,11 +90,15 @@ try {
     await assert.rejects(seed.query(`DELETE FROM payments WHERE id=1`));
     await assert.rejects(seed.query(`INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,service_amount,pickup_delivery_amount) VALUES (1,1,1,1,1)`));
     await assert.rejects(seed.query(`INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,service_amount) VALUES (1,2,2,1)`));
+    const scopedPool = { connect: async () => { const client = await pool.connect(); await client.query(`SET search_path TO "${schemaA}"`); return client; } };
     const paymentInput = { organisationId:1,siteId:1,orderId:1,idempotencyKey:"behavioral-payment-key",amount:"5",method:"cash",allocations:[{ target:"service" as const,amount:"4" }] };
-    const created = await createOrReplayPayment(seed, paymentInput);
+    const created = await createOrReplayPayment(scopedPool, paymentInput);
     assert.equal(created.replayed, false); assert.deepEqual(created.allocations, [{ target:"service",amount:"4.00"},{ target:"unallocated",amount:"1.00" }]);
-    assert.equal((await createOrReplayPayment(seed, paymentInput)).replayed, true);
-    await assert.rejects(createOrReplayPayment(seed, { ...paymentInput, amount:"6" }), OrderMoneyConflictError);
+    assert.equal((await createOrReplayPayment(scopedPool, paymentInput)).replayed, true);
+    await assert.rejects(createOrReplayPayment(scopedPool, { ...paymentInput, amount:"6" }), OrderMoneyConflictError);
+    const rollbackKey = "behavioral-rollback-key";
+    await assert.rejects(createOrReplayPayment(scopedPool, { ...paymentInput, idempotencyKey: rollbackKey, allocations: [{ target:"service",amount:"-1" }] }));
+    assert.equal((await seed.query(`SELECT count(*)::int AS count FROM payments WHERE idempotency_key=$1`, [rollbackKey])).rows[0].count, 0);
     await seed.query(`INSERT INTO order_refunds(organisation_id,site_id,order_id,amount,reason,status,idempotency_key,request_fingerprint) VALUES (1,1,1,1,'correction','approved_internal','internal-only','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`);
     await assert.rejects(seed.query(`UPDATE order_refunds SET amount=2 WHERE id=1`));
     await assert.rejects(seed.query(`DELETE FROM order_refunds WHERE id=1`));

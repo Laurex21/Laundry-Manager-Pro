@@ -4,13 +4,17 @@ import {
   canonicalMoney,
   composeMembershipAmount,
   correctionOutcome,
+  createOrReplayPayment,
   eligibleServiceDiscount,
   fingerprintRequest,
   hasStainCapability,
   moneyBalance,
   multiplyMoney,
   paidCorrectionOutcome,
+  recordPaidCorrectionOutcome,
+  resolveStainCapability,
   subtractMoney,
+  withMoneyTransaction,
 } from "./order-money";
 
 assert.equal(canonicalMoney("1.005"), "1.01");
@@ -46,5 +50,62 @@ assert.equal(hasStainCapability("owner", []), true);
 assert.equal(hasStainCapability("manager", ["manage_stain_treatment_pricing"]), true);
 assert.equal(hasStainCapability("manager", []), false);
 assert.equal(hasStainCapability("operator", ["manage_stain_treatment_pricing"]), false);
+for (const [role, capabilities, expected] of [
+  ["owner", [], true],
+  ["manager", ["manage_stain_treatment_pricing"], true],
+  ["manager", [], false],
+  ["operator", ["manage_stain_treatment_pricing"], false],
+] as const) {
+  const resolved = await resolveStainCapability({ async query() { return { rows: [{ role, capabilities }], rowCount: 1 }; } }, { userId: "u", organisationId: 1, siteId: 2 });
+  assert.equal(resolved.canManagePricing, expected);
+}
+
+const transactionLog: string[] = [];
+const transactionSource = {
+  async connect() {
+    return {
+      async query(text: string) {
+        transactionLog.push(text);
+        if (text.includes("FROM orders") && text.includes("FOR UPDATE")) return { rows: [{ id: 7 }], rowCount: 1 };
+        if (text.includes("FROM payments") && text.includes("idempotency_key")) return { rows: [], rowCount: 0 };
+        if (text.includes("INSERT INTO payments")) return { rows: [{ id: 11, request_fingerprint: "f".repeat(64) }], rowCount: 1 };
+        if (text.includes("INSERT INTO order_payment_allocations")) return { rows: [], rowCount: 1 };
+        if (text.includes(" AS balance")) return { rows: [{ balance: "5.00" }], rowCount: 1 };
+        return { rows: [], rowCount: null };
+      },
+      release() { transactionLog.push("RELEASE"); },
+    };
+  },
+};
+const livePayment = await createOrReplayPayment(transactionSource, {
+  organisationId: 1, siteId: 2, orderId: 7, idempotencyKey: "live-payment-test-key",
+  amount: "5", method: "cash", allocations: [{ target: "service", amount: "4" }],
+});
+assert.equal(livePayment.replayed, false);
+assert.ok(transactionLog.includes("BEGIN") && transactionLog.includes("COMMIT"));
+assert.ok(transactionLog.some((sql) => sql.includes("request_fingerprint")));
+assert.ok(transactionLog.filter((sql) => sql.includes("INSERT INTO order_payment_allocations")).length === 2);
+
+const rollbackLog: string[] = [];
+await assert.rejects(withMoneyTransaction({ async connect() { return {
+  async query(text: string) { rollbackLog.push(text); return { rows: [], rowCount: null }; },
+  release() { rollbackLog.push("RELEASE"); },
+}; } }, async () => { throw new Error("allocation failure"); }), /allocation failure/);
+assert.deepEqual(rollbackLog, ["BEGIN", "ROLLBACK", "RELEASE"]);
+
+const correctionSql: string[] = [];
+const persistedCorrection = await recordPaidCorrectionOutcome({ async connect() { return {
+  async query(text: string) {
+    correctionSql.push(text);
+    if (text.includes("FROM orders") && text.includes("FOR UPDATE")) return { rows: [{ id: 7 }], rowCount: 1 };
+    if (text.includes("FROM order_corrections")) return { rows: [], rowCount: 0 };
+    return { rows: [], rowCount: text.includes("INSERT INTO order_corrections") ? 1 : null };
+  },
+  release() {},
+}; } }, {
+  organisationId: 1, siteId: 2, orderId: 7, idempotencyKey: "paid-correction-key", kind: "balance", amount: "2", reason: "Corrected total increased",
+});
+assert.deepEqual(persistedCorrection, { kind: "balance", amount: "2.00" });
+assert.ok(correctionSql.some((sql) => sql.includes("INSERT INTO order_corrections")));
 
 console.log("Order money foundation regression checks passed");

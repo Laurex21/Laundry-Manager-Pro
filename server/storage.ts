@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import { 
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
   machines, employees, employeeActivities, employeeAttendance, machineUsage,
@@ -28,6 +28,11 @@ import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "driz
 import { formatReportingDay } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
+import { canonicalMoney, createOrReplayPayment, sumMoney } from "./lib/order-money";
+
+type AuthoritativePaymentInput = Pick<InsertPayment, "orderId" | "amount" | "method" | "reference" | "collectedByEmployeeId" | "isAdvance" | "date"> & {
+  organisationId: number; siteId: number; idempotencyKey: string;
+};
 
 let businessSettingsSchemaReady = false;
 
@@ -63,7 +68,7 @@ export interface IStorage {
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
-  createPayment(payment: InsertPayment): Promise<Payment>;
+  createPayment(payment: AuthoritativePaymentInput): Promise<Payment>;
   getPaymentsByOrder(orderId: number): Promise<Payment[]>;
 
   getCustomerOrders(customerId: number): Promise<any[]>;
@@ -693,17 +698,19 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async createPayment(insertPayment: InsertPayment): Promise<Payment> {
-    return await db.transaction(async (tx) => {
-      const [payment] = await tx.insert(payments).values(insertPayment as typeof payments.$inferInsert).returning();
-      const orderPayments = await tx.select().from(payments).where(eq(payments.orderId, insertPayment.orderId));
-      const totalPaid = orderPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const [order] = await tx.select().from(orders).where(eq(orders.id, insertPayment.orderId));
-      let newPaymentStatus = "partial";
-      if (totalPaid >= Number(order.totalAmount)) newPaymentStatus = "paid";
-      await tx.update(orders).set({ paymentStatus: newPaymentStatus }).where(eq(orders.id, insertPayment.orderId));
-      return payment;
+  async createPayment(insertPayment: AuthoritativePaymentInput): Promise<Payment> {
+    const result = await createOrReplayPayment(pool, {
+      ...insertPayment,
+      paymentDate: insertPayment.date ?? undefined,
+      isAdvance: insertPayment.isAdvance ?? false,
+      amount: canonicalMoney(insertPayment.amount),
+      allocations: [{ target: "unallocated", amount: canonicalMoney(insertPayment.amount) }],
     });
+    await pool.query(
+      `UPDATE orders SET payment_status = CASE WHEN $2::numeric = 0 THEN 'paid' ELSE 'partial' END WHERE id=$1 AND organisation_id=$3 AND site_id=$4`,
+      [insertPayment.orderId, result.balance, insertPayment.organisationId, insertPayment.siteId],
+    );
+    return result.payment as Payment;
   }
 
   async getPaymentsByOrder(orderId: number): Promise<Payment[]> {
@@ -717,8 +724,9 @@ export class DatabaseStorage implements IStorage {
     const result = [];
     for (const order of customerOrders) {
       const orderPayments = await db.select().from(payments).where(eq(payments.orderId, order.id));
-      const totalPaid = orderPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-      result.push({ ...order, totalPaid, balance: Math.max(0, Number(order.totalAmount) - totalPaid) });
+      const totalPaid = sumMoney(orderPayments.map((payment) => payment.amount));
+      const balanceResult = await pool.query(`SELECT greatest($1::numeric - $2::numeric, 0)::text AS balance`, [order.totalAmount, totalPaid]);
+      result.push({ ...order, totalPaid, balance: canonicalMoney(balanceResult.rows[0].balance) });
     }
     return result;
   }

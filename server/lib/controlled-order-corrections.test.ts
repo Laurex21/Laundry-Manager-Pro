@@ -45,6 +45,8 @@ assert.match(routes, /Order correction eligibility failed/);
 assert.match(routes, /Reference: \$\{reference\}/);
 assert.match(routes, /\/api\/orders\/:id\/correct"/);
 assert.match(routes, /\/api\/orders\/:id\/corrected-copy/);
+assert.match(routes, /\/api\/orders\/:id\/paid-correction/);
+assert.match(routes, /recordPaidCorrectionOutcome\(pool/);
 assert.match(routes, /requireSiteRole\(req, res, order\.siteId, \["owner", "manager"\]\)/);
 
 assert.match(component, /<fieldset/);

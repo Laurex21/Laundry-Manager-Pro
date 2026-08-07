@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { allocateMoney, canonicalMoney, sumMoney } from "../../shared/order-money";
+import { allocateMoney, canonicalMoney, hasStainCapability, sumMoney } from "../../shared/order-money";
 export * from "../../shared/order-money";
 
 function canonicalize(value: unknown): unknown {
@@ -40,6 +40,37 @@ export class OrderMoneyConflictError extends Error {
 export interface MoneyQueryClient {
   query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount: number | null }>;
 }
+export interface MoneyTransactionSource {
+  connect(): Promise<MoneyQueryClient & { release(): void }>;
+}
+
+export async function resolveStainCapability(client: MoneyQueryClient, input: { userId: string; organisationId: number; siteId: number }) {
+  const result = await client.query(
+    `SELECT CASE WHEN o.owner_id=$1 THEN 'owner' ELSE sm.role END AS role,
+            CASE WHEN o.owner_id=$1 THEN '[]'::jsonb ELSE coalesce(sm.capabilities,'[]'::jsonb) END AS capabilities
+     FROM organisations o LEFT JOIN site_members sm ON sm.site_id=$3 AND sm.user_id=$1
+     WHERE o.id=$2`,
+    [input.userId,input.organisationId,input.siteId],
+  );
+  const row = result.rows[0];
+  const capabilities = Array.isArray(row?.capabilities) ? row.capabilities : [];
+  return { role: row?.role ?? null, capabilities, canManagePricing: row ? hasStainCapability(row.role, capabilities) : false };
+}
+
+export async function withMoneyTransaction<T>(source: MoneyTransactionSource, operation: (client: MoneyQueryClient) => Promise<T>): Promise<T> {
+  const client = await source.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await operation(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 type Allocation = { target: "service" | "pickup_delivery" | "unallocated"; amount: string };
 type TenantInput = { organisationId: number; siteId: number; orderId: number; idempotencyKey: string };
@@ -60,13 +91,13 @@ async function persistAllocations(client: MoneyQueryClient, table: "order_paymen
   }
 }
 
-export async function createOrReplayPayment(client: MoneyQueryClient, input: TenantInput & {
+export async function persistPaymentInTransaction(client: MoneyQueryClient, input: TenantInput & {
   amount: string; method: string; reference?: string | null; collectedByEmployeeId?: number | null;
-  isAdvance?: boolean; allocations: Allocation[];
+  paymentDate?: Date; isAdvance?: boolean; allocations: Allocation[]; fingerprintContext?: unknown;
 }) {
   const amount = canonicalMoney(input.amount);
   if (amount === "0.00") throw new Error("Payment amount must be positive");
-  const fingerprint = fingerprintRequest({ orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, isAdvance: !!input.isAdvance, allocations: input.allocations });
+  const fingerprint = fingerprintRequest({ orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate?.toISOString() ?? null, isAdvance: !!input.isAdvance, allocations: input.allocations, context: input.fingerprintContext ?? null });
   const order = await client.query(
     `SELECT id FROM orders WHERE id = $1 AND organisation_id = $2 AND site_id = $3 FOR UPDATE`,
     [input.orderId, input.organisationId, input.siteId],
@@ -81,9 +112,9 @@ export async function createOrReplayPayment(client: MoneyQueryClient, input: Ten
     return { payment: replay.rows[0], replayed: true, balance: await orderBalance(client, input) };
   }
   const inserted = await client.query(
-    `INSERT INTO payments (order_id, collected_by_employee_id, amount, method, reference, is_advance, idempotency_key, organisation_id, site_id, request_fingerprint)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (organisation_id,site_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
-    [input.orderId, input.collectedByEmployeeId ?? null, amount, input.method, input.reference ?? null, !!input.isAdvance, input.idempotencyKey, input.organisationId, input.siteId, fingerprint],
+    `INSERT INTO payments (order_id, collected_by_employee_id, amount, method, reference, date, is_advance, idempotency_key, organisation_id, site_id, request_fingerprint)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (organisation_id,site_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+    [input.orderId, input.collectedByEmployeeId ?? null, amount, input.method, input.reference ?? null, input.paymentDate ?? new Date(), !!input.isAdvance, input.idempotencyKey, input.organisationId, input.siteId, fingerprint],
   );
   if (!inserted.rowCount) {
     const raced = await client.query(`SELECT * FROM payments WHERE organisation_id=$1 AND site_id=$2 AND idempotency_key=$3`, [input.organisationId,input.siteId,input.idempotencyKey]);
@@ -95,7 +126,11 @@ export async function createOrReplayPayment(client: MoneyQueryClient, input: Ten
   return { payment: inserted.rows[0], allocations, replayed: false, balance: await orderBalance(client, input) };
 }
 
-export async function createOrReplayRefund(client: MoneyQueryClient, input: TenantInput & {
+export async function createOrReplayPayment(source: MoneyTransactionSource, input: Parameters<typeof persistPaymentInTransaction>[1]) {
+  return withMoneyTransaction(source, (client) => persistPaymentInTransaction(client, input));
+}
+
+export async function persistRefundInTransaction(client: MoneyQueryClient, input: TenantInput & {
   amount: string; reason: string; status: "approved_internal" | "customer_credit"; approvedBy?: string | null;
   allocations: Allocation[];
 }) {
@@ -124,6 +159,10 @@ export async function createOrReplayRefund(client: MoneyQueryClient, input: Tena
   return { refund: inserted.rows[0], allocations, replayed: false, balance: await orderBalance(client, input) };
 }
 
+export async function createOrReplayRefund(source: MoneyTransactionSource, input: Parameters<typeof persistRefundInTransaction>[1]) {
+  return withMoneyTransaction(source, (client) => persistRefundInTransaction(client, input));
+}
+
 export async function orderBalance(client: MoneyQueryClient, input: Pick<TenantInput, "organisationId" | "siteId" | "orderId">) {
   const result = await client.query(
     `SELECT greatest(o.total_amount - coalesce((SELECT sum(p.amount) FROM payments p WHERE p.order_id=o.id AND p.organisation_id=o.organisation_id AND p.site_id=o.site_id),0)
@@ -135,14 +174,30 @@ export async function orderBalance(client: MoneyQueryClient, input: Pick<TenantI
   return canonicalMoney(result.rows[0].balance);
 }
 
-export async function recordPaidCorrectionOutcome(client: MoneyQueryClient, input: TenantInput & {
+async function persistPaidCorrectionOutcome(client: MoneyQueryClient, input: TenantInput & {
   kind: PaidCorrectionOutcome["kind"]; amount: string; reason: string; actorUserId?: string | null;
   customerId?: number; allocations?: Allocation[];
 }) {
   const outcome = paidCorrectionOutcome(input.kind, input.amount);
+  const correctionFingerprint = fingerprintRequest({ kind: outcome.kind, amount: outcome.amount, reason: input.reason, customerId: input.customerId ?? null });
+  const order = await client.query(`SELECT id FROM orders WHERE id=$1 AND organisation_id=$2 AND site_id=$3 FOR UPDATE`, [input.orderId,input.organisationId,input.siteId]);
+  if (!order.rowCount) throw new Error("Order not found for tenant");
+  const replay = await client.query(
+    `SELECT after_snapshot FROM order_corrections WHERE order_id=$1 AND site_id=$2 AND after_snapshot->>'idempotencyKey'=$3 ORDER BY id LIMIT 1`,
+    [input.orderId,input.siteId,input.idempotencyKey],
+  );
+  if (replay.rowCount) {
+    if (replay.rows[0].after_snapshot?.requestFingerprint !== correctionFingerprint) throw new OrderMoneyConflictError("Idempotency key was already used with a different correction request");
+    return outcome;
+  }
+  await client.query(
+    `INSERT INTO order_corrections (order_id,site_id,reason,before_snapshot,after_snapshot,changed_by)
+     VALUES ($1,$2,$3,jsonb_build_object('financialOutcome','pending'),jsonb_build_object('financialOutcome',$4,'amount',$5,'idempotencyKey',$6,'requestFingerprint',$7),$8)`,
+    [input.orderId,input.siteId,input.reason,outcome.kind,outcome.amount,input.idempotencyKey,correctionFingerprint,input.actorUserId ?? null],
+  );
   if (outcome.kind === "balanced" || outcome.kind === "balance") return outcome;
   if (outcome.kind === "approved_internal_refund") {
-    await createOrReplayRefund(client, {
+    await persistRefundInTransaction(client, {
       ...input,
       amount: outcome.amount,
       status: "approved_internal",
@@ -169,4 +224,8 @@ export async function recordPaidCorrectionOutcome(client: MoneyQueryClient, inpu
     await client.query(`UPDATE customers SET credit_balance=$2,total_credit_added=total_credit_added+$3 WHERE id=$1 AND site_id=$4`, [input.customerId,after,outcome.amount,input.siteId]);
   }
   return outcome;
+}
+
+export async function recordPaidCorrectionOutcome(source: MoneyTransactionSource, input: Parameters<typeof persistPaidCorrectionOutcome>[1]) {
+  return withMoneyTransaction(source, (client) => persistPaidCorrectionOutcome(client, input));
 }

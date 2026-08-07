@@ -91,6 +91,7 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
+  foreignKey({ name: "orders_site_tenant_fkey", columns: [table.siteId, table.organisationId], foreignColumns: [sites.id, sites.organisationId] }),
   index("idx_orders_site_status_ready")
     .on(table.siteId, table.status, table.readyAt)
     .where(sql`${table.status} = 'ready'`),
@@ -140,15 +141,17 @@ export const payments = pgTable("payments", {
   reference: varchar("reference", { length: 255 }),
   date: timestamp("date").defaultNow(),
   isAdvance: boolean("is_advance").default(false),
-  idempotencyKey: varchar("idempotency_key", { length: 100 }),
+  idempotencyKey: varchar("idempotency_key", { length: 100 }).notNull(),
   organisationId: integer("organisation_id").notNull(),
   siteId: integer("site_id").notNull(),
-  requestFingerprint: varchar("request_fingerprint", { length: 64 }),
+  requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
 }, (table) => [
   uniqueIndex("idx_payments_tenant_idempotency_key")
     .on(table.organisationId, table.siteId, table.idempotencyKey)
     .where(sql`${table.idempotencyKey} IS NOT NULL`),
   uniqueIndex("payments_tenant_identity").on(table.id, table.organisationId, table.siteId),
+  foreignKey({ name: "payments_order_tenant_fkey", columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
+  check("payments_request_fingerprint_valid", sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
 
 export const garmentItems = pgTable("garment_items", {
@@ -362,7 +365,9 @@ export const sites = pgTable("sites", {
   phone: varchar("phone", { length: 50 }).default(""),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("sites_tenant_identity").on(table.id, table.organisationId),
+]);
 
 export const creditTransactions = pgTable("credit_transactions", {
   id: serial("id").primaryKey(),
@@ -569,7 +574,9 @@ export const siteMembers = pgTable("site_members", {
   role: varchar("role", { length: 50 }).notNull(),
   capabilities: jsonb("capabilities").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  check("site_members_capabilities_valid", sql`jsonb_typeof(${table.capabilities}) = 'array' AND ${table.capabilities} <@ '["manage_stain_treatment_pricing", "view_stain_treatment_reports"]'::jsonb`),
+]);
 
 export const VALID_SITE_MEMBER_CAPABILITIES = [
   "manage_stain_treatment_pricing",
@@ -593,6 +600,8 @@ export const orderRefunds = pgTable("order_refunds", {
   uniqueIndex("order_refunds_tenant_idempotency").on(table.organisationId, table.siteId, table.idempotencyKey),
   foreignKey({ columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
   check("order_refunds_amount_bounds", sql`${table.amount} > 0 AND ${table.amount} <= 99999999.99`),
+  check("order_refunds_status_valid", sql`${table.status} IN ('approved_internal', 'customer_credit')`),
+  check("order_refunds_request_fingerprint_valid", sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
 
 export const orderPaymentAllocations = pgTable("order_payment_allocations", {
@@ -607,6 +616,7 @@ export const orderPaymentAllocations = pgTable("order_payment_allocations", {
 }, (table) => [
   foreignKey({ columns: [table.paymentId, table.organisationId, table.siteId], foreignColumns: [payments.id, payments.organisationId, payments.siteId] }),
   check("order_payment_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
+  check("order_payment_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
 ]);
 
 export const orderRefundAllocations = pgTable("order_refund_allocations", {
@@ -621,6 +631,7 @@ export const orderRefundAllocations = pgTable("order_refund_allocations", {
 }, (table) => [
   foreignKey({ columns: [table.refundId, table.organisationId, table.siteId], foreignColumns: [orderRefunds.id, orderRefunds.organisationId, orderRefunds.siteId] }),
   check("order_refund_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
+  check("order_refund_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
 ]);
 
 export const siteInvitations = pgTable("site_invitations", {

@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { OrderMoneyConflictError, persistPaymentInTransaction } from "./order-money";
 
 export const CREDIT_REASONS = ["manual_credit", "compensation", "advance_payment"] as const;
 
@@ -49,25 +50,6 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    const existing = await client.query(
-      `SELECT p.*, c.credit_balance
-       FROM payments p
-       JOIN orders o ON o.id = p.order_id
-       JOIN customers c ON c.id = o.customer_id
-       WHERE p.idempotency_key IN ($1, $2)
-       ORDER BY p.id
-       LIMIT 1`,
-      [`${input.idempotencyKey}:cash`, `${input.idempotencyKey}:credit`],
-    );
-    if (existing.rowCount) {
-      await client.query("COMMIT");
-      return {
-        ...existing.rows[0],
-        idempotentReplay: true,
-        creditBalance: existing.rows[0].credit_balance,
-      };
-    }
 
     const orderResult = await client.query(
       `SELECT o.id, o.customer_id, o.site_id, o.status, o.total_amount, s.organisation_id
@@ -130,27 +112,34 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
 
     let cashPayment: any = null;
     let creditPayment: any = null;
+    const fingerprintContext = { creditToApply: input.creditToApply, surplusDisposition: input.surplusDisposition };
     if (amounts.cash_positive) {
-      const result = await client.query(
-        `INSERT INTO payments
-          (order_id, collected_by_employee_id, amount, method, reference, date, is_advance, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, false, $7)
-         RETURNING *`,
-        [
-          input.orderId,
-          input.collectedByEmployeeId,
-          amounts.cash_applied,
-          input.method,
-          input.reference ?? null,
-          input.paymentDate ?? new Date(),
-          `${input.idempotencyKey}:cash`,
-        ],
-      );
-      cashPayment = result.rows[0];
+      const result = await persistPaymentInTransaction(client, {
+        organisationId: input.organisationId, siteId: input.siteId, orderId: input.orderId,
+        collectedByEmployeeId: input.collectedByEmployeeId, amount: amounts.cash_applied,
+        method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate,
+        idempotencyKey: `${input.idempotencyKey}:cash`, allocations: [{ target: "unallocated", amount: amounts.cash_applied }], fingerprintContext,
+      });
+      cashPayment = result.payment;
+      if (result.replayed) {
+        await client.query("COMMIT");
+        return { ...cashPayment, idempotentReplay: true, creditBalance: customer.credit_balance };
+      }
     }
 
     let currentBalance = customer.credit_balance as string;
     if (amounts.credit_positive) {
+      const paymentResult = await persistPaymentInTransaction(client, {
+        organisationId: input.organisationId, siteId: input.siteId, orderId: input.orderId,
+        collectedByEmployeeId: input.collectedByEmployeeId, amount: amounts.credit_requested,
+        method: "Client Credit", paymentDate: input.paymentDate,
+        idempotencyKey: `${input.idempotencyKey}:credit`, allocations: [{ target: "unallocated", amount: amounts.credit_requested }], fingerprintContext,
+      });
+      creditPayment = paymentResult.payment;
+      if (paymentResult.replayed) {
+        await client.query("COMMIT");
+        return { ...creditPayment, idempotentReplay: true, creditBalance: customer.credit_balance };
+      }
       const updated = await client.query(
         `UPDATE customers
          SET credit_balance = credit_balance - $1::numeric,
@@ -163,20 +152,6 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
       if (!updated.rowCount) throw new CreditOperationError("Insufficient customer credit");
       currentBalance = updated.rows[0].balance_after;
 
-      const paymentResult = await client.query(
-        `INSERT INTO payments
-          (order_id, collected_by_employee_id, amount, method, reference, date, is_advance, idempotency_key)
-         VALUES ($1, $2, $3, 'Client Credit', NULL, $4, false, $5)
-         RETURNING *`,
-        [
-          input.orderId,
-          input.collectedByEmployeeId,
-          amounts.credit_requested,
-          input.paymentDate ?? new Date(),
-          `${input.idempotencyKey}:credit`,
-        ],
-      );
-      creditPayment = paymentResult.rows[0];
       await client.query(
         `INSERT INTO credit_transactions
           (organisation_id, site_id, customer_id, order_id, payment_id, type, amount, reason,
@@ -255,6 +230,7 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
     };
   } catch (error) {
     await client.query("ROLLBACK");
+    if (error instanceof OrderMoneyConflictError) throw new CreditOperationError(error.message, 409);
     throw error;
   } finally {
     client.release();

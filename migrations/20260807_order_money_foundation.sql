@@ -51,6 +51,9 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS site_id integer;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS request_fingerprint varchar(64);
 UPDATE payments p SET organisation_id = o.organisation_id, site_id = o.site_id FROM orders o
  WHERE o.id = p.order_id AND (p.organisation_id IS NULL OR p.site_id IS NULL);
+UPDATE payments SET idempotency_key = 'legacy-payment-' || id WHERE idempotency_key IS NULL;
+UPDATE payments SET request_fingerprint = md5('legacy-payment-' || id::text) || md5('legacy-payment-' || id::text || ':fingerprint')
+ WHERE request_fingerprint IS NULL OR request_fingerprint !~ '^[0-9a-f]{64}$';
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM payments WHERE organisation_id IS NULL OR site_id IS NULL) THEN
     RAISE EXCEPTION 'cannot safely establish tenant identity for every legacy payment';
@@ -62,6 +65,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_tenant_idempotency_key
   ON payments(organisation_id, site_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 ALTER TABLE payments ALTER COLUMN organisation_id SET NOT NULL;
 ALTER TABLE payments ALTER COLUMN site_id SET NOT NULL;
+ALTER TABLE payments ALTER COLUMN idempotency_key SET NOT NULL;
+ALTER TABLE payments ALTER COLUMN request_fingerprint SET NOT NULL;
+ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_request_fingerprint_valid;
+ALTER TABLE payments ADD CONSTRAINT payments_request_fingerprint_valid CHECK (request_fingerprint ~ '^[0-9a-f]{64}$');
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='payments'::regclass AND conname='payments_order_tenant_fkey') THEN
     ALTER TABLE payments ADD CONSTRAINT payments_order_tenant_fkey FOREIGN KEY (order_id,organisation_id,site_id) REFERENCES orders(id,organisation_id,site_id);
@@ -126,6 +133,63 @@ CREATE TABLE IF NOT EXISTS order_refund_allocations (
   CONSTRAINT order_refund_allocation_one_target CHECK (num_nonnulls(service_amount, pickup_delivery_amount, unallocated_amount) = 1),
   CONSTRAINT order_refund_allocation_positive CHECK (coalesce(service_amount, pickup_delivery_amount, unallocated_amount) > 0)
 );
+
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS organisation_id integer;
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS site_id integer;
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS order_id integer;
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS amount numeric(10,2);
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS reason text;
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS status varchar(30) DEFAULT 'approved_internal';
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS idempotency_key varchar(120);
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS request_fingerprint varchar(64);
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS approved_by varchar;
+ALTER TABLE order_refunds ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS payment_id integer;
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS organisation_id integer;
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS site_id integer;
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS service_amount numeric(10,2);
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS pickup_delivery_amount numeric(10,2);
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS unallocated_amount numeric(10,2);
+ALTER TABLE order_payment_allocations ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS refund_id integer;
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS organisation_id integer;
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS site_id integer;
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS service_amount numeric(10,2);
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS pickup_delivery_amount numeric(10,2);
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS unallocated_amount numeric(10,2);
+ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+ALTER TABLE order_refunds ALTER COLUMN organisation_id SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN site_id SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN order_id SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN amount SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN reason SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN status SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN idempotency_key SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN request_fingerprint SET NOT NULL;
+ALTER TABLE order_refunds ALTER COLUMN created_at SET NOT NULL;
+ALTER TABLE order_payment_allocations ALTER COLUMN payment_id SET NOT NULL;
+ALTER TABLE order_payment_allocations ALTER COLUMN organisation_id SET NOT NULL;
+ALTER TABLE order_payment_allocations ALTER COLUMN site_id SET NOT NULL;
+ALTER TABLE order_payment_allocations ALTER COLUMN created_at SET NOT NULL;
+ALTER TABLE order_refund_allocations ALTER COLUMN refund_id SET NOT NULL;
+ALTER TABLE order_refund_allocations ALTER COLUMN organisation_id SET NOT NULL;
+ALTER TABLE order_refund_allocations ALTER COLUMN site_id SET NOT NULL;
+ALTER TABLE order_refund_allocations ALTER COLUMN created_at SET NOT NULL;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_id_organisation_id_site_id_key') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_id_organisation_id_site_id_key UNIQUE(id,organisation_id,site_id); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_organisation_id_site_id_idempotency_key_key') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_organisation_id_site_id_idempotency_key_key UNIQUE(organisation_id,site_id,idempotency_key); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_organisation_id_fkey') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_organisation_id_fkey FOREIGN KEY(organisation_id) REFERENCES organisations(id); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_amount_check') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_amount_check CHECK (amount > 0 AND amount <= 99999999.99); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_status_check') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_status_check CHECK (status IN ('approved_internal','customer_credit')); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_request_fingerprint_check') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_request_fingerprint_check CHECK (request_fingerprint ~ '^[0-9a-f]{64}$'); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_payment_allocations'::regclass AND conname='order_payment_allocation_one_target') THEN ALTER TABLE order_payment_allocations ADD CONSTRAINT order_payment_allocation_one_target CHECK (num_nonnulls(service_amount,pickup_delivery_amount,unallocated_amount)=1); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_payment_allocations'::regclass AND conname='order_payment_allocation_positive') THEN ALTER TABLE order_payment_allocations ADD CONSTRAINT order_payment_allocation_positive CHECK (coalesce(service_amount,pickup_delivery_amount,unallocated_amount)>0); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refund_allocations'::regclass AND conname='order_refund_allocation_one_target') THEN ALTER TABLE order_refund_allocations ADD CONSTRAINT order_refund_allocation_one_target CHECK (num_nonnulls(service_amount,pickup_delivery_amount,unallocated_amount)=1); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refund_allocations'::regclass AND conname='order_refund_allocation_positive') THEN ALTER TABLE order_refund_allocations ADD CONSTRAINT order_refund_allocation_positive CHECK (coalesce(service_amount,pickup_delivery_amount,unallocated_amount)>0); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refunds'::regclass AND conname='order_refunds_order_id_organisation_id_site_id_fkey') THEN ALTER TABLE order_refunds ADD CONSTRAINT order_refunds_order_id_organisation_id_site_id_fkey FOREIGN KEY(order_id,organisation_id,site_id) REFERENCES orders(id,organisation_id,site_id); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_payment_allocations'::regclass AND conname='order_payment_allocations_payment_id_organisation_id_site_id_fkey') THEN ALTER TABLE order_payment_allocations ADD CONSTRAINT order_payment_allocations_payment_id_organisation_id_site_id_fkey FOREIGN KEY(payment_id,organisation_id,site_id) REFERENCES payments(id,organisation_id,site_id); END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='order_refund_allocations'::regclass AND conname='order_refund_allocations_refund_id_organisation_id_site_id_fkey') THEN ALTER TABLE order_refund_allocations ADD CONSTRAINT order_refund_allocations_refund_id_organisation_id_site_id_fkey FOREIGN KEY(refund_id,organisation_id,site_id) REFERENCES order_refunds(id,organisation_id,site_id); END IF;
+END $$;
 
 INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,unallocated_amount)
 SELECT p.id,p.organisation_id,p.site_id,p.amount
