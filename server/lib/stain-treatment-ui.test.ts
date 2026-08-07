@@ -10,6 +10,8 @@ const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
 const editor = readFileSync(join(root, "client/src/components/orders/stain-treatment-editor.tsx"), "utf8");
 const orders = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
 const orderHook = readFileSync(join(root, "client/src/hooks/use-orders.ts"), "utf8");
+const detail = readFileSync(join(root, "client/src/pages/order-detail.tsx"), "utf8");
+const analytics = readFileSync(join(root, "client/src/pages/analytics.tsx"), "utf8");
 
 assert.match(hook, /\/api\/stain-treatment\/prices/);
 assert.match(hook, /invalidateQueries\(\{ queryKey: STAIN_TREATMENT_SETTINGS_KEY \}\)/);
@@ -46,12 +48,27 @@ assert.match(orders, /pricingConflict/);
 assert.match(orders, /expectedPricingSetVersion/);
 assert.match(orderHook, /OrderPostingError/);
 assert.match(orderHook, /res\.status/);
+assert.match(detail, /stain-treatment-history/);
+assert.match(detail, /acknowledgementTextVersion/);
+assert.match(detail, /line\.adjustments/);
+assert.doesNotMatch(detail, /stain-treatment-history[\s\S]{0,4000}(edit|delete).*treatment/i);
+assert.match(analytics, /\/api\/stain-treatment\/report/);
+assert.match(analytics, /view_stain_treatment_reports/);
+assert.match(analytics, /bookedRevenue/);
+assert.match(analytics, /collectedRevenue/);
+assert.match(analytics, /acknowledgementExceptions/);
 
 [
   "stain_treatment_settings", "stain_treatment_standard", "stain_treatment_intensive",
   "stain_treatment_very_intensive", "stain_treatment_per_piece", "stain_treatment_per_kg",
   "stain_treatment_currency", "stain_treatment_save", "stain_treatment_saved",
   "stain_treatment_missing", "stain_treatment_permission", "stain_treatment_prices_ascending",
+].forEach((key) => assert.equal((i18n.match(new RegExp(`\"${key}\"`, "g")) || []).length, 3, key));
+
+[
+  "stain_treatment_report", "stain_treatment_booked", "stain_treatment_collected",
+  "stain_treatment_history", "stain_treatment_acknowledgement",
+  "stain_treatment_acknowledgement_exceptions",
 ].forEach((key) => assert.equal((i18n.match(new RegExp(`\"${key}\"`, "g")) || []).length, 3, key));
 
 [

@@ -420,7 +420,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.getOrder(Number(req.params.id));
     if (!order) return res.status(404).json({ message: "Order not found" });
     if (order.siteId == null || !(await canAccessSite(req, order.siteId))) return res.status(403).json({ message: "Forbidden" });
-    res.json(order);
+    const treatments = await pool.query(`SELECT t.*, concat_ws(' ',u.first_name,u.last_name) AS creator_name,
+      concat_ws(' ',au.first_name,au.last_name) AS acknowledged_by_name
+      FROM order_stain_treatments t
+      LEFT JOIN users u ON u.id=t.created_by LEFT JOIN users au ON au.id=t.acknowledged_by
+      WHERE t.order_id=$1 AND t.organisation_id=$2 AND t.site_id=$3 ORDER BY t.created_at,t.id`, [order.id, (req as any).organisationId, order.siteId]);
+    const treatmentIds = treatments.rows.map((row: any) => row.id);
+    const adjustments = treatmentIds.length ? await pool.query(`SELECT a.*, concat_ws(' ',u.first_name,u.last_name) AS creator_name,
+      concat_ws(' ',au.first_name,au.last_name) AS acknowledged_by_name
+      FROM order_stain_treatment_adjustments a
+      LEFT JOIN users u ON u.id=a.created_by LEFT JOIN users au ON au.id=a.acknowledged_by
+      WHERE a.organisation_id=$1 AND a.site_id=$2 AND a.treatment_id=ANY($3::int[]) ORDER BY a.created_at,a.id`, [(req as any).organisationId, order.siteId, treatmentIds]) : { rows: [] };
+    res.json({ ...order, stainTreatments: treatments.rows.map((line: any) => ({ ...line, adjustments: adjustments.rows.filter((entry: any) => entry.treatment_id === line.id) })) });
   });
 
   app.post(api.orders.create.path, isAuthenticated, async (req, res) => {

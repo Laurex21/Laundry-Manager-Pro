@@ -2,12 +2,15 @@ import type { Express } from "express";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { stainTreatmentPricingInputSchema } from "@shared/stain-treatment";
 import { ZodError } from "zod";
-import { getActiveTreatmentPrices, replaceTreatmentPrices, StainTreatmentPricingError } from "./stain-treatment";
+import { getActiveTreatmentPrices, getStainTreatmentReport, replaceTreatmentPrices, StainTreatmentPricingError } from "./stain-treatment";
 
 type PricingActor = { role: string; capabilities: readonly string[] };
 export function canManageStainTreatmentPricing(actor: PricingActor): boolean {
   if (actor.role === "owner") return true;
   return actor.role === "manager" && actor.capabilities.includes("manage_stain_treatment_pricing");
+}
+export function canViewStainTreatmentReports(actor: PricingActor): boolean {
+  return actor.role === "owner" || (actor.role === "manager" && actor.capabilities.includes("view_stain_treatment_reports"));
 }
 
 async function resolveActor(req: any, siteId: number): Promise<PricingActor> {
@@ -43,6 +46,22 @@ function sendError(res: any, error: unknown) {
 }
 
 export function registerStainTreatmentRoutes(app: Express) {
+  // GET /api/stain-treatment/report
+  app.get("/api/stain-treatment/report", isAuthenticated, async (req: any, res) => {
+    try {
+      const { pool } = await import("../db");
+      const requested = req.query.siteId == null || req.query.siteId === "all" ? [...(req.authorizedSiteIds ?? [])] : [Number(req.query.siteId)];
+      if (!requested.length || requested.some((id: number) => !Number.isInteger(id) || !req.authorizedSiteIds?.includes(id))) return res.status(403).json({ message: "Forbidden" });
+      const actors = await Promise.all(requested.map((siteId: number) => resolveActor(req, siteId)));
+      if (actors.some((actor) => !canViewStainTreatmentReports(actor))) return res.status(403).json({ message: "Forbidden" });
+      res.json(await getStainTreatmentReport(pool, {
+        organisationId: Number(req.organisationId), siteIds: requested,
+        mode: req.query.mode === "collected" ? "collected" : "booked",
+        from: String(req.query.from ?? ""), to: String(req.query.to ?? ""), asOf: req.query.asOf ? String(req.query.asOf) : undefined,
+        page: Number(req.query.page ?? 1), pageSize: Number(req.query.pageSize ?? 25),
+      }));
+    } catch (error) { sendError(res, error); }
+  });
   // GET /api/stain-treatment/prices
   app.get("/api/stain-treatment/prices", isAuthenticated, async (req: any, res) => {
     try {

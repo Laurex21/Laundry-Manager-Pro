@@ -8,6 +8,8 @@ import {
   getActiveTreatmentPrices,
   replaceTreatmentPrices,
   resolveTreatmentPrice,
+  getStainTreatmentReport,
+  validateTreatmentReportInput,
   type PricingDatabase,
 } from "./stain-treatment";
 
@@ -144,15 +146,31 @@ assert.deepEqual(resolveDb.statements[0].values, [7, 44, "intensive", "kg"]);
 
 process.env.DATABASE_URL ||= "postgresql://invalid:invalid@127.0.0.1:1/never_connected";
 const { canManageStainTreatmentPricing } = await import("./stain-treatment-routes");
+const { canViewStainTreatmentReports } = await import("./stain-treatment-routes");
 assert.equal(canManageStainTreatmentPricing({ role: "owner", capabilities: [] }), true);
 assert.equal(canManageStainTreatmentPricing({ role: "manager", capabilities: ["manage_stain_treatment_pricing"] }), true);
 assert.equal(canManageStainTreatmentPricing({ role: "manager", capabilities: [] }), false);
 assert.equal(canManageStainTreatmentPricing({ role: "operator", capabilities: ["manage_stain_treatment_pricing"] }), false);
+assert.equal(canViewStainTreatmentReports({ role: "owner", capabilities: [] }), true);
+assert.equal(canViewStainTreatmentReports({ role: "manager", capabilities: ["view_stain_treatment_reports"] }), true);
+assert.equal(canViewStainTreatmentReports({ role: "manager", capabilities: [] }), false);
+assert.equal(canViewStainTreatmentReports({ role: "operator", capabilities: ["view_stain_treatment_reports"] }), false);
+assert.throws(() => validateTreatmentReportInput({ organisationId: 7, siteIds: [44], mode: "booked", from: "2024-01-01", to: "2026-01-01", page: 1, pageSize: 25 }), /366/);
+assert.throws(() => validateTreatmentReportInput({ organisationId: 7, siteIds: [], mode: "booked", from: "2026-01-01", to: "2026-01-02", page: 1, pageSize: 25 }), /authorized/i);
+const reportDb = new ScriptedDatabase([{ rows: [{ site_id: 44, site_name: "Central", level: "standard", unit: "piece", currency: "XAF", quantity: "2", booked_revenue: "10", collected_revenue: "5", treated_orders: 1, acknowledgement_exceptions: 0, average_booked_revenue: "10", total_groups: 1 }] }]);
+const report = await getStainTreatmentReport(reportDb, { organisationId: 7, siteIds: [44], mode: "booked", from: "2026-08-01", to: "2026-08-07", asOf: "2026-08-07", page: 1, pageSize: 25 });
+assert.equal(report.groups[0].bookedRevenue, "10.00");
+assert.equal(report.groups[0].quantity, "2.00");
+assert.deepEqual(reportDb.statements[0].values?.slice(0, 2), [7, [44]]);
+assert.match(reportDb.statements[0].text, /payment_date/);
+assert.match(reportDb.statements[0].text, /order_refund_allocations/);
+assert.match(reportDb.statements[0].text, /count\(DISTINCT e\.order_id\)/i);
 
 const routesSource = readFileSync(new URL("./stain-treatment-routes.ts", import.meta.url), "utf8");
 const correctionSource = readFileSync(new URL("./order-corrections.ts", import.meta.url), "utf8");
 assert.match(routesSource, /GET \/api\/stain-treatment\/prices|app\.get\("\/api\/stain-treatment\/prices"/);
 assert.match(routesSource, /PUT \/api\/stain-treatment\/prices|app\.put\("\/api\/stain-treatment\/prices"/);
+assert.match(routesSource, /app\.get\("\/api\/stain-treatment\/report"/);
 assert.match(routesSource, /isAuthenticated/);
 assert.doesNotMatch(routesSource, /req\.body\.(organisationId|siteId|currency)/);
 assert.match(correctionSource, /SELECT id FROM order_stain_treatments[\s\S]*FOR UPDATE/);

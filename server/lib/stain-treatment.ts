@@ -277,3 +277,80 @@ export async function resolveTreatmentPrice(database: PricingDatabase, input: Re
   if (!result.rows[0]) throw new StainTreatmentPricingError("No active stain treatment price is configured", 409, "pricing_missing");
   return { ...result.rows[0], price: canonicalMoney(result.rows[0].price), version: Number(result.rows[0].set_version) };
 }
+
+export type TreatmentReportMode = "booked" | "collected";
+export interface TreatmentReportInput {
+  organisationId: number;
+  siteIds: number[];
+  mode: TreatmentReportMode;
+  from: string;
+  to: string;
+  asOf?: string;
+  page: number;
+  pageSize: number;
+}
+
+export function validateTreatmentReportInput(input: TreatmentReportInput) {
+  if (!input.siteIds.length) throw new StainTreatmentPricingError("No authorized sites", 403, "forbidden");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.from) || !/^\d{4}-\d{2}-\d{2}$/.test(input.to) || input.from > input.to) {
+    throw new StainTreatmentPricingError("Invalid report date range", 400, "invalid_date_range");
+  }
+  if (input.asOf && !/^\d{4}-\d{2}-\d{2}$/.test(input.asOf)) throw new StainTreatmentPricingError("Invalid as-of date", 400, "invalid_as_of");
+  const days = (Date.parse(`${input.to}T00:00:00Z`) - Date.parse(`${input.from}T00:00:00Z`)) / 86400000;
+  if (days > 366) throw new StainTreatmentPricingError("Report date range cannot exceed 366 days", 400, "date_range_too_large");
+  if (!Number.isInteger(input.page) || input.page < 1 || !Number.isInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 100) {
+    throw new StainTreatmentPricingError("Invalid report pagination", 400, "invalid_pagination");
+  }
+  return input;
+}
+
+/** Audited aggregates: SQL keeps currencies and units separate and returns numeric values as text. */
+export async function getStainTreatmentReport(database: PricingDatabase, raw: TreatmentReportInput) {
+  const input = validateTreatmentReportInput(raw);
+  const values: unknown[] = [input.organisationId, input.siteIds, input.from, input.to, input.asOf ?? input.to, input.pageSize, (input.page - 1) * input.pageSize];
+  const booked = input.mode === "booked";
+  const result = await database.query(`
+    WITH effective AS (
+      SELECT t.id, t.order_id, t.site_id, s.name AS site_name, t.level, t.unit, t.currency,
+        (t.quantity + coalesce(sum(a.quantity_effect) FILTER (WHERE a.created_at < ($5::date + interval '1 day')), 0))::numeric AS net_quantity,
+        (t.line_total + coalesce(sum(a.amount_effect) FILTER (WHERE a.created_at < ($5::date + interval '1 day')), 0))::numeric AS net_booked,
+        t.acknowledgement_affirmed, t.acknowledgement_text_version, t.acknowledged_at,
+        o.entry_date::date AS booked_date
+      FROM order_stain_treatments t
+      JOIN orders o ON o.id=t.order_id AND o.organisation_id=t.organisation_id AND o.site_id=t.site_id
+      JOIN sites s ON s.id=t.site_id AND s.organisation_id=t.organisation_id
+      LEFT JOIN order_stain_treatment_adjustments a ON a.treatment_id=t.id AND a.organisation_id=t.organisation_id AND a.site_id=t.site_id
+      WHERE t.organisation_id=$1 AND t.site_id=ANY($2::int[]) AND o.status NOT IN ('draft','cancelled','canceled')
+      GROUP BY t.id,o.entry_date,s.name
+    ), paid AS (
+      SELECT pa.treatment_id AS id, sum(pa.treatment_amount) AS amount FROM order_payment_allocations pa
+      JOIN payments p ON p.id=pa.payment_id AND p.organisation_id=$1 AND p.site_id=ANY($2::int[])
+      WHERE p.payment_date >= $3::date AND p.payment_date < ($4::date + interval '1 day') GROUP BY pa.treatment_id
+    ), refunded AS (
+      SELECT ra.treatment_id AS id, sum(ra.treatment_amount) AS amount FROM order_refund_allocations ra
+      JOIN order_refunds r ON r.id=ra.refund_id AND r.organisation_id=$1 AND r.site_id=ANY($2::int[])
+      WHERE r.created_at >= $3::date AND r.created_at < ($4::date + interval '1 day') GROUP BY ra.treatment_id
+    ), collected AS (
+      SELECT e.id, coalesce(p.amount,0)-coalesce(r.amount,0) AS net_collected FROM effective e
+      LEFT JOIN paid p ON p.id=e.id LEFT JOIN refunded r ON r.id=e.id
+    ), grouped AS (
+      SELECT e.site_id,e.site_name,e.level,e.unit,e.currency,
+        sum(e.net_quantity)::text AS quantity,
+        sum(CASE WHEN ${booked ? "e.booked_date BETWEEN $3::date AND $4::date" : "true"} THEN e.net_booked ELSE 0 END)::text AS booked_revenue,
+        sum(c.net_collected)::text AS collected_revenue,
+        count(DISTINCT e.order_id) FILTER (WHERE e.net_quantity > 0)::int AS treated_orders,
+        count(*) FILTER (WHERE e.level='very_intensive' AND (e.acknowledgement_affirmed IS NOT TRUE OR e.acknowledgement_text_version IS NULL OR e.acknowledged_at IS NULL))::int AS acknowledgement_exceptions
+      FROM effective e JOIN collected c ON c.id=e.id
+      WHERE ${booked ? "e.booked_date BETWEEN $3::date AND $4::date" : "c.net_collected <> 0"}
+      GROUP BY e.site_id,e.site_name,e.level,e.unit,e.currency
+    )
+    SELECT *, CASE WHEN treated_orders=0 THEN '0.00' ELSE round(booked_revenue::numeric/treated_orders,2)::text END AS average_booked_revenue,
+      count(*) OVER()::int AS total_groups
+    FROM grouped ORDER BY currency,unit,site_name,level LIMIT $6 OFFSET $7
+  `, values);
+  return {
+    mode: input.mode, from: input.from, to: input.to, asOf: input.asOf ?? input.to,
+    page: input.page, pageSize: input.pageSize, total: Number(result.rows[0]?.total_groups ?? 0),
+    groups: result.rows.map((row: any) => ({ ...row, quantity: new Decimal(row.quantity).toFixed(2), bookedRevenue: canonicalMoney(row.booked_revenue), collectedRevenue: canonicalMoney(row.collected_revenue), averageBookedRevenue: canonicalMoney(row.average_booked_revenue), treatedOrders: Number(row.treated_orders), acknowledgementExceptions: Number(row.acknowledgement_exceptions) })),
+  };
+}
