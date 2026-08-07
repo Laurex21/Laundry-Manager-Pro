@@ -83,7 +83,7 @@ Implementation is split into a money-foundation prerequisite and the stain-treat
 
 ### Refund and allocation model
 
-- Add append-only `order_refunds` and `order_refund_allocations`. A refund has organisation, site, order, positive amount, currency, reason, idempotency key, canonical request fingerprint, actor, timestamp, and optional source payment. Allocations link a refund to a service, treatment charge, pickup/delivery, or remain explicitly unallocated. A database check requires exactly one allocation target/kind.
+- Add append-only `order_refunds` and `order_refund_allocations`. A refund has organisation, site, order, positive amount, currency, reason, idempotency key, canonical request fingerprint, actor, timestamp, and optional source payment. The foundation supports service, pickup/delivery, or explicitly unallocated targets. Task 2 extends it with the treatment target once the treatment table exists. A database check requires exactly one allocation target/kind.
 - Refunds never mutate or delete payments. Total allocated amount cannot exceed the refund, and treatment allocation cannot exceed collected cash attributable to that treatment after prior refunds.
 - Paid-order corrections create either an outstanding balance, customer credit, or approved refund record according to the signed recalculated balance. No automatic external money send occurs.
 - Booked treatment revenue changes only through treatment adjustment/void; collected treatment cash changes through deterministic payment allocation and treatment-linked refunds.
@@ -124,7 +124,7 @@ Test canonical two-decimal strings, half-up multiplication/subtraction, `numeric
 
 - [ ] **Step 2: Write failing payment/refund allocation tests**
 
-Test append-only positive payments/refunds, canonical request fingerprints, rejection of changed-payload key reuse, deterministic allocation order, exactly-one-target allocation checks, composite target tenant FKs, treatment-linked refund limits, explicit unallocated refunds, already-paid correction outcomes, and the rule that no external refund is sent automatically. Use two connections to prove locked payment/refund rows prevent concurrent over-allocation.
+Test append-only positive payments/refunds, canonical request fingerprints, rejection of changed-payload key reuse, deterministic allocation order, exactly-one-target checks for service/pickup/unallocated allocations, composite target tenant FKs, explicit unallocated refunds, already-paid correction outcomes, and the rule that no external refund is sent automatically. Use two connections to prove locked payment/refund rows prevent concurrent over-allocation. Treatment-linked allocation and refund limits are added in Task 2 after treatment tables exist.
 
 - [ ] **Step 3: Add the direct decimal dependency and test scripts**
 
@@ -163,7 +163,7 @@ Return authenticated organisation currency and validated effective capabilities.
 
 - [ ] **Step 8: Apply the migration to a disposable PostgreSQL database**
 
-Implement `scripts/test-stain-postgres.ts` to hard-fail if `TEST_DATABASE_URL` is absent, matches configured production/Replit URLs, or does not identify a test database. It creates a cryptographically unique PostgreSQL schema, sets `search_path`, applies the money-foundation then treatment migration, reruns both, exercises Replit self-heal against a second clean schema, compares required tables/columns/constraints/indexes, runs the two-connection suites, and drops only the exact validated temporary schemas in `finally`.
+Implement the first stage of `scripts/test-stain-postgres.ts` to hard-fail if `TEST_DATABASE_URL` is absent, matches configured production/Replit URLs, or does not identify a test database. It creates a cryptographically unique PostgreSQL schema, sets `search_path`, applies and reruns only the money-foundation migration, exercises the foundation Replit self-heal against a second clean schema, compares foundation tables/columns/constraints/indexes, runs foundation allocation races, and drops only the exact validated temporary schemas in `finally`. Task 2 extends the harness to the treatment migration and full parity.
 
 Run: `npm run test:stain-db && npm run test:order-money && npm run test:schema-guard && npm run test:tenant-isolation && npm run check`
 
@@ -241,6 +241,7 @@ Require:
 - Tenant-scoped `orders.idempotency_key`, `orders.request_fingerprint`, and immutable `orders.posted_at` for atomic whole-order retry and booked-report dates.
 - `order_stain_treatments` with organisation, site, order, order item, level, unit, quantity, captured rate, line total, currency, pricing version, idempotency key, acknowledgement fields, nullable `corrected_from_treatment_id`, creator, and timestamp.
 - `order_stain_treatment_adjustments` with original charge, signed quantity/amount effect, action (`adjustment` or `void`), reason, fresh acknowledgement when required, actor, and timestamp.
+- Extend payment/refund allocations with a treatment-charge target, restrictive composite tenant FK, and updated exactly-one-target check now that `order_stain_treatments` exists.
 - Tenant/site/date indexes, idempotency uniqueness scoped to organisation, and restrictive composite foreign keys proving `(organisation_id, site_id)`, `(order_id, site_id)`, and `(order_item_id, order_id)` consistency.
 - Unique org/site pricing-set parent, partial uniqueness for one active rate per site/level/unit, one-way/no-self correction linkage, and database checks for valid enums, positive rates/quantities, two-decimal scale, and acknowledgement completeness.
 
@@ -262,16 +263,20 @@ Create constraints and indexes explicitly. Preserve pricing history by inserting
 
 Use `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and guarded `DO $$` blocks for constraints on partially existing tables. Never drop, truncate, or rewrite financial tables during startup.
 
-- [ ] **Step 6: Run schema gates**
+- [ ] **Step 6: Extend the safe database harness and treatment-allocation tests**
 
-Run: `TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-schema && npm run test:schema-guard && npm run check`
+Extend `scripts/test-stain-postgres.ts` to apply money foundation then treatment migration, rerun both, apply the complete Replit self-heal to a second clean schema, and compare all required tables/columns/constraints/indexes. Add treatment-linked refund limits and concurrent treatment-allocation overrun tests. Preserve the production-URL refusal and exact-schema cleanup guarantees.
+
+- [ ] **Step 7: Run schema gates**
+
+Run: `npm run test:stain-db && npm run test:stain-schema && npm run test:order-money && npm run test:schema-guard && npm run check`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add shared/schema.ts migrations/20260807_stain_treatment_pricing.sql server/replit_integrations/auth/replitAuth.ts server/lib/stain-treatment-schema.test.ts
+git add shared/schema.ts migrations/20260807_stain_treatment_pricing.sql server/replit_integrations/auth/replitAuth.ts server/lib/stain-treatment-schema.test.ts server/lib/order-refunds.test.ts scripts/test-stain-postgres.ts
 git commit -m "feat: add stain treatment financial schema"
 ```
 
@@ -332,7 +337,7 @@ git commit -m "feat: configure fixed stain treatment rates"
 
 - [ ] **Step 1: Extend order input with safe treatment drafts**
 
-Require an order-level idempotency key and canonical request fingerprint covering tenant, customer, service lines, treatment drafts, acknowledgement, advance payment, and expected pricing-set version. Accept treatment `orderItemIndex`, level, quantity, acknowledgement attestation/version when applicable, line idempotency key, and an opaque server-issued `expectedPricingSetVersion`. The index resolves to the server-created order item inside the transaction; no client order-item ID is trusted during new-order creation.
+Require a client-generated order-level idempotency key. The server—not the client—canonically serializes tenant, customer, ordered service lines, treatment drafts, acknowledgement, advance payment, and expected pricing-set version, then computes and stores the request fingerprint. Accept treatment `orderItemIndex`, level, quantity, acknowledgement attestation/version when applicable, line idempotency key, and an opaque server-issued `expectedPricingSetVersion`. The index resolves to the server-created order item inside the transaction; no client order-item ID is trusted during new-order creation.
 
 - [ ] **Step 2: Write failing posting tests**
 
@@ -345,6 +350,7 @@ Cover:
 - Unsupported service units.
 - Missing prices and Very intensive acknowledgement.
 - Duplicate whole-order retries, changed-payload key reuse, and concurrent duplicate submissions.
+- Canonical fingerprint stability across JSON object-key ordering, and intentional service/treatment array ordering rules.
 - Preview/post price changes returning 409 with a new server preview.
 - Same idempotency key retry after a pre-insert 409, and immutable replay after a successful insert.
 - Posting versus rate replacement using two real database connections.
@@ -552,7 +558,43 @@ git add server/lib/stain-treatment.ts server/lib/stain-treatment-routes.ts serve
 git commit -m "feat: report audited stain treatment activity"
 ```
 
-## Task 9: Full QA, devil's advocate, and rollout gate
+## Task 9: Build the executable browser and accessibility gate
+
+**Files:**
+- Create: `playwright.stain-treatment.config.ts`
+- Create: `e2e/stain-treatment.spec.ts`
+- Create: `scripts/seed-stain-treatment-e2e.ts`
+- Modify: `package.json`
+- Modify: `package-lock.json`
+
+- [ ] **Step 1: Write the failing browser smoke and accessibility tests**
+
+Cover Owner rate configuration, authorized/unauthorized Manager access, piece and kg order creation, all three levels, Very intensive acknowledgement, changed-price dialog, receipt/detail/report rendering, keyboard focus, 320px mobile layout, and axe serious/critical violations.
+
+- [ ] **Step 2: Run the test to confirm the harness is absent**
+
+Run: `npm run test:stain-e2e`
+
+Expected: FAIL because the Playwright config/seeded app harness is not implemented.
+
+- [ ] **Step 3: Implement isolated config, seed, startup, and cleanup**
+
+Configure `webServer` against a unique safe test schema, unused localhost port, desktop Chromium and 320px mobile projects, trace on first retry, and `artifacts/stain-treatment-e2e/`. Seed isolated Owner, capable Manager, unauthorized Manager, Operator, piece service, kg service, membership, and six rates. Hard-fail without safe test DB context and clean up exact fixtures/schema in `finally`.
+
+- [ ] **Step 4: Run the browser gate**
+
+Run: `npm run test:stain-e2e`
+
+Expected: PASS with screenshots, traces, and JSON results saved under the declared artifact path.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add playwright.stain-treatment.config.ts e2e/stain-treatment.spec.ts scripts/seed-stain-treatment-e2e.ts package.json package-lock.json
+git commit -m "test: add stain treatment browser gate"
+```
+
+## Task 10: Full QA, devil's advocate, and rollout gate
 
 **Files:**
 - Modify only when an approved QA finding requires a fix; commit each fix separately.
@@ -562,9 +604,10 @@ git commit -m "feat: report audited stain treatment activity"
 ```bash
 npm run test:order-money
 npm run test:stain-domain
-TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-schema
-TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-api
-TEST_DATABASE_URL="$TEST_DATABASE_URL" npm run test:stain-concurrency
+npm run test:stain-db
+npm run test:stain-schema
+npm run test:stain-api
+npm run test:stain-concurrency
 npm run test:stain-ui
 npm run test:stain-e2e
 npm run test:tenant-isolation
@@ -584,9 +627,7 @@ Expected: every command passes.
 
 Verify desktop and mobile configuration, piece/kg orders, all three levels, split levels, memberships, percentage/fixed discounts, receipts, payments, corrections, reporting, and all three languages. Never use production financial data for QA.
 
-Create `playwright.stain-treatment.config.ts` with `webServer` starting the app against the unique safe test schema created by `scripts/test-stain-postgres.ts`, `baseURL` on an unused localhost port, desktop Chromium and 320px mobile projects, trace on first retry, and artifacts under `artifacts/stain-treatment-e2e/`. Seed isolated Owner, capable Manager, unauthorized Manager, Operator, piece service, kg service, membership, and six rates through `scripts/seed-stain-treatment-e2e.ts`. `npm run test:stain-e2e` must hard-fail without safe test DB context and clean up fixtures.
-
-Automate keyboard-only settings/order entry, changed-price dialog focus, first-invalid-field focus, `aria-live` announcements, untranslated-key detection, 320px mobile layout, and receipt/detail/report rendering. Use `@axe-core/playwright` on Settings, Order, Order Detail, and Analytics and fail on serious/critical violations. Save screenshots, traces, and JSON results under the declared artifact path.
+Reuse the committed Playwright/axe harness from Task 9 and extend its scenarios only when QA exposes an approved missing regression. Confirm its safe schema refusal, seeded roles/services/rates, keyboard behavior, changed-price focus, `aria-live` announcements, untranslated-key detection, 320px layout, receipt/detail/report rendering, axe results, cleanup, and artifact output.
 
 - [ ] **Step 3: Run concurrency and retry checks**
 
