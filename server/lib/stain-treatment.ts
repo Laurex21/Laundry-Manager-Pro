@@ -190,6 +190,8 @@ export interface ActiveTreatmentPrices {
   currency: string;
   rates: Array<StainTreatmentRateInput & { id: number }>;
   expectedPricingSetVersion: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
 }
 
 function mapRates(rows: any[]): ActiveTreatmentPrices | null {
@@ -206,13 +208,15 @@ function mapRates(rows: any[]): ActiveTreatmentPrices | null {
     version: Number(rows[0].set_version),
     currency: rows[0].currency,
     expectedPricingSetVersion: pricingSetToken(Number(rows[0].pricing_set_id ?? rows[0].pricingSetId ?? 0), Number(rows[0].set_version)),
+    updatedAt: rows[0].created_at ?? rows[0].createdAt ? new Date(rows[0].created_at ?? rows[0].createdAt).toISOString() : null,
+    updatedBy: rows[0].created_by ?? rows[0].createdBy ?? null,
     rates: rows.map((row) => ({ id: Number(row.id), level: row.level, unit: row.unit, price: canonicalMoney(row.price) })),
   };
 }
 
 export async function getActiveTreatmentPrices(database: PricingDatabase, scope: PricingScope): Promise<ActiveTreatmentPrices | null> {
   const result = await database.query(`
-    SELECT id, pricing_set_id, set_version, level, unit, currency, price
+    SELECT id, pricing_set_id, set_version, level, unit, currency, price, created_at, created_by
     FROM stain_treatment_price_versions
     WHERE organisation_id = $1 AND site_id = $2 AND active = true
     ORDER BY unit, level
@@ -250,7 +254,7 @@ export async function replaceTreatmentPrices(database: PricingDatabase, input: R
         INSERT INTO stain_treatment_price_versions
           (pricing_set_id, organisation_id, site_id, set_version, level, unit, currency, price, active, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
-        RETURNING id, pricing_set_id, set_version, level, unit, currency, price
+        RETURNING id, pricing_set_id, set_version, level, unit, currency, price, created_at, created_by
       `, [parent.rows[0].id, input.organisationId, input.siteId, version, rate.level, rate.unit, org.rows[0].currency, canonicalMoney(rate.price), input.actorId]);
       inserted.push(result.rows[0]);
     }

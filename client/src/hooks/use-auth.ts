@@ -83,6 +83,8 @@ export function useAuth() {
   const currentSite = (user as any)?.currentSite ?? null;
   const allSites: any[] = (user as any)?.allSites ?? [];
   const isOwner = userRole === "owner";
+  const capabilities: string[] = Array.isArray((user as any)?.capabilities) ? (user as any).capabilities : [];
+  const hasCapability = (capability: string) => isOwner || capabilities.includes(capability);
 
   const hasFeature = (feature: string): boolean => {
     const featureMap: Record<string, string[]> = {
@@ -125,6 +127,8 @@ export function useAuth() {
     currentSite,
     allSites,
     isOwner,
+    capabilities,
+    hasCapability,
     switchSite: switchSiteMutation.mutate,
     isSwitchingSite: switchSiteMutation.isPending,
     canAccess,
