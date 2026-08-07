@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useOrders, useCreateOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
+import { useOrders, useCreateOrder, useUpdateOrderStatus, OrderPostingError } from "@/hooks/use-orders";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useServices } from "@/hooks/use-services";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
@@ -87,6 +87,9 @@ import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { useToast } from "@/hooks/use-toast";
 import { GarmentColorPicker } from "@/components/garment-color-picker";
+import { StainTreatmentEditor } from "@/components/orders/stain-treatment-editor";
+import { useStainTreatmentPrices } from "@/hooks/use-stain-treatment";
+import type { StainTreatmentDraftInput } from "@shared/stain-treatment";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
@@ -761,10 +764,19 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [discountMode, setDiscountMode] = useState<"fixed" | "percentage">("fixed");
+  const [orderIdempotencyKey, setOrderIdempotencyKey] = useState(() => `order-${crypto.randomUUID()}`);
+  const [treatments, setTreatments] = useState<StainTreatmentDraftInput[]>([]);
+  const [treatmentSubtotal, setTreatmentSubtotal] = useState("0.00");
+  const [treatmentsValid, setTreatmentsValid] = useState(true);
+  const [pricingConflict, setPricingConflict] = useState<any>(null);
+  const [pendingOrderPayload, setPendingOrderPayload] = useState<any>(null);
+  const { data: stainPricing } = useStainTreatmentPrices();
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
     defaultValues: {
+      idempotencyKey: orderIdempotencyKey,
+      treatments: [],
       status: "pending",
       paymentStatus: "unpaid",
       entryDate: format(new Date(), "yyyy-MM-dd"),
@@ -866,8 +878,8 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
 
   const total = useMemo(() => {
     const pickupVal = Number(watchedPickupCost) || 0;
-    return Math.max(0, subtotal - discountAmount + pickupVal);
-  }, [subtotal, discountAmount, watchedPickupCost]);
+    return Math.max(0, subtotal - discountAmount + Number(treatmentSubtotal || 0) + pickupVal);
+  }, [subtotal, discountAmount, treatmentSubtotal, watchedPickupCost]);
 
   const totalRegisteredGarments = useMemo(() => {
     return (watchedGarmentItems || []).reduce((sum, garment) => {
@@ -886,9 +898,25 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     });
   }
 
-  async function onSubmit(data: CreateOrderFormValues) {
+  function removeServiceItem(index: number) {
+    setTreatments((current) => current
+      .filter((draft) => draft.orderItemIndex !== index)
+      .map((draft) => draft.orderItemIndex > index ? { ...draft, orderItemIndex: draft.orderItemIndex - 1 } : draft));
+    remove(index);
+  }
+
+  async function onSubmit(data: CreateOrderFormValues, reviewedPricingVersion?: string) {
+    if (!treatmentsValid) {
+      toast({ title: t("stain_treatment_fix_errors"), description: t("stain_treatment_quantity_exceeded"), variant: "destructive" });
+      return;
+    }
     const formattedData = {
       ...data,
+      idempotencyKey: orderIdempotencyKey,
+      treatments,
+      expectedPricingSetVersion: treatments.length > 0
+        ? (reviewedPricingVersion || stainPricing?.expectedPricingSetVersion)
+        : undefined,
       discount: discountAmount.toFixed(2),
       discountPct: discountMode === "percentage" ? Number(data.discountPct || 0) : 0,
       customerId: Number(data.customerId),
@@ -924,6 +952,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
       }
     }
 
+    setPendingOrderPayload(formattedData);
     createOrder(formattedData, {
       onSuccess: async (newOrder: any) => {
         let orderDetails = newOrder;
@@ -958,8 +987,20 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
           });
         }
         form.reset();
+        setTreatments([]);
+        setTreatmentSubtotal("0.00");
+        setPricingConflict(null);
+        setPendingOrderPayload(null);
+        const nextKey = `order-${crypto.randomUUID()}`;
+        setOrderIdempotencyKey(nextKey);
+        form.setValue("idempotencyKey", nextKey);
         onSuccess(orderDetails);
-      }
+      },
+      onError: (error) => {
+        if (error instanceof OrderPostingError && error.status === 409 && error.code === "pricing_conflict") {
+          setPricingConflict(error.details);
+        }
+      },
     });
   }
 
@@ -1025,7 +1066,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
         </Form>
       ) : (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 lg:space-y-3">
+          <form onSubmit={form.handleSubmit((data) => onSubmit(data))} className="space-y-4 lg:space-y-3">
             <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
               <FormField
                 control={form.control}
@@ -1189,7 +1230,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                      onClick={() => remove(index)}
+                      onClick={() => removeServiceItem(index)}
                       disabled={fields.length === 1}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1198,6 +1239,16 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 );
               })}
             </div>
+
+                <StainTreatmentEditor
+                  services={activeServices}
+                  items={(watchedItems || []).map((item) => ({ serviceId: Number(item.serviceId) || 0, quantity: Number(item.quantity) || 0 }))}
+                  value={treatments}
+                  onChange={setTreatments}
+                  onSubtotalChange={setTreatmentSubtotal}
+                  onValidityChange={setTreatmentsValid}
+                  disabled={isOrderPending}
+                />
 
                 <div className="space-y-3" data-testid="garment-inventory-section">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1277,7 +1328,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
 
               <div className="min-w-0 space-y-2 rounded-xl border bg-muted/10 p-4 lg:p-3 lg:space-y-2 lg:sticky lg:top-0" data-testid="order-form-summary-column">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">{t("subtotal")}:</span>
+                <span className="text-muted-foreground">{t("cleaning_subtotal")}:</span>
                 <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
@@ -1389,12 +1440,18 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                   )}
                 />
               </div>
-              {(Number(watchedPickupCost) > 0 || discountAmount > 0) && (
+              {(Number(watchedPickupCost) > 0 || discountAmount > 0 || Number(treatmentSubtotal) > 0) && (
                 <div className="text-xs text-muted-foreground space-y-1 px-1">
                   {discountAmount > 0 && (
                     <div className="flex justify-between">
-                      <span>- {t("discount")}:</span>
+                      <span>- {t("cleaning_discount")}:</span>
                       <span className="font-mono text-destructive">-{symbol}{discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {Number(treatmentSubtotal) > 0 && (
+                    <div className="flex justify-between">
+                      <span>+ {t("stain_treatment_subtotal")}:</span>
+                      <span className="font-mono text-primary">+{symbol}{Number(treatmentSubtotal).toFixed(2)}</span>
                     </div>
                   )}
                   {Number(watchedPickupCost) > 0 && (
@@ -1466,13 +1523,53 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
             </div>
 
             <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm">
-              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending}>
+              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending || !treatmentsValid}>
                 {isOrderPending ? t("saving") : t("create_new_order")}
               </Button>
             </div>
           </form>
         </Form>
       )}
+      <AlertDialog open={Boolean(pricingConflict)} onOpenChange={(open) => { if (!open && !isOrderPending) setPricingConflict(null); }}>
+        <AlertDialogContent aria-describedby="stain-price-change-description">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("stain_treatment_price_changed")}</AlertDialogTitle>
+            <AlertDialogDescription id="stain-price-change-description" aria-live="assertive">
+              {t("stain_treatment_review_prices")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-[45vh] space-y-3 overflow-y-auto text-sm">
+            <div className="grid grid-cols-3 gap-2 border-b pb-2 font-semibold">
+              <span>{t("stain_treatment_level")}</span><span>{t("previous_price")}</span><span>{t("new_price")}</span>
+            </div>
+            {(pricingConflict?.newRates || []).map((rate: any) => {
+              const oldRate = pricingConflict?.oldRates?.find((candidate: any) => candidate.level === rate.level && candidate.unit === rate.unit);
+              return <div key={`${rate.unit}-${rate.level}`} className="grid grid-cols-3 gap-2">
+                <span>{t(`stain_treatment_${rate.level}`)} · {rate.unit}</span>
+                <span className="font-mono">{oldRate?.price ?? "—"}</span>
+                <span className="font-mono font-semibold">{rate.price}</span>
+              </div>;
+            })}
+            <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted p-3">
+              <div><p className="text-xs text-muted-foreground">{t("previous_total")}</p><p className="font-mono font-semibold">{pricingConflict?.oldTotal ?? "—"}</p></div>
+              <div><p className="text-xs text-muted-foreground">{t("new_total")}</p><p className="font-mono font-semibold">{pricingConflict?.newTotal ?? "—"}</p></div>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isOrderPending}>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isOrderPending || !pendingOrderPayload}
+              onClick={(event) => {
+                event.preventDefault();
+                const version = pricingConflict?.expectedPricingSetVersion;
+                if (version) void form.handleSubmit((data) => onSubmit(data, version))();
+              }}
+            >
+              {isOrderPending ? t("saving") : t("stain_treatment_resubmit")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

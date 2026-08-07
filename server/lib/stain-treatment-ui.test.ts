@@ -7,6 +7,9 @@ const hook = readFileSync(join(root, "client/src/hooks/use-stain-treatment.ts"),
 const panel = readFileSync(join(root, "client/src/components/settings/stain-treatment-settings.tsx"), "utf8");
 const settings = readFileSync(join(root, "client/src/pages/settings.tsx"), "utf8");
 const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
+const editor = readFileSync(join(root, "client/src/components/orders/stain-treatment-editor.tsx"), "utf8");
+const orders = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
+const orderHook = readFileSync(join(root, "client/src/hooks/use-orders.ts"), "utf8");
 
 assert.match(hook, /\/api\/stain-treatment\/prices/);
 assert.match(hook, /invalidateQueries\(\{ queryKey: STAIN_TREATMENT_SETTINGS_KEY \}\)/);
@@ -23,12 +26,40 @@ assert.match(panel, /updatedAt/);
 assert.doesNotMatch(panel, /type="number"/);
 assert.match(settings, /manage_stain_treatment_pricing/);
 assert.match(settings, /StainTreatmentSettings/);
+assert.match(editor, /<fieldset/);
+assert.match(editor, /<legend/);
+assert.match(editor, /orderItemIndex/);
+assert.match(editor, /treatmentUnit\(selectedService\)/);
+assert.match(editor, /STAIN_TREATMENT_LEVELS/);
+assert.match(editor, /affected_quantity/);
+assert.match(editor, /aria-describedby/);
+assert.match(editor, /aria-live="polite"/);
+assert.match(editor, /very_intensive_acknowledgement/);
+assert.match(editor, /normalizeLocaleDecimal/);
+assert.match(editor, /aggregate/);
+assert.doesNotMatch(editor, /custom.?rate/i);
+assert.match(orders, /StainTreatmentEditor/);
+assert.match(orders, /cleaning_subtotal/);
+assert.match(orders, /cleaning_discount/);
+assert.match(orders, /stain_treatment_subtotal/);
+assert.match(orders, /pricingConflict/);
+assert.match(orders, /expectedPricingSetVersion/);
+assert.match(orderHook, /OrderPostingError/);
+assert.match(orderHook, /res\.status/);
 
 [
   "stain_treatment_settings", "stain_treatment_standard", "stain_treatment_intensive",
   "stain_treatment_very_intensive", "stain_treatment_per_piece", "stain_treatment_per_kg",
   "stain_treatment_currency", "stain_treatment_save", "stain_treatment_saved",
   "stain_treatment_missing", "stain_treatment_permission", "stain_treatment_prices_ascending",
+].forEach((key) => assert.equal((i18n.match(new RegExp(`\"${key}\"`, "g")) || []).length, 3, key));
+
+[
+  "stain_treatment_add", "stain_treatment_related_service", "stain_treatment_affected_quantity",
+  "stain_treatment_rate_preview", "stain_treatment_subtotal", "stain_treatment_missing_order",
+  "stain_treatment_quantity_exceeded", "stain_treatment_very_intensive_acknowledgement",
+  "stain_treatment_price_changed", "stain_treatment_review_prices", "stain_treatment_resubmit",
+  "cleaning_subtotal", "cleaning_discount",
 ].forEach((key) => assert.equal((i18n.match(new RegExp(`\"${key}\"`, "g")) || []).length, 3, key));
 
 console.log("stain treatment settings UI regression tests passed");
