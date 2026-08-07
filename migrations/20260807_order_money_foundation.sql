@@ -158,6 +158,34 @@ ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS service_amount num
 ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS pickup_delivery_amount numeric(10,2);
 ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS unallocated_amount numeric(10,2);
 ALTER TABLE order_refund_allocations ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+
+-- Repair populated legacy partial tables only from authoritative parent joins. Tenant
+-- identity is never guessed: rows without a resolvable parent deliberately abort.
+UPDATE order_refunds r SET organisation_id=o.organisation_id,site_id=o.site_id
+FROM orders o WHERE r.order_id=o.id AND (r.organisation_id IS NULL OR r.site_id IS NULL);
+UPDATE order_refunds SET reason='Legacy refund import' WHERE reason IS NULL OR btrim(reason)='';
+UPDATE order_refunds SET status='approved_internal' WHERE status IS NULL;
+UPDATE order_refunds SET idempotency_key='legacy-refund-' || id WHERE idempotency_key IS NULL;
+UPDATE order_refunds SET request_fingerprint=md5('legacy-refund-' || id::text) || md5('legacy-refund-' || id::text || ':fingerprint')
+WHERE request_fingerprint IS NULL OR request_fingerprint !~ '^[0-9a-f]{64}$';
+UPDATE order_refunds SET created_at=now() WHERE created_at IS NULL;
+UPDATE order_payment_allocations a SET organisation_id=p.organisation_id,site_id=p.site_id
+FROM payments p WHERE a.payment_id=p.id AND (a.organisation_id IS NULL OR a.site_id IS NULL);
+UPDATE order_payment_allocations SET created_at=now() WHERE created_at IS NULL;
+UPDATE order_refund_allocations a SET organisation_id=r.organisation_id,site_id=r.site_id
+FROM order_refunds r WHERE a.refund_id=r.id AND (a.organisation_id IS NULL OR a.site_id IS NULL);
+UPDATE order_refund_allocations SET created_at=now() WHERE created_at IS NULL;
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM order_refunds WHERE order_id IS NULL OR organisation_id IS NULL OR site_id IS NULL OR amount IS NULL) THEN
+   RAISE EXCEPTION 'cannot safely repair legacy order_refunds: order tenant or amount is unresolved';
+ END IF;
+ IF EXISTS (SELECT 1 FROM order_payment_allocations WHERE payment_id IS NULL OR organisation_id IS NULL OR site_id IS NULL) THEN
+   RAISE EXCEPTION 'cannot safely repair legacy order_payment_allocations: payment parent is unresolved';
+ END IF;
+ IF EXISTS (SELECT 1 FROM order_refund_allocations WHERE refund_id IS NULL OR organisation_id IS NULL OR site_id IS NULL) THEN
+   RAISE EXCEPTION 'cannot safely repair legacy order_refund_allocations: refund parent is unresolved';
+ END IF;
+END $$;
 ALTER TABLE order_refunds ALTER COLUMN organisation_id SET NOT NULL;
 ALTER TABLE order_refunds ALTER COLUMN site_id SET NOT NULL;
 ALTER TABLE order_refunds ALTER COLUMN order_id SET NOT NULL;

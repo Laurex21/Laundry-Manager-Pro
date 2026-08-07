@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
-import { calculateOrderTotals, paidCorrectionOutcome } from "./order-money";
+import { calculateOrderTotals, canonicalMoney, compareMoney, fingerprintRequest, persistRefundInTransaction, subtractMoney, sumMoney } from "./order-money";
 export { paidCorrectionOutcome } from "./order-money";
 
 export class OrderCorrectionError extends Error {
@@ -14,6 +14,7 @@ export type ControlledOrderEditInput = {
   entryDate: Date;
   pickupDate: Date | null;
   reason: string;
+  idempotencyKey?: string;
   items: Array<{ serviceId: number; quantity: number }>;
   garments: Array<{ itemName: string; quantity: number; color?: string | null }>;
 };
@@ -118,8 +119,9 @@ export async function editOrderControlled(
   siteId: number,
   actorUserId: string | null,
   input: ControlledOrderEditInput,
+  transactionSource: Pick<typeof pool, "connect"> = pool,
 ) {
-  const client = await pool.connect();
+  const client = await transactionSource.connect();
   try {
     await client.query("BEGIN");
     const orderResult = await client.query(
@@ -134,11 +136,9 @@ export async function editOrderControlled(
     if (!order) throw new OrderCorrectionError("Order not found", 404);
     const deps = await dependencies(client, orderId);
     const isUnusedCorrectedCopy = !!order.corrected_from_order_id && !order.has_corrections;
+    const hasFinancialImpact = deps.has_payments || deps.has_credit;
     if (
       (order.status !== "received" && !isUnusedCorrectedCopy)
-      || order.payment_status !== "unpaid"
-      || deps.has_payments
-      || deps.has_credit
       || deps.has_subscription
       || deps.has_cycles
       || deps.has_machine_usage
@@ -147,6 +147,9 @@ export async function editOrderControlled(
       || (deps.has_status_progress && !isUnusedCorrectedCopy)
     ) {
       throw new OrderCorrectionError("This order already has a financial or operational impact and can no longer be edited", 409);
+    }
+    if (hasFinancialImpact && !input.idempotencyKey) {
+      throw new OrderCorrectionError("Paid corrections require an idempotency key", 400);
     }
 
     const customerResult = await client.query(
@@ -183,20 +186,49 @@ export async function editOrderControlled(
     const money = calculateOrderTotals(input.items.map((item) => ({ price: prices.get(item.serviceId) ?? "0", quantity: item.quantity })), String(order.discount_pct || 0), String(order.discount_amount || order.discount || 0), String(order.pickup_cost || 0));
     const before = await snapshot(client, orderId);
 
+    const postedResult = hasFinancialImpact ? await client.query(
+      `SELECT
+         coalesce((SELECT sum(p.amount) FROM payments p WHERE p.order_id=$1 AND p.organisation_id=$2 AND p.site_id=$3),0)::text AS cash_paid,
+         coalesce((SELECT sum(r.amount) FROM order_refunds r WHERE r.order_id=$1 AND r.organisation_id=$2 AND r.site_id=$3),0)::text AS refunded,
+         coalesce((SELECT sum(ct.amount) FROM credit_transactions ct WHERE ct.order_id=$1 AND ct.organisation_id=$2 AND ct.site_id=$3 AND ct.type='debit'),0)::text AS credit_applied`,
+      [orderId, order.organisation_id, siteId],
+    ) : { rows: [{ cash_paid: "0", refunded: "0", credit_applied: "0" }] };
+    const posted = postedResult.rows[0];
+    const netPosted = subtractMoney(sumMoney([posted.cash_paid, posted.credit_applied]), posted.refunded);
+    const comparison = compareMoney(money.total, netPosted);
+    const financialOutcome = !hasFinancialImpact
+      ? { kind: "unpaid" as const, amount: money.total }
+      : comparison > 0
+        ? { kind: "balance" as const, amount: subtractMoney(money.total, netPosted) }
+        : comparison === 0
+          ? { kind: "balance" as const, amount: "0.00" }
+          : compareMoney(posted.credit_applied, "0") > 0
+            ? { kind: "customer_credit" as const, amount: subtractMoney(netPosted, money.total) }
+            : { kind: "approved_internal_refund" as const, amount: subtractMoney(netPosted, money.total), externalTransfer: false as const };
+
     await client.query(
       `UPDATE orders SET customer_id = $2, entry_date = $3, pickup_date = $4,
          original_price = $5, discount_amount = $6, discount = $6,
-         total_amount = $7, correction_reason = $8, updated_at = NOW()
+         total_amount = $7, payment_status = $8, correction_reason = $9, updated_at = NOW()
        WHERE id = $1`,
-      [orderId, input.customerId, input.entryDate, input.pickupDate, money.subtotal, money.discount, money.total, input.reason],
+      [orderId, input.customerId, input.entryDate, input.pickupDate, money.subtotal, money.discount, money.total,
+       !hasFinancialImpact ? "unpaid" : comparison > 0 ? "partial" : "paid", input.reason],
     );
-    await client.query(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
+    const existingItems = await client.query(`SELECT id, service_id FROM order_items WHERE order_id=$1 ORDER BY id FOR UPDATE`, [orderId]);
+    const reusable = new Map<number, number[]>();
+    for (const row of existingItems.rows) reusable.set(Number(row.service_id), [...(reusable.get(Number(row.service_id)) ?? []), Number(row.id)]);
+    const retainedItemIds: number[] = [];
     for (const item of input.items) {
-      await client.query(
-        `INSERT INTO order_items (order_id, service_id, quantity, price_at_order) VALUES ($1, $2, $3, $4)`,
-        [orderId, item.serviceId, item.quantity, prices.get(item.serviceId)],
-      );
+      const stableId = reusable.get(item.serviceId)?.shift();
+      if (stableId) {
+        retainedItemIds.push(stableId);
+        await client.query(`UPDATE order_items SET quantity=$2,price_at_order=$3 WHERE id=$1 AND order_id=$4`, [stableId,item.quantity,prices.get(item.serviceId),orderId]);
+      } else {
+        const inserted = await client.query(`INSERT INTO order_items (order_id,service_id,quantity,price_at_order) VALUES ($1,$2,$3,$4) RETURNING id`, [orderId,item.serviceId,item.quantity,prices.get(item.serviceId)]);
+        retainedItemIds.push(Number(inserted.rows[0].id));
+      }
     }
+    await client.query(`DELETE FROM order_items WHERE order_id=$1 AND NOT (id=ANY($2::int[]))`, [orderId,retainedItemIds]);
     await client.query(`DELETE FROM garment_items WHERE order_id = $1`, [orderId]);
     for (const garment of input.garments) {
       await client.query(
@@ -204,7 +236,31 @@ export async function editOrderControlled(
         [orderId, garment.itemName, garment.quantity, garment.color || null],
       );
     }
+
+    if (hasFinancialImpact && financialOutcome.amount !== "0.00") {
+      if (financialOutcome.kind === "approved_internal_refund") {
+        await persistRefundInTransaction(client, {
+          organisationId: order.organisation_id, siteId, orderId,
+          idempotencyKey: `${input.idempotencyKey}:refund`, amount: financialOutcome.amount,
+          reason: input.reason, status: "approved_internal", approvedBy: actorUserId,
+          allocations: [{ target: "unallocated", amount: financialOutcome.amount }],
+        });
+      } else if (financialOutcome.kind === "customer_credit") {
+        const customer = await client.query(`SELECT credit_balance FROM customers WHERE id=$1 AND site_id=$2 FOR UPDATE`, [input.customerId,siteId]);
+        if (!customer.rowCount) throw new OrderCorrectionError("Customer not found for tenant site", 404);
+        const creditBefore = canonicalMoney(customer.rows[0].credit_balance ?? "0");
+        const creditAfter = sumMoney([creditBefore,financialOutcome.amount]);
+        const creditKey = `${order.organisation_id}:${siteId}:${input.idempotencyKey}:correction-credit`;
+        await client.query(
+          `INSERT INTO credit_transactions (organisation_id,site_id,customer_id,order_id,type,amount,reason,balance_before,balance_after,notes,created_by,idempotency_key)
+           VALUES ($1,$2,$3,$4,'credit',$5,'order_correction',$6,$7,$8,$9,$10)`,
+          [order.organisation_id,siteId,input.customerId,orderId,financialOutcome.amount,creditBefore,creditAfter,input.reason,actorUserId,creditKey],
+        );
+        await client.query(`UPDATE customers SET credit_balance=$2,total_credit_added=total_credit_added+$3 WHERE id=$1 AND site_id=$4`, [input.customerId,creditAfter,financialOutcome.amount,siteId]);
+      }
+    }
     const after = await snapshot(client, orderId);
+    after.financialOutcome = { ...financialOutcome, netPosted, idempotencyKey: input.idempotencyKey ?? null, requestFingerprint: fingerprintRequest({ orderId, input }) };
     await client.query(
       `INSERT INTO order_corrections (order_id, site_id, reason, before_snapshot, after_snapshot, changed_by)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -216,7 +272,7 @@ export async function editOrderControlled(
       [orderId, order.status, actorUserId, `Order corrected: ${input.reason}`],
     );
     await client.query("COMMIT");
-    return { orderId, totalAmount: money.total };
+    return { orderId, totalAmount: money.total, paymentStatus: !hasFinancialImpact ? "unpaid" : comparison > 0 ? "partial" : "paid", financialOutcome };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

@@ -18,6 +18,7 @@ if (!safeMarker.test(host) && !safeMarker.test(database)) throw new Error("TEST_
 
 const schemaA = `stain_money_${randomBytes(12).toString("hex")}`;
 const schemaB = `stain_money_${randomBytes(12).toString("hex")}`;
+const schemaC = `stain_money_${randomBytes(12).toString("hex")}`;
 const validSchema = /^stain_money_[0-9a-f]{24}$/;
 assert.match(schemaA, validSchema); assert.match(schemaB, validSchema);
 const pool = new pg.Pool({ connectionString: testUrl, max: 4 });
@@ -42,12 +43,17 @@ async function setup(schema: string, rerun: boolean) {
     await client.query(base);
     if (rerun) {
       await client.query(`
-        CREATE TABLE order_refunds(id serial PRIMARY KEY, order_id integer);
-        CREATE TABLE order_payment_allocations(id serial PRIMARY KEY, payment_id integer);
-        CREATE TABLE order_refund_allocations(id serial PRIMARY KEY, refund_id integer);
+        CREATE TABLE order_refunds(id serial PRIMARY KEY, order_id integer, amount numeric(10,2));
+        CREATE TABLE order_payment_allocations(id serial PRIMARY KEY, payment_id integer, unallocated_amount numeric(10,2));
+        CREATE TABLE order_refund_allocations(id serial PRIMARY KEY, refund_id integer, unallocated_amount numeric(10,2));
       `);
     }
     await client.query(`INSERT INTO organisations(name,owner_id) VALUES ('legacy','owner'); INSERT INTO sites(organisation_id,name) VALUES (1,'legacy'); INSERT INTO customers(site_id) VALUES (1); INSERT INTO orders(customer_id,site_id,total_amount) VALUES (1,1,10); INSERT INTO payments(order_id,amount,method) VALUES (1,2,'cash')`);
+    if (rerun) await client.query(`
+      INSERT INTO order_refunds(order_id,amount) VALUES (1,1);
+      INSERT INTO order_payment_allocations(payment_id,unallocated_amount) VALUES (1,2);
+      INSERT INTO order_refund_allocations(refund_id,unallocated_amount) VALUES (1,1);
+    `);
     if (rerun) await applyOrderMoneyFoundation(client);
     else await client.query(migration);
   } finally { client.release(); }
@@ -68,6 +74,13 @@ async function signature(schema: string) {
 try {
   await setup(schemaA, false);
   await setup(schemaB, true);
+  const broken = await pool.connect();
+  try {
+    await broken.query(`CREATE SCHEMA "${schemaC}"; SET search_path TO "${schemaC}"; ${base}`);
+    await broken.query(`CREATE TABLE order_refunds(id serial PRIMARY KEY,order_id integer,amount numeric(10,2)); CREATE TABLE order_payment_allocations(id serial PRIMARY KEY,payment_id integer); CREATE TABLE order_refund_allocations(id serial PRIMARY KEY,refund_id integer); INSERT INTO order_refunds(order_id,amount) VALUES (999999,1)`);
+    await assert.rejects(applyOrderMoneyFoundation(broken), /cannot safely repair legacy order_refunds/);
+    await broken.query("ROLLBACK");
+  } finally { broken.release(); }
   const concurrentFoundation = async () => {
     const client = await pool.connect();
     try {
@@ -117,7 +130,7 @@ try {
   assert.deepEqual(outcomes.sort(), ["ok", "rejected"]);
   console.log("Order money PostgreSQL foundation checks passed");
 } finally {
-  for (const schema of [schemaA, schemaB]) {
+  for (const schema of [schemaA, schemaB, schemaC]) {
     if (!validSchema.test(schema)) throw new Error("Refusing to drop an unvalidated schema name");
     await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   }

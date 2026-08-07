@@ -174,7 +174,7 @@ export async function orderBalance(client: MoneyQueryClient, input: Pick<TenantI
   return canonicalMoney(result.rows[0].balance);
 }
 
-async function persistPaidCorrectionOutcome(client: MoneyQueryClient, input: TenantInput & {
+export async function persistPaidCorrectionOutcome(client: MoneyQueryClient, input: TenantInput & {
   kind: PaidCorrectionOutcome["kind"]; amount: string; reason: string; actorUserId?: string | null;
   customerId?: number; allocations?: Allocation[];
 }) {

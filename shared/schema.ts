@@ -585,9 +585,9 @@ export const VALID_SITE_MEMBER_CAPABILITIES = [
 
 export const orderRefunds = pgTable("order_refunds", {
   id: serial("id").primaryKey(),
-  organisationId: integer("organisation_id").notNull(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
   siteId: integer("site_id").notNull(),
-  orderId: integer("order_id").notNull().references(() => orders.id),
+  orderId: integer("order_id").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   reason: text("reason").notNull(),
   status: varchar("status", { length: 30 }).notNull().default("approved_internal"),
@@ -596,12 +596,12 @@ export const orderRefunds = pgTable("order_refunds", {
   approvedBy: varchar("approved_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
-  uniqueIndex("order_refunds_tenant_identity").on(table.id, table.organisationId, table.siteId),
-  uniqueIndex("order_refunds_tenant_idempotency").on(table.organisationId, table.siteId, table.idempotencyKey),
-  foreignKey({ columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
-  check("order_refunds_amount_bounds", sql`${table.amount} > 0 AND ${table.amount} <= 99999999.99`),
-  check("order_refunds_status_valid", sql`${table.status} IN ('approved_internal', 'customer_credit')`),
-  check("order_refunds_request_fingerprint_valid", sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
+  uniqueIndex("order_refunds_id_organisation_id_site_id_key").on(table.id, table.organisationId, table.siteId),
+  uniqueIndex("order_refunds_organisation_id_site_id_idempotency_key_key").on(table.organisationId, table.siteId, table.idempotencyKey),
+  foreignKey({ name: "order_refunds_order_id_organisation_id_site_id_fkey", columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
+  check("order_refunds_amount_check", sql`${table.amount} > 0 AND ${table.amount} <= 99999999.99`),
+  check("order_refunds_status_check", sql`${table.status} IN ('approved_internal', 'customer_credit')`),
+  check("order_refunds_request_fingerprint_check", sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
 
 export const orderPaymentAllocations = pgTable("order_payment_allocations", {
@@ -614,7 +614,7 @@ export const orderPaymentAllocations = pgTable("order_payment_allocations", {
   unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
-  foreignKey({ columns: [table.paymentId, table.organisationId, table.siteId], foreignColumns: [payments.id, payments.organisationId, payments.siteId] }),
+  foreignKey({ name: "order_payment_allocations_payment_id_organisation_id_site_id_fkey", columns: [table.paymentId, table.organisationId, table.siteId], foreignColumns: [payments.id, payments.organisationId, payments.siteId] }),
   check("order_payment_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
   check("order_payment_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
 ]);
@@ -629,7 +629,7 @@ export const orderRefundAllocations = pgTable("order_refund_allocations", {
   unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
-  foreignKey({ columns: [table.refundId, table.organisationId, table.siteId], foreignColumns: [orderRefunds.id, orderRefunds.organisationId, orderRefunds.siteId] }),
+  foreignKey({ name: "order_refund_allocations_refund_id_organisation_id_site_id_fkey", columns: [table.refundId, table.organisationId, table.siteId], foreignColumns: [orderRefunds.id, orderRefunds.organisationId, orderRefunds.siteId] }),
   check("order_refund_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
   check("order_refund_allocation_positive", sql`coalesce(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) > 0`),
 ]);

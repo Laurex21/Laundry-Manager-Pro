@@ -28,7 +28,7 @@ import {
   getOrderCorrectionEligibility,
   OrderCorrectionError,
 } from "./lib/order-corrections";
-import { calculateOrderTotals, canonicalMoney, compareMoney, recordPaidCorrectionOutcome } from "./lib/order-money";
+import { calculateOrderTotals, canonicalMoney, compareMoney } from "./lib/order-money";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -522,6 +522,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     entryDate: z.coerce.date(),
     pickupDate: z.coerce.date().nullable(),
     reason: z.string().trim().min(5).max(500),
+    idempotencyKey: z.string().min(16).max(64).optional(),
     items: z.array(z.object({
       serviceId: z.coerce.number().int().positive(),
       quantity: z.coerce.number().positive().max(100000),
@@ -605,19 +606,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.getOrder(Number(req.params.id));
     if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
     if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
-    const organisationId = Number((req as any).organisationId);
-    const body = z.object({
-      kind: z.enum(["balance", "customer_credit", "approved_internal_refund", "balanced"]),
-      amount: z.coerce.string(),
-      reason: z.string().trim().min(5).max(500),
-      idempotencyKey: z.string().min(16).max(80),
-    }).parse(req.body);
-    const result = await recordPaidCorrectionOutcome(pool, {
-      organisationId, siteId: order.siteId, orderId: order.id,
-      customerId: order.customerId, actorUserId: (req.session as any)?.userId ?? null,
-      ...body,
-    });
-    res.status(201).json(result);
+    try {
+      const input = controlledOrderEditSchema.extend({ idempotencyKey: z.string().min(16).max(64) }).parse(req.body);
+      const result = await editOrderControlled(order.id, order.siteId, (req.session as any)?.userId ?? null, input);
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
   });
 
   app.patch(api.orders.updateStatus.path, isAuthenticated, async (req, res) => {
