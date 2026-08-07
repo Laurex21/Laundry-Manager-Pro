@@ -101,7 +101,7 @@ export async function persistPaymentInTransaction(client: MoneyQueryClient, inpu
   if (amount === "0.00") throw new Error("Payment amount must be positive");
   const fingerprint = fingerprintRequest(
     { orderId: input.orderId, amount, method: input.method, reference: input.reference ?? null, paymentDate: input.paymentDate?.toISOString() ?? null, isAdvance: !!input.isAdvance, context: input.fingerprintContext ?? null },
-    { moneyPaths: ["amount", "context.creditToApply"] },
+    { moneyPaths: ["amount", "context.amountReceived", "context.creditToApply"] },
   );
   const order = await client.query(
     `SELECT id,

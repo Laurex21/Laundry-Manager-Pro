@@ -1,5 +1,6 @@
 import { pool } from "../db";
 import { OrderMoneyConflictError, persistPaymentInTransaction } from "./order-money";
+import { findCompositePaymentReplay, type PaymentOperationInput } from "./composite-payment-idempotency";
 
 export const CREDIT_REASONS = ["manual_credit", "compensation", "advance_payment"] as const;
 
@@ -11,21 +12,6 @@ export class CreditOperationError extends Error {
     super(message);
   }
 }
-
-type PaymentOperationInput = {
-  orderId: number;
-  amountReceived: string;
-  method: string;
-  reference?: string | null;
-  paymentDate?: Date;
-  creditToApply: string;
-  surplusDisposition: "return" | "credit";
-  idempotencyKey: string;
-  organisationId: number;
-  siteId: number;
-  actorUserId: string | null;
-  collectedByEmployeeId: number | null;
-};
 
 function assertMoney(value: string, field: string, allowZero = true) {
   if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(value)) {
@@ -52,7 +38,7 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
     await client.query("BEGIN");
 
     const orderResult = await client.query(
-      `SELECT o.id, o.customer_id, o.site_id, o.status, o.total_amount, s.organisation_id
+      `SELECT o.id, o.customer_id, o.site_id, o.status, o.payment_status, o.total_amount, s.organisation_id
        FROM orders o
        JOIN sites s ON s.id = o.site_id
        WHERE o.id = $1
@@ -67,14 +53,6 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
     if (["cancelled", "cancellation_requested"].includes(order.status)) {
       throw new CreditOperationError("Payments cannot be registered for cancelled orders");
     }
-    const remainingResult = await client.query(
-      `SELECT GREATEST($1::numeric - COALESCE(SUM(amount), 0), 0)::text AS remaining
-       FROM payments
-       WHERE order_id = $2`,
-      [order.total_amount, input.orderId],
-    );
-    order.remaining = remainingResult.rows[0].remaining;
-
     const customerResult = await client.query(
       `SELECT c.id, c.credit_balance, cs.organisation_id AS customer_organisation_id
        FROM customers c
@@ -87,6 +65,20 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
     if (!customer || customer.customer_organisation_id !== input.organisationId) {
       throw new CreditOperationError("Customer does not belong to this organisation", 403);
     }
+
+    const replay = await findCompositePaymentReplay(client, input, customer.credit_balance, order.payment_status);
+    if (replay) {
+      await client.query("COMMIT");
+      return replay;
+    }
+
+    const remainingResult = await client.query(
+      `SELECT GREATEST($1::numeric - COALESCE(SUM(amount), 0), 0)::text AS remaining
+       FROM payments
+       WHERE order_id = $2`,
+      [order.total_amount, input.orderId],
+    );
+    order.remaining = remainingResult.rows[0].remaining;
 
     const calculation = await client.query(
       `SELECT
@@ -112,7 +104,11 @@ export async function recordPaymentWithCredit(input: PaymentOperationInput) {
 
     let cashPayment: any = null;
     let creditPayment: any = null;
-    const fingerprintContext = { creditToApply: input.creditToApply, surplusDisposition: input.surplusDisposition };
+    const fingerprintContext = {
+      amountReceived: input.amountReceived,
+      creditToApply: input.creditToApply,
+      surplusDisposition: input.surplusDisposition,
+    };
     if (amounts.cash_positive) {
       const result = await persistPaymentInTransaction(client, {
         organisationId: input.organisationId, siteId: input.siteId, orderId: input.orderId,
