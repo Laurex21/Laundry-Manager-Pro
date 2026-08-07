@@ -60,9 +60,13 @@ export function composeMembershipAmount(serviceAmount: DecimalValue, coveredAmou
   return { covered: canonicalMoney(covered), discount: canonicalMoney(discount), due: canonicalMoney(remaining.minus(discount)) };
 }
 
+type AllocatedMoney<T> = T extends { amount: DecimalValue }
+  ? Omit<T, "amount"> & { amount: MoneyString }
+  : never;
+
 export function allocateMoney<T extends { target: FoundationAllocationTarget; amount: DecimalValue }>(total: DecimalValue, requested: T[]) {
   let remaining = decimal(canonicalMoney(total));
-  const result: Array<(Omit<T, "amount"> & { amount: MoneyString }) | { target: "unallocated"; amount: MoneyString }> = [];
+  const result: Array<AllocatedMoney<T> | { target: "unallocated"; amount: MoneyString }> = [];
   for (const allocation of requested) {
     if (remaining.isZero()) break;
     const requestedAmount = decimal(canonicalMoney(allocation.amount));

@@ -45,6 +45,9 @@ assert.deepEqual(allocateMoney("12", [{ target: "service", amount: "10" }, { tar
   { target: "service", amount: "10.00" },
   { target: "pickup_delivery", amount: "2.00" },
 ]);
+assert.deepEqual(allocateMoney("7", [{ target: "treatment", treatmentId: 42, amount: "10" }]), [
+  { target: "treatment", treatmentId: 42, amount: "7.00" },
+]);
 assert.equal(moneyBalance("100", ["25", "12.50"], ["2.50"]), "65.00");
 assert.equal(correctionOutcome("100", "110"), "balance");
 assert.equal(correctionOutcome("100", "90"), "customer_credit");
