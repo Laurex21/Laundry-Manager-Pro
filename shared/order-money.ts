@@ -4,7 +4,7 @@ Decimal.set({ precision: 30, rounding: Decimal.ROUND_HALF_UP });
 
 export const MONEY_MAX = "99999999.99";
 export type MoneyString = string;
-export type FoundationAllocationTarget = "service" | "pickup_delivery" | "unallocated";
+export type FoundationAllocationTarget = "service" | "treatment" | "pickup_delivery" | "unallocated";
 type DecimalValue = string | number | Decimal;
 
 function decimal(value: DecimalValue): Decimal {
@@ -60,15 +60,15 @@ export function composeMembershipAmount(serviceAmount: DecimalValue, coveredAmou
   return { covered: canonicalMoney(covered), discount: canonicalMoney(discount), due: canonicalMoney(remaining.minus(discount)) };
 }
 
-export function allocateMoney(total: DecimalValue, requested: Array<{ target: FoundationAllocationTarget; amount: DecimalValue }>) {
+export function allocateMoney<T extends { target: FoundationAllocationTarget; amount: DecimalValue }>(total: DecimalValue, requested: T[]) {
   let remaining = decimal(canonicalMoney(total));
-  const result: Array<{ target: FoundationAllocationTarget; amount: MoneyString }> = [];
+  const result: Array<(Omit<T, "amount"> & { amount: MoneyString }) | { target: "unallocated"; amount: MoneyString }> = [];
   for (const allocation of requested) {
     if (remaining.isZero()) break;
     const requestedAmount = decimal(canonicalMoney(allocation.amount));
     const amount = requestedAmount.greaterThan(remaining) ? remaining : requestedAmount;
     if (amount.isZero()) continue;
-    result.push({ target: allocation.target, amount: canonicalMoney(amount) });
+    result.push({ ...allocation, amount: canonicalMoney(amount) });
     remaining = remaining.minus(amount);
   }
   if (remaining.greaterThan(0)) result.push({ target: "unallocated", amount: canonicalMoney(remaining) });
