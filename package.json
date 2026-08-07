@@ -32,9 +32,18 @@
     "test:controlled-order-corrections": "tsx server/lib/controlled-order-corrections.test.ts",
     "test:garment-colors": "tsx server/lib/garment-colors.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test:order-money": "tsx server/lib/order-refunds.test.ts",
+    "test:stain-domain": "tsx server/lib/stain-treatment-domain.test.ts",
+    "test:stain-schema": "tsx server/lib/stain-treatment-schema.test.ts",
+    "test:stain-api": "tsx server/lib/stain-treatment-api.test.ts",
+    "test:stain-concurrency": "tsx server/lib/stain-treatment-concurrency.test.ts",
+    "test:stain-ui": "tsx server/lib/stain-treatment-ui.test.ts",
+    "test:stain-db": "tsx scripts/test-stain-postgres.ts",
+    "test:stain-e2e": "playwright test --config playwright.stain-treatment.config.ts"
   },
   "dependencies": {
+    "decimal.js-light": "^2.5.1",
     "@anthropic-ai/sdk": "^0.96.0",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.10.0",
@@ -114,6 +123,8 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.54.1",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",

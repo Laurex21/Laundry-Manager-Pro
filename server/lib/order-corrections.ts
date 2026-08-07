@@ -1,5 +1,12 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
+import { calculateOrderTotals, type PaidCorrectionOutcome } from "./order-money";
+
+export function paidCorrectionOutcome(kind: "balance" | "customer_credit" | "approved_internal_refund" | "balanced", amount: string): PaidCorrectionOutcome {
+  if (kind === "approved_internal_refund") return { kind, amount, externalTransfer: false };
+  if (kind === "balanced") return { kind, amount: "0.00" };
+  return { kind, amount };
+}
 
 export class OrderCorrectionError extends Error {
   constructor(message: string, public readonly statusCode = 400) {
@@ -168,24 +175,17 @@ export async function editOrderControlled(
       `SELECT service_id, price_at_order FROM order_items WHERE order_id = $1 ORDER BY id`,
       [orderId],
     );
-    const existingPrices = new Map<number, number>();
+    const existingPrices = new Map<number, string>();
     for (const item of existingPricesResult.rows) {
       if (!existingPrices.has(Number(item.service_id))) {
-        existingPrices.set(Number(item.service_id), Number(item.price_at_order));
+        existingPrices.set(Number(item.service_id), String(item.price_at_order));
       }
     }
     const prices = new Map(servicesResult.rows.map((service) => [
       Number(service.id),
-      existingPrices.get(Number(service.id)) ?? Number(service.price),
+      existingPrices.get(Number(service.id)) ?? String(service.price),
     ]));
-    const subtotal = input.items.reduce((sum, item) => sum + (prices.get(item.serviceId) ?? 0) * item.quantity, 0);
-    const discountPct = Number(order.discount_pct || 0);
-    const discountAmount = Math.min(
-      subtotal,
-      discountPct > 0 ? subtotal * (discountPct / 100) : Number(order.discount_amount || order.discount || 0),
-    );
-    const pickupCost = Number(order.pickup_cost || 0);
-    const totalAmount = Math.max(0, subtotal - discountAmount + pickupCost);
+    const money = calculateOrderTotals(input.items.map((item) => ({ price: prices.get(item.serviceId) ?? "0", quantity: item.quantity })), String(order.discount_pct || 0), String(order.discount_amount || order.discount || 0), String(order.pickup_cost || 0));
     const before = await snapshot(client, orderId);
 
     await client.query(
@@ -193,7 +193,7 @@ export async function editOrderControlled(
          original_price = $5, discount_amount = $6, discount = $6,
          total_amount = $7, correction_reason = $8, updated_at = NOW()
        WHERE id = $1`,
-      [orderId, input.customerId, input.entryDate, input.pickupDate, subtotal, discountAmount, totalAmount, input.reason],
+      [orderId, input.customerId, input.entryDate, input.pickupDate, money.subtotal, money.discount, money.total, input.reason],
     );
     await client.query(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
     for (const item of input.items) {
@@ -221,7 +221,7 @@ export async function editOrderControlled(
       [orderId, order.status, actorUserId, `Order corrected: ${input.reason}`],
     );
     await client.query("COMMIT");
-    return { orderId, totalAmount: totalAmount.toFixed(2) };
+    return { orderId, totalAmount: money.total };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

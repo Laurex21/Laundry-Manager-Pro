@@ -30,7 +30,8 @@ assert.match(service, /to_regclass\('public\.production_cycle_orders'\)/);
 assert.match(service, /available\.production_cycle_orders && available\.production_cycles/);
 assert.match(service, /enabled \? `EXISTS\(\$\{sql\}\)` : "false"/);
 assert.match(service, /before_snapshot, after_snapshot/);
-assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? Number\(service\.price\)/);
+assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? String\(service\.price\)/);
+assert.match(service, /calculateOrderTotals/);
 assert.match(service, /Replaced by corrected order/);
 assert.match(
   service,

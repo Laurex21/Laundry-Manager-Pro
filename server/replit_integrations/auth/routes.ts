@@ -15,10 +15,14 @@ import {
   recordCurrentLegalAcceptance,
 } from "../../lib/legal";
 
-async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
+async function getOrganisation(organisationId: number | null): Promise<{ ownerId: string; currency: string } | null> {
   if (!organisationId) return null;
-  const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId));
-  return org?.ownerId ?? null;
+  const [org] = await db.select({ ownerId: organisations.ownerId, currency: organisations.currency }).from(organisations).where(eq(organisations.id, organisationId));
+  return org ?? null;
+}
+
+async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
+  return (await getOrganisation(organisationId))?.ownerId ?? null;
 }
 
 async function isOrganisationOwnerUser(user: { id: string; organisationId: number | null; userType?: string | null }): Promise<boolean> {
@@ -29,7 +33,8 @@ async function isOrganisationOwnerUser(user: { id: string; organisationId: numbe
 async function buildUserResponse(userId: string) {
   const user = await authStorage.getUser(userId);
   if (!user) return null;
-  const orgOwnerId = await getOrganisationOwnerId(user.organisationId);
+  const organisation = await getOrganisation(user.organisationId);
+  const orgOwnerId = organisation?.ownerId ?? null;
   const isOrgOwner = user.userType !== "staff" && (!orgOwnerId || orgOwnerId === userId);
   const subscriptionOwnerId = isOrgOwner ? userId : orgOwnerId;
   const sub = subscriptionOwnerId ? await storage.getUserSubscription(subscriptionOwnerId) : null;
@@ -37,6 +42,7 @@ async function buildUserResponse(userId: string) {
 
   // Determine effective role: check if user is the org owner or a site member
   let effectiveRole = user.role ?? "owner";
+  let capabilities: string[] = [];
   if (user.organisationId) {
     if (!isOrgOwner) {
       // User is not the org owner — find their highest-priority site member role
@@ -45,14 +51,21 @@ async function buildUserResponse(userId: string) {
         // Priority: manager > operator (owners are handled above)
         if (memberships.some(m => m.role === "manager")) effectiveRole = "manager";
         else effectiveRole = "operator";
+        const effectiveMembership = user.currentSiteId
+          ? memberships.find(m => m.siteId === user.currentSiteId)
+          : memberships.find(m => m.role === effectiveRole);
+        if (effectiveMembership?.role === "manager") capabilities = effectiveMembership.capabilities ?? [];
         // Use role from current site if available
         if (user.currentSiteId) {
           const currentMembership = memberships.find(m => m.siteId === user.currentSiteId);
           if (currentMembership) effectiveRole = currentMembership.role;
+          if (currentMembership?.role !== "manager") capabilities = [];
         }
       }
     }
   }
+  if (isOrgOwner) capabilities = ["manage_stain_treatment_pricing", "view_stain_treatment_reports"];
+  if (effectiveRole === "operator") capabilities = [];
 
   let currentSite = null;
   let allSites: any[] = [];
@@ -64,7 +77,7 @@ async function buildUserResponse(userId: string) {
   }
   const legalAcceptance = await getCurrentLegalAcceptanceStatus(userId);
 
-  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites, legalAcceptance };
+  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, capabilities, currency: organisation?.currency ?? "FCFA", planSlug, passwordHash: undefined, currentSite, allSites, legalAcceptance };
 }
 
 async function ensureUserOrganisation(userId: string) {

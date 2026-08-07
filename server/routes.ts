@@ -28,6 +28,7 @@ import {
   getOrderCorrectionEligibility,
   OrderCorrectionError,
 } from "./lib/order-corrections";
+import { calculateOrderTotals, canonicalMoney, compareMoney } from "./lib/order-money";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -430,38 +431,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!(await canAccessCustomer(req, customer.id))) {
         return res.status(403).json({ message: "Customer does not belong to this organisation" });
       }
-      let subtotal = 0;
+      const pricedItems: Array<{ price: string; quantity: number }> = [];
       for (const item of items) {
         const service = await storage.getService(item.serviceId);
         if (!service) return res.status(400).json({ message: `Service ${item.serviceId} not found` });
         if (!(await canAccessService(req, service.id))) {
           return res.status(403).json({ message: `Service ${item.serviceId} does not belong to this organisation` });
         }
-        subtotal += Number(service.price) * item.quantity;
+        pricedItems.push({ price: service.price, quantity: item.quantity });
       }
-      const discountPct = Number(orderData.discountPct || 0);
-      const requestedDiscountAmount = Number(orderData.discount || 0);
-      const discountAmount = discountPct > 0
-        ? subtotal * (discountPct / 100)
-        : requestedDiscountAmount;
-      if (!Number.isFinite(discountAmount) || discountAmount < 0 || discountAmount > subtotal) {
-        return res.status(400).json({ message: "Discount must be between zero and the order subtotal" });
-      }
-      const pickupCostAmount = Number(orderData.pickupCost || 0);
-      const advanceAmount = Number(orderData.advancePayment || 0);
-      const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
-      const initialPaymentStatus = advanceAmount >= totalAmount ? "paid" : advanceAmount > 0 ? "partial" : "unpaid";
+      const discountPct = String(orderData.discountPct || 0);
+      let money;
+      try { money = calculateOrderTotals(pricedItems, discountPct, String(orderData.discount || 0), String(orderData.pickupCost || 0)); }
+      catch { return res.status(400).json({ message: "Discount must be between zero and the order subtotal" }); }
+      const advanceAmount = canonicalMoney(String(orderData.advancePayment || 0));
+      const initialPaymentStatus = compareMoney(advanceAmount, money.total) >= 0 ? "paid" : compareMoney(advanceAmount, "0") > 0 ? "partial" : "unpaid";
       const employee = await actorEmployee(req, siteId);
       const order = await storage.createOrder({
         ...orderData,
         createdByEmployeeId: employee?.id ?? null,
         status: "received",
-        totalAmount: totalAmount.toString(),
-        originalPrice: subtotal.toString(),
-        discountPct: discountPct.toString(),
-        discountAmount: discountAmount.toString(),
-        discount: discountAmount.toString(),
-        pickupCost: pickupCostAmount.toString(),
+        totalAmount: money.total,
+        originalPrice: money.subtotal,
+        discountPct,
+        discountAmount: money.discount,
+        discount: money.discount,
+        pickupCost: money.pickupDelivery,
         paymentStatus: initialPaymentStatus,
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
@@ -471,17 +466,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         siteId,
         actionType: "order_created",
         orderId: order.id,
-        amount: totalAmount,
+        amount: money.total,
         weightKg: items.reduce((sum, item) => sum + item.quantity, 0),
         metadata: { itemCount: items.length, garmentCount: garments?.length ?? 0 },
       });
-      if (discountAmount > 0) {
+      if (compareMoney(money.discount, "0") > 0) {
         await trackEmployeeActivity(req, {
           siteId,
           actionType: "discount_applied",
           orderId: order.id,
-          amount: discountAmount,
-          metadata: { subtotal, totalAmount },
+          amount: money.discount,
+          metadata: { subtotal: money.subtotal, totalAmount: money.total },
         });
       }
       for (const usage of machineUsages ?? []) {
@@ -495,11 +490,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           cycleDurationMinutes: usage.cycleDurationMinutes || 0,
         } as any);
       }
-      if (advanceAmount > 0) {
+      if (compareMoney(advanceAmount, "0") > 0) {
         await storage.createPayment({
           orderId: order.id,
           collectedByEmployeeId: employee?.id ?? null,
-          amount: advanceAmount.toString(),
+          amount: advanceAmount,
           method: orderData.advancePaymentMethod || "Cash",
           date: order.entryDate || new Date(),
           isAdvance: true,
@@ -1857,6 +1852,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Multi-Site Routes (Prompt B) ────────────────────────────────────────────
+
+  app.put("/api/organisation/currency", isAuthenticated, async (req, res) => {
+    const organisation = await requireOwnerOrganisation(req, res);
+    if (!organisation) return;
+    const parsed = z.object({ currency: z.string().trim().min(3).max(10).regex(/^[A-Z]+$/) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid currency" });
+    try {
+      const { db } = await import("./db");
+      const { organisations } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      const [updated] = await db.update(organisations).set({ currency: parsed.data.currency }).where(eq(organisations.id, organisation.id)).returning();
+      res.json({ currency: updated.currency });
+    } catch (error: any) {
+      if (error?.code === "23514") return res.status(409).json({ message: "Currency cannot change after a financial record is posted" });
+      throw error;
+    }
+  });
 
   app.get("/api/sites", isAuthenticated, async (req, res) => {
     try {

@@ -19,7 +19,7 @@ assert.match(routes, /error\?\.code === "23505"/);
 assert.match(routes, /Subscription already applied to this order/);
 assert.match(routes, /Subscription order limit exhausted/);
 assert.match(routes, /remainingOrders == null \|\| row\.subscription\.remainingOrders > 0/);
-assert.match(routes, /extraAmount \* \(Number\(row\.plan\.discountPercentage/);
+assert.match(routes, /eligibleServiceDiscount\(extraAmount, String\(row\.plan\.discountPercentage/);
 assert.doesNotMatch(routes, /coveredAmount \* \(Number\(row\.plan\.discountPercentage/);
 
 assert.match(routes, /requirePlanManager/);

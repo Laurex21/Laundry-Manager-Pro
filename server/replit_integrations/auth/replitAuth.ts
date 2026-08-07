@@ -3,6 +3,8 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { pool } from "../../db";
 import { ensureOrderItemQuantitySupportsDecimals } from "../../lib/order-item-quantity-schema";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
@@ -306,6 +308,8 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_production_cycle_orders_order ON production_cycle_orders(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
+  await ensureOrderMoneyFoundation();
+
   // One-time data correction: kapnangsilva@gmail.com was accidentally
   // onboarded as a staff member, overwriting their admin credentials.
   // Restore owner access; guarded so it only fires when still in the
@@ -317,6 +321,11 @@ async function ensureAuthSchema() {
     WHERE email     = 'kapnangsilva@gmail.com'
       AND user_type = 'staff'
   `);
+}
+
+export async function ensureOrderMoneyFoundation() {
+  const migration = await readFile(join(process.cwd(), "migrations/20260807_order_money_foundation.sql"), "utf8");
+  await pool.query(migration);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

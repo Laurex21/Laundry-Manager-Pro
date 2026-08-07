@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check, foreignKey } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -46,6 +46,7 @@ export const customers = pgTable("customers", {
 export const services = pgTable("services", {
   id: serial("id").primaryKey(),
   siteId: integer("site_id"),
+  organisationId: integer("organisation_id"),
   name: text("name").notNull(),
   description: text("description"),
   unit: text("unit").notNull(),
@@ -87,6 +88,7 @@ export const orders = pgTable("orders", {
   correctedFromOrderId: integer("corrected_from_order_id"),
   correctionReason: text("correction_reason"),
   siteId: integer("site_id"),
+  organisationId: integer("organisation_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -96,6 +98,7 @@ export const orders = pgTable("orders", {
   index("idx_orders_created_at").on(table.createdAt),
   index("idx_orders_delivered_at").on(table.deliveredAt),
   index("idx_orders_corrected_from").on(table.correctedFromOrderId),
+  uniqueIndex("orders_tenant_identity").on(table.id, table.organisationId, table.siteId),
 ]);
 
 export const orderItems = pgTable("order_items", {
@@ -108,7 +111,7 @@ export const orderItems = pgTable("order_items", {
 
 export const orderStatusHistory = pgTable("order_status_history", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull().references(() => orders.id),
+  orderId: integer("order_id").notNull(),
   status: text("status").notNull(),
   changedAt: timestamp("changed_at").defaultNow(),
   changedBy: varchar("changed_by"),
@@ -139,10 +142,14 @@ export const payments = pgTable("payments", {
   date: timestamp("date").defaultNow(),
   isAdvance: boolean("is_advance").default(false),
   idempotencyKey: varchar("idempotency_key", { length: 100 }),
+  organisationId: integer("organisation_id"),
+  siteId: integer("site_id"),
+  requestFingerprint: varchar("request_fingerprint", { length: 64 }),
 }, (table) => [
-  uniqueIndex("idx_payments_idempotency_key")
-    .on(table.idempotencyKey)
+  uniqueIndex("idx_payments_tenant_idempotency_key")
+    .on(table.organisationId, table.siteId, table.idempotencyKey)
     .where(sql`${table.idempotencyKey} IS NOT NULL`),
+  uniqueIndex("payments_tenant_identity").on(table.id, table.organisationId, table.siteId),
 ]);
 
 export const garmentItems = pgTable("garment_items", {
@@ -343,6 +350,7 @@ export const organisations = pgTable("organisations", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   ownerId: varchar("owner_id").notNull(),
+  currency: varchar("currency", { length: 10 }).notNull().default("FCFA"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -560,8 +568,61 @@ export const siteMembers = pgTable("site_members", {
   siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
   role: varchar("role", { length: 50 }).notNull(),
+  capabilities: jsonb("capabilities").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const VALID_SITE_MEMBER_CAPABILITIES = [
+  "manage_stain_treatment_pricing",
+  "view_stain_treatment_reports",
+] as const;
+
+export const orderRefunds = pgTable("order_refunds", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("approved_internal"),
+  idempotencyKey: varchar("idempotency_key", { length: 120 }).notNull(),
+  requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
+  approvedBy: varchar("approved_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("order_refunds_tenant_identity").on(table.id, table.organisationId, table.siteId),
+  uniqueIndex("order_refunds_tenant_idempotency").on(table.organisationId, table.siteId, table.idempotencyKey),
+  foreignKey({ columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
+  check("order_refunds_amount_bounds", sql`${table.amount} > 0 AND ${table.amount} <= 99999999.99`),
+]);
+
+export const orderPaymentAllocations = pgTable("order_payment_allocations", {
+  id: serial("id").primaryKey(),
+  paymentId: integer("payment_id").notNull(),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
+  serviceAmount: decimal("service_amount", { precision: 10, scale: 2 }),
+  pickupDeliveryAmount: decimal("pickup_delivery_amount", { precision: 10, scale: 2 }),
+  unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  foreignKey({ columns: [table.paymentId, table.organisationId, table.siteId], foreignColumns: [payments.id, payments.organisationId, payments.siteId] }),
+  check("order_payment_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
+]);
+
+export const orderRefundAllocations = pgTable("order_refund_allocations", {
+  id: serial("id").primaryKey(),
+  refundId: integer("refund_id").notNull(),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
+  serviceAmount: decimal("service_amount", { precision: 10, scale: 2 }),
+  pickupDeliveryAmount: decimal("pickup_delivery_amount", { precision: 10, scale: 2 }),
+  unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  foreignKey({ columns: [table.refundId, table.organisationId, table.siteId], foreignColumns: [orderRefunds.id, orderRefunds.organisationId, orderRefunds.siteId] }),
+  check("order_refund_allocation_one_target", sql`num_nonnulls(${table.serviceAmount}, ${table.pickupDeliveryAmount}, ${table.unallocatedAmount}) = 1`),
+]);
 
 export const siteInvitations = pgTable("site_invitations", {
   id: serial("id").primaryKey(),

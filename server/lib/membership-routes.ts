@@ -11,6 +11,7 @@ import {
 import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
 import { buildMembershipCard } from "./membership-card-generator";
 import { createPendingSubscriptionNotification } from "./subscription-notifications";
+import { canonicalMoney, compareMoney, eligibleServiceDiscount, multiplyMoney, subtractMoney, sumMoney } from "./order-money";
 import { usageThresholdCrossed } from "./subscription-formulas";
 import { awardRenewalPoints } from "./loyalty";
 import { rateLimit } from "./rate-limit";
@@ -133,26 +134,26 @@ function computeCoverage(row: { subscription: typeof customerSubscriptions.$infe
   const originalPiecesLeft = row.subscription.remainingPieces;
   let kgLeft = row.subscription.remainingKg == null ? null : Number(row.subscription.remainingKg);
   let piecesLeft = row.subscription.remainingPieces;
-  let coveredAmount = 0, extraAmount = 0, kgToDeduct = 0, piecesToDeduct = 0;
+  let coveredAmount = "0.00", extraAmount = "0.00", kgToDeduct = 0, piecesToDeduct = 0;
   const orderLimitAvailable = row.subscription.remainingOrders == null || row.subscription.remainingOrders > 0;
   const coverageBreakdown = items.map(item => {
-    const quantity = Number(item.quantity); const lineAmount = quantity * Number(item.unitPrice);
+    const quantity = Number(item.quantity); const lineAmount = multiplyMoney(String(item.quantity), String(item.unitPrice));
     const consumesKg = item.unit === "kg" && (kgLeft != null || originalPiecesLeft == null);
     let coveredQty = 0;
     if (orderLimitAvailable && included.has(item.serviceId)) {
       if (consumesKg) coveredQty = kgLeft == null ? quantity : Math.min(quantity, Math.max(0, kgLeft));
       else coveredQty = piecesLeft == null ? quantity : Math.min(quantity, Math.max(0, piecesLeft));
     }
-    const extraQty = quantity - coveredQty; const lineCovered = coveredQty * Number(item.unitPrice);
-    const overageRate = consumesKg ? Number(row.plan.overagePricePerKg ?? item.unitPrice) : Number(row.plan.overagePricePerPiece ?? item.unitPrice);
-    const lineExtra = extraQty * overageRate;
-    coveredAmount += lineCovered; extraAmount += lineExtra;
+    const extraQty = quantity - coveredQty; const lineCovered = multiplyMoney(String(coveredQty), String(item.unitPrice));
+    const overageRate = String(consumesKg ? row.plan.overagePricePerKg ?? item.unitPrice : row.plan.overagePricePerPiece ?? item.unitPrice);
+    const lineExtra = multiplyMoney(String(extraQty), overageRate);
+    coveredAmount = sumMoney([coveredAmount, lineCovered]); extraAmount = sumMoney([extraAmount, lineExtra]);
     if (consumesKg) { kgToDeduct += coveredQty; if (kgLeft != null) kgLeft -= coveredQty; }
     else { piecesToDeduct += coveredQty; if (piecesLeft != null) piecesLeft -= coveredQty; }
     return { serviceId: item.serviceId, serviceName: item.serviceName, coveredQty, extraQty, coveredAmount: lineCovered, extraAmount: lineExtra, originalAmount: lineAmount };
   });
-  const discount = orderLimitAvailable ? extraAmount * (Number(row.plan.discountPercentage ?? 0) / 100) : 0;
-  extraAmount = Math.max(0, extraAmount - discount);
+  const discount = orderLimitAvailable ? eligibleServiceDiscount(extraAmount, String(row.plan.discountPercentage ?? 0)) : "0.00";
+  extraAmount = subtractMoney(extraAmount, discount);
   // Registered garments are the source of truth for piece consumption. A
   // combined plan must consume its kg allowance and its piece allowance on the
   // same order; service units alone cannot represent both dimensions.
@@ -161,7 +162,7 @@ function computeCoverage(row: { subscription: typeof customerSubscriptions.$infe
     piecesLeft = Math.max(0, originalPiecesLeft - piecesToDeduct);
   }
   const ordersToDeduct = row.subscription.remainingOrders == null || !orderLimitAvailable ? 0 : 1;
-  return { coveredAmount, extraAmount, discount, kgToDeduct, piecesToDeduct, ordersToDeduct, coverageBreakdown, remainingAfter: { kg: kgLeft, pieces: piecesLeft, orders: row.subscription.remainingOrders == null ? null : Math.max(0, row.subscription.remainingOrders - ordersToDeduct) }, savingsAchieved: coveredAmount + discount, subscription: row.subscription, plan: row.plan, order: row.order };
+  return { coveredAmount, extraAmount, discount, kgToDeduct, piecesToDeduct, ordersToDeduct, coverageBreakdown, remainingAfter: { kg: kgLeft, pieces: piecesLeft, orders: row.subscription.remainingOrders == null ? null : Math.max(0, row.subscription.remainingOrders - ordersToDeduct) }, savingsAchieved: sumMoney([coveredAmount, discount]), subscription: row.subscription, plan: row.plan, order: row.order };
 }
 
 async function calculateCoverage(organisationId: number, subscriptionId: number, orderId: number, siteId: number) {
@@ -337,7 +338,7 @@ export function registerMembershipRoutes(app: Express) {
         if (!coverage) return { status: 404 as const, message: "Eligible subscription/order not found" };
         if (coverage.subscription.remainingOrders != null && coverage.subscription.remainingOrders <= 0) return { status: 409 as const, message: "Subscription order limit exhausted" };
         await tx.insert(subscriptionTransactions).values({ customerSubscriptionId: input.customerSubscriptionId, orderId: input.orderId, kgConsumed: String(coverage.kgToDeduct), piecesConsumed: coverage.piecesToDeduct, amountCovered: String(coverage.coveredAmount), extraAmountCharged: String(coverage.extraAmount) });
-        await tx.update(orders).set({ originalPrice: coverage.order!.originalPrice ?? coverage.order!.totalAmount, totalAmount: String(coverage.extraAmount), paymentStatus: coverage.extraAmount <= 0 ? "paid" : coverage.order!.paymentStatus, updatedAt: new Date() }).where(and(eq(orders.id, input.orderId), eq(orders.siteId, siteId)));
+        await tx.update(orders).set({ originalPrice: coverage.order!.originalPrice ?? coverage.order!.totalAmount, totalAmount: canonicalMoney(coverage.extraAmount), paymentStatus: compareMoney(coverage.extraAmount, "0") <= 0 ? "paid" : coverage.order!.paymentStatus, updatedAt: new Date() }).where(and(eq(orders.id, input.orderId), eq(orders.siteId, siteId)));
         const [subscription] = await tx.update(customerSubscriptions).set({ remainingKg: coverage.remainingAfter.kg == null ? null : String(coverage.remainingAfter.kg), remainingPieces: coverage.remainingAfter.pieces, remainingOrders: coverage.remainingAfter.orders, totalConsumedKg: String(Number(coverage.subscription.totalConsumedKg ?? 0) + coverage.kgToDeduct), totalConsumedPieces: Number(coverage.subscription.totalConsumedPieces ?? 0) + coverage.piecesToDeduct, totalOrdersUsed: Number(coverage.subscription.totalOrdersUsed ?? 0) + 1, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, input.customerSubscriptionId), eq(customerSubscriptions.organisationId, organisationId))).returning();
         return { status: 200 as const, subscription, coverage };
       });
