@@ -28,7 +28,16 @@ const base = `
  CREATE TABLE organisations(id serial PRIMARY KEY,name varchar(255) NOT NULL,owner_id varchar NOT NULL,created_at timestamp DEFAULT now());
  CREATE TABLE sites(id serial PRIMARY KEY,organisation_id integer NOT NULL REFERENCES organisations(id),name varchar(255) NOT NULL);
  CREATE TABLE customers(id serial PRIMARY KEY,site_id integer);
- CREATE TABLE orders(id serial PRIMARY KEY,customer_id integer NOT NULL REFERENCES customers(id),site_id integer,total_amount numeric(10,2) NOT NULL DEFAULT 0);
+ CREATE TABLE orders(
+   id serial PRIMARY KEY,
+   customer_id integer NOT NULL REFERENCES customers(id),
+   site_id integer,
+   total_amount numeric(10,2) NOT NULL DEFAULT 0,
+   original_price numeric(10,2) NOT NULL DEFAULT 0,
+   discount_amount numeric(10,2) NOT NULL DEFAULT 0,
+   discount numeric(10,2) NOT NULL DEFAULT 0,
+   pickup_cost numeric(10,2) NOT NULL DEFAULT 0
+ );
  CREATE TABLE payments(id serial PRIMARY KEY,order_id integer NOT NULL REFERENCES orders(id),collected_by_employee_id integer,amount numeric(10,2) NOT NULL,method varchar(50) NOT NULL,reference varchar(255),date timestamp DEFAULT now(),is_advance boolean DEFAULT false,idempotency_key varchar(100));
  CREATE TABLE site_members(id serial PRIMARY KEY,site_id integer NOT NULL REFERENCES sites(id),user_id varchar NOT NULL,role varchar(50) NOT NULL);
  CREATE TABLE membership_subscription_payments(id serial PRIMARY KEY,organisation_id integer NOT NULL REFERENCES organisations(id),amount numeric(12,2) NOT NULL);
@@ -48,14 +57,22 @@ async function setup(schema: string, rerun: boolean) {
         CREATE TABLE order_refund_allocations(id serial PRIMARY KEY, refund_id integer, unallocated_amount numeric(10,2));
       `);
     }
-    await client.query(`INSERT INTO organisations(name,owner_id) VALUES ('legacy','owner'); INSERT INTO sites(organisation_id,name) VALUES (1,'legacy'); INSERT INTO customers(site_id) VALUES (1); INSERT INTO orders(customer_id,site_id,total_amount) VALUES (1,1,10); INSERT INTO payments(order_id,amount,method) VALUES (1,2,'cash')`);
+    await client.query(`INSERT INTO organisations(name,owner_id) VALUES ('legacy','owner'); INSERT INTO sites(organisation_id,name) VALUES (1,'legacy'); INSERT INTO customers(site_id) VALUES (1); INSERT INTO orders(customer_id,site_id,total_amount,original_price,discount_amount,discount,pickup_cost) VALUES (1,1,10,10,0,0,0); INSERT INTO payments(order_id,amount,method) VALUES (1,2,'cash')`);
     if (rerun) await client.query(`
       INSERT INTO order_refunds(order_id,amount) VALUES (1,1);
       INSERT INTO order_payment_allocations(payment_id,unallocated_amount) VALUES (1,2);
       INSERT INTO order_refund_allocations(refund_id,unallocated_amount) VALUES (1,1);
     `);
     if (rerun) await applyOrderMoneyFoundation(client);
-    else await client.query(migration);
+    else {
+      await client.query(migration);
+      await client.query(`
+        INSERT INTO order_refunds(organisation_id,site_id,order_id,amount,reason,status,idempotency_key,request_fingerprint)
+        VALUES (1,1,1,1,'legacy correction','approved_internal','legacy-refund','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+        INSERT INTO order_refund_allocations(refund_id,organisation_id,site_id,unallocated_amount)
+        VALUES (1,1,1,1);
+      `);
+    }
   } finally { client.release(); }
 }
 
@@ -96,6 +113,7 @@ try {
     assert.equal((await seed.query(`SELECT organisation_id,site_id FROM orders WHERE id=1`)).rows[0].organisation_id, 1);
     assert.equal((await seed.query(`SELECT organisation_id,site_id FROM payments WHERE id=1`)).rows[0].organisation_id, 1);
     assert.equal((await seed.query(`SELECT unallocated_amount FROM order_payment_allocations WHERE payment_id=1`)).rows[0].unallocated_amount, "2.00");
+    assert.equal((await seed.query(`SELECT unallocated_amount FROM order_refund_allocations WHERE refund_id=1`)).rows[0].unallocated_amount, "1.00");
     await seed.query(`INSERT INTO organisations(name,owner_id) VALUES ('other','owner2'); INSERT INTO sites(organisation_id,name) VALUES (2,'other'); INSERT INTO customers(site_id) VALUES (2); INSERT INTO orders(customer_id,site_id,organisation_id,total_amount) VALUES (2,2,2,10)`);
     await assert.rejects(seed.query(`UPDATE orders SET organisation_id=2,site_id=2 WHERE id=1`));
     await assert.rejects(seed.query(`INSERT INTO orders(customer_id,site_id,organisation_id,total_amount) VALUES (1,1,2,10)`));
@@ -106,7 +124,7 @@ try {
     const scopedPool = { connect: async () => { const client = await pool.connect(); await client.query(`SET search_path TO "${schemaA}"`); return client; } };
     const paymentInput = { organisationId:1,siteId:1,orderId:1,idempotencyKey:"behavioral-payment-key",amount:"5",method:"cash" };
     const created = await createOrReplayPayment(scopedPool, paymentInput);
-    assert.equal(created.replayed, false); assert.deepEqual(created.allocations, [{ target:"service",amount:"4.00"},{ target:"unallocated",amount:"1.00" }]);
+    assert.equal(created.replayed, false); assert.deepEqual(created.allocations, [{ target:"service",amount:"5.00" }]);
     assert.equal((await createOrReplayPayment(scopedPool, paymentInput)).replayed, true);
     await assert.rejects(createOrReplayPayment(scopedPool, { ...paymentInput, amount:"6" }), OrderMoneyConflictError);
     const rollbackKey = "behavioral-rollback-key";
