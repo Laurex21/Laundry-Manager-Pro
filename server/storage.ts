@@ -325,7 +325,7 @@ export class DatabaseStorage implements IStorage {
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null }[]): Promise<Order> {
     await ensureOrderItemQuantitySupportsDecimals();
     const created = await db.transaction(async (tx) => {
-      const [order] = await tx.insert(orders).values(insertOrder).returning();
+      const [order] = await tx.insert(orders).values(insertOrder as typeof orders.$inferInsert).returning();
       let orderWithNumber = { ...order, orderNumber: order.id };
       if (typeof order.siteId === "number") {
         const siteRows = await tx.select({ id: orders.id })
@@ -695,7 +695,7 @@ export class DatabaseStorage implements IStorage {
 
   async createPayment(insertPayment: InsertPayment): Promise<Payment> {
     return await db.transaction(async (tx) => {
-      const [payment] = await tx.insert(payments).values(insertPayment).returning();
+      const [payment] = await tx.insert(payments).values(insertPayment as typeof payments.$inferInsert).returning();
       const orderPayments = await tx.select().from(payments).where(eq(payments.orderId, insertPayment.orderId));
       const totalPaid = orderPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       const [order] = await tx.select().from(orders).where(eq(orders.id, insertPayment.orderId));

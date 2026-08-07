@@ -1,4 +1,5 @@
 BEGIN;
+SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':order-money-foundation', 0));
 
 ALTER TABLE organisations ADD COLUMN IF NOT EXISTS currency varchar(10);
 UPDATE organisations SET currency = 'FCFA' WHERE currency IS NULL OR btrim(currency) = '';
@@ -14,17 +15,58 @@ ALTER TABLE site_members ADD CONSTRAINT site_members_capabilities_valid CHECK (
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS organisation_id integer;
 UPDATE orders o SET organisation_id = s.organisation_id FROM sites s WHERE s.id = o.site_id AND o.organisation_id IS NULL;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM orders WHERE organisation_id IS NULL OR site_id IS NULL) THEN
+    RAISE EXCEPTION 'cannot safely establish tenant identity for every legacy order';
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS sites_tenant_identity ON sites(id, organisation_id);
 CREATE UNIQUE INDEX IF NOT EXISTS orders_tenant_identity ON orders(id, organisation_id, site_id);
+ALTER TABLE orders ALTER COLUMN organisation_id SET NOT NULL;
+ALTER TABLE orders ALTER COLUMN site_id SET NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='orders'::regclass AND conname='orders_site_tenant_fkey') THEN
+    ALTER TABLE orders ADD CONSTRAINT orders_site_tenant_fkey FOREIGN KEY (site_id, organisation_id) REFERENCES sites(id, organisation_id);
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION enforce_order_tenant_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE site_organisation integer;
+BEGIN
+  IF TG_OP = 'UPDATE' AND (NEW.organisation_id, NEW.site_id) IS DISTINCT FROM (OLD.organisation_id, OLD.site_id) THEN
+    RAISE EXCEPTION 'order tenant identity is immutable' USING ERRCODE='23514';
+  END IF;
+  SELECT organisation_id INTO site_organisation FROM sites WHERE id=NEW.site_id;
+  IF NEW.organisation_id IS NULL THEN NEW.organisation_id := site_organisation; END IF;
+  IF site_organisation IS NULL OR NEW.organisation_id IS DISTINCT FROM site_organisation THEN
+    RAISE EXCEPTION 'order tenant does not match site tenant' USING ERRCODE='23503';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS enforce_order_tenant_identity ON orders;
+CREATE TRIGGER enforce_order_tenant_identity BEFORE INSERT OR UPDATE OF organisation_id,site_id ON orders FOR EACH ROW EXECUTE FUNCTION enforce_order_tenant_identity();
 
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS organisation_id integer;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS site_id integer;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS request_fingerprint varchar(64);
 UPDATE payments p SET organisation_id = o.organisation_id, site_id = o.site_id FROM orders o
  WHERE o.id = p.order_id AND (p.organisation_id IS NULL OR p.site_id IS NULL);
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM payments WHERE organisation_id IS NULL OR site_id IS NULL) THEN
+    RAISE EXCEPTION 'cannot safely establish tenant identity for every legacy payment';
+  END IF;
+END $$;
 DROP INDEX IF EXISTS idx_payments_idempotency_key;
 CREATE UNIQUE INDEX IF NOT EXISTS payments_tenant_identity ON payments(id, organisation_id, site_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_tenant_idempotency_key
   ON payments(organisation_id, site_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+ALTER TABLE payments ALTER COLUMN organisation_id SET NOT NULL;
+ALTER TABLE payments ALTER COLUMN site_id SET NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='payments'::regclass AND conname='payments_order_tenant_fkey') THEN
+    ALTER TABLE payments ADD CONSTRAINT payments_order_tenant_fkey FOREIGN KEY (order_id,organisation_id,site_id) REFERENCES orders(id,organisation_id,site_id);
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION derive_payment_tenant() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE tenant record;
@@ -85,6 +127,11 @@ CREATE TABLE IF NOT EXISTS order_refund_allocations (
   CONSTRAINT order_refund_allocation_positive CHECK (coalesce(service_amount, pickup_delivery_amount, unallocated_amount) > 0)
 );
 
+INSERT INTO order_payment_allocations(payment_id,organisation_id,site_id,unallocated_amount)
+SELECT p.id,p.organisation_id,p.site_id,p.amount
+FROM payments p
+WHERE NOT EXISTS (SELECT 1 FROM order_payment_allocations a WHERE a.payment_id=p.id);
+
 CREATE OR REPLACE FUNCTION reject_order_money_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME USING ERRCODE = '55000'; END $$;
 DROP TRIGGER IF EXISTS order_refunds_append_only ON order_refunds;
@@ -102,6 +149,8 @@ BEGIN
   IF allocated + coalesce(NEW.service_amount, NEW.pickup_delivery_amount, NEW.unallocated_amount) > payment_total THEN RAISE EXCEPTION 'allocations cannot exceed payment'; END IF;
   RETURN NEW;
 END $$;
+DROP TRIGGER IF EXISTS payments_append_only ON payments;
+CREATE TRIGGER payments_append_only BEFORE UPDATE OR DELETE ON payments FOR EACH ROW EXECUTE FUNCTION reject_order_money_mutation();
 DROP TRIGGER IF EXISTS validate_payment_allocation_total ON order_payment_allocations;
 CREATE TRIGGER validate_payment_allocation_total BEFORE INSERT ON order_payment_allocations FOR EACH ROW EXECUTE FUNCTION validate_payment_allocation_total();
 

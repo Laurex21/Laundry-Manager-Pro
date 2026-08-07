@@ -324,8 +324,8 @@ async function ensureAuthSchema() {
 }
 
 export async function ensureOrderMoneyFoundation() {
-  const migration = await readFile(join(process.cwd(), "migrations/20260807_order_money_foundation.sql"), "utf8");
-  await pool.query(migration);
+  const { applyOrderMoneyFoundation } = await import("../../lib/order-money-foundation");
+  await applyOrderMoneyFoundation(pool);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

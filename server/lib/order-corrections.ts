@@ -1,12 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
-import { calculateOrderTotals, type PaidCorrectionOutcome } from "./order-money";
-
-export function paidCorrectionOutcome(kind: "balance" | "customer_credit" | "approved_internal_refund" | "balanced", amount: string): PaidCorrectionOutcome {
-  if (kind === "approved_internal_refund") return { kind, amount, externalTransfer: false };
-  if (kind === "balanced") return { kind, amount: "0.00" };
-  return { kind, amount };
-}
+import { calculateOrderTotals, paidCorrectionOutcome } from "./order-money";
+export { paidCorrectionOutcome } from "./order-money";
 
 export class OrderCorrectionError extends Error {
   constructor(message: string, public readonly statusCode = 400) {

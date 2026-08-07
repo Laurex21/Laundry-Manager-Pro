@@ -46,7 +46,6 @@ export const customers = pgTable("customers", {
 export const services = pgTable("services", {
   id: serial("id").primaryKey(),
   siteId: integer("site_id"),
-  organisationId: integer("organisation_id"),
   name: text("name").notNull(),
   description: text("description"),
   unit: text("unit").notNull(),
@@ -87,8 +86,8 @@ export const orders = pgTable("orders", {
   cancellationRejectionNote: text("cancellation_rejection_note"),
   correctedFromOrderId: integer("corrected_from_order_id"),
   correctionReason: text("correction_reason"),
-  siteId: integer("site_id"),
-  organisationId: integer("organisation_id"),
+  siteId: integer("site_id").notNull(),
+  organisationId: integer("organisation_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -111,7 +110,7 @@ export const orderItems = pgTable("order_items", {
 
 export const orderStatusHistory = pgTable("order_status_history", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
   status: text("status").notNull(),
   changedAt: timestamp("changed_at").defaultNow(),
   changedBy: varchar("changed_by"),
@@ -142,8 +141,8 @@ export const payments = pgTable("payments", {
   date: timestamp("date").defaultNow(),
   isAdvance: boolean("is_advance").default(false),
   idempotencyKey: varchar("idempotency_key", { length: 100 }),
-  organisationId: integer("organisation_id"),
-  siteId: integer("site_id"),
+  organisationId: integer("organisation_id").notNull(),
+  siteId: integer("site_id").notNull(),
   requestFingerprint: varchar("request_fingerprint", { length: 64 }),
 }, (table) => [
   uniqueIndex("idx_payments_tenant_idempotency_key")
@@ -799,10 +798,12 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
   readyAt: true,
   deliveredAt: true,
   cancelledAt: true,
+  organisationId: true,
+  siteId: true,
 });
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export const insertPaymentSchema = createInsertSchema(payments)
-  .omit({ id: true })
+  .omit({ id: true, organisationId: true, siteId: true, requestFingerprint: true })
   .extend({ date: z.coerce.date().optional() });
 export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true, returnedForTreatment: true, returnStage: true, returnNotes: true, returnedAt: true, resolvedAt: true });
 export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true });
