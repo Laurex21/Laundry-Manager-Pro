@@ -118,8 +118,8 @@ async function seedRows(pool: pg.Pool, schema: string, state: StainE2EState) {
     }
     // Seed a membership plan so the order UI exercises the rule that treatment is never discounted.
     const plan = await client.query(
-      `INSERT INTO subscription_plans(organisation_id,name,status,billing_cycle,duration_days,recurring_price,discount_percentage)
-       VALUES ($1,'E2E Member','active','monthly',30,100,10) RETURNING id`,
+      `INSERT INTO subscription_plans(organisation_id,name,status,billing_cycle,duration_days,recurring_price,included_weight_kg,included_pieces,max_orders,discount_percentage)
+       VALUES ($1,'E2E Member','active','monthly',30,100,20,20,20,10) RETURNING id`,
       [organisationId],
     );
     const order = await client.query(
