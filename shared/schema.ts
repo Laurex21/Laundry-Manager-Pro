@@ -148,10 +148,14 @@ export const payments = pgTable("payments", {
   reference: varchar("reference", { length: 255 }),
   date: timestamp("date").defaultNow(),
   isAdvance: boolean("is_advance").default(false),
-  idempotencyKey: varchar("idempotency_key", { length: 100 }).notNull(),
-  organisationId: integer("organisation_id").notNull(),
-  siteId: integer("site_id").notNull(),
-  requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
+  // These four columns are intentionally nullable in the declarative Drizzle
+  // model because Replit schema sync applies constraints before data backfills.
+  // The production startup migration backfills legacy rows, validates them,
+  // and then applies NOT NULL atomically.
+  idempotencyKey: varchar("idempotency_key", { length: 100 }),
+  organisationId: integer("organisation_id"),
+  siteId: integer("site_id"),
+  requestFingerprint: varchar("request_fingerprint", { length: 64 }),
 }, (table) => [
   uniqueIndex("idx_payments_tenant_idempotency_key")
     .on(table.organisationId, table.siteId, table.idempotencyKey)
