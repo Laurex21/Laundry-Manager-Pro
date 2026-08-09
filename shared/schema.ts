@@ -90,7 +90,10 @@ export const orders = pgTable("orders", {
   requestFingerprint: varchar("request_fingerprint", { length: 64 }),
   postedAt: timestamp("posted_at").notNull().defaultNow(),
   siteId: integer("site_id").notNull(),
-  organisationId: integer("organisation_id").notNull(),
+  // organisationId is NOT NULL in the database (enforced by ensureAuthSchema after backfill).
+  // Drizzle schema keeps it nullable so the auto-generated deployment migration emits a safe
+  // ADD COLUMN (no default needed); PostgreSQL MATCH SIMPLE lets NULL bypass the FK check.
+  organisationId: integer("organisation_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -149,16 +152,19 @@ export const payments = pgTable("payments", {
   date: timestamp("date").defaultNow(),
   isAdvance: boolean("is_advance").default(false),
   idempotencyKey: varchar("idempotency_key", { length: 100 }).notNull(),
-  organisationId: integer("organisation_id").notNull(),
-  siteId: integer("site_id").notNull(),
-  requestFingerprint: varchar("request_fingerprint", { length: 64 }).notNull(),
+  // These three columns are NOT NULL in the database (enforced by ensureAuthSchema after backfill).
+  // Drizzle schema keeps them nullable so the auto-generated deployment migration emits safe
+  // ADD COLUMN statements; PostgreSQL MATCH SIMPLE lets NULLs bypass FK checks on existing rows.
+  organisationId: integer("organisation_id"),
+  siteId: integer("site_id"),
+  requestFingerprint: varchar("request_fingerprint", { length: 64 }),
 }, (table) => [
   uniqueIndex("idx_payments_tenant_idempotency_key")
     .on(table.organisationId, table.siteId, table.idempotencyKey)
     .where(sql`${table.idempotencyKey} IS NOT NULL`),
   uniqueIndex("payments_tenant_identity").on(table.id, table.organisationId, table.siteId),
   foreignKey({ name: "payments_order_tenant_fkey", columns: [table.orderId, table.organisationId, table.siteId], foreignColumns: [orders.id, orders.organisationId, orders.siteId] }),
-  check("payments_request_fingerprint_valid", sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
+  check("payments_request_fingerprint_valid", sql`${table.requestFingerprint} IS NULL OR ${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
 ]);
 
 export const garmentItems = pgTable("garment_items", {
