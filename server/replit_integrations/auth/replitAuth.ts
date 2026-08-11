@@ -43,10 +43,6 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
   `);
   await pool.query(`
-    ALTER TABLE organisations
-    ADD COLUMN IF NOT EXISTS currency varchar(10) DEFAULT 'FCFA'
-  `);
-  await pool.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS created_by_employee_id integer
   `);
@@ -228,17 +224,6 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS idempotency_key varchar(100)
   `);
   await pool.query(`
-    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_orders_id_fk;
-    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fkey;
-    DO $$ DECLARE legacy_fk record; BEGIN
-      FOR legacy_fk IN
-        SELECT c.conname FROM pg_constraint c
-        WHERE c.conrelid='payments'::regclass AND c.contype='f' AND array_length(c.conkey,1)=1
-          AND c.conkey[1]=(SELECT attnum FROM pg_attribute WHERE attrelid='payments'::regclass AND attname='order_id')
-      LOOP EXECUTE format('ALTER TABLE payments DROP CONSTRAINT %I', legacy_fk.conname); END LOOP;
-    END $$
-  `);
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS credit_transactions (
       id serial PRIMARY KEY,
       organisation_id integer NOT NULL REFERENCES organisations(id),
@@ -321,37 +306,6 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_production_cycle_orders_order ON production_cycle_orders(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
-  // Pre-flight repair: the order-money-foundation migration aborts if any order
-  // has a NULL site_id (it cannot establish tenant identity). Repair such orders
-  // by inferring the site from the associated customer, which always has a site.
-  // Orders that cannot be repaired this way are removed only when they carry no
-  // financial data (no payments). This runs idempotently before the migration so
-  // it self-heals on every deployment without touching healthy rows.
-  await pool.query(`
-    UPDATE orders o
-    SET site_id = c.site_id
-    FROM customers c
-    WHERE o.customer_id = c.id
-      AND o.site_id IS NULL
-      AND c.site_id IS NOT NULL
-  `);
-  await pool.query(`
-    DELETE FROM order_items
-    WHERE order_id IN (
-      SELECT id FROM orders
-      WHERE site_id IS NULL
-        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id)
-    )
-  `);
-  await pool.query(`
-    DELETE FROM orders
-    WHERE site_id IS NULL
-      AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id)
-  `);
-
-  await ensureOrderMoneyFoundation();
-  await ensureStainTreatmentSchema();
-
   // One-time data correction: kapnangsilva@gmail.com was accidentally
   // onboarded as a staff member, overwriting their admin credentials.
   // Restore owner access; guarded so it only fires when still in the
@@ -363,22 +317,6 @@ async function ensureAuthSchema() {
     WHERE email     = 'kapnangsilva@gmail.com'
       AND user_type = 'staff'
   `);
-}
-
-export async function ensureOrderMoneyFoundation() {
-  const { applyOrderMoneyFoundation } = await import("../../lib/order-money-foundation");
-  await applyOrderMoneyFoundation(pool);
-}
-
-/**
- * Applies the exact idempotent treatment migration used in production. The SQL
- * contains CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, and guarded
- * DO $$ BEGIN blocks so partially provisioned Replit databases self-heal
- * without dropping, truncating, or rewriting posted financial history.
- */
-export async function ensureStainTreatmentSchema(database: { query(sql: string): Promise<unknown> } = pool) {
-  const { applyStainTreatmentSchema } = await import("../../lib/stain-treatment-schema");
-  await applyStainTreatmentSchema(database);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

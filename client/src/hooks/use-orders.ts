@@ -5,17 +5,6 @@ import { useToast } from "@/hooks/use-toast";
 
 type CreateOrderInput = z.infer<typeof createOrderWithItemsSchema>;
 
-export class OrderPostingError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code?: string,
-    public readonly details?: Record<string, unknown>,
-  ) {
-    super(message);
-  }
-}
-
 export function useOrders() {
   return useQuery({
     queryKey: [api.orders.list.path],
@@ -55,7 +44,7 @@ export function useCreateOrder() {
 
       if (!res.ok) {
         const error = await res.json().catch(() => null);
-        throw new OrderPostingError(error?.message || "Failed to create order", res.status, error?.code, error?.details);
+        throw new Error(error?.message || "Failed to create order");
       }
       return api.orders.create.responses[201].parse(await res.json());
     },
@@ -65,7 +54,6 @@ export function useCreateOrder() {
       toast({ title: "Success", description: "Order created successfully" });
     },
     onError: (error) => {
-      if (error instanceof OrderPostingError && error.code === "pricing_conflict") return;
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });

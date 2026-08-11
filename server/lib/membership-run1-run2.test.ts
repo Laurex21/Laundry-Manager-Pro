@@ -8,13 +8,6 @@ const schema = readFileSync(join(root, "shared/schema.ts"), "utf8");
 const ordersPage = readFileSync(join(root, "client/src/pages/orders.tsx"), "utf8");
 const server = readFileSync(join(root, "server/index.ts"), "utf8");
 const subscriberReceipt = readFileSync(join(root, "server/lib/subscription-receipt.ts"), "utf8");
-const { membershipFinancialComposition } = await import("./membership-financials");
-
-assert.deepEqual(membershipFinancialComposition({ eligibleServiceAmount: "100.00", coveredServiceAmount: "100.00", uncoveredServiceAmount: "0.00", treatmentAmount: "30.00", pickupDeliveryAmount: "5.00" }), {
-  eligibleServiceAmount: "100.00", coveredServiceAmount: "100.00", uncoveredServiceAmount: "0.00", treatmentAmount: "30.00", pickupDeliveryAmount: "5.00", finalAmount: "35.00",
-});
-assert.equal(membershipFinancialComposition({ eligibleServiceAmount: "100.00", coveredServiceAmount: "40.00", uncoveredServiceAmount: "60.00", treatmentAmount: "30.00", pickupDeliveryAmount: "0.00" }).finalAmount, "90.00");
-assert.equal(membershipFinancialComposition({ eligibleServiceAmount: "100.00", coveredServiceAmount: "0.00", uncoveredServiceAmount: "100.00", treatmentAmount: "30.00", pickupDeliveryAmount: "0.00" }).finalAmount, "130.00");
 
 assert.match(schema, /idx_sub_transactions_order_unique/);
 assert.match(schema, /customerSubscriptionId, table\.orderId\)\.where/);
@@ -26,14 +19,7 @@ assert.match(routes, /error\?\.code === "23505"/);
 assert.match(routes, /Subscription already applied to this order/);
 assert.match(routes, /Subscription order limit exhausted/);
 assert.match(routes, /remainingOrders == null \|\| row\.subscription\.remainingOrders > 0/);
-assert.match(routes, /eligibleServiceDiscount\(extraAmount, String\(row\.plan\.discountPercentage/);
-assert.match(routes, /treatmentAmount/);
-assert.match(routes, /pickupDeliveryAmount/);
-assert.match(routes, /eligibleServiceAmount/);
-assert.match(routes, /coveredServiceAmount/);
-assert.match(routes, /uncoveredServiceAmount/);
-assert.match(routes, /finalAmount/);
-assert.doesNotMatch(routes, /totalAmount: canonicalMoney\(coverage\.extraAmount\)/);
+assert.match(routes, /extraAmount \* \(Number\(row\.plan\.discountPercentage/);
 assert.doesNotMatch(routes, /coveredAmount \* \(Number\(row\.plan\.discountPercentage/);
 
 assert.match(routes, /requirePlanManager/);

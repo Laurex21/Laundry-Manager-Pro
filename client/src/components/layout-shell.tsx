@@ -81,7 +81,7 @@ const PAGE_TITLES: Record<string, string> = {
 
 function RegionalSettings() {
   const { t, i18n } = useTranslation();
-  const { currency } = useCurrency();
+  const { currency, setCurrency } = useCurrency();
   const currentLang = LANGUAGES.find((l) => l.code === i18n.language) || LANGUAGES[0];
   const currentCurrency = CURRENCIES.find((c) => c.code === currency) || CURRENCIES[0];
 
@@ -117,10 +117,33 @@ function RegionalSettings() {
 
       <Separator orientation="vertical" className="h-4 mx-0.5" />
 
-      <div className="flex items-center gap-1.5 px-2.5 text-muted-foreground" data-testid="authoritative-currency">
-        <Banknote className="w-3.5 h-3.5" strokeWidth={1.5} />
-        <span className="text-xs font-medium hidden sm:inline">{currentCurrency.code}</span>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-muted-foreground hover:text-foreground px-2.5 h-8"
+            data-testid="button-currency-toggle"
+          >
+            <Banknote className="w-3.5 h-3.5" strokeWidth={1.5} />
+            <span className="text-xs font-medium hidden sm:inline">{t(currentCurrency.labelKey)}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground pb-1">{t("currency_label")}</DropdownMenuLabel>
+          {CURRENCIES.map((cur) => (
+            <DropdownMenuItem
+              key={cur.code}
+              onClick={() => setCurrency(cur.code)}
+              className={cn("flex items-center justify-between gap-2 text-sm", currency === cur.code && "text-primary font-semibold")}
+              data-testid={`menu-item-currency-${cur.code}`}
+            >
+              <span>{cur.symbol} {t(cur.labelKey)}</span>
+              {currency === cur.code && <Check className="w-3.5 h-3.5 text-primary" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

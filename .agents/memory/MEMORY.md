@@ -1,2 +1,1 @@
 - [Publish-time schema drift](publish-schema-drift.md) — never publish code querying columns absent from dev DB + ensureAuthSchema(); that startup fn is the prod DDL/data-fix self-heal path.
-- [Production startup migration guard](prod-startup-migration-guard.md) — order-money-foundation migration aborts if any orders.site_id IS NULL; ensureAuthSchema() repairs orphaned orders before calling that migration.

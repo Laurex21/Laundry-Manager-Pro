@@ -1,18 +1,44 @@
-import { useAuth } from "./use-auth";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-export type Currency = string;
+export type Currency = "FCFA" | "USD" | "NGN" | "EUR" | "ZAR" | "MRU";
 
-const symbols: Record<string, string> = { FCFA: "FCFA", XAF: "FCFA", EUR: "€", USD: "$", GBP: "£", ZAR: "R" };
-
-export function formatCurrency(value: number | string, currency = "FCFA") {
-  const normalized = String(currency || "FCFA").toUpperCase();
-  const amount = typeof value === "number" ? value : Number(value);
-  return `${Number.isFinite(amount) ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"} ${symbols[normalized] ?? normalized}`;
+interface CurrencyStore {
+  currency: Currency;
+  setCurrency: (currency: Currency) => void;
+  getSymbol: () => string;
 }
 
-/** Formatter/cache only: the authenticated organisation is authoritative. */
-export function useCurrency() {
-  const { user } = useAuth() as { user?: { currency?: string } | null };
-  const currency = String(user?.currency || "FCFA").toUpperCase();
-  return { currency, getSymbol: () => symbols[currency] ?? currency, format: (value: number | string) => formatCurrency(value, currency) };
+const symbols: Record<Currency, string> = {
+  FCFA: "FCFA ",
+  USD: "$",
+  NGN: "₦",
+  EUR: "€",
+  ZAR: "R",
+  MRU: "UM ",
+};
+const SUPPORTED_CURRENCIES = new Set<Currency>(["FCFA", "USD", "NGN", "EUR", "ZAR", "MRU"]);
+
+function normalizeCurrency(value: unknown): Currency {
+  return typeof value === "string" && SUPPORTED_CURRENCIES.has(value as Currency)
+    ? (value as Currency)
+    : "FCFA";
 }
+
+export const useCurrency = create<CurrencyStore>()(
+  persist(
+    (set, get) => ({
+      currency: "FCFA",
+      setCurrency: (currency: Currency) => set({ currency: normalizeCurrency(currency) }),
+      getSymbol: () => symbols[normalizeCurrency(get().currency)],
+    }),
+    {
+      name: "currency-storage",
+      version: 1,
+      migrate: (persisted: any) => ({
+        ...persisted,
+        currency: normalizeCurrency(persisted?.currency),
+      }),
+    }
+  )
+);

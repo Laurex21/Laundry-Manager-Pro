@@ -44,7 +44,7 @@ function currencyForCountry(country: string | null) {
 
 type NotificationOptions = {
   allowedSiteIds?: number[];
-  amount?: string;
+  amount?: number;
   currency?: string;
   occurrenceKey?: string;
 };
@@ -58,7 +58,7 @@ function buildMessage(trigger: Trigger, row: NonNullable<Awaited<ReturnType<type
   if (trigger === "expired") return NOTIFICATION_TEMPLATES.expired(first, row.plan.name, row.businessName);
   if (trigger === "usage_80") return NOTIFICATION_TEMPLATES.usage_80(first, row.plan.name, remainingKg, row.businessName);
   if (trigger === "usage_100") return NOTIFICATION_TEMPLATES.usage_100(first, row.plan.name, row.businessName);
-  if (trigger === "payment_confirmed") return NOTIFICATION_TEMPLATES.payment_confirmed(first, row.plan.name, options.amount ?? String(row.plan.recurringPrice), options.currency ?? currencyForCountry(row.country), row.businessName);
+  if (trigger === "payment_confirmed") return NOTIFICATION_TEMPLATES.payment_confirmed(first, row.plan.name, options.amount ?? Number(row.plan.recurringPrice), options.currency ?? currencyForCountry(row.country), row.businessName);
   return NOTIFICATION_TEMPLATES.card_ready(first, row.subscription.membershipNumber, row.businessName);
 }
 

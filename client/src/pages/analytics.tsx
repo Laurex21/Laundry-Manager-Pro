@@ -53,8 +53,6 @@ function AnalyticsContent() {
 
       <ExecutiveDecisionCockpit period={period} />
 
-      <StainTreatmentAnalyticsSection />
-
       <CustomerCreditAnalyticsSection />
       <WasteSection />
       <CustomerBehaviorSection period={period} />
@@ -62,37 +60,6 @@ function AnalyticsContent() {
       <AdvancedAnalyticsSection period={period} />
     </div>
   );
-}
-
-function StainTreatmentAnalyticsSection() {
-  const { t } = useTranslation();
-  const { hasCapability, currentSite } = useAuth();
-  const [mode, setMode] = useState<"booked" | "collected">("booked");
-  const now = new Date();
-  const to = now.toISOString().slice(0, 10);
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
-  const allowed = hasCapability("view_stain_treatment_reports");
-  const { data, isLoading, isError } = useQuery<any>({
-    queryKey: ["/api/stain-treatment/report", mode, currentSite?.id, from, to], enabled: allowed,
-    queryFn: async () => {
-      const params = new URLSearchParams({ mode, from, to, siteId: currentSite?.id ? String(currentSite.id) : "all", page: "1", pageSize: "100" });
-      const response = await fetch(`/api/stain-treatment/report?${params}`, { credentials: "include" });
-      if (!response.ok) throw new Error("Unable to load stain treatment report");
-      return response.json();
-    },
-  });
-  if (!allowed) return null;
-  return <Card data-testid="stain-treatment-analytics">
-    <CardHeader className="flex-row items-center justify-between gap-3"><CardTitle>{t("stain_treatment_report")}</CardTitle>
-      <div className="flex gap-1"><Button size="sm" variant={mode === "booked" ? "default" : "outline"} onClick={() => setMode("booked")}>{t("stain_treatment_booked")}</Button><Button size="sm" variant={mode === "collected" ? "default" : "outline"} onClick={() => setMode("collected")}>{t("stain_treatment_collected")}</Button></div>
-    </CardHeader>
-    <CardContent>
-      {isLoading ? <Skeleton className="h-28" /> : isError ? <p role="alert" className="text-destructive">{t("stain_treatment_report_error")}</p> :
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th className="p-2 text-left">{t("site")}</th><th>{t("level")}</th><th>{t("unit")}</th><th>{t("quantity")}</th><th>{t("stain_treatment_booked")}</th><th>{t("stain_treatment_collected")}</th><th>{t("orders")}</th><th>{t("average")}</th></tr></thead><tbody>
-          {(data?.groups || []).map((row: any) => <tr key={`${row.site_id}-${row.level}-${row.unit}-${row.currency}`} className="border-t"><td className="p-2">{row.site_name}</td><td>{t(`stain_treatment_${row.level}`)}</td><td>{t(`stain_treatment_unit_${row.unit}`)}</td><td>{row.quantity}</td><td>{row.currency} {row.bookedRevenue}</td><td>{row.currency} {row.collectedRevenue}</td><td>{row.treatedOrders}</td><td>{row.currency} {row.averageBookedRevenue}</td></tr>)}
-        </tbody></table>{(data?.groups || []).some((row: any) => row.acknowledgementExceptions > 0) && <p role="alert" className="mt-3 text-amber-700">{t("stain_treatment_acknowledgement_exceptions")}</p>}</div>}
-    </CardContent>
-  </Card>;
 }
 
 function ExecutiveDecisionCockpit({ period }: { period: string }) {

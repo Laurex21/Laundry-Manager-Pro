@@ -58,33 +58,6 @@ function serviceUnitLabel(unit: string | null | undefined, lang: string): string
   return unit === "kg" ? "kg" : label("Pieces", "Pièces", lang);
 }
 
-function canonicalReceiptMoney(value: unknown): string {
-  const raw = String(value ?? "0.00");
-  if (!/^-?\d+(?:\.\d{1,2})?$/.test(raw)) return "0.00";
-  const [whole, fraction = ""] = raw.split(".");
-  return `${whole}.${fraction.padEnd(2, "0")}`;
-}
-
-function stainTreatmentRows(stainTreatments: any[], symbol: string, lang: string): string {
-  return stainTreatments.map((treatment: any) => {
-    const capturedRate = canonicalReceiptMoney(treatment.capturedRate);
-    const lineTotal = canonicalReceiptMoney(treatment.lineTotal);
-    const level = treatment.level === "very_intensive"
-      ? label("Very intensive stain treatment", "Traitement de tache très intensif", lang)
-      : treatment.level === "intensive"
-        ? label("Intensive stain treatment", "Traitement de tache intensif", lang)
-        : label("Standard stain treatment", "Traitement de tache standard", lang);
-    const warning = treatment.level === "very_intensive"
-      ? `<div style="font-size:10px;color:#92400e">${label("Very intensive stain treatment does not guarantee complete stain removal.", "Le traitement très intensif ne garantit pas l’élimination complète de la tache.", lang)} (${escapeHtml(treatment.acknowledgementTextVersion || "")})</div>`
-      : "";
-    const adjustments = (treatment.adjustments || []).map((adjustment: any) => {
-      const action = adjustment.action === "void" ? label("Voided", "Annulé", lang) : label("Adjustment", "Ajustement", lang);
-      return `<tr><td style="padding:6px 12px 6px 24px;border-bottom:1px solid #e5e7eb;color:#64748b">↳ ${action}: ${escapeHtml(adjustment.reason)}</td><td style="text-align:center">${escapeHtml(adjustment.quantityEffect)} ${escapeHtml(treatment.unit)}</td><td></td><td style="text-align:right">${symbol}${canonicalReceiptMoney(adjustment.amountEffect)}</td></tr>`;
-    }).join("");
-    return `<tr><td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${level}${warning}</td><td style="text-align:center">${escapeHtml(treatment.quantity)} ${escapeHtml(treatment.unit)}</td><td style="text-align:right">${symbol}${capturedRate}</td><td style="text-align:right">${symbol}${lineTotal}</td></tr>${adjustments}`;
-  }).join("");
-}
-
 function orderSubtotal(items: any[]): number {
   return items.reduce((sum: number, item: any) => sum + (Number(item.priceAtOrder) * Number(item.quantity || 0)), 0);
 }
@@ -515,14 +488,13 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const customer = order.customer || {};
   const items = order.items || [];
   const garments = order.garmentItems || [];
-  const stainTreatments = order.stainTreatments || [];
   const entryDate = formatReceiptDateTime(order.createdAt || order.entryDate || new Date(), lang);
   const pickupDate = formatReceiptDateOnly(order.pickupDate, lang);
   const registeredBy = agentFirstName(order.createdByEmployee);
   const discount = Number(order.discount || 0);
   const subtotal = orderSubtotal(items);
   const pickupCost = Number(order.pickupCost || 0);
-  const orderTotal = Number(canonicalReceiptMoney(order.totalAmount ?? orderTotalFromParts(subtotal, discount, pickupCost)));
+  const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
 
   const statusLabel = order.paymentStatus === "paid" ? label("PAID", "PAYÉ", lang) : order.paymentStatus === "partial" ? label("PARTIAL", "PARTIEL", lang) : label("UNPAID", "IMPAYÉ", lang);
   const statusColor = order.paymentStatus === "paid" ? "#16a34a" : order.paymentStatus === "partial" ? "#d97706" : "#dc2626";
@@ -540,7 +512,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${price.toFixed(2)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
-  }).join("") + stainTreatmentRows(stainTreatments, symbol, lang);
+  }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
     `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.color ? ` · ${escapeHtml(g.color)}` : ""}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`

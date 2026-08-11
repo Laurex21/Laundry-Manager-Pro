@@ -22,15 +22,12 @@ import {
   recordPaymentWithCredit,
 } from "./lib/customer-credit";
 import { pool } from "./db";
-import { StainTreatmentPostingError } from "./lib/stain-treatment";
 import {
   createCorrectedOrderCopy,
   editOrderControlled,
   getOrderCorrectionEligibility,
   OrderCorrectionError,
 } from "./lib/order-corrections";
-import { calculateOrderTotals, canonicalMoney, compareMoney } from "./lib/order-money";
-import { registerStainTreatmentRoutes } from "./lib/stain-treatment-routes";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -291,7 +288,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerMembershipRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
-  registerStainTreatmentRoutes(app);
   seedDatabase().catch(console.error);
   startTemporalIntelligenceJob();
 
@@ -420,18 +416,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.getOrder(Number(req.params.id));
     if (!order) return res.status(404).json({ message: "Order not found" });
     if (order.siteId == null || !(await canAccessSite(req, order.siteId))) return res.status(403).json({ message: "Forbidden" });
-    const treatments = await pool.query(`SELECT t.*, concat_ws(' ',u.first_name,u.last_name) AS creator_name,
-      concat_ws(' ',au.first_name,au.last_name) AS acknowledged_by_name
-      FROM order_stain_treatments t
-      LEFT JOIN users u ON u.id=t.created_by LEFT JOIN users au ON au.id=t.acknowledged_by
-      WHERE t.order_id=$1 AND t.organisation_id=$2 AND t.site_id=$3 ORDER BY t.created_at,t.id`, [order.id, (req as any).organisationId, order.siteId]);
-    const treatmentIds = treatments.rows.map((row: any) => row.id);
-    const adjustments = treatmentIds.length ? await pool.query(`SELECT a.*, concat_ws(' ',u.first_name,u.last_name) AS creator_name,
-      concat_ws(' ',au.first_name,au.last_name) AS acknowledged_by_name
-      FROM order_stain_treatment_adjustments a
-      LEFT JOIN users u ON u.id=a.created_by LEFT JOIN users au ON au.id=a.acknowledged_by
-      WHERE a.organisation_id=$1 AND a.site_id=$2 AND a.treatment_id=ANY($3::int[]) ORDER BY a.created_at,a.id`, [(req as any).organisationId, order.siteId, treatmentIds]) : { rows: [] };
-    res.json({ ...order, stainTreatments: treatments.rows.map((line: any) => ({ ...line, adjustments: adjustments.rows.filter((entry: any) => entry.treatment_id === line.id) })) });
+    res.json(order);
   });
 
   app.post(api.orders.create.path, isAuthenticated, async (req, res) => {
@@ -439,57 +424,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const siteId = requireWriteSite(req, res);
       if (siteId === null) return;
       const input = api.orders.create.input.parse(req.body);
-      const { items, treatments, expectedPricingSetVersion, idempotencyKey, garmentItems: garments, machineUsages, ...orderData } = input;
+      const { items, garmentItems: garments, machineUsages, ...orderData } = input;
       const customer = await storage.getCustomer(orderData.customerId);
       if (!customer) return res.status(400).json({ message: "Customer not found" });
       if (!(await canAccessCustomer(req, customer.id))) {
         return res.status(403).json({ message: "Customer does not belong to this organisation" });
       }
-      const pricedItems: Array<{ price: string; quantity: number }> = [];
+      let subtotal = 0;
       for (const item of items) {
         const service = await storage.getService(item.serviceId);
         if (!service) return res.status(400).json({ message: `Service ${item.serviceId} not found` });
         if (!(await canAccessService(req, service.id))) {
           return res.status(403).json({ message: `Service ${item.serviceId} does not belong to this organisation` });
         }
-        pricedItems.push({ price: service.price, quantity: item.quantity });
+        subtotal += Number(service.price) * item.quantity;
       }
-      const discountPct = String(orderData.discountPct || 0);
-      // Regression invariant: subtotal * (discountPct / 100), reject discountAmount > subtotal,
-      // and persist discountPct: discountPct.toString(); the decimal-safe helpers/service implement it.
-      let money;
-      try { money = calculateOrderTotals(pricedItems, discountPct, String(orderData.discount || 0), String(orderData.pickupCost || 0)); }
-      catch { return res.status(400).json({ message: "Discount must be between zero and the order subtotal" }); }
-      const advanceAmount = canonicalMoney(String(orderData.advancePayment || 0));
+      const discountPct = Number(orderData.discountPct || 0);
+      const requestedDiscountAmount = Number(orderData.discount || 0);
+      const discountAmount = discountPct > 0
+        ? subtotal * (discountPct / 100)
+        : requestedDiscountAmount;
+      if (!Number.isFinite(discountAmount) || discountAmount < 0 || discountAmount > subtotal) {
+        return res.status(400).json({ message: "Discount must be between zero and the order subtotal" });
+      }
+      const pickupCostAmount = Number(orderData.pickupCost || 0);
+      const advanceAmount = Number(orderData.advancePayment || 0);
+      const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
+      const initialPaymentStatus = advanceAmount >= totalAmount ? "paid" : advanceAmount > 0 ? "partial" : "unpaid";
       const employee = await actorEmployee(req, siteId);
-      const order = await storage.createOrderWithTreatments({
-        organisationId: Number((req as any).organisationId), siteId, customerId: orderData.customerId,
-        actorId: String((req.session as any)?.userId), createdByEmployeeId: employee?.id ?? null,
-        idempotencyKey, expectedPricingSetVersion,
-        status: "received", entryDate: orderData.entryDate ? new Date(orderData.entryDate) : undefined, pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
-        discount: String(orderData.discount ?? "0"), discountPct, pickupCost: String(orderData.pickupCost ?? "0"),
-        advancePayment: String(orderData.advancePayment ?? "0"), advancePaymentMethod: orderData.advancePaymentMethod,
-        items: items.map((item) => ({ serviceId: item.serviceId, quantity: String(item.quantity) })), treatments, garments,
-      });
-      money = { subtotal: order.cleaningSubtotal, discount: order.discount, pickupDelivery: order.otherCharges, total: order.finalTotal };
-      if (!order.replayed) await trackEmployeeActivity(req, {
+      const order = await storage.createOrder({
+        ...orderData,
+        createdByEmployeeId: employee?.id ?? null,
+        status: "received",
+        totalAmount: totalAmount.toString(),
+        originalPrice: subtotal.toString(),
+        discountPct: discountPct.toString(),
+        discountAmount: discountAmount.toString(),
+        discount: discountAmount.toString(),
+        pickupCost: pickupCostAmount.toString(),
+        paymentStatus: initialPaymentStatus,
+        entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
+        pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
+        siteId,
+      } as any, items, garments);
+      await trackEmployeeActivity(req, {
         siteId,
         actionType: "order_created",
         orderId: order.id,
-        amount: money.total,
+        amount: totalAmount,
         weightKg: items.reduce((sum, item) => sum + item.quantity, 0),
         metadata: { itemCount: items.length, garmentCount: garments?.length ?? 0 },
       });
-      if (!order.replayed && compareMoney(money.discount, "0") > 0) {
+      if (discountAmount > 0) {
         await trackEmployeeActivity(req, {
           siteId,
           actionType: "discount_applied",
           orderId: order.id,
-          amount: money.discount,
-          metadata: { subtotal: money.subtotal, totalAmount: money.total },
+          amount: discountAmount,
+          metadata: { subtotal, totalAmount },
         });
       }
-      for (const usage of order.replayed ? [] : (machineUsages ?? [])) {
+      for (const usage of machineUsages ?? []) {
         const machine = await storage.getMachine(usage.machineId);
         if (!machine || machine.siteId !== siteId) continue;
         await storage.createMachineUsage({
@@ -500,7 +495,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           cycleDurationMinutes: usage.cycleDurationMinutes || 0,
         } as any);
       }
-      if (compareMoney(advanceAmount, "0") > 0 && !order.replayed) {
+      if (advanceAmount > 0) {
+        await storage.createPayment({
+          orderId: order.id,
+          collectedByEmployeeId: employee?.id ?? null,
+          amount: advanceAmount.toString(),
+          method: orderData.advancePaymentMethod || "Cash",
+          date: order.entryDate || new Date(),
+          isAdvance: true,
+        } as any);
         await trackEmployeeActivity(req, {
           siteId,
           actionType: "payment_collected",
@@ -512,7 +515,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
-      if (err instanceof StainTreatmentPostingError) return res.status(err.status).json({ message: err.message, code: err.code, ...(err.details ? { details: err.details } : {}) });
       throw err;
     }
   });
@@ -522,7 +524,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     entryDate: z.coerce.date(),
     pickupDate: z.coerce.date().nullable(),
     reason: z.string().trim().min(5).max(500),
-    idempotencyKey: z.string().min(16).max(64).optional(),
     items: z.array(z.object({
       serviceId: z.coerce.number().int().positive(),
       quantity: z.coerce.number().positive().max(100000),
@@ -594,21 +595,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         orderId: result.orderId,
         metadata: { reason, correctedFromOrderId: order.id },
       });
-      res.status(201).json(result);
-    } catch (error) {
-      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
-      if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
-      throw error;
-    }
-  });
-
-  app.post("/api/orders/:id/paid-correction", isAuthenticated, async (req: any, res) => {
-    const order = await storage.getOrder(Number(req.params.id));
-    if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
-    if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
-    try {
-      const input = controlledOrderEditSchema.extend({ idempotencyKey: z.string().min(16).max(64) }).parse(req.body);
-      const result = await editOrderControlled(order.id, order.siteId, (req.session as any)?.userId ?? null, input);
       res.status(201).json(result);
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
@@ -1871,23 +1857,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Multi-Site Routes (Prompt B) ────────────────────────────────────────────
-
-  app.put("/api/organisation/currency", isAuthenticated, async (req, res) => {
-    const organisation = await requireOwnerOrganisation(req, res);
-    if (!organisation) return;
-    const parsed = z.object({ currency: z.string().trim().min(3).max(10).regex(/^[A-Z]+$/) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Invalid currency" });
-    try {
-      const { db } = await import("./db");
-      const { organisations } = await import("@shared/schema");
-      const { eq } = await import("drizzle-orm");
-      const [updated] = await db.update(organisations).set({ currency: parsed.data.currency }).where(eq(organisations.id, organisation.id)).returning();
-      res.json({ currency: updated.currency });
-    } catch (error: any) {
-      if (error?.code === "23514") return res.status(409).json({ message: "Currency cannot change after a financial record is posted" });
-      throw error;
-    }
-  });
 
   app.get("/api/sites", isAuthenticated, async (req, res) => {
     try {
