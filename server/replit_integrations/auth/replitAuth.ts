@@ -43,6 +43,10 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
   `);
   await pool.query(`
+    ALTER TABLE organisations
+    ADD COLUMN IF NOT EXISTS currency varchar(10) DEFAULT 'FCFA'
+  `);
+  await pool.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS created_by_employee_id integer
   `);
