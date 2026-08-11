@@ -33,7 +33,6 @@ import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
 import { OrderCorrectionActions } from "@/components/order-correction-actions";
-import { garmentColorSwatch, GARMENT_COLOR_VALUES } from "@/lib/garment-colors";
 
 const PIPELINE_STAGES = PRODUCTION_STAGES;
 
@@ -418,30 +417,6 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {(order.stainTreatments || []).length > 0 && (
-        <Card data-testid="stain-treatment-history">
-          <CardHeader><CardTitle>{t("stain_treatment_history")}</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {(order.stainTreatments || []).map((line: any) => (
-              <section key={line.id} className="rounded-lg border p-4" aria-label={t("stain_treatment_history_line")}>
-                <div className="flex flex-wrap justify-between gap-2">
-                  <strong>{t(`stain_treatment_${line.level}`)} · {line.quantity} {t(`stain_treatment_unit_${line.unit}`)}</strong>
-                  <span>{symbol}{Number(line.lineTotal ?? line.line_total).toFixed(2)} ({symbol}{Number(line.capturedRate ?? line.captured_rate).toFixed(2)})</span>
-                </div>
-                <p className="text-xs text-muted-foreground">{t("recorded_by")}: {line.creatorName || line.createdBy || line.created_by} · {formatBusinessDateTime(line.createdAt || line.created_at)}</p>
-                {line.acknowledgementTextVersion && <p className="mt-2 text-sm">{t("stain_treatment_acknowledgement")}: {line.acknowledgementTextVersion} · {formatBusinessDateTime(line.acknowledgedAt)}</p>}
-                {(line.adjustments || []).length > 0 && <ul className="mt-3 space-y-2 border-l pl-4">
-                  {line.adjustments.map((adjustment: any) => <li key={adjustment.id}>
-                    <span className="font-medium">{t(`stain_treatment_${adjustment.action}`)}</span>: {adjustment.reason} · {symbol}{Number(adjustment.amountEffect ?? adjustment.amount_effect).toFixed(2)}
-                    <span className="block text-xs text-muted-foreground">{adjustment.creatorName || adjustment.createdBy || adjustment.created_by} · {formatBusinessDateTime(adjustment.createdAt || adjustment.created_at)}</span>
-                  </li>)}
-                </ul>}
-              </section>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
       {order.status === "cancellation_requested" && (
         <Card className="border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10" data-testid="cancellation-requested-alert">
           <CardContent className="p-4 flex items-center gap-3">
@@ -669,8 +644,7 @@ export default function OrderDetail() {
                     g.returnedForTreatment && !g.resolvedAt ? "bg-orange-50 dark:bg-orange-950/10 border border-orange-200" : "bg-muted/30"
                   )} data-testid={`garment-item-${g.id}`}>
                     <div className="flex items-center gap-2">
-                      {g.color && <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" style={{ background: garmentColorSwatch(g.color) || "transparent" }} aria-hidden="true" />}
-                      <span>{g.quantity}x {g.itemName}{g.color ? ` · ${GARMENT_COLOR_VALUES.has(g.color) ? t(`color_${g.color}`) : g.color}` : ""}</span>
+                      <span>{g.quantity}x {g.itemName}</span>
                       {g.returnedForTreatment && !g.resolvedAt && (
                         <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-600">
                           <RotateCcw className="w-3 h-3 mr-1" /> {t("returned_label")} {g.returnStage}

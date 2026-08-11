@@ -35,10 +35,6 @@ export async function setupAuth(app: Express) {
 
 async function ensureAuthSchema() {
   await pool.query(`
-    ALTER TABLE garment_items
-    ADD COLUMN IF NOT EXISTS color varchar(40)
-  `);
-  await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
   `);
@@ -224,17 +220,6 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS idempotency_key varchar(100)
   `);
   await pool.query(`
-    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_orders_id_fk;
-    ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fkey;
-    DO $$ DECLARE legacy_fk record; BEGIN
-      FOR legacy_fk IN
-        SELECT c.conname FROM pg_constraint c
-        WHERE c.conrelid='payments'::regclass AND c.contype='f' AND array_length(c.conkey,1)=1
-          AND c.conkey[1]=(SELECT attnum FROM pg_attribute WHERE attrelid='payments'::regclass AND attname='order_id')
-      LOOP EXECUTE format('ALTER TABLE payments DROP CONSTRAINT %I', legacy_fk.conname); END LOOP;
-    END $$
-  `);
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS credit_transactions (
       id serial PRIMARY KEY,
       organisation_id integer NOT NULL REFERENCES organisations(id),
@@ -317,9 +302,6 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_production_cycle_orders_order ON production_cycle_orders(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
-  await ensureOrderMoneyFoundation();
-  await ensureStainTreatmentSchema();
-
   // One-time data correction: kapnangsilva@gmail.com was accidentally
   // onboarded as a staff member, overwriting their admin credentials.
   // Restore owner access; guarded so it only fires when still in the
@@ -331,22 +313,6 @@ async function ensureAuthSchema() {
     WHERE email     = 'kapnangsilva@gmail.com'
       AND user_type = 'staff'
   `);
-}
-
-export async function ensureOrderMoneyFoundation() {
-  const { applyOrderMoneyFoundation } = await import("../../lib/order-money-foundation");
-  await applyOrderMoneyFoundation(pool);
-}
-
-/**
- * Applies the exact idempotent treatment migration used in production. The SQL
- * contains CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, and guarded
- * DO $$ BEGIN blocks so partially provisioned Replit databases self-heal
- * without dropping, truncating, or rewriting posted financial history.
- */
-export async function ensureStainTreatmentSchema(database: { query(sql: string): Promise<unknown> } = pool) {
-  const { applyStainTreatmentSchema } = await import("../../lib/stain-treatment-schema");
-  await applyStainTreatmentSchema(database);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

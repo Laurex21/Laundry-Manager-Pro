@@ -26,9 +26,7 @@ import {
   Link as LinkIcon, Shield, Clock, Upload, X, Globe2, MoreVertical,
   MessageCircle,
   Gift,
-  Sparkles,
 } from "lucide-react";
-import { StainTreatmentSettings } from "@/components/settings/stain-treatment-settings";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -928,12 +926,10 @@ export default function Settings() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { isOwner, hasCapability } = useAuth();
-  const canManageStainTreatment = hasCapability("manage_stain_treatment_pricing");
+  const { isOwner } = useAuth();
 
   const { data: settings, isLoading } = useQuery<any>({
     queryKey: ["/api/settings"],
-    enabled: isOwner,
   });
 
   const saveMut = useMutation({
@@ -956,7 +952,7 @@ export default function Settings() {
 
   const merged = { ...DEFAULT_SETTINGS, ...(settings || {}) };
 
-  if (isOwner && isLoading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="h-8 w-48 bg-muted animate-pulse rounded" />
@@ -965,7 +961,7 @@ export default function Settings() {
     );
   }
 
-  if (!isOwner && !canManageStainTreatment) {
+  if (!isOwner) {
     return (
       <div className="flex items-center justify-center min-h-64">
         <Card className="max-w-sm w-full">
@@ -986,9 +982,8 @@ export default function Settings() {
         <p className="text-muted-foreground mt-1">{t("settings_subtitle")}</p>
       </div>
 
-      <Tabs defaultValue={isOwner ? "identity" : "stain-treatment"}>
-        <TabsList className={`grid w-full max-w-3xl ${isOwner ? "grid-cols-6" : "grid-cols-1"}`} data-testid="settings-tabs">
-          {isOwner && <>
+      <Tabs defaultValue="identity">
+        <TabsList className="grid w-full max-w-2xl grid-cols-5" data-testid="settings-tabs">
           <TabsTrigger value="identity" className="gap-2" data-testid="tab-identity">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">{t("business")}</span>
@@ -1009,15 +1004,10 @@ export default function Settings() {
             <Gift className="w-4 h-4" />
             <span className="hidden sm:inline">{t("loyalty")}</span>
           </TabsTrigger>
-          </>}
-          {canManageStainTreatment && <TabsTrigger value="stain-treatment" className="gap-2" data-testid="tab-stain-treatment">
-            <Sparkles className="w-4 h-4" aria-hidden="true" />
-            <span className="hidden sm:inline">{t("stain_treatment")}</span>
-          </TabsTrigger>}
         </TabsList>
 
         <div className="mt-6">
-          {isOwner && <><TabsContent value="identity">
+          <TabsContent value="identity">
             <Card>
               <CardHeader>
                 <CardTitle>{t("business_identity")}</CardTitle>
@@ -1075,10 +1065,6 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
-          </>}
-          {canManageStainTreatment && <TabsContent value="stain-treatment">
-            <StainTreatmentSettings canManage={canManageStainTreatment} />
-          </TabsContent>}
         </div>
       </Tabs>
     </div>

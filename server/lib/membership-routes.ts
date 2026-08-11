@@ -5,40 +5,28 @@ import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { users } from "@shared/models/auth";
 import {
-  businessSettings, customerSubscriptions, customers, garmentItems, membershipCards, orders, orderItems, orderStainTreatments, orderStainTreatmentAdjustments, organisations, services, sites,
+  businessSettings, customerSubscriptions, customers, garmentItems, membershipCards, orders, orderItems, organisations, services, sites,
   loyaltyProgram, membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
 } from "@shared/schema";
 import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
 import { buildMembershipCard } from "./membership-card-generator";
 import { createPendingSubscriptionNotification } from "./subscription-notifications";
-import { canonicalMoney, compareMoney, eligibleServiceDiscount, multiplyMoney, subtractMoney, sumMoney } from "./order-money";
 import { usageThresholdCrossed } from "./subscription-formulas";
 import { awardRenewalPoints } from "./loyalty";
 import { rateLimit } from "./rate-limit";
 import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
-import { membershipFinancialComposition } from "./membership-financials";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
-const moneyInput = (positive: boolean) => z.union([z.string(), z.number()]).transform((value, ctx) => {
-  try {
-    const amount = canonicalMoney(String(value));
-    if (positive ? compareMoney(amount, "0") <= 0 : compareMoney(amount, "0") < 0) throw new Error("Invalid amount");
-    return amount;
-  } catch {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid monetary amount" });
-    return z.NEVER;
-  }
-});
 
 const planInput = z.object({
   name: z.string().trim().min(1).max(100), description: z.string().nullish(),
   status: z.enum(statuses).default("active"), billingCycle: z.enum(cycles),
-  durationDays: z.coerce.number().int().positive(), recurringPrice: moneyInput(true),
-  activationFee: moneyInput(false).optional(), includedWeightKg: z.coerce.number().positive().nullish(),
+  durationDays: z.coerce.number().int().positive(), recurringPrice: z.coerce.number().positive(),
+  activationFee: z.coerce.number().min(0).optional(), includedWeightKg: z.coerce.number().positive().nullish(),
   includedPieces: z.coerce.number().int().positive().nullish(), maxOrders: z.coerce.number().int().positive().nullish(),
   allowCarryForward: z.boolean().optional(), carryForwardLimit: z.coerce.number().min(0).nullish(),
-  overagePricePerKg: moneyInput(false).nullish(), overagePricePerPiece: moneyInput(false).nullish(),
+  overagePricePerKg: z.coerce.number().min(0).nullish(), overagePricePerPiece: z.coerce.number().min(0).nullish(),
   pickupIncluded: z.boolean().optional(), deliveryIncluded: z.boolean().optional(), expressIncluded: z.boolean().optional(),
   priorityQueue: z.boolean().optional(), discountPercentage: z.coerce.number().min(0).max(100).optional(),
   autoRenew: z.boolean().optional(), gracePeriodDays: z.coerce.number().int().min(0).optional(),
@@ -141,30 +129,30 @@ function addDays(value: string | Date, days: number) {
 
 type CoverageItem = { serviceId: number; quantity: number | string; unitPrice: number | string; serviceName: string; unit: string | null };
 
-function computeCoverage(row: { subscription: typeof customerSubscriptions.$inferSelect; plan: typeof subscriptionPlans.$inferSelect; order?: typeof orders.$inferSelect }, included: Set<number>, items: CoverageItem[], garmentPieceCount = 0, postedTreatmentAmount = "0.00") {
+function computeCoverage(row: { subscription: typeof customerSubscriptions.$inferSelect; plan: typeof subscriptionPlans.$inferSelect; order?: typeof orders.$inferSelect }, included: Set<number>, items: CoverageItem[], garmentPieceCount = 0) {
   const originalPiecesLeft = row.subscription.remainingPieces;
   let kgLeft = row.subscription.remainingKg == null ? null : Number(row.subscription.remainingKg);
   let piecesLeft = row.subscription.remainingPieces;
-  let coveredAmount = "0.00", extraAmount = "0.00", kgToDeduct = 0, piecesToDeduct = 0;
+  let coveredAmount = 0, extraAmount = 0, kgToDeduct = 0, piecesToDeduct = 0;
   const orderLimitAvailable = row.subscription.remainingOrders == null || row.subscription.remainingOrders > 0;
   const coverageBreakdown = items.map(item => {
-    const quantity = Number(item.quantity); const lineAmount = multiplyMoney(String(item.quantity), String(item.unitPrice));
+    const quantity = Number(item.quantity); const lineAmount = quantity * Number(item.unitPrice);
     const consumesKg = item.unit === "kg" && (kgLeft != null || originalPiecesLeft == null);
     let coveredQty = 0;
     if (orderLimitAvailable && included.has(item.serviceId)) {
       if (consumesKg) coveredQty = kgLeft == null ? quantity : Math.min(quantity, Math.max(0, kgLeft));
       else coveredQty = piecesLeft == null ? quantity : Math.min(quantity, Math.max(0, piecesLeft));
     }
-    const extraQty = quantity - coveredQty; const lineCovered = multiplyMoney(String(coveredQty), String(item.unitPrice));
-    const overageRate = String(consumesKg ? row.plan.overagePricePerKg ?? item.unitPrice : row.plan.overagePricePerPiece ?? item.unitPrice);
-    const lineExtra = multiplyMoney(String(extraQty), overageRate);
-    coveredAmount = sumMoney([coveredAmount, lineCovered]); extraAmount = sumMoney([extraAmount, lineExtra]);
+    const extraQty = quantity - coveredQty; const lineCovered = coveredQty * Number(item.unitPrice);
+    const overageRate = consumesKg ? Number(row.plan.overagePricePerKg ?? item.unitPrice) : Number(row.plan.overagePricePerPiece ?? item.unitPrice);
+    const lineExtra = extraQty * overageRate;
+    coveredAmount += lineCovered; extraAmount += lineExtra;
     if (consumesKg) { kgToDeduct += coveredQty; if (kgLeft != null) kgLeft -= coveredQty; }
     else { piecesToDeduct += coveredQty; if (piecesLeft != null) piecesLeft -= coveredQty; }
     return { serviceId: item.serviceId, serviceName: item.serviceName, coveredQty, extraQty, coveredAmount: lineCovered, extraAmount: lineExtra, originalAmount: lineAmount };
   });
-  const discount = orderLimitAvailable ? eligibleServiceDiscount(extraAmount, String(row.plan.discountPercentage ?? 0)) : "0.00";
-  extraAmount = subtractMoney(extraAmount, discount);
+  const discount = orderLimitAvailable ? extraAmount * (Number(row.plan.discountPercentage ?? 0) / 100) : 0;
+  extraAmount = Math.max(0, extraAmount - discount);
   // Registered garments are the source of truth for piece consumption. A
   // combined plan must consume its kg allowance and its piece allowance on the
   // same order; service units alone cannot represent both dimensions.
@@ -173,15 +161,7 @@ function computeCoverage(row: { subscription: typeof customerSubscriptions.$infe
     piecesLeft = Math.max(0, originalPiecesLeft - piecesToDeduct);
   }
   const ordersToDeduct = row.subscription.remainingOrders == null || !orderLimitAvailable ? 0 : 1;
-  const eligibleServiceAmount = sumMoney(coverageBreakdown.map((line) => line.originalAmount));
-  const coveredServiceAmount = coveredAmount;
-  const uncoveredServiceAmount = extraAmount;
-  // Memberships and plan discounts apply to cleaning services only. Treatment
-  // and transport remain payable at their captured order values.
-  const treatmentAmount = canonicalMoney(postedTreatmentAmount);
-  const pickupDeliveryAmount = canonicalMoney(String(row.order?.pickupCost ?? "0"));
-  const financials = membershipFinancialComposition({ eligibleServiceAmount, coveredServiceAmount, uncoveredServiceAmount, treatmentAmount, pickupDeliveryAmount });
-  return { ...financials, coveredAmount, extraAmount: uncoveredServiceAmount, discount, kgToDeduct, piecesToDeduct, ordersToDeduct, coverageBreakdown, remainingAfter: { kg: kgLeft, pieces: piecesLeft, orders: row.subscription.remainingOrders == null ? null : Math.max(0, row.subscription.remainingOrders - ordersToDeduct) }, savingsAchieved: sumMoney([coveredAmount, discount]), subscription: row.subscription, plan: row.plan, order: row.order };
+  return { coveredAmount, extraAmount, discount, kgToDeduct, piecesToDeduct, ordersToDeduct, coverageBreakdown, remainingAfter: { kg: kgLeft, pieces: piecesLeft, orders: row.subscription.remainingOrders == null ? null : Math.max(0, row.subscription.remainingOrders - ordersToDeduct) }, savingsAchieved: coveredAmount + discount, subscription: row.subscription, plan: row.plan, order: row.order };
 }
 
 async function calculateCoverage(organisationId: number, subscriptionId: number, orderId: number, siteId: number) {
@@ -195,11 +175,8 @@ async function calculateCoverage(organisationId: number, subscriptionId: number,
   if (!row) return null;
   const included = new Set((await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).innerJoin(subscriptionPlans, and(eq(subscriptionPlanServices.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x => x.serviceId));
   const items = await db.select({ serviceId: orderItems.serviceId, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder, serviceName: services.name, unit: services.unit }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
-  const treatmentRows = await db.select({ amount: orderStainTreatments.lineTotal }).from(orderStainTreatments).where(and(eq(orderStainTreatments.orderId, orderId), eq(orderStainTreatments.organisationId, organisationId), eq(orderStainTreatments.siteId, siteId)));
-  const adjustmentRows = await db.select({ amount: orderStainTreatmentAdjustments.amountEffect }).from(orderStainTreatmentAdjustments).innerJoin(orderStainTreatments, eq(orderStainTreatmentAdjustments.treatmentId, orderStainTreatments.id)).where(and(eq(orderStainTreatments.orderId, orderId), eq(orderStainTreatmentAdjustments.organisationId, organisationId), eq(orderStainTreatmentAdjustments.siteId, siteId)));
-  const treatmentAmount = sumMoney([...treatmentRows.map((entry) => entry.amount), ...adjustmentRows.map((entry) => entry.amount)]);
   const [garmentTotal] = await db.select({ count: sql<number>`coalesce(sum(${garmentItems.quantity}), 0)` }).from(garmentItems).where(eq(garmentItems.orderId, orderId));
-  return computeCoverage(row, included, items, Number(garmentTotal?.count ?? 0), treatmentAmount);
+  return computeCoverage(row, included, items, Number(garmentTotal?.count ?? 0));
 }
 
 async function calculateDraftCoverage(organisationId: number, subscriptionId: number, customerId: number, siteId: number, draftItems: Array<{ serviceId: number; quantity: number }>, garmentPieceCount = 0) {
@@ -359,8 +336,8 @@ export function registerMembershipRoutes(app: Express) {
         const coverage = await calculateCoverage(organisationId, input.customerSubscriptionId, input.orderId, siteId);
         if (!coverage) return { status: 404 as const, message: "Eligible subscription/order not found" };
         if (coverage.subscription.remainingOrders != null && coverage.subscription.remainingOrders <= 0) return { status: 409 as const, message: "Subscription order limit exhausted" };
-        await tx.insert(subscriptionTransactions).values({ customerSubscriptionId: input.customerSubscriptionId, orderId: input.orderId, kgConsumed: String(coverage.kgToDeduct), piecesConsumed: coverage.piecesToDeduct, amountCovered: String(coverage.coveredServiceAmount), extraAmountCharged: String(coverage.finalAmount) });
-        await tx.update(orders).set({ originalPrice: coverage.order!.originalPrice ?? coverage.order!.totalAmount, totalAmount: coverage.finalAmount, paymentStatus: compareMoney(coverage.finalAmount, "0") <= 0 ? "paid" : coverage.order!.paymentStatus, updatedAt: new Date() }).where(and(eq(orders.id, input.orderId), eq(orders.siteId, siteId)));
+        await tx.insert(subscriptionTransactions).values({ customerSubscriptionId: input.customerSubscriptionId, orderId: input.orderId, kgConsumed: String(coverage.kgToDeduct), piecesConsumed: coverage.piecesToDeduct, amountCovered: String(coverage.coveredAmount), extraAmountCharged: String(coverage.extraAmount) });
+        await tx.update(orders).set({ originalPrice: coverage.order!.originalPrice ?? coverage.order!.totalAmount, totalAmount: String(coverage.extraAmount), paymentStatus: coverage.extraAmount <= 0 ? "paid" : coverage.order!.paymentStatus, updatedAt: new Date() }).where(and(eq(orders.id, input.orderId), eq(orders.siteId, siteId)));
         const [subscription] = await tx.update(customerSubscriptions).set({ remainingKg: coverage.remainingAfter.kg == null ? null : String(coverage.remainingAfter.kg), remainingPieces: coverage.remainingAfter.pieces, remainingOrders: coverage.remainingAfter.orders, totalConsumedKg: String(Number(coverage.subscription.totalConsumedKg ?? 0) + coverage.kgToDeduct), totalConsumedPieces: Number(coverage.subscription.totalConsumedPieces ?? 0) + coverage.piecesToDeduct, totalOrdersUsed: Number(coverage.subscription.totalOrdersUsed ?? 0) + 1, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, input.customerSubscriptionId), eq(customerSubscriptions.organisationId, organisationId))).returning();
         return { status: 200 as const, subscription, coverage };
       });
@@ -392,17 +369,14 @@ export function registerMembershipRoutes(app: Express) {
     if (!row) return res.status(404).json({ message: "No subscription coverage for this order; use the standard receipt" });
     const items = await db.select({ serviceName: services.name, quantity: orderItems.quantity, unitPrice: orderItems.priceAtOrder }).from(orderItems).innerJoin(services, eq(orderItems.serviceId, services.id)).innerJoin(sites, and(eq(services.siteId, sites.id), eq(sites.organisationId, organisationId))).where(eq(orderItems.orderId, orderId));
     const garments = await db.select({ itemName: garmentItems.itemName, quantity: garmentItems.quantity }).from(garmentItems).where(eq(garmentItems.orderId, orderId));
-    const stainTreatments = await db.select().from(orderStainTreatments).where(and(eq(orderStainTreatments.orderId, orderId), eq(orderStainTreatments.organisationId, organisationId), eq(orderStainTreatments.siteId, siteId)));
-    const treatmentAdjustments = stainTreatments.length ? await db.select().from(orderStainTreatmentAdjustments).where(and(inArray(orderStainTreatmentAdjustments.treatmentId, stainTreatments.map((treatment) => treatment.id)), eq(orderStainTreatmentAdjustments.organisationId, organisationId), eq(orderStainTreatmentAdjustments.siteId, siteId))) : [];
-    const treatmentsWithHistory = stainTreatments.map((treatment) => ({ ...treatment, adjustments: treatmentAdjustments.filter((adjustment) => adjustment.treatmentId === treatment.id) }));
     const siteOrders = await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId)).orderBy(asc(orders.createdAt), asc(orders.id));
     const siteOrderIndex = siteOrders.findIndex((siteOrder) => siteOrder.id === orderId);
     const order = { ...row.order, orderNumber: siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id };
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
-    const coverage = { coveredAmount: canonicalMoney(row.transaction.amountCovered ?? "0"), extraAmount: canonicalMoney(row.transaction.extraAmountCharged ?? "0"), savingsAchieved: canonicalMoney(row.transaction.amountCovered ?? "0"), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
+    const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
     const format = z.enum(["a4", "thermal58", "thermal80"]).catch("a4").parse(req.query.format);
-    const data = { ...row, order, items: items.map((item) => ({ ...item, lineTotal: multiplyMoney(String(item.quantity), String(item.unitPrice)) })), garments, stainTreatments: treatmentsWithHistory, settings, coverage };
+    const data = { ...row, order, items, garments, settings, coverage };
     const html = format === "thermal58" ? generateSubscriberThermalReceiptHTML(data, 58) : format === "thermal80" ? generateSubscriberThermalReceiptHTML(data, 80) : generateSubscriberReceiptHTML(data);
     res.type("html").send(html);
   });
@@ -452,7 +426,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId))) return res.status(400).json({ message: "Invalid service selection" });
     const created = await db.transaction(async (tx) => {
       const { serviceIds, ...values } = input;
-      const [plan] = await tx.insert(subscriptionPlans).values({ ...values, organisationId, recurringPrice: canonicalMoney(values.recurringPrice), activationFee: canonicalMoney(values.activationFee ?? "0"), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : canonicalMoney(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : canonicalMoney(values.overagePricePerPiece) }).returning();
+      const [plan] = await tx.insert(subscriptionPlans).values({ ...values, organisationId, recurringPrice: String(values.recurringPrice), activationFee: String(values.activationFee ?? 0), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : String(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : String(values.overagePricePerPiece) }).returning();
       if (serviceIds.length) await tx.insert(subscriptionPlanServices).values(serviceIds.map((serviceId) => ({ subscriptionPlanId: plan.id, serviceId })));
       return plan;
     });
@@ -466,7 +440,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!plan) return res.status(404).json({ message: "Plan not found" });
     const included = await db.select({ id: services.id, name: services.name }).from(subscriptionPlanServices).innerJoin(services, eq(subscriptionPlanServices.serviceId, services.id)).innerJoin(sites, eq(services.siteId, sites.id)).where(and(eq(subscriptionPlanServices.subscriptionPlanId, id), eq(sites.organisationId, organisationId!)));
     const subscribers = await db.select({ subscription: customerSubscriptions, customerName: customers.name }).from(customerSubscriptions).innerJoin(customers, eq(customerSubscriptions.customerId, customers.id)).where(and(eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.subscriptionPlanId, id), eq(customerSubscriptions.status, "active")));
-    res.json({ ...plan, recurringPrice: canonicalMoney(plan.recurringPrice), activationFee: canonicalMoney(plan.activationFee ?? "0"), services: included, subscriberCount: subscribers.length, subscribers, monthlyRevenue: multiplyMoney(plan.recurringPrice, String(subscribers.length)) });
+    res.json({ ...plan, services: included, subscriberCount: subscribers.length, subscribers, monthlyRevenue: Number(plan.recurringPrice) * subscribers.length });
   });
 
   app.put("/api/subscription-plans/:id", isAuthenticated, async (req: any, res) => {
@@ -480,7 +454,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId!))) return res.status(400).json({ message: "Invalid service selection" });
     const updated = await db.transaction(async (tx) => {
       const { serviceIds, ...values } = input;
-      const [plan] = await tx.update(subscriptionPlans).set({ ...values, recurringPrice: canonicalMoney(values.recurringPrice), activationFee: canonicalMoney(values.activationFee ?? "0"), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : canonicalMoney(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : canonicalMoney(values.overagePricePerPiece), updatedAt: new Date() }).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId!))).returning();
+      const [plan] = await tx.update(subscriptionPlans).set({ ...values, recurringPrice: String(values.recurringPrice), activationFee: String(values.activationFee ?? 0), discountPercentage: String(values.discountPercentage ?? 0), includedWeightKg: values.includedWeightKg == null ? null : String(values.includedWeightKg), carryForwardLimit: values.carryForwardLimit == null ? null : String(values.carryForwardLimit), overagePricePerKg: values.overagePricePerKg == null ? null : String(values.overagePricePerKg), overagePricePerPiece: values.overagePricePerPiece == null ? null : String(values.overagePricePerPiece), updatedAt: new Date() }).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId!))).returning();
       await tx.delete(subscriptionPlanServices).where(eq(subscriptionPlanServices.subscriptionPlanId, id));
       if (serviceIds.length) await tx.insert(subscriptionPlanServices).values(serviceIds.map((serviceId) => ({ subscriptionPlanId: id, serviceId })));
       return plan;
@@ -541,21 +515,21 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId, siteScope(req)))) return res.status(404).json({ message: "Customer not found" });
-    const input = z.object({ subscriptionPlanId: z.coerce.number().int().positive(), startDate: z.string().date(), notes: z.string().nullish(), paymentMethod: z.string().optional(), activationFeeAmount: moneyInput(false).optional() }).parse(req.body);
+    const input = z.object({ subscriptionPlanId: z.coerce.number().int().positive(), startDate: z.string().date(), notes: z.string().nullish(), paymentMethod: z.string().optional(), activationFeeAmount: z.coerce.number().min(0).optional() }).parse(req.body);
     const [plan] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, input.subscriptionPlanId), eq(subscriptionPlans.organisationId, organisationId), eq(subscriptionPlans.status, "active"), isNull(subscriptionPlans.deletedAt))).limit(1);
     if (!plan) return res.status(400).json({ message: "Invalid subscription plan" });
     const membershipNumber = `XP-${organisationId}-${Date.now()}`; const expiryDate = addDays(input.startDate, plan.durationDays);
     const subscription = await db.transaction(async (tx) => {
       const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes }).returning();
-      const fee = canonicalMoney(input.activationFeeAmount ?? plan.activationFee ?? "0");
-      if (compareMoney(fee, "0") > 0) await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: fee, paymentMethod: input.paymentMethod ?? "cash", status: "completed" });
+      const fee = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
+      if (fee > 0) await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(fee), paymentMethod: input.paymentMethod ?? "cash", status: "completed" });
       await tx.insert(membershipCards).values({ customerSubscriptionId: created.id, cardNumber: membershipNumber, barcode: membershipNumber, expiryDate });
       return created;
     });
     await createPendingSubscriptionNotification(subscription.id, organisationId, "welcome").catch((error) => console.error("[Subscriptions] Welcome notification failed", error));
     await createPendingSubscriptionNotification(subscription.id, organisationId, "card_ready").catch((error) => console.error("[Subscriptions] Card notification failed", error));
-    const activationAmount = canonicalMoney(input.activationFeeAmount ?? plan.activationFee ?? "0");
-    if (compareMoney(activationAmount, "0") > 0) {
+    const activationAmount = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
+    if (activationAmount > 0) {
       await createPendingSubscriptionNotification(subscription.id, organisationId, "payment_confirmed", { amount: activationAmount }).catch((error) => console.error("[Subscriptions] Payment notification failed", error));
     }
     invalidateSubscriptionDashboard(organisationId);
@@ -574,7 +548,7 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/subscriptions/:id/renew", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
-    const input = z.object({ paymentMethod: z.string().optional(), amount: moneyInput(true).optional() }).parse(req.body ?? {});
+    const input = z.object({ paymentMethod: z.string().optional(), amount: z.coerce.number().positive().optional() }).parse(req.body ?? {});
     const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1), eq(subscriptionPlans.organisationId, organisationId ?? -1))).limit(1);
     if (!row) return res.status(404).json({ message: "Subscription not found" });
     const expiryDate = addDays(new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date(), row.plan.durationDays);
@@ -582,11 +556,11 @@ export function registerMembershipRoutes(app: Express) {
       const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
       const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
       if (!updated) return null;
-      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: canonicalMoney(input.amount ?? row.plan.recurringPrice), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }).returning();
+      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount ?? Number(row.plan.recurringPrice)), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }).returning();
       return { subscription: updated, payment };
     });
     if (!renewed) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
-    await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: canonicalMoney(renewed.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
+    await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: Number(renewed.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
     await awardRenewalPoints(renewed.payment.id, row.subscription.customerId, organisationId)
       .catch((error) => console.error("[Loyalty] Renewal points award failed", error));
     invalidateSubscriptionDashboard(organisationId);

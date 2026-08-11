@@ -11,10 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { GarmentColorPicker } from "@/components/garment-color-picker";
 
 type EditableItem = { serviceId: number; quantity: number };
-type EditableGarment = { itemName: string; quantity: number; color?: string | null };
+type EditableGarment = { itemName: string; quantity: number };
 
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
@@ -58,7 +57,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
     setPickupDate(String(order.pickupDate || "").slice(0, 10));
     setReason("");
     setItems((order.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: Number(item.quantity) })));
-    setGarments((order.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "" })));
+    setGarments((order.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity) })));
   }, [editOpen, order]);
 
   const activeServices = useMemo(() => services.filter((service: any) => service.active !== false), [services]);
@@ -80,7 +79,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
         pickupDate: pickupDate ? new Date(`${pickupDate}T00:00:00`).toISOString() : null,
         reason: reason.trim(),
         items,
-        garments: garments.map((garment) => ({ ...garment, itemName: garment.itemName.trim(), color: garment.color?.trim() || null })),
+        garments: garments.map((garment) => ({ ...garment, itemName: garment.itemName.trim() })),
       }),
     })),
     onSuccess: () => {
@@ -225,10 +224,6 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
                     <Label htmlFor={`correction-garment-${index}`}>{t("garment_type")}</Label>
                     <Input id={`correction-garment-${index}`} value={garment.itemName} onChange={(event) => setGarments((current) => current.map((entry, garmentIndex) => garmentIndex === index ? { ...entry, itemName: event.target.value } : entry))} />
                   </div>
-                  <div className="order-last space-y-2 sm:col-span-3">
-                    <Label>{t("garment_color")}</Label>
-                    <GarmentColorPicker value={garment.color} onChange={(color) => setGarments((current) => current.map((entry, garmentIndex) => garmentIndex === index ? { ...entry, color } : entry))} testId={`correction-garment-color-${index}`} />
-                  </div>
                   <div className="space-y-2">
                     <Label htmlFor={`correction-garment-quantity-${index}`}>{t("quantity")}</Label>
                     <Input id={`correction-garment-quantity-${index}`} type="number" min="1" value={garment.quantity} onChange={(event) => setGarments((current) => current.map((entry, garmentIndex) => garmentIndex === index ? { ...entry, quantity: Number(event.target.value) } : entry))} />
@@ -238,7 +233,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
                   </Button>
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => setGarments((current) => [...current, { itemName: "", quantity: 1, color: "" }])}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setGarments((current) => [...current, { itemName: "", quantity: 1 }])}>
                 <Plus className="mr-2 h-4 w-4" aria-hidden="true" />{t("add_garment")}
               </Button>
             </fieldset>

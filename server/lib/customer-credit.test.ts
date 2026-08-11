@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findCompositePaymentReplay } from "./composite-payment-idempotency";
-import { fingerprintRequest, OrderMoneyConflictError } from "./order-money";
 
 const root = process.cwd();
 const schema = readFileSync(join(root, "shared/schema.ts"), "utf8");
@@ -69,100 +67,5 @@ assert.match(orderDetail, /stage-machine-save-hint/);
 assert.match(i18n, /machine_assignment_save_hint/);
 assert.match(creditTab, /userRole === "owner" \|\| userRole === "manager"/);
 assert.match(creditTab, /credit-transaction-/);
-
-const basePayment = {
-  orderId: 44,
-  amountReceived: "6.00",
-  method: "cash",
-  creditToApply: "4.00",
-  surplusDisposition: "return" as const,
-  idempotencyKey: "composite-payment-001",
-  organisationId: 1,
-  siteId: 2,
-  actorUserId: "actor-1",
-  collectedByEmployeeId: null,
-};
-function compositeFingerprint(input: typeof basePayment, amount: string, method: string) {
-  return fingerprintRequest({
-    orderId: input.orderId,
-    amount,
-    method,
-    reference: null,
-    paymentDate: null,
-    isAdvance: false,
-    context: {
-      amountReceived: input.amountReceived,
-      creditToApply: input.creditToApply,
-      surplusDisposition: input.surplusDisposition,
-    },
-  }, { moneyPaths: ["amount", "context.amountReceived", "context.creditToApply"] });
-}
-function replayClient(input: typeof basePayment, legs: Array<{ id: number; suffix: "cash" | "credit"; amount: string; method: string }>) {
-  return {
-    async query(text: string) {
-      if (text.includes("FROM payments")) return {
-        rows: legs.map((leg) => ({
-          id: leg.id,
-          amount: leg.amount,
-          method: leg.method,
-          idempotency_key: `${input.idempotencyKey}:${leg.suffix}`,
-          request_fingerprint: compositeFingerprint(input, leg.amount, leg.method),
-        })),
-        rowCount: legs.length,
-      };
-      if (text.includes("FROM credit_transactions")) return {
-        rows: legs.some((leg) => leg.suffix === "credit") ? [{ type: "debit", amount: input.creditToApply }] : [],
-        rowCount: legs.some((leg) => leg.suffix === "credit") ? 1 : 0,
-      };
-      throw new Error(`Unexpected replay query: ${text}`);
-    },
-  };
-}
-
-const cashOnlyInput = { ...basePayment, amountReceived: "10.00", creditToApply: "0.00" };
-const cashReplay = await findCompositePaymentReplay(
-  replayClient(cashOnlyInput, [{ id: 1, suffix: "cash", amount: "10.00", method: "cash" }]),
-  cashOnlyInput,
-  "3.00",
-  "paid",
-);
-assert.equal(cashReplay?.idempotentReplay, true);
-assert.equal(cashReplay?.cashApplied, "10.00");
-
-const creditOnlyInput = { ...basePayment, amountReceived: "0.00", creditToApply: "10.00" };
-const creditReplay = await findCompositePaymentReplay(
-  replayClient(creditOnlyInput, [{ id: 2, suffix: "credit", amount: "10.00", method: "Client Credit" }]),
-  creditOnlyInput,
-  "15.00",
-  "paid",
-);
-assert.equal(creditReplay?.idempotentReplay, true);
-assert.equal(creditReplay?.creditApplied, "10.00");
-
-const mixedReplay = await findCompositePaymentReplay(
-  replayClient(basePayment, [
-    { id: 3, suffix: "cash", amount: "6.00", method: "cash" },
-    { id: 4, suffix: "credit", amount: "4.00", method: "Client Credit" },
-  ]),
-  basePayment,
-  "11.00",
-  "paid",
-);
-assert.equal(mixedReplay?.idempotentReplay, true);
-assert.equal(mixedReplay?.cashApplied, "6.00");
-assert.equal(mixedReplay?.creditApplied, "4.00");
-
-await assert.rejects(
-  findCompositePaymentReplay(
-    replayClient(basePayment, [
-      { id: 3, suffix: "cash", amount: "6.00", method: "cash" },
-      { id: 4, suffix: "credit", amount: "4.00", method: "Client Credit" },
-    ]),
-    { ...basePayment, amountReceived: "7.00" },
-    "11.00",
-    "paid",
-  ),
-  (error: unknown) => error instanceof OrderMoneyConflictError && error.statusCode === 409,
-);
 
 console.log("Customer credit regression checks passed");
