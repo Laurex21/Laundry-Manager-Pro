@@ -321,6 +321,34 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_production_cycle_orders_order ON production_cycle_orders(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
+  // Pre-flight repair: the order-money-foundation migration aborts if any order
+  // has a NULL site_id (it cannot establish tenant identity). Repair such orders
+  // by inferring the site from the associated customer, which always has a site.
+  // Orders that cannot be repaired this way are removed only when they carry no
+  // financial data (no payments). This runs idempotently before the migration so
+  // it self-heals on every deployment without touching healthy rows.
+  await pool.query(`
+    UPDATE orders o
+    SET site_id = c.site_id
+    FROM customers c
+    WHERE o.customer_id = c.id
+      AND o.site_id IS NULL
+      AND c.site_id IS NOT NULL
+  `);
+  await pool.query(`
+    DELETE FROM order_items
+    WHERE order_id IN (
+      SELECT id FROM orders
+      WHERE site_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id)
+    )
+  `);
+  await pool.query(`
+    DELETE FROM orders
+    WHERE site_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id)
+  `);
+
   await ensureOrderMoneyFoundation();
   await ensureStainTreatmentSchema();
 
