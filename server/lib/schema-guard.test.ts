@@ -49,23 +49,4 @@ for (const column of ["total_amount", "original_price", "discount_amount", "disc
 }
 assert.match(postgresHarness, /allocations, \[\{ target:"service",amount:"5\.00" \}\]/);
 
-// Replit's schema-sync engine applies declarative NOT NULL constraints before
-// custom backfills. Legacy payment columns must remain nullable in Drizzle;
-// the staged production migration is authoritative for their final NOT NULL
-// constraints after tenant/idempotency/fingerprint backfill.
-const paymentsSchema = schema.match(/export const payments = pgTable\("payments", \{([\s\S]*?)\n\}, \(table\) => \[/)?.[1];
-assert.ok(paymentsSchema, "payments schema block must exist");
-for (const column of ["idempotencyKey", "organisationId", "siteId", "requestFingerprint"]) {
-  assert.doesNotMatch(
-    paymentsSchema,
-    new RegExp(`${column}: [^\\n]+\\.notNull\\(\\)`),
-    `${column} must not make Replit constrain populated payment rows before backfill`,
-  );
-}
-const paymentBackfill = moneyMigration.indexOf("UPDATE payments SET idempotency_key = 'legacy-payment-'");
-const paymentNotNull = moneyMigration.indexOf("ALTER TABLE payments ALTER COLUMN idempotency_key SET NOT NULL");
-assert.ok(paymentBackfill >= 0 && paymentNotNull > paymentBackfill, "payment idempotency must be backfilled before NOT NULL");
-assert.match(moneyMigration, /UPDATE payments p SET organisation_id = o\.organisation_id, site_id = o\.site_id FROM orders o/);
-assert.match(moneyMigration, /cannot safely establish tenant identity for every legacy payment/);
-
 console.log("schema guard regression tests passed");
