@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
+import { garmentColorSwatch } from "./garment-colors";
 import { orderDisplayId } from "./order-display";
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
@@ -72,6 +73,15 @@ function serviceItemTotal(items: any[]): number {
 
 function receiptRegisteredItemTotal(garments: any[], items: any[]): number {
   return garments.length > 0 ? garmentItemTotal(garments) : serviceItemTotal(items);
+}
+
+function receiptGarmentColor(color?: string | null, size = 14): string {
+  if (!color) return "";
+  const swatch = garmentColorSwatch(color);
+  if (!swatch) return ` <span style="color:#64748b;">· ${escapeHtml(color)}</span>`;
+
+  // The title preserves a text equivalent while the receipt visually matches the order-page palette.
+  return ` <span title="${escapeHtml(color)}" style="display:inline-block;width:${size}px;height:${size}px;margin-left:6px;vertical-align:-2px;border-radius:999px;border:1px solid #94a3b8;background:${swatch};-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>`;
 }
 
 function orderTotalFromParts(subtotal: number, discount: number, pickupCost: number): number {
@@ -352,8 +362,7 @@ function buildThermalReceiptHtml(args: {
   const garmentRows = args.garments.length > 0
     ? args.garments.map((garment: any) => {
         const name = garment.itemName || garment.name || label("Item", "Article", args.lang);
-        const color = garment.color ? ` · ${garment.color}` : "";
-        return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}${color}`)}</div>`;
+        return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}`)}${receiptGarmentColor(garment.color, 12)}</div>`;
       }).join("")
     : args.items.length > 0
       ? args.items.map((item: any) => {
@@ -515,7 +524,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.color ? ` · ${escapeHtml(g.color)}` : ""}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${receiptGarmentColor(g.color)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : items.length > 0 ? items.map((item: any) => {
     const service = item.service || {};
     return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
@@ -817,7 +826,7 @@ export function generatePaymentReceipt(
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${g.color ? ` · ${escapeHtml(g.color)}` : ""}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${receiptGarmentColor(g.color)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : items.length > 0 ? items.map((item: any) => {
     const service = item.service || {};
     return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
