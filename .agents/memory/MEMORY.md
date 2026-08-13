@@ -1,1 +1,2 @@
 - [Publish-time schema drift](publish-schema-drift.md) — never publish code querying columns absent from dev DB + ensureAuthSchema(); that startup fn is the prod DDL/data-fix self-heal path.
+- [Stain treatment DB rollback procedure](stain-treatment-rollback.md) — full list of dev DB objects to drop when reverting the stain treatment / order-money-foundation migrations.
