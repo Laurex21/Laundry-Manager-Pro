@@ -8,6 +8,7 @@ import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-me
 import { generatePaymentReceipt, generateThermalPaymentReceipt } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
+import { paymentDateWithRegistrationTime } from "@/lib/payment-date";
 import {
   CreditCard,
   CheckCircle2,
@@ -166,7 +167,7 @@ export default function Payments() {
         orderId: selectedOrderId,
         amount: amount || "0",
         method,
-        date: new Date(`${paymentDate}T00:00:00`),
+        date: paymentDateWithRegistrationTime(paymentDate),
         reference: reference || undefined,
         creditToApply: appliedCredit.toFixed(2),
         surplusDisposition: disposition,

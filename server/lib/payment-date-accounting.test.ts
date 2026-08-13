@@ -8,6 +8,7 @@ const paymentsPage = readFileSync(join(root, "client/src/pages/payments.tsx"), "
 const routes = readFileSync(join(root, "server/routes.ts"), "utf8");
 const storage = readFileSync(join(root, "server/storage.ts"), "utf8");
 const i18n = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
+const paymentDate = readFileSync(join(root, "client/src/lib/payment-date.ts"), "utf8");
 
 assert.match(schema, /insertPaymentSchema = createInsertSchema\(payments\)[\s\S]*\.extend\(\{ date: z\.coerce\.date\(\)\.optional\(\) \}\)/);
 
@@ -16,8 +17,11 @@ assert.match(paymentsPage, /const \[paymentDate, setPaymentDate\] = useState\(to
 assert.match(paymentsPage, /data-testid="input-payment-date"/);
 assert.match(paymentsPage, /t\("payment_date"\)/);
 assert.match(paymentsPage, /t\("payment_date_hint"\)/);
-assert.match(paymentsPage, /date: new Date\(`\$\{paymentDate\}T00:00:00`\)/);
+assert.match(paymentsPage, /date: paymentDateWithRegistrationTime\(paymentDate\)/);
 assert.match(paymentsPage, /\|\| !paymentDate/);
+assert.match(paymentDate, /now\.getHours\(\)/);
+assert.match(paymentDate, /now\.getMinutes\(\)/);
+assert.doesNotMatch(paymentDate, /T00:00:00/);
 
 assert.match(routes, /date: order\.entryDate \|\| new Date\(\)/);
 
