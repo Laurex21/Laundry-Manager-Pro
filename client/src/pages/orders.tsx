@@ -1199,31 +1199,40 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               })}
             </div>
 
-                <div className="space-y-3 lg:space-y-2" data-testid="garment-inventory-section">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <Shirt className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-sm font-medium text-muted-foreground">{t('garment_inventory', 'Garment Inventory')}</h3>
+                <div className="overflow-hidden rounded-xl border bg-background" data-testid="garment-inventory-section">
+              <div className="flex flex-col gap-3 border-b bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Shirt className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">{t('garment_inventory', 'Garment Inventory')}</h3>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground" aria-live="polite" data-testid="text-total-registered-garments">
-                    {t("total_registered_items", "Total registered items")}: <span className="font-mono text-foreground">{totalRegisteredGarments}</span>
+                  <div className="rounded-md border bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground" aria-live="polite" data-testid="text-total-registered-garments">
+                    {t('garments_count', { count: totalRegisteredGarments })}
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1, color: "" })}>
                     <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
                   </Button>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">{t('garment_inventory_hint', 'Track individual garment items for this order (not billed separately)')}</p>
+
+              <div className="hidden grid-cols-[minmax(0,1fr)_5rem_minmax(9rem,0.65fr)_2.5rem] gap-3 border-b bg-muted/10 px-3 py-2 text-xs font-medium text-muted-foreground md:grid">
+                <span>{t('item_name', 'Garment')}</span>
+                <span>{t('qty', 'Qty')}</span>
+                <span>{t('garment_color', 'Colour')}</span>
+                <span className="sr-only">{t('actions', 'Actions')}</span>
+              </div>
 
               {garmentFields.map((field, index) => (
-                <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.75rem] items-end gap-2 rounded-lg border border-border/50 bg-muted/20 p-2 sm:gap-3 sm:p-3 lg:p-2">
+                <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.5rem] items-end gap-2 border-b p-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_5rem_minmax(9rem,0.65fr)_2.5rem] md:items-start md:gap-3">
                   <FormField
                     control={form.control}
                     name={`garmentItems.${index}.itemName`}
                     render={({ field }) => (
                       <FormItem className="min-w-0">
-                        <FormLabel className="text-xs">{t('item_name', 'Item Name')}</FormLabel>
+                        <FormLabel className="text-xs md:sr-only">{t('item_name', 'Item Name')}</FormLabel>
                         <FormControl>
                           <Input placeholder={t('garment_placeholder', 'e.g. Shirt, Trousers, Dress')} {...field} />
                         </FormControl>
@@ -1235,9 +1244,9 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                     control={form.control}
                     name={`garmentItems.${index}.color`}
                     render={({ field }) => {
-                      return <FormItem className="order-last col-span-3 min-w-0">
-                        <FormLabel className="text-xs">{t("garment_color")}</FormLabel>
-                        <GarmentColorPicker value={field.value} onChange={field.onChange} testId={`palette-garment-color-${index}`} />
+                      return <FormItem className="order-last col-span-3 min-w-0 md:order-none md:col-span-1">
+                        <FormLabel className="text-xs md:sr-only">{t("garment_color")}</FormLabel>
+                        <GarmentColorPicker compact value={field.value} onChange={field.onChange} testId={`palette-garment-color-${index}`} />
                         <FormMessage />
                       </FormItem>;
                     }}
@@ -1247,7 +1256,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                     name={`garmentItems.${index}.quantity`}
                     render={({ field }) => (
                       <FormItem className="min-w-0">
-                        <FormLabel className="text-xs">{t('qty', 'Qty')}</FormLabel>
+                        <FormLabel className="text-xs md:sr-only">{t('qty', 'Qty')}</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
