@@ -189,7 +189,7 @@ function ServiceCombobox({
           </Button>
         </FormControl>
       </PopoverTrigger>
-      <PopoverContent className="w-[max(var(--radix-popover-trigger-width),280px)] p-0" align="start">
+      <PopoverContent portalled={false} className="w-[max(var(--radix-popover-trigger-width),280px)] p-0" align="start">
         <Command
           filter={(itemValue, searchValue) =>
             normalizeServiceSearch(itemValue).includes(normalizeServiceSearch(searchValue)) ? 1 : 0
