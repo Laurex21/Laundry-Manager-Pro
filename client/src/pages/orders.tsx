@@ -1364,11 +1364,11 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                               name={field.name}
                               ref={field.ref}
                               onBlur={field.onBlur}
-                              value={field.value ?? ""}
+                              value={watchedDiscountPct ?? ""}
                               onFocus={(e) => e.target.select()}
                               onChange={(event) => {
-                                const percentage = event.currentTarget.valueAsNumber;
-                                field.onChange(Number.isNaN(percentage) ? 0 : percentage);
+                                const percentage = event.currentTarget.value;
+                                field.onChange(percentage);
                               }}
                               data-testid="input-discount-percentage"
                             />
