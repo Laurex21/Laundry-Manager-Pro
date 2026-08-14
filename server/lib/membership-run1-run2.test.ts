@@ -42,16 +42,20 @@ assert.match(ordersPage, /Subscription coverage not applied/);
 assert.doesNotMatch(ordersPage, /catch \{\}/);
 assert.match(server, /status >= 500 \? "Internal Server Error"/);
 
-assert.match(routes, /const garments = await db\.select\(\{ itemName: garmentItems\.itemName, quantity: garmentItems\.quantity \}\)/);
+assert.match(routes, /const garments = await db\.select\(\{ itemName: garmentItems\.itemName, quantity: garmentItems\.quantity, color: garmentItems\.color \}\)/);
 assert.match(routes, /orderNumber/);
 assert.match(routes, /kgConsumed: Number\(row\.transaction\.kgConsumed/);
 assert.match(routes, /piecesConsumed: Number\(row\.transaction\.piecesConsumed/);
 assert.match(subscriberReceipt, /order\.orderNumber \?\? order\.id/);
 assert.match(subscriberReceipt, /Vêtements enregistrés/);
-assert.match(subscriberReceipt, /Consommation de cette commande/);
-assert.match(subscriberReceipt, /Taux de consommation/);
+assert.match(subscriberReceipt, /Utilisation de cette commande/);
+assert.match(subscriberReceipt, /de votre forfait/);
 assert.match(subscriberReceipt, /plan\.includedWeightKg/);
 assert.match(subscriberReceipt, /plan\.includedPieces/);
+assert.match(subscriberReceipt, /Services pris en charge/);
+assert.match(subscriberReceipt, /Entièrement couvert par votre abonnement/);
+assert.doesNotMatch(subscriberReceipt, /Montant total commande/);
+assert.doesNotMatch(subscriberReceipt, /Économies réalisées aujourd’hui/);
 assert.match(ordersPage, /garmentPieceCount: totalRegisteredGarments/);
 
 console.log("membership Run 1/2 regression tests passed");

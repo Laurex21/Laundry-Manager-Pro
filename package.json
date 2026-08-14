@@ -22,6 +22,7 @@
     "test:schema-guard": "tsx server/lib/schema-guard.test.ts",
     "test:membership-card": "tsx server/lib/membership-card-generator.test.ts",
     "test:membership-run1-run2": "tsx server/lib/membership-run1-run2.test.ts",
+    "test:subscriber-receipt-design": "tsx server/lib/subscriber-receipt-design.test.ts",
     "test:membership-run3": "tsx server/lib/membership-run1-run2.test.ts && tsx server/lib/membership-card-generator.test.ts && tsx server/lib/subscription-dashboard.test.ts && tsx server/lib/loyalty.test.ts && tsx server/lib/subscription-security.test.ts && tsx server/lib/customers-responsive.test.ts && tsx server/lib/mobile-service-selector.test.ts && tsx server/lib/order-discount-toggle.test.ts",
     "test:tenant-isolation": "tsx server/lib/tenant-isolation.test.ts",
     "test:expenses-redesign": "tsx server/lib/expenses-redesign.test.ts",
