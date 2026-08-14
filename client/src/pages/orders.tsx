@@ -414,7 +414,7 @@ export default function Orders() {
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-hidden lg:px-5 lg:py-3">
+          <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-y-auto lg:px-5 lg:py-3">
             <DialogHeader className="sticky top-0 z-20 -mx-2 bg-background/95 px-2 pb-3 backdrop-blur-sm lg:pb-1">
               <DialogTitle>{t("create_new_order")}</DialogTitle>
             </DialogHeader>
@@ -1025,7 +1025,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
         </Form>
       ) : (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 lg:grid lg:min-h-0 lg:grid-rows-[auto_1fr_auto] lg:gap-2 lg:space-y-0">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 lg:space-y-2">
             <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
               <FormField
                 control={form.control}
@@ -1128,8 +1128,8 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
             )}
             {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:bg-blue-950/20 sm:p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="shrink-0 text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
-            <div className="grid min-w-0 gap-4 lg:min-h-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-stretch lg:gap-4 lg:overflow-hidden">
-              <div className="min-w-0 space-y-4 lg:min-h-0 lg:space-y-2 lg:overflow-y-auto lg:overscroll-contain lg:pr-2" data-testid="order-form-primary-column">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-start lg:gap-4">
+              <div className="min-w-0 space-y-4 lg:space-y-2" data-testid="order-form-primary-column">
                 <div className="space-y-3 lg:space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-muted-foreground">{t('order_services', 'Order Services')}</h3>
@@ -1465,7 +1465,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:static lg:pt-1">
+            <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:pt-1">
               <Button type="submit" className="w-full" size="lg" disabled={isOrderPending}>
                 {isOrderPending ? t("saving") : t("create_new_order")}
               </Button>
