@@ -78,7 +78,7 @@ export interface IStorage {
   updateExpenditure(id: number, data: Partial<InsertExpenditure>): Promise<Expenditure | undefined>;
   deleteExpenditure(id: number): Promise<boolean>;
 
-  getPublicStats(): Promise<{ totalOrders: number; totalCustomers: number; totalTransactions: number; totalLaundries: number; totalGarments: number }>;
+  getPublicStats(): Promise<{ totalOrders: number; totalCustomers: number; totalTransactions: number; totalLaundries: number; totalGarments: number; totalCountries: number }>;
   getStats(): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
 
   getPerformanceData(siteId: number | number[] | null, startDate?: Date, endDate?: Date): Promise<{
@@ -1811,11 +1811,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPublicStats() {
-    const [[o], [c], [p], [g]] = await Promise.all([
+    const [[o], [c], [p], [g], [countryStats]] = await Promise.all([
       db.select({ count: sql<number>`count(*)::int` }).from(orders),
       db.select({ count: sql<number>`count(*)::int` }).from(customers),
       db.select({ count: sql<number>`count(*)::int` }).from(payments),
       db.select({ total: sql<number>`coalesce(sum(${orderItems.quantity}),0)::float8` }).from(orderItems),
+      db
+        .select({ count: sql<number>`count(distinct lower(trim(${businessSettings.country})))::int` })
+        .from(businessSettings)
+        .innerJoin(users, eq(businessSettings.userId, users.id))
+        .where(and(ne(users.userType, "staff"), sql`trim(coalesce(${businessSettings.country}, '')) <> ''`)),
     ]);
     const laundries = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -1828,6 +1833,7 @@ export class DatabaseStorage implements IStorage {
       totalTransactions: p?.count || 0,
       totalLaundries: laundries[0]?.count || 0,
       totalGarments: g?.total || 0,
+      totalCountries: countryStats?.count || 0,
     };
   }
 

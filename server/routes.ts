@@ -296,7 +296,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const stats = await storage.getPublicStats();
       res.json(stats);
     } catch {
-      res.json({ totalOrders: 0, totalCustomers: 0, totalTransactions: 0, totalLaundries: 0, totalGarments: 0 });
+      res.json({ totalOrders: 0, totalCustomers: 0, totalTransactions: 0, totalLaundries: 0, totalGarments: 0, totalCountries: 0 });
     }
   });
 

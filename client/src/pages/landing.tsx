@@ -9,7 +9,7 @@ import {
   TrendingUp, Truck, UserRound, Wind, X, XCircle,
 } from "lucide-react";
 
-type PublicStats = { totalOrders: number; totalCustomers: number; totalLaundries: number };
+type PublicStats = { totalOrders: number; totalCustomers: number; totalLaundries: number; totalCountries: number };
 const NAVY = "#0D1B4B";
 const BLUE = "#1E63F0";
 
@@ -151,6 +151,7 @@ export default function LandingPage() {
   const metrics = useMemo(() => [
     [stats?.totalLaundries, t("landing_v3.active_laundries")], [stats?.totalOrders, t("landing_v3.orders_processed")],
     [stats?.totalCustomers, t("landing_v3.customers_registered")],
+    [stats?.totalCountries, t("landing_v3.countries")],
   ].filter(([value]) => Number(value) > 0), [stats, t]);
   const pains = ["garments", "payments", "notebooks", "profit", "customers", "data"];
   const workflow = [[UserRound,"client"],[FileText,"order"],[Layers3,"sorting"],[Droplets,"washing"],[Wind,"drying"],[Shirt,"ironing"],[Package,"packing"],[CheckCircle2,"ready"],[Truck,"delivery"],[BarChart3,"reports"]] as const;
