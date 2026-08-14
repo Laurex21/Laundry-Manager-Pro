@@ -19,9 +19,11 @@ export function computeTier(totalLifetimePoints: number): LoyaltyTier {
 export function computeOrderPoints(
   amount: number,
   pointsPerOrder: number,
-  pointsPerFcfa: number | null,
+  spendAmountPerPoint: number | null,
   tier: LoyaltyTier,
 ) {
-  const spendPoints = pointsPerFcfa == null ? 0 : Math.floor(amount * pointsPerFcfa);
+  const spendPoints = spendAmountPerPoint == null || spendAmountPerPoint <= 0
+    ? 0
+    : Math.floor(amount / spendAmountPerPoint);
   return Math.max(0, Math.round((pointsPerOrder + spendPoints) * LOYALTY_TIERS[tier].multiplier));
 }

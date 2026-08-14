@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useCustomer, useUpdateCustomer } from "@/hooks/use-customers";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCustomerSchema, type InsertCustomer, type Customer } from "@shared/schema";
@@ -25,6 +25,8 @@ import {
   Truck,
   CheckCircle2,
   Clock,
+  Gift,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +41,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -60,6 +64,8 @@ import {
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { CustomerMembershipTab } from "@/components/customer-membership-tab";
 import { CustomerCreditTab } from "@/components/customer-credit-tab";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 
 const VIP_THRESHOLD = 50000;
 
@@ -88,11 +94,46 @@ export default function CustomerDetail() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const { openWhatsApp } = useWhatsAppLauncher();
+  const { userRole } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const symbol = getSymbol();
 
   const { data: customer, isLoading: customerLoading } = useCustomer(customerId);
   const { data: customerOrders, isLoading: ordersLoading } = useCustomerOrders(customerId);
   const [editOpen, setEditOpen] = useState(false);
+  const [redemptionOpen, setRedemptionOpen] = useState(false);
+  const { data: loyalty } = useQuery<any>({
+    queryKey: ["/api/customers", customerId, "loyalty"],
+    queryFn: async () => {
+      const response = await fetch(`/api/customers/${customerId}/loyalty`, { credentials: "include" });
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: !!customerId,
+  });
+  const redeemLoyalty = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/customers/${customerId}/loyalty/redeem`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idempotencyKey: `loyalty-redeem-${customerId}-${crypto.randomUUID()}` }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || t("loyalty_redeem_error"));
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "loyalty"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/:id", customerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customerId, "credit"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      setRedemptionOpen(false);
+      toast({ title: t("loyalty_redeemed_success") });
+    },
+    onError: (error: Error) => toast({ title: t("loyalty_redeem_error"), description: error.message, variant: "destructive" }),
+  });
 
   if (customerLoading) {
     return (
@@ -209,7 +250,7 @@ export default function CustomerDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card data-testid="card-total-orders">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
@@ -253,7 +294,48 @@ export default function CustomerDetail() {
             </div>
           </CardContent>
         </Card>
+        <Card className={loyalty?.canRedeem ? "border-violet-300 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20" : ""} data-testid="card-loyalty-points">
+          <CardContent className="p-5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-md bg-violet-100 p-2.5 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                <Gift className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-muted-foreground">{t("loyalty_points_balance")}</p>
+                <p className="text-2xl font-bold" data-testid="text-loyalty-points">{Number(loyalty?.points ?? customer.loyaltyPoints ?? 0)}</p>
+                <p className="text-xs capitalize text-muted-foreground">{loyalty?.tier ?? customer.loyaltyTier ?? "bronze"}</p>
+              </div>
+            </div>
+            {loyalty?.enabled && (
+              <div className="mt-3 border-t pt-3">
+                <p className="text-xs text-muted-foreground">{t("loyalty_points_to_reward", { points: loyalty.rewardPointsRequired, amount: `${symbol}${Number(loyalty.rewardValue).toFixed(2)}` })}</p>
+                {(userRole === "owner" || userRole === "manager") && loyalty.canRedeem && (
+                  <Button type="button" size="sm" className="mt-2 min-h-10 w-full" onClick={() => setRedemptionOpen(true)} data-testid="button-redeem-loyalty">
+                    <Gift className="mr-2 h-4 w-4" aria-hidden="true" />{t("redeem_loyalty_reward")}
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog open={redemptionOpen} onOpenChange={setRedemptionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("redeem_loyalty_reward")}</DialogTitle>
+            <DialogDescription>
+              {t("confirm_loyalty_redemption", { points: loyalty?.rewardPointsRequired, amount: `${symbol}${Number(loyalty?.rewardValue ?? 0).toFixed(2)}` })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRedemptionOpen(false)}>{t("cancel")}</Button>
+            <Button type="button" onClick={() => redeemLoyalty.mutate()} disabled={redeemLoyalty.isPending} data-testid="button-confirm-loyalty-redemption">
+              {redeemLoyalty.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}{t("redeem_loyalty_reward")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {shouldShowChurnWarning && (
         <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-orange-800 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300" data-testid="banner-client-churn-risk">

@@ -368,9 +368,11 @@ function LoyaltyTab({ settings }: { settings: any }) {
   const { data: program } = useQuery<any>({ queryKey: ["/api/loyalty-program"] });
   const [form, setForm] = useState({
     pointsPerOrder: 10,
-    pointsPerFcfa: "",
+    spendAmountPerPoint: 500,
     renewalBonus: 50,
     referralBonus: 100,
+    rewardPointsRequired: 100,
+    rewardValue: 500,
     pointExpireDays: "",
     isActive: true,
   });
@@ -378,9 +380,11 @@ function LoyaltyTab({ settings }: { settings: any }) {
     if (!program) return;
     setForm({
       pointsPerOrder: Number(program.pointsPerOrder ?? 10),
-      pointsPerFcfa: program.pointsPerFcfa ?? "",
+      spendAmountPerPoint: Number(program.spendAmountPerPoint ?? 500),
       renewalBonus: Number(program.renewalBonus ?? 50),
       referralBonus: Number(program.referralBonus ?? 100),
+      rewardPointsRequired: Number(program.rewardPointsRequired ?? 100),
+      rewardValue: Number(program.rewardValue ?? 500),
       pointExpireDays: program.pointExpireDays ?? "",
       isActive: Boolean(program.isActive),
     });
@@ -392,7 +396,6 @@ function LoyaltyTab({ settings }: { settings: any }) {
         body: JSON.stringify({
           enabled,
           ...form,
-          pointsPerFcfa: form.pointsPerFcfa === "" ? null : Number(form.pointsPerFcfa),
           pointExpireDays: form.pointExpireDays === "" ? null : Number(form.pointExpireDays),
         }),
       });
@@ -428,8 +431,8 @@ function LoyaltyTab({ settings }: { settings: any }) {
           <Input id="loyalty-points-order" type="number" min="0" value={form.pointsPerOrder} onChange={numberField("pointsPerOrder")} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="loyalty-points-spend">{t("loyalty_points_per_fcfa")}</Label>
-          <Input id="loyalty-points-spend" type="number" min="0" step="0.0001" value={form.pointsPerFcfa} onChange={numberField("pointsPerFcfa")} placeholder="0.0100" />
+          <Label htmlFor="loyalty-points-spend">{t("loyalty_spend_amount_per_point")}</Label>
+          <Input id="loyalty-points-spend" type="number" min="1" step="1" value={form.spendAmountPerPoint} onChange={numberField("spendAmountPerPoint")} inputMode="decimal" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="loyalty-renewal">{t("loyalty_renewal_bonus")}</Label>
@@ -442,6 +445,14 @@ function LoyaltyTab({ settings }: { settings: any }) {
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="loyalty-expiry">{t("loyalty_expiry_days")}</Label>
           <Input id="loyalty-expiry" type="number" min="1" value={form.pointExpireDays} onChange={numberField("pointExpireDays")} placeholder={t("loyalty_never_expires")} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="loyalty-reward-points">{t("loyalty_reward_points_required")}</Label>
+          <Input id="loyalty-reward-points" type="number" min="1" value={form.rewardPointsRequired} onChange={numberField("rewardPointsRequired")} inputMode="numeric" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="loyalty-reward-value">{t("loyalty_reward_value")}</Label>
+          <Input id="loyalty-reward-value" type="number" min="1" step="1" value={form.rewardValue} onChange={numberField("rewardValue")} inputMode="decimal" />
         </div>
       </div>
       <Button

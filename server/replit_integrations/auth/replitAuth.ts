@@ -84,11 +84,39 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS referred_by_customer_id integer
   `);
   await pool.query(`
+    ALTER TABLE business_settings
+    ADD COLUMN IF NOT EXISTS loyalty_program_enabled boolean NOT NULL DEFAULT false
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS loyalty_program (
+      id serial PRIMARY KEY,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      points_per_order integer NOT NULL DEFAULT 10,
+      points_per_fcfa numeric(6, 4),
+      spend_amount_per_point numeric(12, 2) NOT NULL DEFAULT 500,
+      renewal_bonus_points integer NOT NULL DEFAULT 50,
+      referral_bonus_points integer NOT NULL DEFAULT 100,
+      reward_points_required integer NOT NULL DEFAULT 100,
+      reward_value numeric(12, 2) NOT NULL DEFAULT 500,
+      point_expire_days integer,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamp DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE loyalty_program
+    ADD COLUMN IF NOT EXISTS spend_amount_per_point numeric(12, 2) NOT NULL DEFAULT 500,
+    ADD COLUMN IF NOT EXISTS reward_points_required integer NOT NULL DEFAULT 100,
+    ADD COLUMN IF NOT EXISTS reward_value numeric(12, 2) NOT NULL DEFAULT 500
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_program_org ON loyalty_program(organisation_id)`);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS loyalty_points (
       id serial PRIMARY KEY,
       organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
       client_id integer NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
       points integer NOT NULL,
+      redeemed_points integer NOT NULL DEFAULT 0,
       reason varchar(100) NOT NULL,
       order_id integer REFERENCES orders(id),
       subscription_payment_id integer,
@@ -98,6 +126,12 @@ async function ensureAuthSchema() {
       created_at timestamp DEFAULT now()
     )
   `);
+  await pool.query(`ALTER TABLE loyalty_points ADD COLUMN IF NOT EXISTS redeemed_points integer NOT NULL DEFAULT 0`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_loyalty_points_client ON loyalty_points(client_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_loyalty_points_org ON loyalty_points(organisation_id)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_points_order_reason ON loyalty_points(organisation_id, order_id, reason) WHERE order_id IS NOT NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_points_renewal_reason ON loyalty_points(organisation_id, subscription_payment_id, reason) WHERE subscription_payment_id IS NOT NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_points_referral_reason ON loyalty_points(organisation_id, referred_client_id, reason) WHERE referred_client_id IS NOT NULL`);
   await ensureOrderItemQuantitySupportsDecimals();
   await pool.query(`
     ALTER TABLE orders

@@ -10,9 +10,9 @@ assert.equal(computeTier(3000), "platinum");
 assert.equal(computeTier(5000), "diamond");
 
 assert.equal(computeOrderPoints(10_000, 10, null, "bronze"), 10);
-assert.equal(computeOrderPoints(10_000, 10, 0.01, "bronze"), 110);
-assert.equal(computeOrderPoints(10_000, 10, 0.01, "silver"), 121);
-assert.equal(computeOrderPoints(10_000, 10, 0.01, "diamond"), 165);
+assert.equal(computeOrderPoints(10_000, 10, 500, "bronze"), 30);
+assert.equal(computeOrderPoints(10_000, 10, 500, "silver"), 33);
+assert.equal(computeOrderPoints(10_000, 10, 500, "diamond"), 45);
 
 const paymentMessage = NOTIFICATION_TEMPLATES.payment_confirmed("Awa", "Premium", 12_500, "GNF", "XPress");
 assert.match(paymentMessage, /12[^\d]?500 GNF/);

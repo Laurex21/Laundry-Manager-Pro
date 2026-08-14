@@ -736,6 +736,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         orderId: updated.id,
         amount: updated.totalAmount,
       });
+      const site = await storage.getSite(updated.siteId);
+      if (site) {
+        await awardOrderPoints(updated.id, site.organisationId)
+          .catch((error) => console.error("[Loyalty] Order points award failed", error));
+        await awardReferralPoints(updated.id, site.organisationId)
+          .catch((error) => console.error("[Loyalty] Referral points award failed", error));
+      }
     }
     res.json(updated);
   });

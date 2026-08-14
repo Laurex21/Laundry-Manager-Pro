@@ -14,12 +14,26 @@ const auth = readFileSync(join(root, "server/replit_integrations/auth/replitAuth
   "churn_risk_score",
   "total_revenue",
   "avg_deposit_hour",
+  "loyalty_program_enabled",
   "ready_at",
   "delivered_at",
   "cancelled_at",
 ].forEach((column) => {
   assert.match(auth, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`));
 });
+
+assert.match(auth, /CREATE TABLE IF NOT EXISTS loyalty_program/);
+assert.match(auth, /ADD COLUMN IF NOT EXISTS redeemed_points/);
+[
+  "idx_loyalty_points_order_reason",
+  "idx_loyalty_points_renewal_reason",
+  "idx_loyalty_points_referral_reason",
+].forEach((indexName) => assert.match(auth, new RegExp(`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName}`)));
+[
+  "spend_amount_per_point",
+  "reward_points_required",
+  "reward_value",
+].forEach((column) => assert.match(auth, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}|${column} numeric|${column} integer`)));
 
 [
   "idx_clients_last_visit",

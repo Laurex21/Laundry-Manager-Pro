@@ -12,7 +12,7 @@ import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } f
 import { buildMembershipCard } from "./membership-card-generator";
 import { createPendingSubscriptionNotification } from "./subscription-notifications";
 import { usageThresholdCrossed } from "./subscription-formulas";
-import { awardRenewalPoints } from "./loyalty";
+import { awardRenewalPoints, LoyaltyRedemptionError, redeemLoyaltyReward } from "./loyalty";
 import { rateLimit } from "./rate-limit";
 import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 
@@ -216,8 +216,11 @@ export function registerMembershipRoutes(app: Express) {
       organisationId,
       pointsPerOrder: 10,
       pointsPerFcfa: null,
+      spendAmountPerPoint: "500",
       renewalBonus: 50,
       referralBonus: 100,
+      rewardPointsRequired: 100,
+      rewardValue: "500",
       pointExpireDays: null,
       isActive: true,
     });
@@ -226,18 +229,24 @@ export function registerMembershipRoutes(app: Express) {
   app.put("/api/loyalty-program", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req);
     if (!organisationId || !(await requirePlanManager(req, res, organisationId))) return;
-    const input = z.object({
+    const parsed = z.object({
       enabled: z.boolean(),
       pointsPerOrder: z.coerce.number().int().min(0).max(100_000),
-      pointsPerFcfa: z.coerce.number().min(0).max(100).nullish(),
+      spendAmountPerPoint: z.coerce.number().positive().max(1_000_000_000),
       renewalBonus: z.coerce.number().int().min(0).max(100_000),
       referralBonus: z.coerce.number().int().min(0).max(100_000),
+      rewardPointsRequired: z.coerce.number().int().positive().max(1_000_000),
+      rewardValue: z.coerce.number().positive().max(1_000_000_000),
       pointExpireDays: z.coerce.number().int().positive().max(3650).nullish(),
       isActive: z.boolean(),
-    }).parse(req.body);
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid loyalty settings" });
+    const input = parsed.data;
+    const { enabled, ...programInput } = input;
     const values = {
-      ...input,
-      pointsPerFcfa: input.pointsPerFcfa == null ? null : String(input.pointsPerFcfa),
+      ...programInput,
+      spendAmountPerPoint: String(programInput.spendAmountPerPoint),
+      rewardValue: String(programInput.rewardValue),
     };
     const [organisation] = await db.select({ ownerId: organisations.ownerId })
       .from(organisations).where(eq(organisations.id, organisationId)).limit(1);
@@ -245,10 +254,10 @@ export function registerMembershipRoutes(app: Express) {
     const program = await db.transaction(async (tx) => {
       await tx.insert(businessSettings).values({
         userId: organisation.ownerId,
-        loyaltyProgramEnabled: input.enabled,
+        loyaltyProgramEnabled: enabled,
       }).onConflictDoUpdate({
         target: businessSettings.userId,
-        set: { loyaltyProgramEnabled: input.enabled, updatedAt: new Date() },
+        set: { loyaltyProgramEnabled: enabled, updatedAt: new Date() },
       });
       const [saved] = await tx.insert(loyaltyProgram).values({ organisationId, ...values })
         .onConflictDoUpdate({ target: loyaltyProgram.organisationId, set: values })
@@ -256,6 +265,53 @@ export function registerMembershipRoutes(app: Express) {
       return saved;
     });
     res.json(program);
+  });
+
+  app.get("/api/customers/:id/loyalty", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req);
+    const customerId = Number(req.params.id);
+    if (!organisationId || !Number.isInteger(customerId)) return res.status(400).json({ message: "Invalid customer" });
+    const customer = await customerInOrganisation(customerId, organisationId, siteScope(req));
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const [program] = await db.select({ program: loyaltyProgram }).from(loyaltyProgram)
+      .innerJoin(organisations, eq(organisations.id, organisationId))
+      .innerJoin(businessSettings, and(
+        eq(businessSettings.userId, organisations.ownerId),
+        eq(businessSettings.loyaltyProgramEnabled, true),
+      ))
+      .where(and(eq(loyaltyProgram.organisationId, organisationId), eq(loyaltyProgram.isActive, true))).limit(1);
+    res.json({
+      points: customer.loyaltyPoints,
+      tier: customer.loyaltyTier,
+      enabled: Boolean(program),
+      rewardPointsRequired: program?.program.rewardPointsRequired ?? 100,
+      rewardValue: program?.program.rewardValue ?? "500",
+      canRedeem: Boolean(program && customer.loyaltyPoints >= program.program.rewardPointsRequired),
+    });
+  });
+
+  app.post("/api/customers/:id/loyalty/redeem", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req);
+    const customerId = Number(req.params.id);
+    if (!organisationId || !Number.isInteger(customerId)) return res.status(400).json({ message: "Invalid customer" });
+    const customer = await customerInOrganisation(customerId, organisationId, siteScope(req));
+    if (!customer?.siteId) return res.status(404).json({ message: "Customer not found" });
+    if (!(await requirePlanManager(req, res, organisationId))) return;
+    const parsed = z.object({ idempotencyKey: z.string().min(16).max(80) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "A valid redemption request is required" });
+    try {
+      const result = await redeemLoyaltyReward({
+        customerId,
+        organisationId,
+        siteId: customer.siteId,
+        actorUserId: req.userId ?? null,
+        idempotencyKey: parsed.data.idempotencyKey,
+      });
+      res.status(result.idempotentReplay ? 200 : 201).json(result);
+    } catch (error) {
+      if (error instanceof LoyaltyRedemptionError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
   });
 
   app.get("/api/subscriptions/:id/card", isAuthenticated, async (req: any, res) => {
