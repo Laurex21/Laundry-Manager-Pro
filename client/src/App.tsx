@@ -36,7 +36,6 @@ const Employees         = lazy(() => import("@/pages/employees"));
 const Analytics         = lazy(() => import("@/pages/analytics"));
 const Subscriptions     = lazy(() => import("@/pages/subscriptions"));
 const MembershipPlans   = lazy(() => import("@/pages/membership-plans"));
-const SubscriptionDashboard = lazy(() => import("@/pages/subscription-dashboard"));
 const SettingsPage      = lazy(() => import("@/pages/settings"));
 const AcceptInvitation  = lazy(() => import("@/pages/accept-invitation"));
 
@@ -85,6 +84,12 @@ function AccessDenied() {
       </div>
     </div>
   );
+}
+
+function LegacySubscriptionDashboardRoute() {
+  const [, setLocation] = useLocation();
+  useEffect(() => setLocation("/membership-plans?view=revenue"), [setLocation]);
+  return <PageSkeleton />;
 }
 
 function RootRoute() {
@@ -204,7 +209,7 @@ function Router() {
           <ProtectedRoute component={MembershipPlans} page="customers" />
         </Route>
         <Route path="/subscription-dashboard">
-          <ProtectedRoute component={SubscriptionDashboard} page="customers" />
+          <ProtectedRoute component={LegacySubscriptionDashboardRoute} page="customers" />
         </Route>
         <Route path="/settings">
           <ProtectedRoute component={SettingsPage} page="settings" />
