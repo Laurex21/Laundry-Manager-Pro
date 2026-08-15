@@ -565,7 +565,8 @@ export function registerMembershipRoutes(app: Express) {
     const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans, customerName: customers.name, customerPhone: customers.phone }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).innerJoin(customers, eq(customerSubscriptions.customerId, customers.id)).where(and(eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.customerId, customerId), inArray(customerSubscriptions.status, ["active", "suspended", "pending"]))).orderBy(desc(customerSubscriptions.createdAt)).limit(1);
     if (!row) return res.json(null);
     const payments = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.subscriptionId, row.subscription.id))).orderBy(desc(membershipSubscriptionPayments.paymentDate));
-    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments });
+    const availableAdvance = payments.filter((payment) => payment.status === "advance_available").reduce((total, payment) => total + Number(payment.amount), 0);
+    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments, availableAdvance });
   });
 
   app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
@@ -613,15 +614,38 @@ export function registerMembershipRoutes(app: Express) {
     res.json(updated);
   });
 
+  app.post("/api/subscriptions/:id/payments", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
+    if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
+    const input = z.object({ amount: z.coerce.number().positive(), paymentMethod: z.string().min(1), paymentStatus: z.enum(["completed", "pending"]).default("completed"), paymentDate: z.coerce.date().optional(), paymentReference: z.string().max(100).nullish(), notes: z.string().max(500).nullish() }).parse(req.body);
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(subscriptionPlans.organisationId, organisationId))).limit(1).for("update");
+      if (!row) return null;
+      const existingAdvances = await tx.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.status, "advance_available")));
+      const availableAdvance = existingAdvances.reduce((total, payment) => total + Number(payment.amount), 0);
+      const nextCharge = row.subscription.status === "pending" ? Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0) : Number(row.plan.recurringPrice);
+      if (input.paymentStatus === "completed" && input.amount + availableAdvance > nextCharge) return { overpaymentRemaining: nextCharge - availableAdvance };
+      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: input.paymentStatus === "completed" ? "advance_available" : "pending", notes: input.notes || "Advance subscription payment" }).returning();
+      return { payment };
+    });
+    if (!result) return res.status(404).json({ message: "Subscription not found" });
+    if ("overpaymentRemaining" in result) return res.status(400).json({ message: `Advance payment cannot exceed the next subscription charge (${result.overpaymentRemaining} remaining)` });
+    invalidateSubscriptionDashboard(organisationId);
+    res.status(201).json({ payment: result.payment, availableForRenewal: input.paymentStatus === "completed" });
+  });
+
   app.post("/api/subscriptions/:id/renew", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
     const input = z.object({ paymentMethod: z.string().min(1).default("cash"), amount: z.coerce.number().min(0), paymentStatus: z.enum(["completed", "pending"]).default("completed"), paymentDate: z.coerce.date().optional(), paymentReference: z.string().max(100).nullish(), notes: z.string().max(500).nullish() }).parse(req.body ?? {});
     const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1), eq(subscriptionPlans.organisationId, organisationId ?? -1))).limit(1);
     if (!row) return res.status(404).json({ message: "Subscription not found" });
-    const amountDue = row.subscription.status === "pending" ? Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0) : Number(row.plan.recurringPrice);
-    if (input.paymentStatus === "completed" && input.amount < amountDue) return res.status(400).json({ message: `Completed payment must cover the full amount due (${amountDue})` });
-    const fullyPaid = input.paymentStatus === "completed" && input.amount >= amountDue;
+    const totalDue = row.subscription.status === "pending" ? Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0) : Number(row.plan.recurringPrice);
+    const availableAdvances = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.status, "advance_available")));
+    const advanceAmount = availableAdvances.reduce((total, payment) => total + Number(payment.amount), 0);
+    const amountDue = Math.max(0, totalDue - advanceAmount);
+    if (input.paymentStatus === "completed" && input.amount < amountDue) return res.status(400).json({ message: `Completed payment must cover the remaining amount due (${amountDue})` });
+    const fullyPaid = input.paymentStatus === "completed" && input.amount + advanceAmount >= totalDue;
     if (!fullyPaid) {
       const [payment] = await db.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: input.paymentStatus, notes: input.notes || null }).returning();
       invalidateSubscriptionDashboard(organisationId);
@@ -634,6 +658,7 @@ export function registerMembershipRoutes(app: Express) {
       const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
       if (!updated) return null;
       const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "completed", notes: input.notes || null }).returning();
+      if (availableAdvances.length) await tx.update(membershipSubscriptionPayments).set({ status: "advance_applied" }).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId!), eq(membershipSubscriptionPayments.status, "advance_available")));
       return { subscription: updated, payment };
     });
     if (!renewed) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
