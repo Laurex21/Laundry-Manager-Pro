@@ -432,9 +432,19 @@ export function registerMembershipRoutes(app: Express) {
     const order = { ...row.order, orderNumber: siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id };
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
+    const [latestPayment] = await db.select({ status: membershipSubscriptionPayments.status }).from(membershipSubscriptionPayments)
+      .where(and(eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.subscriptionId, row.subscription.id)))
+      .orderBy(desc(membershipSubscriptionPayments.paymentDate), desc(membershipSubscriptionPayments.id)).limit(1);
+    const paymentSummary = {
+      status: row.subscription.status === "active"
+        ? "paid"
+        : latestPayment?.status === "pending"
+          ? "pending"
+          : "unpaid",
+    };
     const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
     const format = z.enum(["a4", "thermal58", "thermal80"]).catch("a4").parse(req.query.format);
-    const data = { ...row, order, items, garments, settings, coverage };
+    const data = { ...row, order, items, garments, settings, coverage, paymentSummary };
     const html = format === "thermal58" ? generateSubscriberThermalReceiptHTML(data, 58) : format === "thermal80" ? generateSubscriberThermalReceiptHTML(data, 80) : generateSubscriberReceiptHTML(data);
     res.type("html").send(html);
   });
