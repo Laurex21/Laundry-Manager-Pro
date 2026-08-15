@@ -18,13 +18,15 @@ import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
+const optionalPositive = z.preprocess((value) => value == null || value === "" || Number(value) === 0 ? null : value, z.coerce.number().positive().nullable().optional());
+const optionalPositiveInt = z.preprocess((value) => value == null || value === "" || Number(value) === 0 ? null : value, z.coerce.number().int().positive().nullable().optional());
 
 const planInput = z.object({
   name: z.string().trim().min(1).max(100), description: z.string().nullish(),
   status: z.enum(statuses).default("active"), billingCycle: z.enum(cycles),
   durationDays: z.coerce.number().int().positive(), recurringPrice: z.coerce.number().positive(),
-  activationFee: z.coerce.number().min(0).optional(), includedWeightKg: z.coerce.number().positive().nullish(),
-  includedPieces: z.coerce.number().int().positive().nullish(), maxOrders: z.coerce.number().int().positive().nullish(),
+  activationFee: z.coerce.number().min(0).optional(), includedWeightKg: optionalPositive,
+  includedPieces: optionalPositiveInt, maxOrders: optionalPositiveInt,
   allowCarryForward: z.boolean().optional(), carryForwardLimit: z.coerce.number().min(0).nullish(),
   overagePricePerKg: z.coerce.number().min(0).nullish(), overagePricePerPiece: z.coerce.number().min(0).nullish(),
   pickupIncluded: z.boolean().optional(), deliveryIncluded: z.boolean().optional(), expressIncluded: z.boolean().optional(),

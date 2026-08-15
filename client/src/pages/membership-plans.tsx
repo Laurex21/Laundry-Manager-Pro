@@ -18,27 +18,43 @@ import { useToast } from "@/hooks/use-toast";
 
 type Plan = Record<string, any> & { id: number; name: string; recurringPrice: string; billingCycle: string; status: string; subscriberCount: number; services: { id: number; name: string }[] };
 const empty = { name: "", description: "", status: "active", billingCycle: "monthly", durationDays: 30, recurringPrice: "", activationFee: "0", includedWeightKg: "", includedPieces: "", maxOrders: "", allowCarryForward: false, carryForwardLimit: "", overagePricePerKg: "", overagePricePerPiece: "", pickupIncluded: false, deliveryIncluded: false, expressIncluded: false, priorityQueue: false, discountPercentage: "0", autoRenew: true, gracePeriodDays: 3, renewalReminderDays: 7, cancellationPolicy: "", serviceIds: [] as number[] };
+const optionalPositiveKeys = ["includedWeightKg", "includedPieces", "maxOrders"] as const;
+const optionalPositiveInput = (value: unknown) => value == null || value === "" || Number(value) === 0 ? "" : value;
+const optionalPositiveNumber = (value: unknown) => value == null || value === "" || Number(value) === 0 ? null : Number(value);
 
 export default function MembershipPlansPage() {
-  const { t } = useTranslation(); const { toast } = useToast(); const [open, setOpen] = useState(false); const [editing, setEditing] = useState<Plan | null>(null); const [form, setForm] = useState<any>(empty);
+  const { t } = useTranslation(); const { toast } = useToast(); const [open, setOpen] = useState(false); const [editing, setEditing] = useState<Plan | null>(null); const [form, setForm] = useState<any>(empty); const [fieldError, setFieldError] = useState<{ field?: string; message: string } | null>(null);
   const { data: plans = [] } = useQuery<Plan[]>({ queryKey: ["/api/subscription-plans"] });
   const { data: services = [] } = useQuery<any[]>({ queryKey: ["/api/services"] });
   function friendlyError(e: Error) {
     try {
       const body = JSON.parse(e.message.replace(/^\d+:\s*/, ""));
-      if (body?.message) return String(body.message);
+      if (body?.message) return { field: body.field ? String(body.field) : undefined, message: String(body.message) };
     } catch { /* ignore */ }
-    return e.message;
+    return { message: e.message };
   }
   const mutation = useMutation({ mutationFn: async () => {
-    const payload = { ...form, recurringPrice: Number(form.recurringPrice), activationFee: Number(form.activationFee || 0), includedWeightKg: form.includedWeightKg === "" ? null : Number(form.includedWeightKg), includedPieces: form.includedPieces === "" ? null : Number(form.includedPieces), maxOrders: form.maxOrders === "" ? null : Number(form.maxOrders), carryForwardLimit: form.carryForwardLimit === "" ? null : Number(form.carryForwardLimit), overagePricePerKg: form.overagePricePerKg === "" ? null : Number(form.overagePricePerKg), overagePricePerPiece: form.overagePricePerPiece === "" ? null : Number(form.overagePricePerPiece) };
+    const payload = { ...form, recurringPrice: Number(form.recurringPrice), activationFee: Number(form.activationFee || 0), includedWeightKg: optionalPositiveNumber(form.includedWeightKg), includedPieces: optionalPositiveNumber(form.includedPieces), maxOrders: optionalPositiveNumber(form.maxOrders), carryForwardLimit: form.carryForwardLimit === "" ? null : Number(form.carryForwardLimit), overagePricePerKg: form.overagePricePerKg === "" ? null : Number(form.overagePricePerKg), overagePricePerPiece: form.overagePricePerPiece === "" ? null : Number(form.overagePricePerPiece) };
     return apiRequest(editing ? "PUT" : "POST", editing ? `/api/subscription-plans/${editing.id}` : "/api/subscription-plans", payload);
-  }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/subscription-plans"] }); setOpen(false); toast({ title: editing ? "Plan updated" : "Plan created" }); }, onError: (e: Error) => toast({ title: "Could not save plan", description: friendlyError(e), variant: "destructive" }) });
+  }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/subscription-plans"] }); setFieldError(null); setOpen(false); toast({ title: editing ? "Plan updated" : "Plan created" }); }, onError: (e: Error) => { const error = friendlyError(e); setFieldError(error); toast({ title: "Could not save plan", description: error.field ? `${error.field}: ${error.message}` : error.message, variant: "destructive" }); } });
   const duplicate = useMutation({ mutationFn: (id: number) => apiRequest("POST", `/api/subscription-plans/${id}/duplicate`), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/subscription-plans"] }) });
   const archive = useMutation({ mutationFn: (id: number) => apiRequest("PATCH", `/api/subscription-plans/${id}/status`, { status: "archived" }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/subscription-plans"] }), onError: (e: Error) => toast({ title: e.message, variant: "destructive" }) });
   const revenue = useMemo(() => plans.filter(p => p.status === "active").reduce((n, p) => n + Number(p.recurringPrice) * Number(p.subscriberCount || 0), 0), [plans]);
-  const edit = (plan?: Plan) => { setEditing(plan ?? null); setForm(plan ? { ...empty, ...plan, serviceIds: plan.services.map(s => s.id) } : empty); setOpen(true); };
-  const field = (key: string, label: string, type = "text", extras: Record<string, any> = {}) => <div className="space-y-1.5"><Label>{label}</Label><Input type={type} value={form[key] ?? ""} onChange={e => setForm({ ...form, [key]: e.target.value })} {...extras} /></div>;
+  const edit = (plan?: Plan) => {
+    setEditing(plan ?? null);
+    setFieldError(null);
+    setForm(plan ? {
+      ...empty,
+      ...plan,
+      ...Object.fromEntries(optionalPositiveKeys.map((key) => [key, optionalPositiveInput(plan[key])])),
+      serviceIds: plan.services.map(s => s.id),
+    } : empty);
+    setOpen(true);
+  };
+  const field = (key: string, label: string, type = "text", extras: Record<string, any> = {}) => {
+    const invalid = fieldError?.field === key;
+    return <div className="space-y-1.5"><Label htmlFor={`plan-${key}`}>{label}</Label><Input id={`plan-${key}`} type={type} value={form[key] ?? ""} aria-invalid={invalid || undefined} aria-describedby={invalid ? `plan-${key}-error` : undefined} onChange={e => { setForm({ ...form, [key]: e.target.value }); if (invalid) setFieldError(null); }} {...extras} />{invalid && <p id={`plan-${key}-error`} role="alert" className="text-xs text-destructive">{fieldError.message}</p>}</div>;
+  };
   const toggle = (key: string, label: string) => <div className="flex items-center justify-between rounded-lg border p-3"><Label>{label}</Label><Switch checked={!!form[key]} onCheckedChange={v => setForm({ ...form, [key]: v })} /></div>;
   return <div className="space-y-6 page-fade-in">
     <div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold">{t("subscription_plans")}</h1><p className="text-sm text-muted-foreground">Configurez les offres membres de votre organisation.</p></div><Button onClick={() => edit()}><Plus className="mr-2 h-4 w-4" />{t("new_plan")}</Button></div>
