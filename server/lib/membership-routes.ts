@@ -571,22 +571,32 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId, siteScope(req)))) return res.status(404).json({ message: "Customer not found" });
-    const input = z.object({ subscriptionPlanId: z.coerce.number().int().positive(), startDate: z.string().date(), notes: z.string().nullish(), paymentMethod: z.string().optional(), activationFeeAmount: z.coerce.number().min(0).optional() }).parse(req.body);
+    const input = z.object({
+      subscriptionPlanId: z.coerce.number().int().positive(),
+      startDate: z.string().date(),
+      notes: z.string().nullish(),
+      paymentMethod: z.string().min(1).default("cash"),
+      paymentAmount: z.coerce.number().min(0),
+      paymentStatus: z.enum(["completed", "pending"]).default("completed"),
+      paymentDate: z.coerce.date().optional(),
+      paymentReference: z.string().max(100).nullish(),
+    }).parse(req.body);
     const [plan] = await db.select().from(subscriptionPlans).where(and(eq(subscriptionPlans.id, input.subscriptionPlanId), eq(subscriptionPlans.organisationId, organisationId), eq(subscriptionPlans.status, "active"), isNull(subscriptionPlans.deletedAt))).limit(1);
     if (!plan) return res.status(400).json({ message: "Invalid subscription plan" });
     const membershipNumber = `XP-${organisationId}-${Date.now()}`; const expiryDate = addDays(input.startDate, plan.durationDays);
+    const amountDue = Number(plan.recurringPrice) + Number(plan.activationFee ?? 0);
+    if (input.paymentStatus === "completed" && input.paymentAmount < amountDue) return res.status(400).json({ message: `Completed payment must cover the full amount due (${amountDue})` });
+    const fullyPaid = input.paymentStatus === "completed" && input.paymentAmount >= amountDue;
     const subscription = await db.transaction(async (tx) => {
-      const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes }).returning();
-      const fee = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
-      if (fee > 0) await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(fee), paymentMethod: input.paymentMethod ?? "cash", status: "completed" });
+      const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes, status: fullyPaid ? "active" : "pending" }).returning();
+      await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(input.paymentAmount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: input.paymentStatus, notes: input.notes || null });
       await tx.insert(membershipCards).values({ customerSubscriptionId: created.id, cardNumber: membershipNumber, barcode: membershipNumber, expiryDate });
       return created;
     });
     await createPendingSubscriptionNotification(subscription.id, organisationId, "welcome").catch((error) => console.error("[Subscriptions] Welcome notification failed", error));
     await createPendingSubscriptionNotification(subscription.id, organisationId, "card_ready").catch((error) => console.error("[Subscriptions] Card notification failed", error));
-    const activationAmount = input.activationFeeAmount ?? Number(plan.activationFee ?? 0);
-    if (activationAmount > 0) {
-      await createPendingSubscriptionNotification(subscription.id, organisationId, "payment_confirmed", { amount: activationAmount }).catch((error) => console.error("[Subscriptions] Payment notification failed", error));
+    if (fullyPaid && input.paymentAmount > 0) {
+      await createPendingSubscriptionNotification(subscription.id, organisationId, "payment_confirmed", { amount: input.paymentAmount }).catch((error) => console.error("[Subscriptions] Payment notification failed", error));
     }
     invalidateSubscriptionDashboard(organisationId);
     res.status(201).json(subscription);
@@ -595,6 +605,8 @@ export function registerMembershipRoutes(app: Express) {
   app.patch("/api/subscriptions/:id/status", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id); const { status } = z.object({ status: z.enum(["suspended", "cancelled", "active"]) }).parse(req.body);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
+    const [current] = await db.select({ status: customerSubscriptions.status }).from(customerSubscriptions).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1))).limit(1);
+    if (status === "active" && current?.status === "pending") return res.status(409).json({ message: "Complete the subscription payment before activation" });
     const [updated] = await db.update(customerSubscriptions).set({ status, cancelledAt: status === "cancelled" ? new Date() : null, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1))).returning();
     if (!updated) return res.status(404).json({ message: "Subscription not found" });
     invalidateSubscriptionDashboard(organisationId);
@@ -604,15 +616,24 @@ export function registerMembershipRoutes(app: Express) {
   app.post("/api/subscriptions/:id/renew", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
-    const input = z.object({ paymentMethod: z.string().optional(), amount: z.coerce.number().positive().optional() }).parse(req.body ?? {});
+    const input = z.object({ paymentMethod: z.string().min(1).default("cash"), amount: z.coerce.number().min(0), paymentStatus: z.enum(["completed", "pending"]).default("completed"), paymentDate: z.coerce.date().optional(), paymentReference: z.string().max(100).nullish(), notes: z.string().max(500).nullish() }).parse(req.body ?? {});
     const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1), eq(subscriptionPlans.organisationId, organisationId ?? -1))).limit(1);
     if (!row) return res.status(404).json({ message: "Subscription not found" });
-    const expiryDate = addDays(new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date(), row.plan.durationDays);
+    const amountDue = row.subscription.status === "pending" ? Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0) : Number(row.plan.recurringPrice);
+    if (input.paymentStatus === "completed" && input.amount < amountDue) return res.status(400).json({ message: `Completed payment must cover the full amount due (${amountDue})` });
+    const fullyPaid = input.paymentStatus === "completed" && input.amount >= amountDue;
+    if (!fullyPaid) {
+      const [payment] = await db.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: input.paymentStatus, notes: input.notes || null }).returning();
+      invalidateSubscriptionDashboard(organisationId);
+      return res.json({ subscription: row.subscription, payment, renewed: false, amountDue });
+    }
+    const renewalBase = row.subscription.status === "pending" ? new Date() : (new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date());
+    const expiryDate = addDays(renewalBase, row.plan.durationDays);
     const renewed = await db.transaction(async (tx) => {
       const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
       const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
       if (!updated) return null;
-      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount ?? Number(row.plan.recurringPrice)), paymentMethod: input.paymentMethod ?? "cash", status: "completed" }).returning();
+      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "completed", notes: input.notes || null }).returning();
       return { subscription: updated, payment };
     });
     if (!renewed) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
@@ -620,7 +641,7 @@ export function registerMembershipRoutes(app: Express) {
     await awardRenewalPoints(renewed.payment.id, row.subscription.customerId, organisationId)
       .catch((error) => console.error("[Loyalty] Renewal points award failed", error));
     invalidateSubscriptionDashboard(organisationId);
-    res.json(renewed.subscription);
+    res.json({ subscription: renewed.subscription, payment: renewed.payment, renewed: true, amountDue });
   });
 
   app.get("/api/subscriptions/:id/history", isAuthenticated, async (req: any, res) => {
