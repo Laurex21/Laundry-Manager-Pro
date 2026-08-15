@@ -468,6 +468,12 @@ export function getDemoFixture(url: string, selectedSiteId: number | null = null
         { clientId: 3, clientName: "Jean Fotso", planName: "Premium", balance: 30000 },
         { clientId: 4, clientName: "Marie Ngo", planName: "Essentiel", balance: 15000 },
       ],
+      subscribers: [
+        { subscriptionId: 1, clientId: 1, clientName: "Amina Njoya", membershipNumber: "XP-2026-001", planName: "Premium", status: "active", expiryDate: "2026-08-31", utilizationPct: 82, subscriptionCost: 30000, amountPaid: 30000, paymentDue: 0 },
+        { subscriptionId: 2, clientId: 2, clientName: "Paul Mbarga", membershipNumber: "XP-2026-002", planName: "Essentiel", status: "active", expiryDate: "2026-09-05", utilizationPct: 64, subscriptionCost: 15000, amountPaid: 15000, paymentDue: 0 },
+        { subscriptionId: 3, clientId: 3, clientName: "Jean Fotso", membershipNumber: "XP-2026-003", planName: "Premium", status: "pending", expiryDate: "2026-09-14", utilizationPct: 0, subscriptionCost: 30000, amountPaid: 10000, paymentDue: 20000 },
+        { subscriptionId: 4, clientId: 4, clientName: "Marie Ngo", membershipNumber: "XP-2026-004", planName: "Essentiel", status: "expired", expiryDate: "2026-08-10", utilizationPct: 100, subscriptionCost: 15000, amountPaid: 0, paymentDue: 15000 },
+      ],
       mrrTrend: [
         { month: "mai", mrr: 142000 },
         { month: "juin", mrr: 163000 },

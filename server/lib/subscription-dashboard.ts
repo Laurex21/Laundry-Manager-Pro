@@ -9,7 +9,7 @@ import {
   subscriptionPlans, subscriptionTransactions,
 } from "@shared/schema";
 import { monthlyEquivalent, percentage, type MembershipBillingCycle } from "./subscription-formulas";
-import { individualUtilizationPct, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
+import { currentCycleFinancials, individualUtilizationPct, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
 import { rateLimit } from "./rate-limit";
 
 const periodSchema = z.enum(["month", "quarter", "year"]);
@@ -119,6 +119,11 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
   const spendBySubscription = new Map<number, number>();
   for (const payment of receivedPayments) spendBySubscription.set(payment.subscriptionId, (spendBySubscription.get(payment.subscriptionId) ?? 0) + Number(payment.amount));
   const utilizationById = new Map(active.map((row) => [row.subscription.id, individualUtilizationPct(row.subscription, row.plan)]));
+  const receivedBySubscription = new Map<number, number>();
+  for (const payment of receivedPayments) {
+    receivedBySubscription.set(payment.subscriptionId, (receivedBySubscription.get(payment.subscriptionId) ?? 0) + Number(payment.amount));
+  }
+  const renewedSubscriptionIds = new Set(payments.filter((payment) => payment.status === "renewal_completed").map((payment) => payment.subscriptionId));
 
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11 + index, 1));
@@ -159,10 +164,30 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
     return { clientId: row.client.id, clientName: row.client.name, planName: row.plan.name, balance: Number(Math.max(0, due - received).toFixed(2)) };
   }).filter((row) => row.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 10);
 
+  const subscribers = all
+    .filter((row) => row.subscription.status !== "cancelled")
+    .map((row) => {
+      const hasCompletedRenewal = renewedSubscriptionIds.has(row.subscription.id);
+      const financials = currentCycleFinancials(row.subscription, row.plan, receivedBySubscription.get(row.subscription.id) ?? 0, hasCompletedRenewal);
+      return {
+        subscriptionId: row.subscription.id,
+        clientId: row.client.id,
+        clientName: row.client.name,
+        membershipNumber: row.subscription.membershipNumber,
+        planName: row.plan.name,
+        status: row.subscription.status,
+        expiryDate: row.subscription.expiryDate,
+        utilizationPct: Number(individualUtilizationPct(row.subscription, row.plan).toFixed(2)),
+        ...financials,
+      };
+    })
+    .sort((a, b) => b.paymentDue - a.paymentDue || b.utilizationPct - a.utilizationPct || a.clientName.localeCompare(b.clientName));
+
   return {
     mrr: Number(mrr.toFixed(2)), arr: Number((mrr * 12).toFixed(2)), activeSubscribers: active.length,
     collectedRevenueThisPeriod: Number(collectedRevenueThisPeriod.toFixed(2)), outstandingBalance: Number(outstandingBalance.toFixed(2)), advanceCredit: Number(advanceCredit.toFixed(2)), pendingSubscribers: pendingSubscriptions.length,
     pendingSubscriberList,
+    subscribers,
     newSubscribersThisPeriod: all.filter((row) => inRange(row.subscription.startDate, periodStart, now)).length,
     renewalsThisPeriod, renewalRate: Number(percentage(renewalsThisPeriod, expiredThisPeriod).toFixed(2)),
     expiringSoon: expiringSoonRows.length, cancelledThisPeriod,

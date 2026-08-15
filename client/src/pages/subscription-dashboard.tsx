@@ -20,6 +20,7 @@ type DashboardData = {
   topSubscribers: Array<{ clientId: number; clientName: string; planName: string; totalSpend: number; utilizationPct: number }>;
   expiringSoonList: Array<{ clientId: number; clientName: string; planName: string; daysUntilExpiry: number; whatsappUrl: string }>;
   pendingSubscriberList: Array<{ clientId: number; clientName: string; planName: string; balance: number }>;
+  subscribers: Array<{ subscriptionId: number; clientId: number; clientName: string; membershipNumber: string; planName: string; status: string; expiryDate: string; utilizationPct: number; subscriptionCost: number; amountPaid: number; paymentDue: number }>;
   mrrTrend: Array<{ month: string; mrr: number }>;
   subscriptionGrowth: Array<{ month: string; new: number; cancelled: number; net: number }>;
   planDistribution: Array<{ planName: string; count: number; pct: number }>;
@@ -98,9 +99,47 @@ export default function SubscriptionDashboardPage() {
       <Card><CardHeader><CardTitle className="text-sm">{t("revenue_by_plan")}</CardTitle></CardHeader><CardContent className="space-y-4">{(data?.revenueByPlan ?? []).map((plan, i) => <div key={plan.planId}><div className="mb-1 flex justify-between gap-3 text-xs"><span className="font-medium">{plan.planName}</span><span className="text-muted-foreground">{money(plan.monthlyRevenue)} · {plan.subscriberCount}</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full" style={{ width: `${Math.min(100, plan.pctOfTotal)}%`, backgroundColor: PLAN_COLORS[i % PLAN_COLORS.length] }} /></div></div>)}</CardContent></Card>
     </section>
 
+    <SubscriberOverview subscribers={data?.subscribers ?? []} money={money} />
+
     <Card><CardHeader><CardTitle className="text-sm">{t("top_subscribers")}</CardTitle></CardHeader><CardContent><ol className="space-y-2">{(data?.topSubscribers ?? []).map((subscriber, i) => <li key={`${subscriber.clientId}-${subscriber.planName}`} className="flex items-center gap-3 border-b py-2 last:border-0"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span><div className="min-w-0 flex-1"><Link href={`/customers/${subscriber.clientId}`} className="block truncate text-sm font-medium underline-offset-4 hover:underline">{subscriber.clientName}</Link><p className="text-xs text-muted-foreground">{subscriber.planName}</p></div><div className="text-right"><p className="text-sm font-bold text-primary">{money(subscriber.totalSpend)}</p><p className="text-xs text-muted-foreground">{subscriber.utilizationPct.toFixed(0)}% {t("utilization")}</p></div></li>)}</ol></CardContent></Card>
     <NotificationCenter />
   </main>;
+}
+
+function SubscriberOverview({ subscribers, money }: { subscribers: DashboardData["subscribers"]; money: (value: number) => string }) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLocaleLowerCase();
+  const visible = normalized
+    ? subscribers.filter((item) => `${item.clientName} ${item.planName} ${item.membershipNumber}`.toLocaleLowerCase().includes(normalized))
+    : subscribers;
+
+  const usage = (subscriber: DashboardData["subscribers"][number]) => <div className="min-w-36">
+    <div className="mb-1 flex items-center justify-between gap-2 text-xs"><span>{t("usage_level")}</span><strong className="tabular-nums">{subscriber.utilizationPct.toFixed(0)}%</strong></div>
+    <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={`${subscriber.clientName}: ${t("usage_level")}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(100, subscriber.utilizationPct))}>
+      <div className={`h-full rounded-full ${subscriber.utilizationPct >= 90 ? "bg-red-600" : subscriber.utilizationPct >= 75 ? "bg-amber-500" : "bg-emerald-600"}`} style={{ width: `${Math.min(100, subscriber.utilizationPct)}%` }} />
+    </div>
+  </div>;
+
+  return <section aria-labelledby="subscriber-overview-title">
+    <Card>
+      <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div><CardTitle id="subscriber-overview-title" className="text-base">{t("subscriber_overview")}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{t("subscriber_overview_help")}</p></div>
+        <label className="block w-full sm:w-72"><span className="sr-only">{t("search_subscribers")}</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("search_subscribers")} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" /></label>
+      </CardHeader>
+      <CardContent>
+        {visible.length === 0 ? <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{t("no_subscribers_found")}</p> : <>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead><tr className="border-b text-xs text-muted-foreground"><th scope="col" className="pb-3 pr-4 font-medium">{t("customer")}</th><th scope="col" className="px-4 pb-3 font-medium">{t("subscription_plan")}</th><th scope="col" className="px-4 pb-3 font-medium">{t("usage_level")}</th><th scope="col" className="px-4 pb-3 text-right font-medium">{t("subscription_cost")}</th><th scope="col" className="px-4 pb-3 text-right font-medium">{t("amount_paid")}</th><th scope="col" className="px-4 pb-3 text-right font-medium">{t("payment_due")}</th><th scope="col" className="pb-3 pl-4 text-right font-medium"><span className="sr-only">{t("actions")}</span></th></tr></thead>
+              <tbody>{visible.map(subscriber => <tr key={subscriber.subscriptionId} className="border-b last:border-0"><td className="py-4 pr-4"><Link href={`/customers/${subscriber.clientId}`} className="font-semibold underline-offset-4 hover:underline focus-visible:underline">{subscriber.clientName}</Link><p className="mt-1 text-xs text-muted-foreground">{subscriber.membershipNumber}</p></td><td className="px-4 py-4"><p className="font-medium">{subscriber.planName}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{t(`membership_status_${subscriber.status}`, subscriber.status)}</p></td><td className="px-4 py-4">{usage(subscriber)}</td><td className="px-4 py-4 text-right font-medium tabular-nums">{money(subscriber.subscriptionCost)}</td><td className="px-4 py-4 text-right font-medium tabular-nums text-emerald-700 dark:text-emerald-400">{money(subscriber.amountPaid)}</td><td className={`px-4 py-4 text-right font-bold tabular-nums ${subscriber.paymentDue > 0 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>{money(subscriber.paymentDue)}</td><td className="py-4 pl-4 text-right"><Button variant="outline" size="sm" asChild><Link href={`/customers/${subscriber.clientId}`}>{t("view")}</Link></Button></td></tr>)}</tbody>
+            </table>
+          </div>
+          <ul className="space-y-3 md:hidden">{visible.map(subscriber => <li key={subscriber.subscriptionId} className="rounded-xl border p-4"><div className="mb-4 flex items-start justify-between gap-3"><div><Link href={`/customers/${subscriber.clientId}`} className="font-semibold underline-offset-4 hover:underline">{subscriber.clientName}</Link><p className="text-xs text-muted-foreground">{subscriber.planName} · {subscriber.membershipNumber}</p></div><span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium capitalize">{t(`membership_status_${subscriber.status}`, subscriber.status)}</span></div>{usage(subscriber)}<dl className="mt-4 grid grid-cols-3 gap-2 border-t pt-4 text-xs"><div><dt className="text-muted-foreground">{t("subscription_cost")}</dt><dd className="mt-1 font-semibold tabular-nums">{money(subscriber.subscriptionCost)}</dd></div><div><dt className="text-muted-foreground">{t("amount_paid")}</dt><dd className="mt-1 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{money(subscriber.amountPaid)}</dd></div><div><dt className="text-muted-foreground">{t("payment_due")}</dt><dd className={`mt-1 font-bold tabular-nums ${subscriber.paymentDue > 0 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>{money(subscriber.paymentDue)}</dd></div></dl><Button variant="outline" className="mt-4 w-full" asChild><Link href={`/customers/${subscriber.clientId}`}>{t("view_membership")}</Link></Button></li>)}</ul>
+        </>}
+      </CardContent>
+    </Card>
+  </section>;
 }
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
