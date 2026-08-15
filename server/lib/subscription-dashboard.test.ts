@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { monthlyEquivalent, percentage, subscriptionExpiryState, usageThresholdCrossed } from "./subscription-formulas";
+import { individualUtilizationPct, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
 import { NOTIFICATION_TEMPLATES } from "./subscription-notification-templates";
 import { getDemoFixture } from "../../client/src/lib/demo-data";
 
@@ -13,6 +14,13 @@ assert.equal(monthlyEquivalent(300, "quarterly"), 100);
 assert.equal(monthlyEquivalent(1200, "annual"), 100);
 assert.equal(percentage(3, 12), 25);
 assert.equal(percentage(1, 0), 0);
+assert.equal(isReceivedSubscriptionPayment("completed"), true);
+assert.equal(isReceivedSubscriptionPayment("renewal_completed"), true);
+assert.equal(isReceivedSubscriptionPayment("advance_available"), true);
+assert.equal(isReceivedSubscriptionPayment("advance_applied"), true);
+assert.equal(isReceivedSubscriptionPayment("pending"), false);
+assert.equal(individualUtilizationPct({ totalConsumedPieces: 7 } as any, { includedWeightKg: null, includedPieces: 10 } as any), 70);
+assert.equal(individualUtilizationPct({ totalOrdersUsed: 2 } as any, { includedWeightKg: null, includedPieces: null, maxOrders: 8 } as any), 25);
 assert.equal(usageThresholdCrossed(30, 19, 100), "usage_80");
 assert.equal(usageThresholdCrossed(19, 0, 100), "usage_100");
 assert.equal(usageThresholdCrossed(10, 5, 100), null);
@@ -32,10 +40,15 @@ const demoDashboard = getDemoFixture("/api/subscriptions/dashboard?period=month"
 assert.equal(typeof demoDashboard, "object");
 assert.ok(!Array.isArray(demoDashboard));
 assert.ok(Array.isArray(demoDashboard.expiringSoonList));
+assert.ok(Array.isArray(demoDashboard.pendingSubscriberList));
+assert.equal(typeof demoDashboard.collectedRevenueThisPeriod, "number");
 assert.ok(Array.isArray(demoDashboard.topSubscribers));
 
 const dashboardSource = readFileSync(join(root, "server/lib/subscription-dashboard.ts"), "utf8");
 assert.match(dashboardSource, /toISOString\(\)\.slice\(0, 7\)/);
+assert.match(dashboardSource, /\["pending", "suspended"\]\.includes\(row\.subscription\.status\)/, "historical MRR must exclude non-revenue statuses");
+assert.match(dashboardSource, /individualUtilizationPct\(row\.subscription, row\.plan\)/, "top subscribers must use individual utilization");
+assert.match(dashboardSource, /collectedRevenueThisPeriod/, "dashboard must separate collected cash from contracted MRR");
 assert.doesNotMatch(dashboardSource, /toLocaleDateString\("fr-FR"/);
 assert.ok(Array.isArray(demoDashboard.revenueByPlan));
 assert.ok(Array.isArray(demoDashboard.mrrTrend));

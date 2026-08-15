@@ -448,6 +448,10 @@ export function getDemoFixture(url: string, selectedSiteId: number | null = null
       cancelledThisPeriod: 1,
       churnRate: 5.3,
       avgRevenuePerSubscriber: 10278,
+      collectedRevenueThisPeriod: 210000,
+      outstandingBalance: 45000,
+      advanceCredit: 10000,
+      pendingSubscribers: 2,
       revenueByPlan: [
         { planId: 1, planName: "Premium", subscriberCount: 10, monthlyRevenue: 125000, pctOfTotal: 67.6 },
         { planId: 2, planName: "Essentiel", subscriberCount: 8, monthlyRevenue: 60000, pctOfTotal: 32.4 },
@@ -459,6 +463,10 @@ export function getDemoFixture(url: string, selectedSiteId: number | null = null
       expiringSoonList: [
         { clientId: 1, clientName: "Amina Njoya", planName: "Premium", daysUntilExpiry: 3, whatsappUrl: "https://wa.me/237655012345" },
         { clientId: 2, clientName: "Paul Mbarga", planName: "Essentiel", daysUntilExpiry: 6, whatsappUrl: "https://wa.me/237655012346" },
+      ],
+      pendingSubscriberList: [
+        { clientId: 3, clientName: "Jean Fotso", planName: "Premium", balance: 30000 },
+        { clientId: 4, clientName: "Marie Ngo", planName: "Essentiel", balance: 15000 },
       ],
       mrrTrend: [
         { month: "mai", mrr: 142000 },

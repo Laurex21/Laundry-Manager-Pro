@@ -9,6 +9,7 @@ import {
   subscriptionPlans, subscriptionTransactions,
 } from "@shared/schema";
 import { monthlyEquivalent, percentage, type MembershipBillingCycle } from "./subscription-formulas";
+import { individualUtilizationPct, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
 import { rateLimit } from "./rate-limit";
 
 const periodSchema = z.enum(["month", "quarter", "year"]);
@@ -78,9 +79,20 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
     return expiry >= now && expiry <= new Date(now.getTime() + 7 * 86_400_000);
   });
   const expiredThisPeriod = all.filter((row) => inRange(row.subscription.expiryDate, periodStart, now)).length;
-  const paymentCounts = new Map<number, number>();
-  for (const payment of payments) paymentCounts.set(payment.subscriptionId, (paymentCounts.get(payment.subscriptionId) ?? 0) + 1);
-  const renewalsThisPeriod = payments.filter((payment) => inRange(payment.paymentDate, periodStart, now) && (paymentCounts.get(payment.subscriptionId) ?? 0) > 1).length;
+  const receivedPayments = payments.filter((payment) => isReceivedSubscriptionPayment(payment.status));
+  const completedBySubscription = new Map<number, typeof receivedPayments>();
+  for (const payment of receivedPayments.filter((item) => item.status === "completed" || item.status === "renewal_completed")) {
+    const rows = completedBySubscription.get(payment.subscriptionId) ?? [];
+    rows.push(payment); completedBySubscription.set(payment.subscriptionId, rows);
+  }
+  for (const rows of completedBySubscription.values()) rows.sort((a, b) => new Date(a.paymentDate ?? 0).getTime() - new Date(b.paymentDate ?? 0).getTime());
+  const renewalPayments = receivedPayments.filter((payment) => {
+    if (payment.status === "renewal_completed") return true;
+    if (payment.status !== "completed") return false;
+    const rows = completedBySubscription.get(payment.subscriptionId) ?? [];
+    return rows.findIndex((row) => row.id === payment.id) > 0;
+  });
+  const renewalsThisPeriod = renewalPayments.filter((payment) => inRange(payment.paymentDate, periodStart, now)).length;
 
   const revenueByPlan = [...planRevenue.values()].map((plan) => ({
     ...plan,
@@ -105,22 +117,25 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
   const avgPlanUtilization = utilizationByPlan.length
     ? utilizationByPlan.reduce((sum, plan) => sum + plan.avgUtilizationPct, 0) / utilizationByPlan.length : 0;
   const spendBySubscription = new Map<number, number>();
-  for (const payment of payments.filter((item) => item.status === "completed")) spendBySubscription.set(payment.subscriptionId, (spendBySubscription.get(payment.subscriptionId) ?? 0) + Number(payment.amount));
-  const utilizationById = new Map(active.map((row) => {
-    const plan = utilizationByPlan.find((item) => item.planId === row.plan.id);
-    return [row.subscription.id, plan?.avgUtilizationPct ?? 0];
-  }));
+  for (const payment of receivedPayments) spendBySubscription.set(payment.subscriptionId, (spendBySubscription.get(payment.subscriptionId) ?? 0) + Number(payment.amount));
+  const utilizationById = new Map(active.map((row) => [row.subscription.id, individualUtilizationPct(row.subscription, row.plan)]));
 
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11 + index, 1));
     const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59));
     const label = date.toISOString().slice(0, 7);
-    const monthRows = all.filter((row) => asDate(row.subscription.startDate)! <= end && (!row.subscription.cancelledAt || asDate(row.subscription.cancelledAt)! > end));
+    const monthRows = all.filter((row) => {
+      if (["pending", "suspended"].includes(row.subscription.status)) return false;
+      const started = asDate(row.subscription.startDate)!;
+      const expiry = asDate(row.subscription.expiryDate);
+      const cancelled = asDate(row.subscription.cancelledAt);
+      return started <= end && (!expiry || expiry >= date) && (!cancelled || cancelled > end);
+    });
     const monthMrr = monthRows.reduce((sum, row) => sum + monthlyEquivalent(Number(row.plan.recurringPrice), row.plan.billingCycle as MembershipBillingCycle), 0);
     const created = all.filter((row) => inRange(row.subscription.startDate, date, end)).length;
     const cancelled = all.filter((row) => inRange(row.subscription.cancelledAt, date, end)).length;
     const expired = all.filter((row) => inRange(row.subscription.expiryDate, date, end)).length;
-    const renewed = payments.filter((payment) => inRange(payment.paymentDate, date, end) && (paymentCounts.get(payment.subscriptionId) ?? 0) > 1).length;
+    const renewed = renewalPayments.filter((payment) => inRange(payment.paymentDate, date, end)).length;
     return { month: label, mrr: Number(monthMrr.toFixed(2)), new: created, cancelled, net: created - cancelled, renewalRate: Number(percentage(renewed, expired).toFixed(2)) };
   });
   const weeks = Array.from({ length: 8 }, (_, index) => {
@@ -130,8 +145,24 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
     return { week: dateOnly(start), kgConsumed: scoped.reduce((sum, row) => sum + Number(row.kg_consumed ?? row.kgConsumed ?? 0), 0), piecesConsumed: scoped.reduce((sum, row) => sum + Number(row.pieces_consumed ?? row.piecesConsumed ?? 0), 0) };
   });
 
+  const collectedRevenueThisPeriod = receivedPayments.filter((payment) => inRange(payment.paymentDate, periodStart, now)).reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const advanceCredit = payments.filter((payment) => payment.status === "advance_available").reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const pendingSubscriptions = all.filter((row) => row.subscription.status === "pending");
+  const outstandingBalance = pendingSubscriptions.reduce((sum, row) => {
+    const due = Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0);
+    const received = receivedPayments.filter((payment) => payment.subscriptionId === row.subscription.id).reduce((subtotal, payment) => subtotal + Number(payment.amount), 0);
+    return sum + Math.max(0, due - received);
+  }, 0);
+  const pendingSubscriberList = pendingSubscriptions.map((row) => {
+    const due = Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0);
+    const received = receivedPayments.filter((payment) => payment.subscriptionId === row.subscription.id).reduce((subtotal, payment) => subtotal + Number(payment.amount), 0);
+    return { clientId: row.client.id, clientName: row.client.name, planName: row.plan.name, balance: Number(Math.max(0, due - received).toFixed(2)) };
+  }).filter((row) => row.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 10);
+
   return {
     mrr: Number(mrr.toFixed(2)), arr: Number((mrr * 12).toFixed(2)), activeSubscribers: active.length,
+    collectedRevenueThisPeriod: Number(collectedRevenueThisPeriod.toFixed(2)), outstandingBalance: Number(outstandingBalance.toFixed(2)), advanceCredit: Number(advanceCredit.toFixed(2)), pendingSubscribers: pendingSubscriptions.length,
+    pendingSubscriberList,
     newSubscribersThisPeriod: all.filter((row) => inRange(row.subscription.startDate, periodStart, now)).length,
     renewalsThisPeriod, renewalRate: Number(percentage(renewalsThisPeriod, expiredThisPeriod).toFixed(2)),
     expiringSoon: expiringSoonRows.length, cancelledThisPeriod,
