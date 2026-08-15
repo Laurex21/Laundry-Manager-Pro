@@ -3,10 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Bell, Clock, DollarSign, Download, Percent, RefreshCw, TrendingDown, UserPlus, Users, XCircle } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -37,6 +38,9 @@ async function fetchDashboard(period: Period): Promise<DashboardData> {
 export default function SubscriptionDashboardPage() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
+  const [, navigate] = useLocation();
+  const viewParam = new URLSearchParams(useSearch()).get("view");
+  const view = viewParam === "subscribers" ? "subscribers" : "revenue";
   const [period, setPeriod] = useState<Period>("month");
   const { data, isLoading, error } = useQuery({
     queryKey: ["subscription-dashboard", period],
@@ -67,6 +71,13 @@ export default function SubscriptionDashboardPage() {
     [t("expiring_soon"), String(data?.expiringSoon ?? 0), Clock],
   ] as const;
 
+  const viewTabs = <Tabs value={view} onValueChange={(value) => navigate(value === "plans" ? "/membership-plans" : `/subscription-dashboard?view=${value}`)}><TabsList aria-label="Subscription management views"><TabsTrigger value="plans">Plans</TabsTrigger><TabsTrigger value="subscribers">Subscribers</TabsTrigger><TabsTrigger value="revenue">Revenue</TabsTrigger></TabsList></Tabs>;
+
+  if (view === "subscribers") return <main className="mx-auto max-w-7xl space-y-6 page-fade-in">
+    <header className="space-y-4"><div><h1 className="text-2xl font-bold">Subscribers</h1><p className="text-sm text-muted-foreground">Customer plans, usage and current-cycle payment position · Updated {lastUpdated}</p></div>{viewTabs}</header>
+    <SubscriberOverview subscribers={data?.subscribers ?? []} money={money} />
+  </main>;
+
   return <main className="mx-auto max-w-7xl space-y-6 page-fade-in">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-2xl font-bold">{t("subscription_dashboard")}</h1><p className="text-sm text-muted-foreground">{t("subscription_dashboard_subtitle")} · Updated {lastUpdated}</p></div>
@@ -77,6 +88,8 @@ export default function SubscriptionDashboardPage() {
         <Button variant="outline" asChild><a href={`/api/subscriptions/dashboard/export?format=csv&period=${period}`} download><Download className="mr-2 h-4 w-4" aria-hidden="true" />CSV</a></Button>
       </div>
     </header>
+
+    {viewTabs}
 
     {(((data?.pendingSubscriberList?.length ?? 0) > 0) || ((data?.expiringSoonList?.length ?? 0) > 0)) && <section aria-labelledby="attention-title" className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-slate-950 dark:border-amber-800 dark:bg-amber-950 dark:text-slate-50"><h2 id="attention-title" className="mb-4 flex items-center gap-2 text-base font-semibold"><Bell className="h-4 w-4" aria-hidden="true" />Attention required</h2><div className="grid gap-4 lg:grid-cols-2">{(data?.pendingSubscriberList?.length ?? 0) > 0 && <div><h3 className="mb-2 text-sm font-medium">Pending subscription payments ({data?.pendingSubscribers})</h3><ul className="space-y-2">{(data?.pendingSubscriberList ?? []).slice(0, 5).map(item=><li key={item.clientId} className="flex items-center justify-between rounded-lg bg-white/70 px-3 py-2 dark:bg-black/20"><div><Link href={`/customers/${item.clientId}`} className="text-sm font-medium underline-offset-4 hover:underline">{item.clientName}</Link><p className="text-xs opacity-70">{item.planName}</p></div><b className="text-sm">{money(item.balance)}</b></li>)}</ul></div>}{(data?.expiringSoonList?.length ?? 0) > 0 && <div><h3 className="mb-2 text-sm font-medium">{t("expiring_soon")} ({data?.expiringSoon})</h3><ul className="space-y-2">{(data?.expiringSoonList ?? []).slice(0,5).map(item=><li key={`${item.clientId}-${item.planName}`} className="flex items-center justify-between gap-3 rounded-lg bg-white/70 px-3 py-2 dark:bg-black/20"><div><Link href={`/customers/${item.clientId}`} className="text-sm font-medium underline-offset-4 hover:underline">{item.clientName}</Link><p className="text-xs opacity-70">{item.planName} · {t("expires_in_days", { count:item.daysUntilExpiry })}</p></div><Button size="sm" className="bg-green-700 text-white hover:bg-green-800" asChild><a href={item.whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp<span className="sr-only"> — {item.clientName}</span></a></Button></li>)}</ul></div>}</div></section>}
 
