@@ -754,7 +754,11 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const { toast } = useToast();
   const { data: customers } = useCustomers();
   const { data: services } = useServices();
-  const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({ queryKey: ["/api/customer-subscription-summaries"] });
+  const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({
+    queryKey: ["/api/customer-subscription-summaries"],
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const activeServices = useMemo(() => services?.filter((service) => service.active) || [], [services]);
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
@@ -830,7 +834,17 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     control: form.control,
     name: "customerId"
   });
-  const { data: subscriptionStatus } = useQuery<any>({ queryKey: ["customer-subscription-status", watchedCustomerId], queryFn: async () => { const r = await fetch(`/api/customers/${watchedCustomerId}/subscription/status`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load subscription"); return r.json(); }, enabled: !!watchedCustomerId });
+  const { data: subscriptionStatus } = useQuery<any>({
+    queryKey: ["customer-subscription-status", watchedCustomerId],
+    queryFn: async () => {
+      const r = await fetch(`/api/customers/${watchedCustomerId}/subscription/status`, { credentials: "include" });
+      if (!r.ok) throw new Error("Unable to load subscription");
+      return r.json();
+    },
+    enabled: !!watchedCustomerId,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const activeSub = subscriptionStatus?.status === "active" ? subscriptionStatus : null;
   const subscriptionLabel = (status: string) => status === "active" ? "Abonné" : t(`membership_status_${status}`);
 

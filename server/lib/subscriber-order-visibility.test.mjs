@@ -12,5 +12,11 @@ assert.match(orders, /Abonné · \{subscriptionStatus\.planName\}/);
 assert.match(orders, /Couvert par le forfait/);
 assert.match(orders, /Non couvert par le forfait/);
 assert.match(orders, /subscriptionStatus\?\.status === "active" \? subscriptionStatus : null/);
+assert.match(orders, /refetchOnMount: "always"/);
+assert.match(orders, /staleTime: 0/);
+
+const membershipTab = readFileSync("client/src/components/customer-membership-tab.tsx", "utf8");
+assert.match(membershipTab, /customer-subscription-summaries/);
+assert.match(membershipTab, /customer-subscription-status", customerId/);
 
 console.log("subscriber order visibility regression passed");
