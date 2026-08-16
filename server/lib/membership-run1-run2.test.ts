@@ -46,10 +46,14 @@ assert.match(routes, /const garments = await db\.select\(\{ itemName: garmentIte
 assert.match(routes, /orderNumber/);
 assert.match(routes, /kgConsumed: Number\(row\.transaction\.kgConsumed/);
 assert.match(routes, /piecesConsumed: Number\(row\.transaction\.piecesConsumed/);
+assert.match(routes, /currentCycleFinancials/);
+assert.match(routes, /isReceivedSubscriptionPayment/);
+assert.doesNotMatch(routes, /row\.subscription\.status === "active"\s*\? "paid"/);
 assert.match(subscriberReceipt, /order\.orderNumber \?\? order\.id/);
 assert.match(subscriberReceipt, /Vêtements enregistrés/);
-assert.match(subscriberReceipt, /Utilisation de cette commande/);
-assert.match(subscriberReceipt, /de votre forfait/);
+assert.match(subscriberReceipt, /Cette commande/);
+assert.match(subscriberReceipt, /Utilisation cumulée/);
+assert.match(subscriberReceipt, /Niveau le plus élevé/);
 assert.match(subscriberReceipt, /plan\.includedWeightKg/);
 assert.match(subscriberReceipt, /plan\.includedPieces/);
 assert.match(subscriberReceipt, /Services pris en charge/);

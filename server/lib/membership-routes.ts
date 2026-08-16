@@ -15,6 +15,7 @@ import { usageThresholdCrossed } from "./subscription-formulas";
 import { awardRenewalPoints, LoyaltyRedemptionError, redeemLoyaltyReward } from "./loyalty";
 import { rateLimit } from "./rate-limit";
 import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
+import { currentCycleFinancials, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
@@ -443,13 +444,26 @@ export function registerMembershipRoutes(app: Express) {
     const order = { ...row.order, orderNumber: siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id };
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
-    const [latestPayment] = await db.select({ status: membershipSubscriptionPayments.status }).from(membershipSubscriptionPayments)
+    const subscriptionPayments = await db.select({ id: membershipSubscriptionPayments.id, status: membershipSubscriptionPayments.status, amount: membershipSubscriptionPayments.amount }).from(membershipSubscriptionPayments)
       .where(and(eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.subscriptionId, row.subscription.id)))
-      .orderBy(desc(membershipSubscriptionPayments.paymentDate), desc(membershipSubscriptionPayments.id)).limit(1);
+      .orderBy(desc(membershipSubscriptionPayments.paymentDate), desc(membershipSubscriptionPayments.id));
+    const latestPayment = subscriptionPayments[0];
+    const receivedAmount = subscriptionPayments
+      .filter((payment) => isReceivedSubscriptionPayment(payment.status))
+      .reduce((total, payment) => total + Number(payment.amount), 0);
+    const financials = currentCycleFinancials(
+      row.subscription,
+      row.plan,
+      receivedAmount,
+      subscriptionPayments.some((payment) => payment.status === "renewal_completed"),
+    );
     const paymentSummary = {
-      status: row.subscription.status === "active"
+      ...financials,
+      status: financials.paymentDue <= 0
         ? "paid"
-        : latestPayment?.status === "pending"
+        : financials.amountPaid > 0
+          ? "partial"
+          : latestPayment?.status === "pending"
           ? "pending"
           : "unpaid",
     };
