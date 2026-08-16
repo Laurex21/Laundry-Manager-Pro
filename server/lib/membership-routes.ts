@@ -353,6 +353,17 @@ export function registerMembershipRoutes(app: Express) {
     res.send(generated.generated.png);
   });
 
+  app.get("/api/customers/:id/subscription/status", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
+    if (!organisationId || !(await customerInOrganisation(customerId, organisationId, siteScope(req)))) return res.status(404).json({ message: "Customer not found" });
+    const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(and(eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.customerId, customerId))).orderBy(desc(customerSubscriptions.createdAt)).limit(1);
+    if (!row) return res.json(null);
+    const serviceIds = (await db.select({ serviceId: subscriptionPlanServices.serviceId }).from(subscriptionPlanServices).innerJoin(subscriptionPlans, and(eq(subscriptionPlanServices.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId))).where(eq(subscriptionPlanServices.subscriptionPlanId, row.plan.id))).map(x=>x.serviceId);
+    const expired = new Date(`${row.subscription.expiryDate}T23:59:59Z`) < new Date();
+    const effectiveStatus = row.subscription.status === "active" && expired ? "expired" : row.subscription.status;
+    res.json({ ...row.subscription, status: effectiveStatus, planName: row.plan.name, serviceIds, benefits: { pickupIncluded: row.plan.pickupIncluded, deliveryIncluded: row.plan.deliveryIncluded, expressIncluded: row.plan.expressIncluded, priorityQueue: row.plan.priorityQueue, discountPercentage: row.plan.discountPercentage } });
+  });
+
   app.get("/api/customers/:id/subscription/active", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const customerId = Number(req.params.id);
     if (!organisationId || !(await customerInOrganisation(customerId, organisationId, siteScope(req)))) return res.status(404).json({ message: "Customer not found" });
@@ -459,7 +470,10 @@ export function registerMembershipRoutes(app: Express) {
       .orderBy(desc(customerSubscriptions.createdAt));
     const latest = new Map<number, typeof rows[number]>();
     for (const row of rows) if (!latest.has(row.customerId)) latest.set(row.customerId, row);
-    res.json(Object.fromEntries(latest));
+    res.json(Object.fromEntries(Array.from(latest.entries()).map(([customerId, row]) => {
+      const expired = row.status === "active" && new Date(`${row.expiryDate}T23:59:59Z`) < new Date();
+      return [customerId, { ...row, status: expired ? "expired" : row.status }];
+    })));
   });
 
   app.get("/api/subscription-plans", isAuthenticated, async (req: any, res) => {

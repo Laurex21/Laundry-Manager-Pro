@@ -753,6 +753,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const { toast } = useToast();
   const { data: customers } = useCustomers();
   const { data: services } = useServices();
+  const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({ queryKey: ["/api/customer-subscription-summaries"] });
   const activeServices = useMemo(() => services?.filter((service) => service.active) || [], [services]);
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
@@ -828,7 +829,9 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     control: form.control,
     name: "customerId"
   });
-  const { data: activeSub } = useQuery<any>({ queryKey: ["customer-active-sub", watchedCustomerId], queryFn: async () => { const r = await fetch(`/api/customers/${watchedCustomerId}/subscription/active`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load subscription"); return r.json(); }, enabled: !!watchedCustomerId });
+  const { data: subscriptionStatus } = useQuery<any>({ queryKey: ["customer-subscription-status", watchedCustomerId], queryFn: async () => { const r = await fetch(`/api/customers/${watchedCustomerId}/subscription/status`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load subscription"); return r.json(); }, enabled: !!watchedCustomerId });
+  const activeSub = subscriptionStatus?.status === "active" ? subscriptionStatus : null;
+  const subscriptionLabel = (status: string) => status === "active" ? "Abonné" : t(`membership_status_${status}`);
 
   const selectedCustomer = customers?.find((c: any) => c.id === Number(watchedCustomerId));
   const customerDiscountPct = Number(selectedCustomer?.defaultDiscountPct || 0);
@@ -1044,9 +1047,10 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                               !field.value && "text-muted-foreground"
                             )}
                           >
-                            {field.value
-                              ? customers?.find((c) => c.id === field.value)?.name
-                              : t("select_customer")}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate">{field.value ? customers?.find((c) => c.id === field.value)?.name : t("select_customer")}</span>
+                              {field.value && subscriptionStatus && <Badge variant={subscriptionStatus.status === "active" ? "default" : "secondary"} className="shrink-0">{subscriptionLabel(subscriptionStatus.status)}</Badge>}
+                            </span>
                             <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </FormControl>
@@ -1072,7 +1076,8 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                                       customer.id === field.value ? "opacity-100" : "opacity-0"
                                     )}
                                   />
-                                  {customer.name} ({customer.phone})
+                                  <span className="min-w-0 flex-1 truncate">{customer.name} ({customer.phone})</span>
+                                  {subscriptionSummaries[String(customer.id)] && <Badge variant={subscriptionSummaries[String(customer.id)].status === "active" ? "default" : "secondary"} className="ml-2 shrink-0">{subscriptionLabel(subscriptionSummaries[String(customer.id)].status)}</Badge>}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
@@ -1126,7 +1131,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 </div>
               </div>
             )}
-            {activeSub && <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:bg-blue-950/20 sm:p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary"><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold text-primary">Membre {activeSub.planName}</span><span className="shrink-0 text-xs text-muted-foreground">#{activeSub.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {activeSub.expiryDate}</span></div><div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{activeSub.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{activeSub.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{activeSub.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{activeSub.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
+            {subscriptionStatus && <div role="status" data-testid="selected-customer-subscription-status" className={cn("rounded-xl border p-3 sm:p-4", subscriptionStatus.status === "active" ? "border-blue-200 bg-blue-50 dark:bg-blue-950/20" : "border-amber-300 bg-amber-50 dark:bg-amber-950/20")}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", subscriptionStatus.status === "active" ? "bg-primary" : "bg-amber-600")}><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold">Abonné · {subscriptionStatus.planName}</span><Badge variant={subscriptionStatus.status === "active" ? "default" : "secondary"}>{subscriptionLabel(subscriptionStatus.status)}</Badge><span className="shrink-0 text-xs text-muted-foreground">#{subscriptionStatus.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {subscriptionStatus.expiryDate}</span></div>{subscriptionStatus.status !== "active" && <p className="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">Cet abonnement ne peut pas couvrir la commande tant que son statut est {subscriptionLabel(subscriptionStatus.status).toLowerCase()}.</p>}<div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{subscriptionStatus.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{subscriptionStatus.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{subscriptionStatus.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
             <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-start lg:gap-4">
               <div className="min-w-0 space-y-4 lg:space-y-2" data-testid="order-form-primary-column">
@@ -1156,6 +1161,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                             onChange={field.onChange}
                             symbol={symbol}
                           />
+                          {activeSub && Number(field.value) > 0 && <p className={cn("mt-1 text-xs font-medium", activeSub.serviceIds?.includes(Number(field.value)) ? "text-emerald-700" : "text-amber-700")}>{activeSub.serviceIds?.includes(Number(field.value)) ? "Couvert par le forfait" : "Non couvert par le forfait"}</p>}
                           <FormMessage />
                         </FormItem>
                       )}
