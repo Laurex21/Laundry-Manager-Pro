@@ -28,6 +28,7 @@ import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "driz
 import { formatReportingDay } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
+import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
 
 let businessSettingsSchemaReady = false;
 
@@ -92,8 +93,8 @@ export interface IStorage {
     totalRevenue: number; totalExpenses: number; netProfit: number; totalOrders: number;
     dailyRevenue: { date: string; revenue: number }[];
     serviceDistribution: { name: string; count: number }[];
-    topCustomers: { name: string; orderCount: number; totalSpent: number }[];
-    customerAreas: { area: string; customerCount: number; orderCount: number; totalSpent: number }[];
+    topCustomers: { name: string; orderCount: number; orderValue: number; amountCollected: number; outstandingBalance: number }[];
+    customerAreas: { area: string; customerCount: number; orderCount: number; orderValue: number; amountCollected: number; outstandingBalance: number }[];
   }>;
 
   getMachines(siteId: number | number[] | null, userId: string): Promise<Machine[]>;
@@ -974,37 +975,21 @@ export class DatabaseStorage implements IStorage {
     const allCustomers = customerIds.length
       ? await db.select().from(customers).where(inArray(customers.id, customerIds))
       : [];
-    const customerMap = new Map(allCustomers.map(c => [c.id, c]));
-    const customerPaymentMap = new Map<number, { orderIds: Set<number>; totalSpent: number }>();
-    for (const payment of filteredPayments) {
-      const existing = customerPaymentMap.get(payment.customerId) || { orderIds: new Set<number>(), totalSpent: 0 };
-      existing.orderIds.add(payment.orderId);
-      existing.totalSpent += Number(payment.amount);
-      customerPaymentMap.set(payment.customerId, existing);
-    }
-    const topCustomers = Array.from(customerPaymentMap.entries())
-      .map(([customerId, data]) => ({ name: customerMap.get(customerId)?.name || 'Unknown', orderCount: data.orderIds.size, totalSpent: data.totalSpent }))
-      .sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 10);
-
-    const customerAreaMap = new Map<string, { area: string; customerIds: Set<number>; orderCount: number; totalSpent: number }>();
-    for (const [customerId, paymentData] of customerPaymentMap.entries()) {
-      const customer = customerMap.get(customerId);
-      const area = (customer?.address || "").trim() || "Unknown area";
-      const key = area.toLowerCase();
-      const existing = customerAreaMap.get(key) || { area, customerIds: new Set<number>(), orderCount: 0, totalSpent: 0 };
-      existing.customerIds.add(customerId);
-      existing.orderCount += paymentData.orderIds.size;
-      existing.totalSpent += paymentData.totalSpent;
-      customerAreaMap.set(key, existing);
-    }
-    const customerAreas = Array.from(customerAreaMap.values())
-      .map((area) => ({
-        area: area.area,
-        customerCount: area.customerIds.size,
-        orderCount: area.orderCount,
-        totalSpent: area.totalSpent,
-      }))
-      .sort((a, b) => b.orderCount - a.orderCount || b.totalSpent - a.totalSpent);
+    const paymentsAppliedToPeriodOrders = orderIds.length > 0
+      ? await db.select({
+          orderId: payments.orderId,
+          customerId: orders.customerId,
+          amount: payments.amount,
+        }).from(payments)
+          .innerJoin(orders, eq(payments.orderId, orders.id))
+          .where(inArray(payments.orderId, orderIds))
+      : [];
+    const { topCustomers, customerAreas } = aggregateCustomerReportMetrics({
+      customers: allCustomers,
+      periodOrders: reportOrders,
+      paymentsReceivedInPeriod: filteredPayments,
+      paymentsAppliedToPeriodOrders,
+    });
 
     return { totalRevenue, totalExpenses, netProfit: totalRevenue - totalExpenses, totalOrders, dailyRevenue, serviceDistribution, topCustomers, customerAreas };
   }

@@ -326,10 +326,13 @@ const makeReports = (siteId?: number | null) => {
     })),
     topCustomers: customersForSite(siteId).map((customer) => {
       const customerOrders = orders.filter((order) => order.customerId === customer.id);
+      const orderValue = moneySum(customerOrders);
       return {
         name: customer.name,
         orderCount: customerOrders.length,
-        totalSpent: moneySum(customerOrders),
+        orderValue,
+        amountCollected: orderValue,
+        outstandingBalance: 0,
       };
     }).filter((customer) => customer.orderCount > 0),
   };

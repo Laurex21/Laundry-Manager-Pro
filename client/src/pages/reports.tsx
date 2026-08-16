@@ -77,8 +77,8 @@ type ReportData = {
   totalOrders: number;
   dailyRevenue: { date: string; revenue: number }[];
   serviceDistribution: { name: string; count: number }[];
-  topCustomers: { name: string; orderCount: number; totalSpent: number }[];
-  customerAreas: { area: string; customerCount: number; orderCount: number; totalSpent: number }[];
+  topCustomers: { name: string; orderCount: number; orderValue: number; amountCollected: number; outstandingBalance: number }[];
+  customerAreas: { area: string; customerCount: number; orderCount: number; orderValue: number; amountCollected: number; outstandingBalance: number }[];
 };
 
 type PerformanceData = {
@@ -172,15 +172,15 @@ export default function Reports() {
     }
     lines.push("");
     lines.push(`--- ${t("top_customers")} ---`);
-    lines.push(`${t("name")} | ${t("order_count")} | ${t("total_spent")}`);
+    lines.push(`${t("name")} | ${t("order_count")} | ${t("order_value")} | ${t("amount_collected")} | ${t("outstanding_balance")}`);
     for (const c of data.topCustomers) {
-      lines.push(`${c.name} | ${c.orderCount} | ${symbol}${c.totalSpent.toFixed(2)}`);
+      lines.push(`${c.name} | ${c.orderCount} | ${symbol}${c.orderValue.toFixed(2)} | ${symbol}${c.amountCollected.toFixed(2)} | ${symbol}${c.outstandingBalance.toFixed(2)}`);
     }
     lines.push("");
     lines.push(`--- ${t("customers_by_area")} ---`);
-    lines.push(`${t("area")} | ${t("customers")} | ${t("order_count")} | ${t("total_spent")}`);
+    lines.push(`${t("area")} | ${t("customers")} | ${t("order_count")} | ${t("order_value")} | ${t("amount_collected")} | ${t("outstanding_balance")}`);
     for (const area of data.customerAreas || []) {
-      lines.push(`${area.area} | ${area.customerCount} | ${area.orderCount} | ${symbol}${area.totalSpent.toFixed(2)}`);
+      lines.push(`${area.area} | ${area.customerCount} | ${area.orderCount} | ${symbol}${area.orderValue.toFixed(2)} | ${symbol}${area.amountCollected.toFixed(2)} | ${symbol}${area.outstandingBalance.toFixed(2)}`);
     }
 
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -557,7 +557,9 @@ export default function Reports() {
                   <TableRow>
                     <TableHead>{t("name")}</TableHead>
                     <TableHead className="text-center">{t("order_count")}</TableHead>
-                    <TableHead className="text-right">{t("total_spent")}</TableHead>
+                    <TableHead className="text-right">{t("order_value")}</TableHead>
+                    <TableHead className="text-right">{t("amount_collected")}</TableHead>
+                    <TableHead className="text-right">{t("outstanding_balance")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -569,8 +571,14 @@ export default function Reports() {
                       <TableCell className="text-center" data-testid={`text-customer-orders-${idx}`}>
                         {c.orderCount}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-customer-spent-${idx}`}>
-                        {symbol}{c.totalSpent.toFixed(2)}
+                      <TableCell className="text-right font-mono" data-testid={`text-customer-order-value-${idx}`}>
+                        {symbol}{c.orderValue.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono" data-testid={`text-customer-collected-${idx}`}>
+                        {symbol}{c.amountCollected.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono" data-testid={`text-customer-balance-${idx}`}>
+                        {symbol}{c.outstandingBalance.toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -607,7 +615,9 @@ export default function Reports() {
                     <TableHead>{t("area")}</TableHead>
                     <TableHead className="text-center">{t("customers")}</TableHead>
                     <TableHead className="text-center">{t("order_count")}</TableHead>
-                    <TableHead className="text-right">{t("total_spent")}</TableHead>
+                    <TableHead className="text-right">{t("order_value")}</TableHead>
+                    <TableHead className="text-right">{t("amount_collected")}</TableHead>
+                    <TableHead className="text-right">{t("outstanding_balance")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -622,8 +632,14 @@ export default function Reports() {
                       <TableCell className="text-center" data-testid={`text-area-orders-${idx}`}>
                         {area.orderCount}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-area-spent-${idx}`}>
-                        {symbol}{area.totalSpent.toFixed(2)}
+                      <TableCell className="text-right font-mono" data-testid={`text-area-order-value-${idx}`}>
+                        {symbol}{area.orderValue.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono" data-testid={`text-area-collected-${idx}`}>
+                        {symbol}{area.amountCollected.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono" data-testid={`text-area-balance-${idx}`}>
+                        {symbol}{area.outstandingBalance.toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}
