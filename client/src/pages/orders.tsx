@@ -81,6 +81,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
