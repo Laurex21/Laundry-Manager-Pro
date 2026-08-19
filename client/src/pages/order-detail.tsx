@@ -362,6 +362,7 @@ export default function OrderDetail() {
         toast({ title: t("mark_as_delivered"), description: t("order_delivered_on", { date: formatBusinessDateTime(new Date()) }) });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
         queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/storage-occupancy"] });
         setDeliverDialogOpen(false);
       }
     } catch { toast({ title: t("error"), variant: "destructive" }); }
