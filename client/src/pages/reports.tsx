@@ -156,14 +156,14 @@ export default function Reports() {
     lines.push(`${t("period")}: ${format(dateFrom, "MMM d, yyyy", { locale: activeDateLocale })} - ${format(dateTo, "MMM d, yyyy", { locale: activeDateLocale })}`);
     lines.push("");
     lines.push(`--- ${t("summary")} ---`);
-    lines.push(`${t("total_revenue")}: ${symbol}${data.totalRevenue.toFixed(2)}`);
-    lines.push(`${t("total_expenses_label")}: ${symbol}${data.totalExpenses.toFixed(2)}`);
-    lines.push(`${t("net_profit")}: ${symbol}${data.netProfit.toFixed(2)}`);
+    lines.push(`${t("total_revenue")}: ${symbol}${(data.totalRevenue ?? 0).toFixed(2)}`);
+    lines.push(`${t("total_expenses_label")}: ${symbol}${(data.totalExpenses ?? 0).toFixed(2)}`);
+    lines.push(`${t("net_profit")}: ${symbol}${(data.netProfit ?? 0).toFixed(2)}`);
     lines.push(`${t("number_of_orders")}: ${data.totalOrders}`);
     lines.push("");
     lines.push(`--- ${t("daily_revenue_trend")} ---`);
     for (const d of data.dailyRevenue) {
-      lines.push(`${d.date}: ${symbol}${d.revenue.toFixed(2)}`);
+      lines.push(`${d.date}: ${symbol}${(d.revenue ?? 0).toFixed(2)}`);
     }
     lines.push("");
     lines.push(`--- ${t("service_distribution")} ---`);
@@ -174,13 +174,13 @@ export default function Reports() {
     lines.push(`--- ${t("top_customers")} ---`);
     lines.push(`${t("name")} | ${t("order_count")} | ${t("order_value")} | ${t("amount_collected")} | ${t("outstanding_balance")}`);
     for (const c of data.topCustomers) {
-      lines.push(`${c.name} | ${c.orderCount} | ${symbol}${c.orderValue.toFixed(2)} | ${symbol}${c.amountCollected.toFixed(2)} | ${symbol}${c.outstandingBalance.toFixed(2)}`);
+      lines.push(`${c.name} | ${c.orderCount} | ${symbol}${(c.orderValue ?? 0).toFixed(2)} | ${symbol}${(c.amountCollected ?? 0).toFixed(2)} | ${symbol}${(c.outstandingBalance ?? 0).toFixed(2)}`);
     }
     lines.push("");
     lines.push(`--- ${t("customers_by_area")} ---`);
     lines.push(`${t("area")} | ${t("customers")} | ${t("order_count")} | ${t("order_value")} | ${t("amount_collected")} | ${t("outstanding_balance")}`);
     for (const area of data.customerAreas || []) {
-      lines.push(`${area.area} | ${area.customerCount} | ${area.orderCount} | ${symbol}${area.orderValue.toFixed(2)} | ${symbol}${area.amountCollected.toFixed(2)} | ${symbol}${area.outstandingBalance.toFixed(2)}`);
+      lines.push(`${area.area} | ${area.customerCount} | ${area.orderCount} | ${symbol}${(area.orderValue ?? 0).toFixed(2)} | ${symbol}${(area.amountCollected ?? 0).toFixed(2)} | ${symbol}${(area.outstandingBalance ?? 0).toFixed(2)}`);
     }
 
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
