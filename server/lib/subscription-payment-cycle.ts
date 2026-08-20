@@ -13,26 +13,47 @@ export function currentSubscriptionPaymentCycle(rows: SubscriptionPaymentRow[], 
     const dateDifference = new Date(a.paymentDate ?? 0).getTime() - new Date(b.paymentDate ?? 0).getTime();
     return dateDifference || Number(a.id ?? 0) - Number(b.id ?? 0);
   });
-  let cycle: "initial" | "renewal" = "initial";
-  let paid = 0;
+  const normalizedInitialCost = Math.max(0, initialCost);
+  const normalizedRenewalCost = Math.max(0, renewalCost);
+  let initialPaid = 0;
+  let renewalPaid = 0;
+  let renewalStarted = false;
   let appliedAdvance = 0;
 
   for (const payment of payments) {
     const amount = Math.max(0, Number(payment.amount ?? 0));
     const status = payment.status ?? "";
     if (status === "advance_applied") { appliedAdvance += amount; continue; }
-    if (INITIAL_STATUSES.has(status) && cycle === "initial") { paid += amount; continue; }
+
+    if (INITIAL_STATUSES.has(status)) {
+      if (initialPaid < normalizedInitialCost) initialPaid += amount;
+      continue;
+    }
+
     if (!RENEWAL_STATUSES.has(status)) continue;
-    const cycleCost = cycle === "initial" ? initialCost : renewalCost;
-    if (cycle === "initial" || paid >= cycleCost) {
-      cycle = "renewal";
-      paid = appliedAdvance;
+
+    // Older versions could record renewal-style statuses before the first
+    // subscription cycle was settled. Treat those amounts as payments toward
+    // the still-open initial balance rather than allowing them to create
+    // renewal credit prematurely.
+    if (initialPaid < normalizedInitialCost) {
+      initialPaid += amount;
+      continue;
+    }
+
+    // A renewal status following a completed renewal starts the next renewal
+    // cycle. Applied advances are held until that new cycle begins.
+    if (!renewalStarted || renewalPaid >= normalizedRenewalCost) {
+      renewalStarted = true;
+      renewalPaid = appliedAdvance;
       appliedAdvance = 0;
     }
-    paid += amount;
+    renewalPaid += amount;
   }
 
-  const cost = Math.max(0, cycle === "initial" ? initialCost : renewalCost);
+  const cycle = initialPaid < normalizedInitialCost ? "initial" as const : renewalStarted ? "renewal" as const : "initial" as const;
+  const cost = cycle === "initial" ? normalizedInitialCost : normalizedRenewalCost;
+  const paid = cycle === "initial" ? initialPaid : renewalPaid;
   return {
     cycle,
     cost,

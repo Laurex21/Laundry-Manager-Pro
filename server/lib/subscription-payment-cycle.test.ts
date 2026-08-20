@@ -22,4 +22,19 @@ assert.deepEqual(currentSubscriptionPaymentCycle(renewalAdvance, 20000, 20000), 
   nextPaymentStatus: "renewal_partial", completedPaymentStatus: "renewal_completed",
 });
 
+const completedRenewal = [...renewalAdvance, { id: 5, amount: 15000, status: "renewal_completed", paymentDate: "2026-09-20T14:23:00Z" }];
+assert.equal(currentSubscriptionPaymentCycle(completedRenewal, 20000, 20000).due, 0);
+
+const nextRenewal = [...completedRenewal, { id: 6, amount: 2000, status: "renewal_partial", paymentDate: "2026-10-20T14:22:00Z" }];
+assert.deepEqual(currentSubscriptionPaymentCycle(nextRenewal, 20000, 20000), {
+  cycle: "renewal", cost: 20000, paid: 2000, due: 18000,
+  nextPaymentStatus: "renewal_partial", completedPaymentStatus: "renewal_completed",
+});
+
+const legacyRenewalBeforeInitialCompletion = [...initialAdvance, { id: 2, amount: 3000, status: "renewal_partial", paymentDate: "2026-08-20T14:23:00Z" }];
+assert.equal(currentSubscriptionPaymentCycle(legacyRenewalBeforeInitialCompletion, 20000, 20000).due, 16000);
+
+const appliedRenewalAdvance = [...fullyPaid, { id: 4, amount: 5000, status: "advance_applied", paymentDate: "2026-09-19T14:22:00Z" }, { id: 5, amount: 2000, status: "renewal_partial", paymentDate: "2026-09-20T14:22:00Z" }];
+assert.equal(currentSubscriptionPaymentCycle(appliedRenewalAdvance, 20000, 20000).due, 13000);
+
 console.log("subscription payment cycle regression passed");
