@@ -8,56 +8,632 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
 export function CustomerMembershipTab({ customerId }: { customerId: number }) {
-  const { t } = useTranslation(); const { toast } = useToast();
+  const { t } = useTranslation();
+  const { toast } = useToast();
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentMode, setPaymentMode] = useState<"activate" | "renew" | "add">("activate");
+  const [paymentMode, setPaymentMode] = useState<"activate" | "renew" | "add">(
+    "activate",
+  );
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
-  const [payment, setPayment] = useState({ amount: "", method: "cash", date: new Date().toISOString().slice(0, 16), reference: "", notes: "" });
+  const [payment, setPayment] = useState({
+    amount: "",
+    method: "cash",
+    date: new Date().toISOString().slice(0, 16),
+    reference: "",
+    notes: "",
+  });
   const key = ["customer-subscription", customerId];
-  const { data: subscription, isLoading } = useQuery<any>({ queryKey: key, queryFn: async () => { const r = await fetch(`/api/customers/${customerId}/subscription`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load subscription"); return r.json(); } });
-  const { data: plans = [] } = useQuery<any[]>({ queryKey: ["/api/subscription-plans"] });
-  const history = useQuery<any>({ queryKey: ["subscription-history", subscription?.id], queryFn: async () => { const r = await fetch(`/api/subscriptions/${subscription.id}/history`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load history"); return r.json(); }, enabled: !!subscription?.id });
-  const card = useQuery<any>({ queryKey: ["membership-card", subscription?.id], queryFn: async () => { const r = await fetch(`/api/subscriptions/${subscription.id}/card`, { credentials: "include" }); if (!r.ok) throw new Error("Unable to load membership card"); return r.json(); }, enabled: !!subscription?.id });
+  const { data: subscription, isLoading } = useQuery<any>({
+    queryKey: key,
+    queryFn: async () => {
+      const r = await fetch(`/api/customers/${customerId}/subscription`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error("Unable to load subscription");
+      return r.json();
+    },
+  });
+  const { data: plans = [] } = useQuery<any[]>({
+    queryKey: ["/api/subscription-plans"],
+  });
+  const history = useQuery<any>({
+    queryKey: ["subscription-history", subscription?.id],
+    queryFn: async () => {
+      const r = await fetch(`/api/subscriptions/${subscription.id}/history`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error("Unable to load history");
+      return r.json();
+    },
+    enabled: !!subscription?.id,
+  });
+  const card = useQuery<any>({
+    queryKey: ["membership-card", subscription?.id],
+    queryFn: async () => {
+      const r = await fetch(`/api/subscriptions/${subscription.id}/card`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error("Unable to load membership card");
+      return r.json();
+    },
+    enabled: !!subscription?.id,
+  });
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: key });
     queryClient.invalidateQueries({ queryKey: ["/api/subscription-plans"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/customer-subscription-summaries"] });
-    queryClient.invalidateQueries({ queryKey: ["customer-subscription-status", customerId] });
-    if (subscription?.id) queryClient.invalidateQueries({ queryKey: ["subscription-history", subscription.id] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/customer-subscription-summaries"],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["customer-subscription-status", customerId],
+    });
+    if (subscription?.id)
+      queryClient.invalidateQueries({
+        queryKey: ["subscription-history", subscription.id],
+      });
   };
-  const action = useMutation({ mutationFn: async ({ url, method, body }: any) => { const response = await apiRequest(method, url, body); return response.json(); }, onSuccess: (data: any) => { refresh(); setPaymentOpen(false); toast({ title: data?.renewed === false ? "Payment recorded; confirmation is required before benefits activate" : t("settings_saved") }); }, onError: (e: Error) => toast({ title: e.message, variant: "destructive" }) });
-  const regenerateCard = useMutation({ mutationFn: async () => { const response = await apiRequest("POST", `/api/subscriptions/${subscription.id}/card/regenerate`); return response.json(); }, onSuccess: (data) => { queryClient.setQueryData(["membership-card", subscription.id], data); toast({ title: t("regenerate_card") }); }, onError: (e: Error) => toast({ title: e.message, variant: "destructive" }) });
-  const openPayment = (mode: "activate" | "renew" | "add", plan: any) => { const fullDue = Number(plan.recurringPrice) + (mode === "activate" || subscription?.status === "pending" ? Number(plan.activationFee ?? 0) : 0); const due = mode === "activate" ? fullDue : Math.max(0, fullDue - Number(subscription?.availableAdvance ?? 0)); setPaymentMode(mode); setSelectedPlan(plan); setPayment({ amount: mode === "add" ? "" : String(due), method: "cash", date: new Date().toISOString().slice(0, 16), reference: "", notes: mode === "add" ? "Advance subscription payment" : "" }); setPaymentOpen(true); };
-  const submitPayment = () => { if (!selectedPlan) return; const common = { paymentMethod: payment.method, paymentDate: payment.date, paymentReference: payment.reference || null, notes: payment.notes || null }; action.mutate(paymentMode === "activate" ? { method:"POST", url:`/api/customers/${customerId}/subscription`, body:{ ...common, subscriptionPlanId:selectedPlan.id, startDate:new Date().toISOString().slice(0,10), paymentAmount:Number(payment.amount) } } : paymentMode === "add" ? { method:"POST", url:`/api/subscriptions/${subscription.id}/payments`, body:{ ...common, amount:Number(payment.amount) } } : { method:"POST", url:`/api/subscriptions/${subscription.id}/renew`, body:{ ...common, amount:Number(payment.amount) } }); };
-  const automaticPaymentStatus = Number(payment.amount || 0) <= 0 ? "pending" : paymentMode === "add" || Number(payment.amount) < Math.max(0, Number(selectedPlan?.recurringPrice ?? 0) + (paymentMode === "activate" || subscription?.status === "pending" ? Number(selectedPlan?.activationFee ?? 0) : 0) - (paymentMode === "activate" ? 0 : Number(subscription?.availableAdvance ?? 0))) ? "partial" : "completed";
-  const paymentDialog = <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}><DialogContent><DialogHeader><DialogTitle>{paymentMode === "activate" ? "Register subscription payment" : paymentMode === "add" ? "Add subscription payment" : "Register renewal payment"}</DialogTitle></DialogHeader>{selectedPlan && <div className="space-y-4"><div className="rounded-lg bg-muted p-4 text-sm"><div className="flex justify-between"><span>Plan price</span><b>{Number(selectedPlan.recurringPrice).toLocaleString()} FCFA</b></div>{(paymentMode === "activate" || subscription?.status === "pending") && <div className="mt-2 flex justify-between"><span>Activation fee</span><b>{Number(selectedPlan.activationFee ?? 0).toLocaleString()} FCFA</b></div>}{paymentMode !== "activate" && <div className="mt-2 flex justify-between"><span>Available advance</span><b>{Number(subscription?.availableAdvance ?? 0).toLocaleString()} FCFA</b></div>}<div className="mt-3 flex justify-between border-t pt-3 text-base"><span>{paymentMode === "add" ? "Maximum advance" : "Amount due"}</span><b>{Math.max(0, Number(selectedPlan.recurringPrice) + (paymentMode === "activate" || subscription?.status === "pending" ? Number(selectedPlan.activationFee ?? 0) : 0) - (paymentMode === "activate" ? 0 : Number(subscription?.availableAdvance ?? 0))).toLocaleString()} FCFA</b></div></div><div className="grid gap-4 sm:grid-cols-2"><div><Label>Amount paid</Label><Input type="number" min="0" value={payment.amount} onChange={e=>setPayment({...payment,amount:e.target.value})}/></div><div><Label>Payment method</Label><Select value={payment.method} onValueChange={method=>setPayment({...payment,method})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_money">Mobile money</SelectItem><SelectItem value="bank_transfer">Bank transfer</SelectItem></SelectContent></Select></div><div><Label>Payment date</Label><Input type="datetime-local" value={payment.date} onChange={e=>setPayment({...payment,date:e.target.value})}/></div><div><Label>Status (automatic)</Label><Select value={automaticPaymentStatus} disabled><SelectTrigger aria-label="Automatic payment status"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="partial">Advance · Activated</SelectItem><SelectItem value="completed">Completed</SelectItem></SelectContent></Select></div><div className="sm:col-span-2"><Label>Reference</Label><Input value={payment.reference} onChange={e=>setPayment({...payment,reference:e.target.value})} placeholder="Optional transaction reference"/></div><div className="sm:col-span-2"><Label>Notes</Label><Input value={payment.notes} onChange={e=>setPayment({...payment,notes:e.target.value})} placeholder="Optional notes"/></div></div><p className="text-xs text-muted-foreground">{paymentMode === "add" ? "Completed advance payments reduce the next renewal amount without resetting the current allowance." : "A confirmed advance above 0 activates or renews the benefits immediately. The remaining balance stays due."}</p><Button className="w-full" disabled={action.isPending || payment.amount === ""} onClick={submitPayment}>{action.isPending ? t("saving") : "Register payment"}</Button></div>}</DialogContent></Dialog>;
-  if (isLoading) return <Card><CardContent className="p-8 text-center text-muted-foreground">Loading…</CardContent></Card>;
-  if (!subscription) return <><Card><CardContent className="space-y-4 p-6"><div className="text-center"><Crown className="mx-auto mb-2 h-8 w-8 text-muted-foreground"/><h3 className="font-semibold">{t("no_subscription")}</h3><p className="text-sm text-muted-foreground">Choisissez un plan pour activer l’abonnement de ce client.</p></div><div className="grid gap-3 sm:grid-cols-2">{plans.filter(p=>p.status==="active").map(plan=><button key={plan.id} className="rounded-lg border p-4 text-left hover:bg-muted" onClick={()=>openPayment("activate",plan)}><p className="font-medium">{plan.name}</p><p className="text-sm text-muted-foreground">{Number(plan.recurringPrice).toLocaleString()} FCFA / {t(plan.billingCycle)}</p></button>)}</div></CardContent></Card>{paymentDialog}</>;
-  const limits = [{ key:"Kg", remaining:subscription.remainingKg, total:subscription.plan.includedWeightKg },{ key:t("remaining_pieces"), remaining:subscription.remainingPieces, total:subscription.plan.includedPieces },{ key:t("remaining_orders"), remaining:subscription.remainingOrders, total:subscription.plan.maxOrders }].filter(x=>x.total!=null);
+  const action = useMutation({
+    mutationFn: async ({ url, method, body }: any) => {
+      const response = await apiRequest(method, url, body);
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      refresh();
+      setPaymentOpen(false);
+      toast({
+        title:
+          data?.renewed === false
+            ? "Payment recorded; confirmation is required before benefits activate"
+            : t("settings_saved"),
+      });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+  const regenerateCard = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "POST",
+        `/api/subscriptions/${subscription.id}/card/regenerate`,
+      );
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["membership-card", subscription.id], data);
+      toast({ title: t("regenerate_card") });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+  const openPayment = (mode: "activate" | "renew" | "add", plan: any) => {
+    const fullDue =
+      Number(plan.recurringPrice) +
+      (mode === "activate" || subscription?.status === "pending"
+        ? Number(plan.activationFee ?? 0)
+        : 0);
+    const due =
+      mode === "activate"
+        ? fullDue
+        : Math.max(0, fullDue - Number(subscription?.availableAdvance ?? 0));
+    setPaymentMode(mode);
+    setSelectedPlan(plan);
+    setPayment({
+      amount: mode === "add" ? "" : String(due),
+      method: "cash",
+      date: new Date().toISOString().slice(0, 16),
+      reference: "",
+      notes:
+        mode === "add"
+          ? Number(subscription?.currentPaymentDue ?? 0) > 0
+            ? "Subscription balance payment"
+            : "Advance subscription payment"
+          : "",
+    });
+    setPaymentOpen(true);
+  };
+  const submitPayment = () => {
+    if (!selectedPlan) return;
+    const common = {
+      paymentMethod: payment.method,
+      paymentDate: payment.date,
+      paymentReference: payment.reference || null,
+      notes: payment.notes || null,
+    };
+    action.mutate(
+      paymentMode === "activate"
+        ? {
+            method: "POST",
+            url: `/api/customers/${customerId}/subscription`,
+            body: {
+              ...common,
+              subscriptionPlanId: selectedPlan.id,
+              startDate: new Date().toISOString().slice(0, 10),
+              paymentAmount: Number(payment.amount),
+            },
+          }
+        : paymentMode === "add"
+          ? {
+              method: "POST",
+              url: `/api/subscriptions/${subscription.id}/payments`,
+              body: { ...common, amount: Number(payment.amount) },
+            }
+          : {
+              method: "POST",
+              url: `/api/subscriptions/${subscription.id}/renew`,
+              body: { ...common, amount: Number(payment.amount) },
+            },
+    );
+  };
+  const addPaymentDue = Number(
+    subscription?.currentPaymentDue ?? selectedPlan?.recurringPrice ?? 0,
+  );
+  const automaticPaymentStatus =
+    Number(payment.amount || 0) <= 0
+      ? "pending"
+      : Number(payment.amount) <
+          (paymentMode === "add"
+            ? addPaymentDue
+            : Math.max(
+                0,
+                Number(selectedPlan?.recurringPrice ?? 0) +
+                  (paymentMode === "activate" ||
+                  subscription?.status === "pending"
+                    ? Number(selectedPlan?.activationFee ?? 0)
+                    : 0) -
+                  (paymentMode === "activate"
+                    ? 0
+                    : Number(subscription?.availableAdvance ?? 0)),
+              ))
+        ? "partial"
+        : "completed";
+  const paymentDialog = (
+    <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {paymentMode === "activate"
+              ? "Register subscription payment"
+              : paymentMode === "add"
+                ? "Add subscription payment"
+                : "Register renewal payment"}
+          </DialogTitle>
+        </DialogHeader>
+        {selectedPlan && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-muted p-4 text-sm">
+              <div className="flex justify-between">
+                <span>Plan price</span>
+                <b>
+                  {Number(selectedPlan.recurringPrice).toLocaleString()} FCFA
+                </b>
+              </div>
+              {(paymentMode === "activate" ||
+                subscription?.status === "pending") && (
+                <div className="mt-2 flex justify-between">
+                  <span>Activation fee</span>
+                  <b>
+                    {Number(selectedPlan.activationFee ?? 0).toLocaleString()}{" "}
+                    FCFA
+                  </b>
+                </div>
+              )}
+              {paymentMode !== "activate" && (
+                <div className="mt-2 flex justify-between">
+                  <span>Available advance</span>
+                  <b>
+                    {Number(
+                      subscription?.availableAdvance ?? 0,
+                    ).toLocaleString()}{" "}
+                    FCFA
+                  </b>
+                </div>
+              )}
+              <div className="mt-3 flex justify-between border-t pt-3 text-base">
+                <span>
+                  {paymentMode === "add"
+                    ? Number(subscription?.currentPaymentDue ?? 0) > 0
+                      ? "Current balance due"
+                      : "Maximum advance"
+                    : "Amount due"}
+                </span>
+                <b>
+                  {(paymentMode === "add" && Number(subscription?.currentPaymentDue ?? 0) > 0
+                    ? Number(subscription.currentPaymentDue)
+                    : Math.max(
+                        0,
+                        Number(selectedPlan.recurringPrice) +
+                          (paymentMode === "activate" || subscription?.status === "pending"
+                            ? Number(selectedPlan.activationFee ?? 0)
+                            : 0) -
+                          (paymentMode === "activate" ? 0 : Number(subscription?.availableAdvance ?? 0)),
+                      )
+                  ).toLocaleString()}{" "}
+                  FCFA
+                </b>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Amount paid</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={payment.amount}
+                  onChange={(e) =>
+                    setPayment({ ...payment, amount: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Payment method</Label>
+                <Select
+                  value={payment.method}
+                  onValueChange={(method) => setPayment({ ...payment, method })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="mobile_money">Mobile money</SelectItem>
+                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Payment date</Label>
+                <Input
+                  type="datetime-local"
+                  value={payment.date}
+                  onChange={(e) =>
+                    setPayment({ ...payment, date: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label>Status (automatic)</Label>
+                <Select value={automaticPaymentStatus} disabled>
+                  <SelectTrigger aria-label="Automatic payment status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="partial">Advance · Activated</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Reference</Label>
+                <Input
+                  value={payment.reference}
+                  onChange={(e) =>
+                    setPayment({ ...payment, reference: e.target.value })
+                  }
+                  placeholder="Optional transaction reference"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Notes</Label>
+                <Input
+                  value={payment.notes}
+                  onChange={(e) =>
+                    setPayment({ ...payment, notes: e.target.value })
+                  }
+                  placeholder="Optional notes"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {paymentMode === "add"
+                ? Number(subscription?.currentPaymentDue ?? 0) > 0
+                  ? "This payment reduces the current subscription balance. Renewal credit starts only after the current cycle is fully paid."
+                  : "Completed advance payments reduce the next renewal amount without resetting the current allowance."
+                : "A confirmed advance above 0 activates or renews the benefits immediately. The remaining balance stays due."}
+            </p>
+            <Button
+              className="w-full"
+              disabled={action.isPending || payment.amount === ""}
+              onClick={submitPayment}
+            >
+              {action.isPending ? t("saving") : "Register payment"}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+  if (isLoading)
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-muted-foreground">
+          Loading…
+        </CardContent>
+      </Card>
+    );
+  if (!subscription)
+    return (
+      <>
+        <Card>
+          <CardContent className="space-y-4 p-6">
+            <div className="text-center">
+              <Crown className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+              <h3 className="font-semibold">{t("no_subscription")}</h3>
+              <p className="text-sm text-muted-foreground">
+                Choisissez un plan pour activer l’abonnement de ce client.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {plans
+                .filter((p) => p.status === "active")
+                .map((plan) => (
+                  <button
+                    key={plan.id}
+                    className="rounded-lg border p-4 text-left hover:bg-muted"
+                    onClick={() => openPayment("activate", plan)}
+                  >
+                    <p className="font-medium">{plan.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {Number(plan.recurringPrice).toLocaleString()} FCFA /{" "}
+                      {t(plan.billingCycle)}
+                    </p>
+                  </button>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+        {paymentDialog}
+      </>
+    );
+  const limits = [
+    {
+      key: "Kg",
+      remaining: subscription.remainingKg,
+      total: subscription.plan.includedWeightKg,
+    },
+    {
+      key: t("remaining_pieces"),
+      remaining: subscription.remainingPieces,
+      total: subscription.plan.includedPieces,
+    },
+    {
+      key: t("remaining_orders"),
+      remaining: subscription.remainingOrders,
+      total: subscription.plan.maxOrders,
+    },
+  ].filter((x) => x.total != null);
   const shareCard = () => {
-    const firstName = String(subscription.customerName ?? "").split(" ")[0] || "client";
-    const message = encodeURIComponent(`Bonjour ${firstName} ! 🎉\n\nVotre carte de membre ${subscription.plan.name} est prête.\n\nN° membre : ${subscription.membershipNumber}\nValable jusqu'au : ${new Date(`${subscription.expiryDate}T00:00:00`).toLocaleDateString()}\n\nPrésentez ce numéro à chaque visite.`);
+    const firstName =
+      String(subscription.customerName ?? "").split(" ")[0] || "client";
+    const message = encodeURIComponent(
+      `Bonjour ${firstName} ! 🎉\n\nVotre carte de membre ${subscription.plan.name} est prête.\n\nN° membre : ${subscription.membershipNumber}\nValable jusqu'au : ${new Date(`${subscription.expiryDate}T00:00:00`).toLocaleDateString()}\n\nPrésentez ce numéro à chaque visite.`,
+    );
     const phone = String(subscription.customerPhone ?? "").replace(/\D/g, "");
-    window.open(`https://wa.me/${phone}?text=${message}`, "_blank", "noopener,noreferrer");
+    window.open(
+      `https://wa.me/${phone}?text=${message}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   };
-  return <div className="space-y-4">
-    <Card><CardHeader><div className="flex items-center justify-between"><div><CardTitle>{subscription.plan.name}</CardTitle><p className="text-sm text-muted-foreground">{subscription.membershipNumber}</p>{Number(subscription.availableAdvance ?? 0) > 0 && <p className="mt-1 text-sm font-medium text-green-700">Advance credit: {Number(subscription.availableAdvance).toLocaleString()} FCFA</p>}</div><Badge>{subscription.status}</Badge></div></CardHeader><CardContent className="space-y-5">{limits.map(x=><div key={x.key}><div className="mb-2 flex justify-between text-sm"><span>{x.key}</span><span>{x.remaining} / {x.total}</span></div><Progress value={Number(x.total)?Number(x.remaining)/Number(x.total)*100:0}/></div>)}<div className="grid gap-2 sm:grid-cols-2">{[["pickupIncluded",t("pickup_included")],["deliveryIncluded",t("delivery_included")],["expressIncluded",t("express_included")],["priorityQueue",t("priority_queue")]].filter(([k])=>subscription.plan[k]).map(([k,label])=><div key={String(k)} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-green-600" aria-hidden="true"/>{label}</div>)}</div><div className="flex flex-wrap gap-2"><Button onClick={()=>openPayment("renew",subscription.plan)}>{subscription.status === "pending" ? "Complete payment" : t("renew_subscription")}</Button><Button variant="outline" onClick={()=>openPayment("add",subscription.plan)}>Add payment</Button><Button variant="outline" onClick={()=>action.mutate({method:"PATCH",url:`/api/subscriptions/${subscription.id}/status`,body:{status:subscription.status==="suspended"?"active":"suspended"}})}>{subscription.status==="suspended"?"Réactiver":t("suspend_subscription")}</Button><Button variant="destructive" onClick={()=>action.mutate({method:"PATCH",url:`/api/subscriptions/${subscription.id}/status`,body:{status:"cancelled"}})}>{t("cancel_subscription")}</Button></div></CardContent></Card>
-    <Card><CardHeader><CardTitle>{t("membership_card")}</CardTitle></CardHeader><CardContent className="space-y-3">
-      {card.isLoading ? <div className="aspect-[324/204] w-full max-w-sm animate-pulse rounded-xl bg-muted mx-auto" aria-label="Chargement de la carte" /> : card.data?.digitalCardImage ? <img src={card.data.digitalCardImage} alt={`${t("membership_card")} ${subscription.membershipNumber}`} className="w-full max-w-sm rounded-xl shadow-xl mx-auto" /> : <p className="text-center text-sm text-muted-foreground">Carte indisponible</p>}
-      <div className="flex flex-wrap gap-2 justify-center">
-        <Button size="sm" variant="outline" asChild><a href={`/api/subscriptions/${subscription.id}/card/download`} download><Download className="w-4 h-4 mr-2" aria-hidden="true" />{t("download_card")}</a></Button>
-        <Button size="sm" variant="outline" onClick={shareCard}><Share2 className="w-4 h-4 mr-2" aria-hidden="true" />{t("share_card")}</Button>
-        <Button size="sm" variant="outline" disabled={regenerateCard.isPending} onClick={()=>regenerateCard.mutate()}><RefreshCw className={`w-4 h-4 mr-2 ${regenerateCard.isPending ? "animate-spin" : ""}`} aria-hidden="true" />{t("regenerate_card")}</Button>
-      </div>
-    </CardContent></Card>
-    <Tabs defaultValue="usage"><TabsList><TabsTrigger value="usage">Utilisations</TabsTrigger><TabsTrigger value="payments">Paiements</TabsTrigger></TabsList><TabsContent value="usage"><Card><CardContent className="p-4 text-sm">{history.data?.transactions?.length ? history.data.transactions.map((x:any)=><div key={x.id} className="border-b py-2">{x.transactionDate} · {x.kgConsumed||0} kg · {x.piecesConsumed||0} pièces</div>) : "Aucune utilisation"}</CardContent></Card></TabsContent><TabsContent value="payments"><Card><CardContent className="p-4 text-sm">{(history.data?.payments||subscription.payments||[]).map((x:any)=><div key={x.id} className="flex items-center justify-between gap-3 border-b py-2"><div><div>{new Date(x.paymentDate).toLocaleString()} · {x.paymentMethod || "—"}</div><div className="text-xs capitalize text-muted-foreground">{x.reference || "No reference"} · {String(x.status || "").replaceAll("_", " ")}</div></div><b>{Number(x.amount).toLocaleString()} FCFA</b></div>)}</CardContent></Card></TabsContent></Tabs>
-    {paymentDialog}
-  </div>;
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>{subscription.plan.name}</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {subscription.membershipNumber}
+              </p>
+              {Number(subscription.availableAdvance ?? 0) > 0 && (
+                <p className="mt-1 text-sm font-medium text-green-700">
+                  Advance credit:{" "}
+                  {Number(subscription.availableAdvance).toLocaleString()} FCFA
+                </p>
+              )}
+            </div>
+            <Badge>{subscription.status}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {limits.map((x) => (
+            <div key={x.key}>
+              <div className="mb-2 flex justify-between text-sm">
+                <span>{x.key}</span>
+                <span>
+                  {x.remaining} / {x.total}
+                </span>
+              </div>
+              <Progress
+                value={
+                  Number(x.total)
+                    ? (Number(x.remaining) / Number(x.total)) * 100
+                    : 0
+                }
+              />
+            </div>
+          ))}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              ["pickupIncluded", t("pickup_included")],
+              ["deliveryIncluded", t("delivery_included")],
+              ["expressIncluded", t("express_included")],
+              ["priorityQueue", t("priority_queue")],
+            ]
+              .filter(([k]) => subscription.plan[k])
+              .map(([k, label]) => (
+                <div
+                  key={String(k)}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <Check
+                    className="h-4 w-4 text-green-600"
+                    aria-hidden="true"
+                  />
+                  {label}
+                </div>
+              ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => openPayment("renew", subscription.plan)}>
+              {subscription.status === "pending"
+                ? "Complete payment"
+                : t("renew_subscription")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => openPayment("add", subscription.plan)}
+            >
+              Add payment
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                action.mutate({
+                  method: "PATCH",
+                  url: `/api/subscriptions/${subscription.id}/status`,
+                  body: {
+                    status:
+                      subscription.status === "suspended"
+                        ? "active"
+                        : "suspended",
+                  },
+                })
+              }
+            >
+              {subscription.status === "suspended"
+                ? "Réactiver"
+                : t("suspend_subscription")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                action.mutate({
+                  method: "PATCH",
+                  url: `/api/subscriptions/${subscription.id}/status`,
+                  body: { status: "cancelled" },
+                })
+              }
+            >
+              {t("cancel_subscription")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("membership_card")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {card.isLoading ? (
+            <div
+              className="aspect-[324/204] w-full max-w-sm animate-pulse rounded-xl bg-muted mx-auto"
+              aria-label="Chargement de la carte"
+            />
+          ) : card.data?.digitalCardImage ? (
+            <img
+              src={card.data.digitalCardImage}
+              alt={`${t("membership_card")} ${subscription.membershipNumber}`}
+              className="w-full max-w-sm rounded-xl shadow-xl mx-auto"
+            />
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">
+              Carte indisponible
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2 justify-center">
+            <Button size="sm" variant="outline" asChild>
+              <a
+                href={`/api/subscriptions/${subscription.id}/card/download`}
+                download
+              >
+                <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+                {t("download_card")}
+              </a>
+            </Button>
+            <Button size="sm" variant="outline" onClick={shareCard}>
+              <Share2 className="w-4 h-4 mr-2" aria-hidden="true" />
+              {t("share_card")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={regenerateCard.isPending}
+              onClick={() => regenerateCard.mutate()}
+            >
+              <RefreshCw
+                className={`w-4 h-4 mr-2 ${regenerateCard.isPending ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              {t("regenerate_card")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Tabs defaultValue="usage">
+        <TabsList>
+          <TabsTrigger value="usage">Utilisations</TabsTrigger>
+          <TabsTrigger value="payments">Paiements</TabsTrigger>
+        </TabsList>
+        <TabsContent value="usage">
+          <Card>
+            <CardContent className="p-4 text-sm">
+              {history.data?.transactions?.length
+                ? history.data.transactions.map((x: any) => (
+                    <div key={x.id} className="border-b py-2">
+                      {x.transactionDate} · {x.kgConsumed || 0} kg ·{" "}
+                      {x.piecesConsumed || 0} pièces
+                    </div>
+                  ))
+                : "Aucune utilisation"}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="payments">
+          <Card>
+            <CardContent className="p-4 text-sm">
+              {(history.data?.payments || subscription.payments || []).map(
+                (x: any) => (
+                  <div
+                    key={x.id}
+                    className="flex items-center justify-between gap-3 border-b py-2"
+                  >
+                    <div>
+                      <div>
+                        {new Date(x.paymentDate).toLocaleString()} ·{" "}
+                        {x.paymentMethod || "—"}
+                      </div>
+                      <div className="text-xs capitalize text-muted-foreground">
+                        {x.reference || "No reference"} ·{" "}
+                        {String(x.status || "").replaceAll("_", " ")}
+                      </div>
+                    </div>
+                    <b>{Number(x.amount).toLocaleString()} FCFA</b>
+                  </div>
+                ),
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+      {paymentDialog}
+    </div>
+  );
 }

@@ -1,0 +1,25 @@
+import assert from "node:assert/strict";
+import { currentSubscriptionPaymentCycle } from "./subscription-payment-cycle";
+
+const initialAdvance = [{ id: 1, amount: 1000, status: "partial", paymentDate: "2026-08-20T14:22:00Z" }];
+assert.deepEqual(currentSubscriptionPaymentCycle(initialAdvance, 20000, 20000), {
+  cycle: "initial", cost: 20000, paid: 1000, due: 19000,
+  nextPaymentStatus: "partial", completedPaymentStatus: "completed",
+});
+
+const cumulativeAdvance = [...initialAdvance, { id: 2, amount: 3000, status: "partial", paymentDate: "2026-08-20T14:23:00Z" }];
+assert.equal(currentSubscriptionPaymentCycle(cumulativeAdvance, 20000, 20000).due, 16000);
+
+const fullyPaid = [...cumulativeAdvance, { id: 3, amount: 16000, status: "completed", paymentDate: "2026-08-20T14:24:00Z" }];
+assert.equal(currentSubscriptionPaymentCycle(fullyPaid, 20000, 20000).due, 0);
+
+const legacyWrongStatus = [{ id: 1, amount: 1000, status: "completed", paymentDate: "2026-08-20T14:22:00Z" }];
+assert.equal(currentSubscriptionPaymentCycle(legacyWrongStatus, 20000, 20000).due, 19000, "a legacy Completed label must not erase the unpaid balance");
+
+const renewalAdvance = [...fullyPaid, { id: 4, amount: 5000, status: "renewal_partial", paymentDate: "2026-09-20T14:22:00Z" }];
+assert.deepEqual(currentSubscriptionPaymentCycle(renewalAdvance, 20000, 20000), {
+  cycle: "renewal", cost: 20000, paid: 5000, due: 15000,
+  nextPaymentStatus: "renewal_partial", completedPaymentStatus: "renewal_completed",
+});
+
+console.log("subscription payment cycle regression passed");

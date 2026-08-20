@@ -18,7 +18,10 @@ assert.match(routes, /const hasConfirmedAdvance = renewalPaymentStatus !== "pend
 assert.match(routes, /if \(!hasConfirmedAdvance\)[\s\S]*renewed: false/, "unconfirmed renewal payments must not reset benefits");
 assert.match(routes, /renewed: true/, "a confirmed renewal advance must report that benefits were reset");
 assert.match(routes, /\/api\/subscriptions\/:id\/payments/, "existing subscribers need a standalone payment endpoint");
-assert.match(routes, /status: "advance_available"/, "added payments must remain available for renewal");
+assert.match(routes, /currentSubscriptionPaymentCycle/, "added payments must inspect the cumulative current-cycle balance");
+assert.match(routes, /cycle\.due > 0/, "the current balance must be settled before creating renewal credit");
+assert.match(routes, /input\.amount >= cycle\.due \? cycle\.completedPaymentStatus : cycle\.nextPaymentStatus/, "added payment status must be derived from the cumulative balance");
+assert.match(routes, /status: "advance_available"/, "payments after a settled cycle may remain available for renewal");
 assert.match(routes, /advanceAmount = availableAdvances\.reduce/, "renewal must deduct available advance payments");
 assert.match(routes, /status: "advance_applied"/, "advance payments must be consumed exactly once at renewal");
 assert.match(routes, /Advance payment cannot exceed the next subscription charge/, "advance credit must not be silently lost through overpayment");
@@ -26,8 +29,9 @@ assert.match(routes, /\.for\("update"\)/, "advance registration must lock the su
 assert.match(ui, /Register subscription payment/);
 assert.match(ui, /Register renewal payment/);
 assert.match(ui, /Add subscription payment/);
-assert.match(ui, />Add payment</);
+assert.match(ui, />\s*Add payment\s*</);
 assert.match(ui, /Advance credit:/);
+assert.match(ui, /currentPaymentDue/, "the payment form must use the server-calculated current balance");
 assert.match(ui, /Completed advance payments reduce the next renewal amount/);
 assert.match(ui, /Plan price/);
 assert.match(ui, /Activation fee/);

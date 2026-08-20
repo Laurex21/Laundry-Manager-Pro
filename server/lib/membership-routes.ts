@@ -14,6 +14,7 @@ import { createPendingSubscriptionNotification } from "./subscription-notificati
 import { usageThresholdCrossed } from "./subscription-formulas";
 import { awardRenewalPoints, LoyaltyRedemptionError, redeemLoyaltyReward } from "./loyalty";
 import { rateLimit } from "./rate-limit";
+import { currentSubscriptionPaymentCycle } from "./subscription-payment-cycle";
 import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 import { currentCycleFinancials, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
 
@@ -606,7 +607,8 @@ export function registerMembershipRoutes(app: Express) {
     if (!row) return res.json(null);
     const payments = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.subscriptionId, row.subscription.id))).orderBy(desc(membershipSubscriptionPayments.paymentDate));
     const availableAdvance = payments.filter((payment) => payment.status === "advance_available").reduce((total, payment) => total + Number(payment.amount), 0);
-    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments, availableAdvance });
+    const paymentCycle = currentSubscriptionPaymentCycle(payments, Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0), Number(row.plan.recurringPrice));
+    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments, availableAdvance, currentPaymentDue: paymentCycle.due });
   });
 
   app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
@@ -661,17 +663,25 @@ export function registerMembershipRoutes(app: Express) {
     const result = await db.transaction(async (tx) => {
       const [row] = await tx.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(subscriptionPlans.organisationId, organisationId))).limit(1).for("update");
       if (!row) return null;
-      const existingAdvances = await tx.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.status, "advance_available")));
+      const payments = await tx.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId))).orderBy(membershipSubscriptionPayments.paymentDate, membershipSubscriptionPayments.id);
+      const existingAdvances = payments.filter((payment) => payment.status === "advance_available");
       const availableAdvance = existingAdvances.reduce((total, payment) => total + Number(payment.amount), 0);
-      const nextCharge = row.subscription.status === "pending" ? Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0) : Number(row.plan.recurringPrice);
-      if (input.paymentStatus === "completed" && input.amount + availableAdvance > nextCharge) return { overpaymentRemaining: nextCharge - availableAdvance };
+      const cycle = currentSubscriptionPaymentCycle(payments, Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0), Number(row.plan.recurringPrice));
+      if (cycle.due > 0) {
+        if (input.amount > cycle.due) return { overpaymentRemaining: cycle.due };
+        const status = input.amount >= cycle.due ? cycle.completedPaymentStatus : cycle.nextPaymentStatus;
+        const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes: input.notes || "Subscription balance payment" }).returning();
+        return { payment, availableForRenewal: false };
+      }
+      const nextCharge = Number(row.plan.recurringPrice);
+      if (input.amount + availableAdvance > nextCharge) return { overpaymentRemaining: nextCharge - availableAdvance };
       const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "advance_available", notes: input.notes || "Advance subscription payment" }).returning();
-      return { payment };
+      return { payment, availableForRenewal: true };
     });
     if (!result) return res.status(404).json({ message: "Subscription not found" });
     if ("overpaymentRemaining" in result) return res.status(400).json({ message: `Advance payment cannot exceed the next subscription charge (${result.overpaymentRemaining} remaining)` });
     invalidateSubscriptionDashboard(organisationId);
-    res.status(201).json({ payment: result.payment, availableForRenewal: true });
+    res.status(201).json({ payment: result.payment, availableForRenewal: result.availableForRenewal });
   });
 
   app.post("/api/subscriptions/:id/renew", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
