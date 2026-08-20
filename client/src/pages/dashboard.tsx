@@ -66,6 +66,8 @@ export default function Dashboard() {
   const siteCount = dashData?.siteCount ?? allSites.length;
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 6) || [];
   const readyForPickup: any[] = dashData?.readyForPickup ?? [];
+  const overduePickupById = new Map((storageWaiting ?? []).map((order: any) => [order.id, order]));
+  const overduePickupCount = overduePickupById.size;
   const churnCount = behaviorData?.churn?.atRiskCount ?? 0;
 
   if (statsLoading) return <DashboardSkeleton />;
@@ -356,51 +358,7 @@ export default function Dashboard() {
         <div className="space-y-4">
 
           {/* Ready for Pickup */}
-          {storageWaiting && storageWaiting.length > 0 && (
-            <Card className="border-orange-200 dark:border-orange-900/60" data-testid="card-storage-waiting">
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                  {t('garments_waiting')}
-                  <Badge variant="secondary" className="text-[10px] h-4 px-1">{storageWaiting.length}</Badge>
-                </CardTitle>
-                <Link href="/orders?status=ready">
-                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
-                    {t('view_all')} <ChevronRight aria-hidden="true" className="w-3 h-3 ml-1" />
-                  </Button>
-                </Link>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="divide-y divide-border/30">
-                  {storageWaiting.slice(0, 5).map((order: any) => (
-                    <div key={order.id} className="py-2.5" data-testid={`row-storage-waiting-${order.id}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium leading-tight truncate">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
-                          <p className="text-xs text-muted-foreground">{order.customer?.phone || "-"} · {t('days_value', { count: order.daysWaiting })}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{formatBusinessDateTime(order.readyDate)}</p>
-                        </div>
-                        {order.whatsappUrl && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => openWhatsApp(whatsappRequestFromUrl(order.whatsappUrl))}
-                          >
-                            WhatsApp
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Ready for Pickup */}
-          <Card className="border-border/50" data-testid="card-ready-for-pickup">
+          <Card className={overduePickupCount > 0 ? "border-orange-200 dark:border-orange-900/60" : "border-border/50"} data-testid="card-ready-for-pickup">
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Package className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -410,13 +368,18 @@ export default function Dashboard() {
                     {readyForPickup.length}
                   </Badge>
                 )}
+                {overduePickupCount > 0 && (
+                  <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 text-[10px] h-4 px-1">
+                    {overduePickupCount} {t('delays_overdue')}
+                  </Badge>
+                )}
               </CardTitle>
               {readyForPickup.length > 0 && (
-                <Link href="/orders">
-                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
-                    {t('view_all')} <ChevronRight className="w-3 h-3 ml-1" />
-                  </Button>
-                </Link>
+                <Button asChild variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
+                  <Link href="/orders?status=ready">
+                    {t('view_all')} <ChevronRight aria-hidden="true" className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
               )}
             </CardHeader>
             <CardContent className="px-4 pb-4">
@@ -426,19 +389,38 @@ export default function Dashboard() {
                 </p>
               ) : (
                 <div className="divide-y divide-border/30">
-                  {readyForPickup.slice(0, 5).map((order: any) => (
-                    <div key={order.id} className="flex items-center justify-between py-2" data-testid={`row-ready-${order.id}`}>
-                      <div>
-                        <p className="text-sm font-medium leading-tight">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
-                        <p className="text-xs text-muted-foreground">{symbol}{Number(order.totalAmount).toFixed(2)}</p>
+                  {readyForPickup.slice(0, 5).map((order: any) => {
+                    const overdueOrder: any = overduePickupById.get(order.id);
+                    return (
+                      <div key={order.id} className="flex items-center justify-between gap-3 py-2" data-testid={`row-ready-${order.id}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium leading-tight truncate">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {symbol}{Number(order.totalAmount).toFixed(2)}
+                            {overdueOrder && <> · <span className="text-orange-700 dark:text-orange-400">{t('days_value', { count: overdueOrder.daysWaiting })} · {t('delays_overdue')}</span></>}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {overdueOrder?.whatsappUrl && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => openWhatsApp(whatsappRequestFromUrl(overdueOrder.whatsappUrl))}
+                            >
+                              WhatsApp
+                            </Button>
+                          )}
+                          <Button asChild variant="ghost" size="icon" className="h-7 w-7">
+                            <Link href={`/orders/${order.id}`} aria-label={`${t('view_order')} ${order.customer?.name || orderDisplayId(order)}`}>
+                              <ChevronRight aria-hidden="true" className="w-3.5 h-3.5 text-muted-foreground" />
+                            </Link>
+                          </Button>
+                        </div>
                       </div>
-                      <Link href={`/orders/${order.id}`}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Button>
-                      </Link>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
