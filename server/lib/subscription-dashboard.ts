@@ -87,7 +87,7 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
   }
   for (const rows of completedBySubscription.values()) rows.sort((a, b) => new Date(a.paymentDate ?? 0).getTime() - new Date(b.paymentDate ?? 0).getTime());
   const renewalPayments = receivedPayments.filter((payment) => {
-    if (payment.status === "renewal_completed") return true;
+    if (payment.status === "renewal_completed" || payment.status === "renewal_partial") return true;
     if (payment.status !== "completed") return false;
     const rows = completedBySubscription.get(payment.subscriptionId) ?? [];
     return rows.findIndex((row) => row.id === payment.id) > 0;
@@ -123,7 +123,7 @@ async function buildDashboard(organisationId: number, period: "month" | "quarter
   for (const payment of receivedPayments) {
     receivedBySubscription.set(payment.subscriptionId, (receivedBySubscription.get(payment.subscriptionId) ?? 0) + Number(payment.amount));
   }
-  const renewedSubscriptionIds = new Set(payments.filter((payment) => payment.status === "renewal_completed").map((payment) => payment.subscriptionId));
+  const renewedSubscriptionIds = new Set(payments.filter((payment) => payment.status === "renewal_completed" || payment.status === "renewal_partial").map((payment) => payment.subscriptionId));
 
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11 + index, 1));

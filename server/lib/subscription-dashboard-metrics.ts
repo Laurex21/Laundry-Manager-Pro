@@ -1,6 +1,6 @@
 import { percentage } from "./subscription-formulas";
 
-export const RECEIVED_SUBSCRIPTION_PAYMENT_STATUSES = new Set(["completed", "renewal_completed", "advance_available", "advance_applied"]);
+export const RECEIVED_SUBSCRIPTION_PAYMENT_STATUSES = new Set(["partial", "completed", "renewal_partial", "renewal_completed", "advance_available", "advance_applied"]);
 
 export function isReceivedSubscriptionPayment(status: string | null | undefined) {
   return RECEIVED_SUBSCRIPTION_PAYMENT_STATUSES.has(status ?? "");

@@ -15,6 +15,8 @@ assert.equal(monthlyEquivalent(1200, "annual"), 100);
 assert.equal(percentage(3, 12), 25);
 assert.equal(percentage(1, 0), 0);
 assert.equal(isReceivedSubscriptionPayment("completed"), true);
+assert.equal(isReceivedSubscriptionPayment("partial"), true);
+assert.equal(isReceivedSubscriptionPayment("renewal_partial"), true);
 assert.equal(isReceivedSubscriptionPayment("renewal_completed"), true);
 assert.equal(isReceivedSubscriptionPayment("advance_available"), true);
 assert.equal(isReceivedSubscriptionPayment("advance_applied"), true);
