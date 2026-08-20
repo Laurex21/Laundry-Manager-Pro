@@ -351,12 +351,17 @@ export default function Dashboard() {
           {/* Ready for Pickup */}
           {storageWaiting && storageWaiting.length > 0 && (
             <Card className="border-orange-200 dark:border-orange-900/60" data-testid="card-storage-waiting">
-              <CardHeader className="pb-2 pt-4 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                  Vêtements en attente
+                  {t('garments_waiting')}
                   <Badge variant="secondary" className="text-[10px] h-4 px-1">{storageWaiting.length}</Badge>
                 </CardTitle>
+                <Link href="/orders?status=ready">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-7">
+                    {t('view_all')} <ChevronRight aria-hidden="true" className="w-3 h-3 ml-1" />
+                  </Button>
+                </Link>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 <div className="divide-y divide-border/30">
@@ -365,7 +370,7 @@ export default function Dashboard() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-medium leading-tight truncate">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
-                          <p className="text-xs text-muted-foreground">{order.customer?.phone || "-"} · {order.daysWaiting} jours</p>
+                          <p className="text-xs text-muted-foreground">{order.customer?.phone || "-"} · {t('days_value', { count: order.daysWaiting })}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">{formatBusinessDateTime(order.readyDate)}</p>
                         </div>
                         {order.whatsappUrl && (
