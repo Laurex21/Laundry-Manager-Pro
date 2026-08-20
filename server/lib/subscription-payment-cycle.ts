@@ -9,10 +9,10 @@ const INITIAL_STATUSES = new Set(["partial", "completed"]);
 const RENEWAL_STATUSES = new Set(["renewal_partial", "renewal_completed"]);
 
 export function currentSubscriptionPaymentCycle(rows: SubscriptionPaymentRow[], initialCost: number, renewalCost: number) {
-  const payments = [...rows].sort((a, b) => {
-    const dateDifference = new Date(a.paymentDate ?? 0).getTime() - new Date(b.paymentDate ?? 0).getTime();
-    return dateDifference || Number(a.id ?? 0) - Number(b.id ?? 0);
-  });
+  // Payment dates are editable accounting data. Cycle allocation must instead
+  // follow the immutable insertion order, otherwise a backdated final payment
+  // can be assigned to an earlier cycle on subsequent balance calculations.
+  const payments = [...rows].sort((a, b) => Number(a.id ?? 0) - Number(b.id ?? 0));
   const normalizedInitialCost = Math.max(0, initialCost);
   const normalizedRenewalCost = Math.max(0, renewalCost);
   let initialPaid = 0;

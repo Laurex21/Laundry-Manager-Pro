@@ -13,9 +13,13 @@ assert.doesNotMatch(routes, /Completed payment must cover the full amount due/, 
 assert.match(routes, /Complete the subscription payment before activation/, "pending subscriptions must not bypass payment through the status endpoint");
 assert.match(routes, /paymentDate: input\.paymentDate \?\? new Date\(\)/);
 assert.match(routes, /reference: input\.paymentReference \|\| null/);
-assert.match(routes, /const renewalPaymentStatus = totalReceived <= 0 \? "pending" : totalReceived < totalDue \? "renewal_partial" : "renewal_completed"/, "renewal payment status must be derived from the amount received");
-assert.match(routes, /const hasConfirmedAdvance = renewalPaymentStatus !== "pending"/, "a positive renewal advance must reset benefits");
-assert.match(routes, /if \(!hasConfirmedAdvance\)[\s\S]*renewed: false/, "unconfirmed renewal payments must not reset benefits");
+assert.match(routes, /const paymentCycle = currentSubscriptionPaymentCycle\(payments, initialCost, renewalCost\)/, "renewal must inspect the cumulative current-cycle balance");
+assert.match(routes, /if \(paymentCycle\.due > 0\)/, "renewal must settle an open current cycle before starting another one");
+assert.match(routes, /const renewalPaymentStatus = totalReceived <= 0 \? "pending" : totalReceived < renewalCost \? "renewal_partial" : "renewal_completed"/, "renewal payment status must be derived from the cumulative amount received");
+assert.match(routes, /paymentCycle\.cycle === "renewal" && status === "renewal_completed"/, "the final installment must complete a partially paid renewal");
+assert.match(routes, /renewalPaymentStatus !== "renewal_completed"/, "partial renewals must not reset benefits");
+assert.match(routes, /cycle\.cycle === "initial" && status === "completed" && row\.subscription\.status === "pending"/, "the final initial installment must activate a pending subscription");
+assert.match(routes, /paymentCycle\.cycle === "initial" && status === "completed" && row\.subscription\.status === "pending"/, "renewal endpoint must activate a pending subscription when its initial balance is completed");
 assert.match(routes, /renewed: true/, "a confirmed renewal advance must report that benefits were reset");
 assert.match(routes, /\/api\/subscriptions\/:id\/payments/, "existing subscribers need a standalone payment endpoint");
 assert.match(routes, /currentSubscriptionPaymentCycle/, "added payments must inspect the cumulative current-cycle balance");
@@ -41,7 +45,7 @@ assert.match(ui, /Status \(automatic\)/, "payment status must be visibly automat
 assert.match(ui, /Select value=\{automaticPaymentStatus\} disabled/, "staff must not be able to override automatic payment status");
 assert.doesNotMatch(ui, /paymentStatus: payment\.status/, "the client must not submit a manual payment status");
 assert.match(ui, /Payment reference|Reference/);
-assert.match(ui, /A confirmed advance above 0 activates or renews the benefits immediately/);
+assert.match(ui, /A renewal takes effect only after the current renewal balance is fully paid/);
 assert.doesNotMatch(ui, /body:\{paymentMethod:"cash"\}/, "renewal must not be a one-click hard-coded cash payment");
 
 console.log("subscription payment registration regression passed");

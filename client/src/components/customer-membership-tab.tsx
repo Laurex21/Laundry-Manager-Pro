@@ -25,6 +25,20 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
+function paymentStatusLabel(status: unknown) {
+  const labels: Record<string, string> = {
+    pending: "Pending",
+    partial: "Advance · Activated",
+    completed: "Completed",
+    renewal_partial: "Renewal payment · Balance remaining",
+    renewal_completed: "Renewal completed",
+    advance_available: "Advance available",
+    advance_applied: "Advance applied",
+  };
+  const normalized = String(status ?? "");
+  return labels[normalized] ?? normalized.replaceAll("_", " ");
+}
+
 export function CustomerMembershipTab({ customerId }: { customerId: number }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -100,8 +114,8 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
       setPaymentOpen(false);
       toast({
         title:
-          data?.renewed === false
-            ? "Payment recorded; confirmation is required before benefits activate"
+          data?.renewed === false && Number(data?.amountDue ?? 0) > 0
+            ? `Payment recorded; ${Number(data.amountDue).toLocaleString()} FCFA remains due`
             : t("settings_saved"),
       });
     },
@@ -122,6 +136,8 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
   const openPayment = (mode: "activate" | "renew" | "add", plan: any) => {
+    const currentPaymentDue = Number(subscription?.currentPaymentDue ?? 0);
+    const isSettlingCurrentCycle = mode === "renew" && currentPaymentDue > 0;
     const fullDue =
       Number(plan.recurringPrice) +
       (mode === "activate" || subscription?.status === "pending"
@@ -130,6 +146,8 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
     const due =
       mode === "activate"
         ? fullDue
+        : isSettlingCurrentCycle
+          ? currentPaymentDue
         : Math.max(0, fullDue - Number(subscription?.availableAdvance ?? 0));
     setPaymentMode(mode);
     setSelectedPlan(plan);
@@ -139,7 +157,7 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
       date: new Date().toISOString().slice(0, 16),
       reference: "",
       notes:
-        mode === "add"
+        mode === "add" || isSettlingCurrentCycle
           ? Number(subscription?.currentPaymentDue ?? 0) > 0
             ? "Subscription balance payment"
             : "Advance subscription payment"
@@ -183,25 +201,33 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
   const addPaymentDue = Number(
     subscription?.currentPaymentDue ?? selectedPlan?.recurringPrice ?? 0,
   );
-  const automaticPaymentStatus =
-    Number(payment.amount || 0) <= 0
-      ? "pending"
-      : Number(payment.amount) <
-          (paymentMode === "add"
-            ? addPaymentDue
-            : Math.max(
-                0,
-                Number(selectedPlan?.recurringPrice ?? 0) +
-                  (paymentMode === "activate" ||
-                  subscription?.status === "pending"
-                    ? Number(selectedPlan?.activationFee ?? 0)
-                    : 0) -
-                  (paymentMode === "activate"
-                    ? 0
-                    : Number(subscription?.availableAdvance ?? 0)),
-              ))
-        ? "partial"
-        : "completed";
+  const isSettlingCurrentCycle =
+    paymentMode === "add" ||
+    (paymentMode === "renew" && Number(subscription?.currentPaymentDue ?? 0) > 0);
+  const automaticPaymentStatus = (() => {
+    const amount = Number(payment.amount || 0);
+    if (amount <= 0) return "pending";
+    if (paymentMode === "add" && Number(subscription?.currentPaymentDue ?? 0) <= 0) {
+      return "advance_available";
+    }
+    const due = isSettlingCurrentCycle
+      ? addPaymentDue
+      : Math.max(
+          0,
+          Number(selectedPlan?.recurringPrice ?? 0) +
+            (paymentMode === "activate" || subscription?.status === "pending"
+              ? Number(selectedPlan?.activationFee ?? 0)
+              : 0) -
+            (paymentMode === "activate"
+              ? 0
+              : Number(subscription?.availableAdvance ?? 0)),
+        );
+    const isRenewalPayment = isSettlingCurrentCycle
+      ? subscription?.currentPaymentCycle === "renewal"
+      : paymentMode === "renew";
+    if (amount < due) return isRenewalPayment ? "renewal_partial" : "partial";
+    return isRenewalPayment ? "renewal_completed" : "completed";
+  })();
   const paymentDialog = (
     <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
       <DialogContent>
@@ -246,14 +272,14 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
               )}
               <div className="mt-3 flex justify-between border-t pt-3 text-base">
                 <span>
-                  {paymentMode === "add"
+                  {isSettlingCurrentCycle
                     ? Number(subscription?.currentPaymentDue ?? 0) > 0
                       ? "Current balance due"
                       : "Maximum advance"
                     : "Amount due"}
                 </span>
                 <b>
-                  {(paymentMode === "add" && Number(subscription?.currentPaymentDue ?? 0) > 0
+                  {(isSettlingCurrentCycle && Number(subscription?.currentPaymentDue ?? 0) > 0
                     ? Number(subscription.currentPaymentDue)
                     : Math.max(
                         0,
@@ -317,6 +343,9 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="partial">Advance · Activated</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="renewal_partial">Renewal payment · Balance remaining</SelectItem>
+                      <SelectItem value="renewal_completed">Renewal completed</SelectItem>
+                      <SelectItem value="advance_available">Advance available</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -346,7 +375,9 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
                 ? Number(subscription?.currentPaymentDue ?? 0) > 0
                   ? "This payment reduces the current subscription balance. Renewal credit starts only after the current cycle is fully paid."
                   : "Completed advance payments reduce the next renewal amount without resetting the current allowance."
-                : "A confirmed advance above 0 activates or renews the benefits immediately. The remaining balance stays due."}
+                : paymentMode === "activate"
+                  ? "A confirmed advance above 0 activates benefits immediately. The remaining balance stays due."
+                  : "A renewal takes effect only after the current renewal balance is fully paid."}
             </p>
             <Button
               className="w-full"
@@ -448,6 +479,12 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
                   {Number(subscription.availableAdvance).toLocaleString()} FCFA
                 </p>
               )}
+              {Number(subscription.currentPaymentDue ?? 0) > 0 && (
+                <p className="mt-1 text-sm font-medium text-amber-700">
+                  Current balance due:{" "}
+                  {Number(subscription.currentPaymentDue).toLocaleString()} FCFA
+                </p>
+              )}
             </div>
             <Badge>{subscription.status}</Badge>
           </div>
@@ -492,9 +529,21 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
               ))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => openPayment("renew", subscription.plan)}>
-              {subscription.status === "pending"
-                ? "Complete payment"
+            <Button
+              onClick={() =>
+                openPayment(
+                  Number(subscription.currentPaymentDue ?? 0) > 0 &&
+                    subscription.currentPaymentCycle !== "renewal"
+                    ? "add"
+                    : "renew",
+                  subscription.plan,
+                )
+              }
+            >
+              {Number(subscription.currentPaymentDue ?? 0) > 0
+                ? subscription.currentPaymentCycle === "renewal"
+                  ? "Complete renewal payment"
+                  : "Complete payment"
                 : t("renew_subscription")}
             </Button>
             <Button
@@ -622,7 +671,7 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
                       </div>
                       <div className="text-xs capitalize text-muted-foreground">
                         {x.reference || "No reference"} ·{" "}
-                        {String(x.status || "").replaceAll("_", " ")}
+                        {paymentStatusLabel(x.status)}
                       </div>
                     </div>
                     <b>{Number(x.amount).toLocaleString()} FCFA</b>

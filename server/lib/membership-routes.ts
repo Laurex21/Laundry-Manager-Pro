@@ -608,7 +608,7 @@ export function registerMembershipRoutes(app: Express) {
     const payments = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.subscriptionId, row.subscription.id))).orderBy(desc(membershipSubscriptionPayments.paymentDate));
     const availableAdvance = payments.filter((payment) => payment.status === "advance_available").reduce((total, payment) => total + Number(payment.amount), 0);
     const paymentCycle = currentSubscriptionPaymentCycle(payments, Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0), Number(row.plan.recurringPrice));
-    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments, availableAdvance, currentPaymentDue: paymentCycle.due });
+    res.json({ ...row.subscription, plan: row.plan, customerName: row.customerName, customerPhone: row.customerPhone, payments, availableAdvance, currentPaymentDue: paymentCycle.due, currentPaymentCycle: paymentCycle.cycle });
   });
 
   app.post("/api/customers/:id/subscription", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
@@ -671,6 +671,19 @@ export function registerMembershipRoutes(app: Express) {
         if (input.amount > cycle.due) return { overpaymentRemaining: cycle.due };
         const status = input.amount >= cycle.due ? cycle.completedPaymentStatus : cycle.nextPaymentStatus;
         const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes: input.notes || "Subscription balance payment" }).returning();
+        if (cycle.cycle === "initial" && status === "completed" && row.subscription.status === "pending") {
+          const [subscription] = await tx.update(customerSubscriptions).set({ status: "active", updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.status, "pending"))).returning();
+          if (!subscription) return null;
+          return { payment, availableForRenewal: false, renewed: false, activated: true, subscription };
+        }
+        if (cycle.cycle === "renewal" && status === "renewal_completed") {
+          const renewalBase = new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date();
+          const expiryDate = addDays(renewalBase, row.plan.durationDays);
+          const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
+          const [subscription] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
+          if (!subscription) return null;
+          return { payment, availableForRenewal: false, renewed: true, customerId: row.subscription.customerId };
+        }
         return { payment, availableForRenewal: false };
       }
       const nextCharge = Number(row.plan.recurringPrice);
@@ -678,8 +691,13 @@ export function registerMembershipRoutes(app: Express) {
       const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "advance_available", notes: input.notes || "Advance subscription payment" }).returning();
       return { payment, availableForRenewal: true };
     });
-    if (!result) return res.status(404).json({ message: "Subscription not found" });
+    if (!result) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
     if ("overpaymentRemaining" in result) return res.status(400).json({ message: `Advance payment cannot exceed the next subscription charge (${result.overpaymentRemaining} remaining)` });
+    if (result.renewed) {
+      await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: Number(result.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
+      await awardRenewalPoints(result.payment.id, result.customerId!, organisationId)
+        .catch((error) => console.error("[Loyalty] Renewal points award failed", error));
+    }
     invalidateSubscriptionDashboard(organisationId);
     res.status(201).json({ payment: result.payment, availableForRenewal: result.availableForRenewal });
   });
@@ -688,39 +706,72 @@ export function registerMembershipRoutes(app: Express) {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Subscription not found" });
     const input = z.object({ paymentMethod: z.string().min(1).default("cash"), amount: z.coerce.number().min(0), paymentDate: z.coerce.date().optional(), paymentReference: z.string().max(100).nullish(), notes: z.string().max(500).nullish() }).parse(req.body ?? {});
-    const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId ?? -1), eq(subscriptionPlans.organisationId, organisationId ?? -1))).limit(1);
-    if (!row) return res.status(404).json({ message: "Subscription not found" });
-    const totalDue = row.subscription.status === "pending" ? Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0) : Number(row.plan.recurringPrice);
-    const availableAdvances = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.status, "advance_available")));
-    const advanceAmount = availableAdvances.reduce((total, payment) => total + Number(payment.amount), 0);
-    const amountDue = Math.max(0, totalDue - advanceAmount);
-    if (input.amount > amountDue) return res.status(400).json({ message: `Payment cannot exceed the remaining amount due (${amountDue})` });
-    const totalReceived = input.amount + advanceAmount;
-    const renewalPaymentStatus = totalReceived <= 0 ? "pending" : totalReceived < totalDue ? "renewal_partial" : "renewal_completed";
-    const hasConfirmedAdvance = renewalPaymentStatus !== "pending";
-    if (!hasConfirmedAdvance) {
-      const [payment] = await db.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "pending", notes: input.notes || null }).returning();
-      invalidateSubscriptionDashboard(organisationId);
-      return res.json({ subscription: row.subscription, payment, renewed: false, amountDue });
-    }
-    const renewalBase = row.subscription.status === "pending" ? new Date() : (new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date());
-    const expiryDate = addDays(renewalBase, row.plan.durationDays);
-    const renewed = await db.transaction(async (tx) => {
-      const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
-      const [updated] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId!), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
-      if (!updated) return null;
-      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId: organisationId!, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: renewalPaymentStatus, notes: input.notes || null }).returning();
-      if (availableAdvances.length) await tx.update(membershipSubscriptionPayments).set({ status: "advance_applied" }).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId!), eq(membershipSubscriptionPayments.status, "advance_available")));
-      return { subscription: updated, payment };
+    const result: any = await db.transaction(async (tx) => {
+      const [row] = await tx.select({ subscription: customerSubscriptions, plan: subscriptionPlans }).from(customerSubscriptions).innerJoin(subscriptionPlans, eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id)).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(subscriptionPlans.organisationId, organisationId))).limit(1).for("update");
+      if (!row) return null;
+      const payments = await tx.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId))).orderBy(membershipSubscriptionPayments.paymentDate, membershipSubscriptionPayments.id);
+      const initialCost = Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0);
+      const renewalCost = Number(row.plan.recurringPrice);
+      const paymentCycle = currentSubscriptionPaymentCycle(payments, initialCost, renewalCost);
+      const createPayment = async (status: string, notes: string | null = input.notes || null) => {
+        const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes }).returning();
+        return payment;
+      };
+      const completeRenewal = async (payment: any) => {
+        const renewalBase = new Date(row.subscription.expiryDate) > new Date() ? row.subscription.expiryDate : new Date();
+        const expiryDate = addDays(renewalBase, row.plan.durationDays);
+        const carryKg = row.plan.allowCarryForward ? Math.min(Number(row.subscription.remainingKg ?? 0), Number(row.plan.carryForwardLimit ?? row.subscription.remainingKg ?? 0)) : 0;
+        const [subscription] = await tx.update(customerSubscriptions).set({ status: "active", expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: row.plan.includedWeightKg == null ? null : String(Number(row.plan.includedWeightKg) + carryKg), remainingPieces: row.plan.includedPieces, remainingOrders: row.plan.maxOrders, updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.expiryDate, row.subscription.expiryDate))).returning();
+        if (!subscription) return null;
+        return { subscription, payment, renewed: true, amountDue: 0 };
+      };
+
+      // A renewal action must settle a currently open cycle before it can
+      // create a new renewal. This prevents a partial activation payment from
+      // being mistaken for next-cycle credit.
+      if (paymentCycle.due > 0) {
+        if (input.amount > paymentCycle.due) return { overpaymentRemaining: paymentCycle.due, balanceType: "current" };
+        const status = input.amount <= 0 ? "pending" : input.amount >= paymentCycle.due ? paymentCycle.completedPaymentStatus : paymentCycle.nextPaymentStatus;
+        const payment = await createPayment(status, input.notes || "Subscription balance payment");
+        const amountDue = Math.max(0, paymentCycle.due - input.amount);
+        if (paymentCycle.cycle === "initial" && status === "completed" && row.subscription.status === "pending") {
+          const [subscription] = await tx.update(customerSubscriptions).set({ status: "active", updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.status, "pending"))).returning();
+          if (!subscription) return null;
+          return { subscription, payment, renewed: false, activated: true, amountDue };
+        }
+        if (paymentCycle.cycle === "renewal" && status === "renewal_completed") {
+          return completeRenewal(payment);
+        }
+        return { subscription: row.subscription, payment, renewed: false, amountDue };
+      }
+
+      const availableAdvances = payments.filter((payment) => payment.status === "advance_available");
+      const advanceAmount = availableAdvances.reduce((total, payment) => total + Number(payment.amount), 0);
+      const amountDue = Math.max(0, renewalCost - advanceAmount);
+      if (input.amount > amountDue) return { overpaymentRemaining: amountDue, balanceType: "renewal" };
+      const totalReceived = input.amount + advanceAmount;
+      const renewalPaymentStatus = totalReceived <= 0 ? "pending" : totalReceived < renewalCost ? "renewal_partial" : "renewal_completed";
+      const payment = await createPayment(renewalPaymentStatus);
+      if (availableAdvances.length && renewalPaymentStatus !== "pending") {
+        await tx.update(membershipSubscriptionPayments).set({ status: "advance_applied" }).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.status, "advance_available")));
+      }
+      if (renewalPaymentStatus !== "renewal_completed") {
+        return { subscription: row.subscription, payment, renewed: false, amountDue: Math.max(0, renewalCost - totalReceived) };
+      }
+      return completeRenewal(payment);
     });
-    if (!renewed) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
-    await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: Number(renewed.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
-    if (renewalPaymentStatus === "renewal_completed") {
-      await awardRenewalPoints(renewed.payment.id, row.subscription.customerId, organisationId)
+    if (!result) return res.status(404).json({ message: "Subscription not found" });
+    if ("overpaymentRemaining" in result) {
+      const label = result.balanceType === "current" ? "current subscription balance" : "remaining renewal amount";
+      return res.status(400).json({ message: `Payment cannot exceed the ${label} (${result.overpaymentRemaining})` });
+    }
+    if (result.renewed) {
+      await createPendingSubscriptionNotification(id, organisationId, "payment_confirmed", { amount: Number(result.payment.amount) }).catch((error) => console.error("[Subscriptions] Renewal notification failed", error));
+      await awardRenewalPoints(result.payment.id, result.subscription.customerId, organisationId)
         .catch((error) => console.error("[Loyalty] Renewal points award failed", error));
     }
     invalidateSubscriptionDashboard(organisationId);
-    res.json({ subscription: renewed.subscription, payment: renewed.payment, renewed: true, amountDue });
+    res.json(result);
   });
 
   app.get("/api/subscriptions/:id/history", isAuthenticated, async (req: any, res) => {
