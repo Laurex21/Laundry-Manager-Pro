@@ -626,17 +626,16 @@ export function registerMembershipRoutes(app: Express) {
     if (!plan) return res.status(400).json({ message: "Invalid subscription plan" });
     const membershipNumber = `XP-${organisationId}-${Date.now()}`; const expiryDate = addDays(input.startDate, plan.durationDays);
     const amountDue = Number(plan.recurringPrice) + Number(plan.activationFee ?? 0);
-    if (input.paymentStatus === "completed" && input.paymentAmount < amountDue) return res.status(400).json({ message: `Completed payment must cover the full amount due (${amountDue})` });
-    const fullyPaid = input.paymentStatus === "completed" && input.paymentAmount >= amountDue;
+    const hasConfirmedAdvance = input.paymentStatus === "completed" && input.paymentAmount > 0;
     const subscription = await db.transaction(async (tx) => {
-      const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes, status: fullyPaid ? "active" : "pending" }).returning();
+      const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes, status: hasConfirmedAdvance ? "active" : "pending" }).returning();
       await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(input.paymentAmount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: input.paymentStatus, notes: input.notes || null });
       await tx.insert(membershipCards).values({ customerSubscriptionId: created.id, cardNumber: membershipNumber, barcode: membershipNumber, expiryDate });
       return created;
     });
     await createPendingSubscriptionNotification(subscription.id, organisationId, "welcome").catch((error) => console.error("[Subscriptions] Welcome notification failed", error));
     await createPendingSubscriptionNotification(subscription.id, organisationId, "card_ready").catch((error) => console.error("[Subscriptions] Card notification failed", error));
-    if (fullyPaid && input.paymentAmount > 0) {
+    if (hasConfirmedAdvance) {
       await createPendingSubscriptionNotification(subscription.id, organisationId, "payment_confirmed", { amount: input.paymentAmount }).catch((error) => console.error("[Subscriptions] Payment notification failed", error));
     }
     invalidateSubscriptionDashboard(organisationId);
@@ -684,9 +683,8 @@ export function registerMembershipRoutes(app: Express) {
     const availableAdvances = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), eq(membershipSubscriptionPayments.status, "advance_available")));
     const advanceAmount = availableAdvances.reduce((total, payment) => total + Number(payment.amount), 0);
     const amountDue = Math.max(0, totalDue - advanceAmount);
-    if (input.paymentStatus === "completed" && input.amount < amountDue) return res.status(400).json({ message: `Completed payment must cover the remaining amount due (${amountDue})` });
-    const fullyPaid = input.paymentStatus === "completed" && input.amount + advanceAmount >= totalDue;
-    if (!fullyPaid) {
+    const hasConfirmedAdvance = advanceAmount > 0 || (input.paymentStatus === "completed" && input.amount > 0);
+    if (!hasConfirmedAdvance) {
       const [payment] = await db.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: input.paymentStatus, notes: input.notes || null }).returning();
       invalidateSubscriptionDashboard(organisationId);
       return res.json({ subscription: row.subscription, payment, renewed: false, amountDue });
