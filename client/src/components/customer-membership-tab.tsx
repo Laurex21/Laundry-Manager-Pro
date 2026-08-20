@@ -674,7 +674,19 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
                         {paymentStatusLabel(x.status)}
                       </div>
                     </div>
-                    <b>{Number(x.amount).toLocaleString()} FCFA</b>
+                    <div className="flex items-center gap-2">
+                      <b>{Number(x.amount).toLocaleString()} FCFA</b>
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={`/api/subscriptions/${subscription.id}/payments/${x.id}/receipt`}
+                          download={`subscription-payment-${x.id}.html`}
+                          aria-label={`${t("download_receipt")} · ${Number(x.amount).toLocaleString()} FCFA`}
+                        >
+                          <Download className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">{t("download_receipt")}</span>
+                        </a>
+                      </Button>
+                    </div>
                   </div>
                 ),
               )}

@@ -8,7 +8,7 @@ import {
   businessSettings, customerSubscriptions, customers, garmentItems, membershipCards, orders, orderItems, organisations, services, sites,
   loyaltyProgram, membershipSubscriptionPayments, subscriptionPlans, subscriptionPlanServices, subscriptionTransactions,
 } from "@shared/schema";
-import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML } from "./subscription-receipt";
+import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML, generateSubscriptionPaymentReceiptHTML } from "./subscription-receipt";
 import { buildMembershipCard } from "./membership-card-generator";
 import { createPendingSubscriptionNotification } from "./subscription-notifications";
 import { usageThresholdCrossed } from "./subscription-formulas";
@@ -782,6 +782,35 @@ export function registerMembershipRoutes(app: Express) {
     const transactions = await db.select().from(subscriptionTransactions).where(eq(subscriptionTransactions.customerSubscriptionId, id)).orderBy(desc(subscriptionTransactions.transactionDate)).limit(limit).offset((page - 1) * limit);
     const payments = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId!))).orderBy(desc(membershipSubscriptionPayments.paymentDate)).limit(limit).offset((page - 1) * limit);
     res.json({ transactions, payments, page, limit });
+  });
+
+  app.get("/api/subscriptions/:id/payments/:paymentId/receipt", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req); const id = Number(req.params.id); const paymentId = Number(req.params.paymentId);
+    if (!organisationId || !Number.isInteger(paymentId) || !(await subscriptionInScope(id, organisationId, siteScope(req)))) return res.status(404).json({ message: "Payment not found" });
+    const [row] = await db.select({ subscription: customerSubscriptions, plan: subscriptionPlans, customer: customers, payment: membershipSubscriptionPayments })
+      .from(membershipSubscriptionPayments)
+      .innerJoin(customerSubscriptions, and(eq(membershipSubscriptionPayments.subscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId)))
+      .innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId)))
+      .innerJoin(customers, eq(customerSubscriptions.customerId, customers.id))
+      .where(and(eq(membershipSubscriptionPayments.id, paymentId), eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId), inArray(customers.siteId, siteScope(req)))).limit(1);
+    if (!row) return res.status(404).json({ message: "Payment not found" });
+    const payments = await db.select().from(membershipSubscriptionPayments).where(and(eq(membershipSubscriptionPayments.subscriptionId, id), eq(membershipSubscriptionPayments.organisationId, organisationId))).orderBy(membershipSubscriptionPayments.id);
+    const paymentsAtReceipt = payments.filter((payment) => payment.id <= paymentId);
+    let paymentPosition = currentSubscriptionPaymentCycle(paymentsAtReceipt, Number(row.plan.recurringPrice) + Number(row.plan.activationFee ?? 0), Number(row.plan.recurringPrice));
+    let receiptStatus: string | undefined;
+    if (row.payment.status === "advance_available" || row.payment.status === "advance_applied") {
+      const advancePaid = paymentsAtReceipt.filter((payment) => payment.status === "advance_available" || payment.status === "advance_applied").reduce((total, payment) => total + Number(payment.amount), 0);
+      const cost = Number(row.plan.recurringPrice);
+      paymentPosition = { ...paymentPosition, cycle: "renewal", cost, paid: Math.min(cost, advancePaid), due: Math.max(0, cost - advancePaid), nextPaymentStatus: "renewal_partial", completedPaymentStatus: "renewal_completed" };
+      receiptStatus = row.payment.status === "advance_applied" ? "Avance appliquée au renouvellement" : "Avance disponible pour le prochain renouvellement";
+    } else if (row.payment.status === "pending") {
+      receiptStatus = "Paiement en attente";
+    }
+    const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
+    const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
+    const html = generateSubscriptionPaymentReceiptHTML({ ...row, settings, paymentPosition, receiptStatus });
+    res.setHeader("Content-Disposition", `attachment; filename="subscription-payment-${paymentId}.html"`);
+    res.type("html").send(html);
   });
 
   app.get("/api/customers/:id/subscription/card", isAuthenticated, async (req: any, res) => {
