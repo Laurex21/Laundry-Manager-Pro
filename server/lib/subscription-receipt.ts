@@ -84,5 +84,20 @@ export function generateSubscriptionPaymentReceiptHTML(data: any) {
   <section class="section"><h2>Abonné</h2><div class="row"><span>Client</span><strong>${esc(customer.name)}</strong></div><div class="row"><span>Téléphone</span><strong>${esc(customer.phone)}</strong></div><div class="row"><span>N° membre</span><strong>${esc(subscription.membershipNumber)}</strong></div><div class="row"><span>Plan</span><strong>${esc(plan.name)}</strong></div></section>
   <section class="section"><h2>Paiement reçu</h2><div class="row"><span>Montant versé</span><strong class="amount">${money(payment.amount)}</strong></div><div class="row"><span>Moyen de paiement</span><strong>${esc(payment.paymentMethod || "—")}</strong></div><div class="row"><span>Référence</span><strong>${esc(payment.reference || "Aucune")}</strong></div></section>
   <section class="section"><h2>Situation après ce paiement</h2><div class="row"><span>Coût du cycle</span><strong>${money(paymentPosition.cost)}</strong></div><div class="row"><span>Total affecté</span><strong>${money(paymentPosition.paid)}</strong></div><div class="row"><span>Solde restant</span><strong>${money(paymentPosition.due)}</strong></div><div class="row"><span>Statut</span><strong class="status ${paymentPosition.due <= 0 ? "paid" : ""}">${esc(status)}</strong></div></section>
-  <footer>Merci pour votre paiement.<br>${esc(settings?.receiptFooterNote || "")}</footer></main></body></html>`;
+  <footer>Merci pour votre paiement.<br>${esc(settings?.receiptFooterNote || "")}</footer></main>
+  <script>
+    window.addEventListener("load", function () {
+      var images = Array.prototype.slice.call(document.images || []);
+      var waitForImages = images.map(function (image) {
+        if (image.complete) return Promise.resolve();
+        return new Promise(function (resolve) {
+          image.addEventListener("load", resolve, { once: true });
+          image.addEventListener("error", resolve, { once: true });
+        });
+      });
+      Promise.all(waitForImages).then(function () {
+        window.setTimeout(function () { window.print(); }, 250);
+      });
+    });
+  </script></body></html>`;
 }

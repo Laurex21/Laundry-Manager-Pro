@@ -32,4 +32,9 @@ assert.match(routes, /eq\(membershipSubscriptionPayments\.organisationId, organi
 assert.match(routes, /inArray\(customers\.siteId, siteScope\(req\)\)/, "receipt customer must be site scoped");
 assert.match(routes, /Content-Disposition.*subscription-payment-\$\{paymentId\}\.html/, "receipt must download with a stable filename");
 assert.match(membershipUi, /aria-label=\{`\$\{t\("download_receipt"\)\}/, "icon-only receipt control needs an accessible name");
+assert.match(membershipUi, /const receiptWindow = window\.open\("", "_blank"/, "receipt print window must open synchronously from the user click");
+assert.match(membershipUi, /await fetch\(\s*`\/api\/subscriptions\/\$\{subscriptionId\}\/payments\/\$\{paymentId\}\/receipt`[\s\S]*credentials: "include"/, "receipt HTML must be fetched with the authenticated session");
+assert.match(membershipUi, /receiptWindow\.document\.write\(html\)/, "receipt HTML must be written into the dedicated print window");
+assert.match(html, /Promise\.all\(waitForImages\)/, "printing must wait for receipt images to finish loading");
+assert.match(html, /window\.print\(\)/, "payment receipt must trigger the browser print dialog");
 console.log("subscription payment receipt regression passed");

@@ -104,6 +104,42 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
         queryKey: ["subscription-history", subscription.id],
       });
   };
+  const printPaymentReceipt = async (
+    subscriptionId: number,
+    paymentId: number,
+  ) => {
+    const receiptWindow = window.open("", "_blank", "width=820,height=900");
+    if (!receiptWindow) {
+      toast({
+        title: "Unable to open receipt",
+        description: "Please allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    receiptWindow.document.write(
+      "<!doctype html><title>Loading receipt…</title><p style='font-family:Arial;padding:24px'>Loading receipt…</p>",
+    );
+    receiptWindow.document.close();
+    try {
+      const response = await fetch(
+        `/api/subscriptions/${subscriptionId}/payments/${paymentId}/receipt`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error("Unable to load receipt");
+      const html = await response.text();
+      receiptWindow.document.open();
+      receiptWindow.document.write(html);
+      receiptWindow.document.close();
+      receiptWindow.focus();
+    } catch (error) {
+      receiptWindow.close();
+      toast({
+        title: error instanceof Error ? error.message : "Unable to load receipt",
+        variant: "destructive",
+      });
+    }
+  };
   const action = useMutation({
     mutationFn: async ({ url, method, body }: any) => {
       const response = await apiRequest(method, url, body);
@@ -676,15 +712,15 @@ export function CustomerMembershipTab({ customerId }: { customerId: number }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <b>{Number(x.amount).toLocaleString()} FCFA</b>
-                      <Button variant="outline" size="sm" asChild>
-                        <a
-                          href={`/api/subscriptions/${subscription.id}/payments/${x.id}/receipt`}
-                          download={`subscription-payment-${x.id}.html`}
-                          aria-label={`${t("download_receipt")} · ${Number(x.amount).toLocaleString()} FCFA`}
-                        >
-                          <Download className="h-4 w-4" aria-hidden="true" />
-                          <span className="sr-only">{t("download_receipt")}</span>
-                        </a>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => printPaymentReceipt(subscription.id, x.id)}
+                        aria-label={`${t("download_receipt")} · ${Number(x.amount).toLocaleString()} FCFA`}
+                      >
+                        <Download className="h-4 w-4" aria-hidden="true" />
+                        <span className="sr-only">{t("download_receipt")}</span>
                       </Button>
                     </div>
                   </div>
