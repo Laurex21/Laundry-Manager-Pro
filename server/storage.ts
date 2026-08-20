@@ -549,7 +549,12 @@ export class DatabaseStorage implements IStorage {
     const siteWhere = this.siteWhere(orders.siteId, siteId);
     const now = new Date();
     const readyRows = await db.select().from(orders)
-      .where(and(siteWhere, eq(orders.status, "ready"), sql`COALESCE(${orders.readyAt}, ${orders.updatedAt}, ${orders.createdAt}) < ${new Date(now.getTime() - 3 * 86400000)}`))
+      .where(and(
+        siteWhere,
+        eq(orders.status, "ready"),
+        sql`${orders.deliveredAt} IS NULL`,
+        sql`COALESCE(${orders.readyAt}, ${orders.updatedAt}, ${orders.createdAt}) < ${new Date(now.getTime() - 3 * 86400000)}`,
+      ))
       .orderBy(asc(orders.readyAt), asc(orders.updatedAt));
     if (!readyRows.length) return [];
     const scopedCustomers = await this.customersForScopedOrders(readyRows);

@@ -41,7 +41,14 @@ export default function Dashboard() {
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
   const { data: behaviorData } = useQuery<any>({ queryKey: ["/api/analytics/customer-behavior", "month"], queryFn: () => fetch("/api/analytics/customer-behavior?period=month", { credentials: "include" }).then((res) => res.json()) });
-  const { data: storageWaiting } = useQuery<any[]>({ queryKey: ["/api/analytics/storage-occupancy"] });
+  const { data: storageWaiting } = useQuery<any[]>({
+    queryKey: ["/api/analytics/storage-occupancy"],
+    // Storage alerts are operational data shared by the whole team. Refresh
+    // them while the dashboard is open so pickups recorded elsewhere disappear
+    // without requiring a manual page reload.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
   const { data: creditSummary } = useQuery<any>({
     queryKey: ["/api/analytics/credit-summary"],
     queryFn: () => fetch("/api/analytics/credit-summary", { credentials: "include" }).then((res) => {

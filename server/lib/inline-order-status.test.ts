@@ -7,6 +7,8 @@ const ordersPage = fs.readFileSync(path.join(root, "client/src/pages/orders.tsx"
 const ordersHook = fs.readFileSync(path.join(root, "client/src/hooks/use-orders.ts"), "utf8");
 const orderDetail = fs.readFileSync(path.join(root, "client/src/pages/order-detail.tsx"), "utf8");
 const routes = fs.readFileSync(path.join(root, "server/routes.ts"), "utf8");
+const storage = fs.readFileSync(path.join(root, "server/storage.ts"), "utf8");
+const dashboard = fs.readFileSync(path.join(root, "client/src/pages/dashboard.tsx"), "utf8");
 
 assert.match(ordersPage, /function InlineOrderStatus/, "orders list must expose an inline status control");
 assert.match(ordersPage, /ORDER_PIPELINE\.map/, "inline control must use the controlled production pipeline");
@@ -20,5 +22,8 @@ assert.match(ordersHook, /invalidateQueries\(\{ queryKey: \["\/api\/analytics\/s
 assert.match(orderDetail, /handleMarkDelivered[\s\S]*invalidateQueries\(\{ queryKey: \["\/api\/analytics\/storage-occupancy"\] \}\)/, "direct delivery must refresh garments waiting in storage");
 assert.match(ordersHook, /onError:/, "network failures must be visible to the operator");
 assert.match(routes, /VALID_PIPELINE_STATUSES[\s\S]*canAccessOrder/, "the existing API must validate status and tenant access");
+assert.match(storage, /getStorageOccupancyAlerts[\s\S]*orders\.deliveredAt} IS NULL/, "storage alerts must exclude orders already marked as delivered");
+assert.match(dashboard, /storage-occupancy[\s\S]*refetchInterval: 60_000/, "storage alerts must refresh while the dashboard is open");
+assert.match(dashboard, /storage-occupancy[\s\S]*refetchOnWindowFocus: true/, "storage alerts must refresh after returning to the dashboard");
 
 console.log("Inline order-status regression checks passed");
