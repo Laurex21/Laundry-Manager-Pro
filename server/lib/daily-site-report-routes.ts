@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
@@ -44,6 +44,11 @@ export function registerDailySiteReportRoutes(app: Express) {
     if (Number.isInteger(requestedSite)) siteIds = authorisedSites(req).includes(requestedSite) ? [requestedSite] : [];
     if (!organisationId || !siteIds.length) return res.json([]);
     const clauses: any[] = [eq(dailySiteReports.organisationId, organisationId), inArray(dailySiteReports.siteId, siteIds)];
+    const [organisation] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
+    if (organisation?.ownerId !== req.userId) {
+      const managerSiteIds = (await db.select({ siteId: siteMembers.siteId }).from(siteMembers).where(and(eq(siteMembers.userId, req.userId), eq(siteMembers.role, "manager"), inArray(siteMembers.siteId, siteIds)))).map((row) => row.siteId);
+      clauses.push(managerSiteIds.length ? or(inArray(dailySiteReports.siteId, managerSiteIds), eq(dailySiteReports.authorUserId, req.userId)) : eq(dailySiteReports.authorUserId, req.userId));
+    }
     if (typeof req.query.date === "string" && datePattern.test(req.query.date)) clauses.push(eq(dailySiteReports.reportDate, req.query.date));
     if (["draft", "submitted", "acknowledged"].includes(req.query.status)) clauses.push(eq(dailySiteReports.status, req.query.status));
     const reports = await db.select({ report: dailySiteReports, site: sites }).from(dailySiteReports).innerJoin(sites, eq(dailySiteReports.siteId, sites.id)).where(and(...clauses)).orderBy(desc(dailySiteReports.reportDate), desc(dailySiteReports.version));

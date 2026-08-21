@@ -19,6 +19,8 @@ assert.throws(() => validateEvidenceImages(new Array(4).fill({ mimeType: "image/
 assert.throws(() => validateEvidenceImages([{ mimeType: "image/svg+xml", dataUrl: "data:image/svg+xml;base64,AA==" }]), /JPEG, PNG, or WebP/i);
 
 const routes = readFileSync("server/lib/garment-return-routes.ts", "utf8");
+assert.match(routes, /includeAttachments = false/);
+assert.match(routes, /\), true\);/);
 const mainRoutes = readFileSync("server/routes.ts", "utf8");
 
 for (const endpoint of [

@@ -73,7 +73,7 @@ async function caseInScope(caseId: number, organisationId: number, siteIds: numb
   return row ?? null;
 }
 
-async function detailedCases(where: any) {
+async function detailedCases(where: any, includeAttachments = false) {
   const rows = await db.select({
     returnCase: garmentReturnCases,
     garment: garmentItems,
@@ -86,10 +86,10 @@ async function detailedCases(where: any) {
     .where(where)
     .orderBy(desc(garmentReturnCases.createdAt));
   if (!rows.length) return [];
-  const attachments = await db.select().from(garmentReturnAttachments).where(and(
+  const attachments = includeAttachments ? await db.select().from(garmentReturnAttachments).where(and(
     inArray(garmentReturnAttachments.returnCaseId, rows.map((row) => row.returnCase.id)),
     eq(garmentReturnAttachments.organisationId, rows[0].returnCase.organisationId),
-  ));
+  )) : [];
   return rows.map((row) => ({
     ...row,
     attachments: attachments.filter((attachment) => attachment.returnCaseId === row.returnCase.id),
@@ -171,7 +171,7 @@ export function registerGarmentReturnRoutes(app: Express) {
       eq(garmentReturnCases.organisationId, organisationId),
       eq(garmentReturnCases.orderId, orderId),
       inArray(garmentReturnCases.siteId, allowedSiteIds),
-    ));
+    ), true);
     res.json(rows);
   });
 

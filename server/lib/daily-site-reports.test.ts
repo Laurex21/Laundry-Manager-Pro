@@ -20,6 +20,8 @@ assert.match(metrics, /returnsCreated/);
 assert.match(metrics, /returnsOpen/);
 assert.match(metrics, /returnsDecided/);
 assert.match(routes, /authorizedSiteIds/);
+assert.match(routes, /authorUserId, req\.userId/);
+assert.match(routes, /managerSiteIds/);
 assert.match(routes, /status[^\n]*draft/);
 assert.match(routes, /Only a manager or owner/);
 assert.match(routes, /registerDailySiteReportRoutes/);
