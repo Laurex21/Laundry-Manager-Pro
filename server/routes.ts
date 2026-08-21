@@ -14,6 +14,7 @@ import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
+import { registerGarmentReturnRoutes } from "./lib/garment-return-routes";
 import { awardOrderPoints, awardReferralPoints } from "./lib/loyalty";
 import {
   addManualCredit,
@@ -286,6 +287,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
   registerMembershipRoutes(app);
+  registerGarmentReturnRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
   seedDatabase().catch(console.error);
