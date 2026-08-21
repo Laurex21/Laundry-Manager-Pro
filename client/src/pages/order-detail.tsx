@@ -34,6 +34,7 @@ import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
 import { OrderCorrectionActions } from "@/components/order-correction-actions";
 import { garmentColorSwatch, GARMENT_COLOR_VALUES } from "@/lib/garment-colors";
+import { PostDeliveryReturnPanel } from "@/components/post-delivery-return-panel";
 
 const PIPELINE_STAGES = PRODUCTION_STAGES;
 
@@ -670,7 +671,7 @@ export default function OrderDetail() {
                           onClick={() => setReturnGarmentId(g.id)}
                           data-testid={`button-return-${g.id}`}
                         >
-                          <RotateCcw className="w-3 h-3 mr-1" /> {t("return_label")}
+                          <RotateCcw className="w-3 h-3 mr-1" aria-hidden="true" /> {t("internal_return_to_production")}
                         </Button>
                       )}
                     </div>
@@ -707,6 +708,10 @@ export default function OrderDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {order.status === "delivered" && (
+        <PostDeliveryReturnPanel orderId={orderId} garments={order.garmentItems || []} isManager={isManager} />
+      )}
 
       {order.statusHistory && order.statusHistory.length > 0 && (
         <Card>
