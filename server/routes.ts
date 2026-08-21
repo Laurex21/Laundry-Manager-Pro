@@ -15,6 +15,7 @@ import { registerMembershipRoutes } from "./lib/membership-routes";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
 import { registerGarmentReturnRoutes } from "./lib/garment-return-routes";
+import { registerDailySiteReportRoutes } from "./lib/daily-site-report-routes";
 import { awardOrderPoints, awardReferralPoints } from "./lib/loyalty";
 import {
   addManualCredit,
@@ -288,6 +289,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerRentabiliteRoutes(app);
   registerMembershipRoutes(app);
   registerGarmentReturnRoutes(app);
+  registerDailySiteReportRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
   seedDatabase().catch(console.error);
