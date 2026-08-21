@@ -7,7 +7,7 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight,
-  ListChecks,
+  ListChecks, RotateCcw,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
@@ -27,6 +27,7 @@ import {
 const ALL_NAV_ITEMS = [
   { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
   { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
+  { icon: RotateCcw, labelKey: "quality_operations", href: "/quality-operations", page: "qualityOperations" },
   { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
   { icon: Shirt, labelKey: "services", href: "/services", page: "services" },
   { icon: DollarSign, labelKey: "expenses", href: "/expenses", page: "expenses" },
@@ -64,6 +65,7 @@ const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
 const PAGE_TITLES: Record<string, string> = {
   "/": "dashboard",
   "/orders": "orders",
+  "/quality-operations": "quality_operations",
   "/customers": "customers",
   "/services": "services",
   "/expenses": "expenses",

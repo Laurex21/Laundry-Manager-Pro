@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
   AlertCircle, AlertTriangle, Info, Building2, MapPin, UserCheck,
-  TrendingUp, CalendarDays, Package, CreditCard, Wallet
+  TrendingUp, CalendarDays, Package, CreditCard, Wallet, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +56,11 @@ export default function Dashboard() {
       return res.json();
     }),
   });
+  const { data: garmentReturns = [] } = useQuery<any[]>({
+    queryKey: ["/api/garment-returns"],
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
@@ -69,6 +74,7 @@ export default function Dashboard() {
   const overduePickupById = new Map((storageWaiting ?? []).map((order: any) => [order.id, order]));
   const overduePickupCount = overduePickupById.size;
   const churnCount = behaviorData?.churn?.atRiskCount ?? 0;
+  const openReturnCount = garmentReturns.filter((item) => !["rejected", "resolved"].includes(item.returnCase.status)).length;
 
   if (statsLoading) return <DashboardSkeleton />;
 
@@ -123,6 +129,13 @@ export default function Dashboard() {
                 {readyForPickup.length}
               </span>
             )}
+          </Button>
+        </Link>
+        <Link href="/quality-operations" className="contents sm:inline-flex">
+          <Button variant="ghost" size="sm" className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${openReturnCount > 0 ? " text-orange-700 dark:text-orange-400" : ""}`}>
+            <RotateCcw className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+            {t('quality_operations_open')}
+            {openReturnCount > 0 && <span className="ml-1.5 rounded-sm bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-orange-700 dark:bg-orange-900/40 dark:text-orange-400">{openReturnCount}</span>}
           </Button>
         </Link>
         <div className="hidden sm:block w-px h-4 bg-border/60 mx-1.5 shrink-0" />
