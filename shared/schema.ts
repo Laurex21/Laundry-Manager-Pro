@@ -416,6 +416,43 @@ export const garmentReturnAttachments = pgTable("garment_return_attachments", {
   index("idx_garment_return_attachments_case").on(table.returnCaseId),
 ]);
 
+export const dailySiteReports = pgTable("daily_site_reports", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  reportDate: date("report_date").notNull(),
+  version: integer("version").notNull().default(1),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  metricsSnapshot: jsonb("metrics_snapshot").notNull().default({}),
+  summary: text("summary").notNull().default(""),
+  difficulties: text("difficulties").notNull().default(""),
+  needs: text("needs").notNull().default(""),
+  handover: text("handover").notNull().default(""),
+  authorUserId: varchar("author_user_id").notNull(),
+  submittedAt: timestamp("submitted_at"),
+  acknowledgedByUserId: varchar("acknowledged_by_user_id"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_daily_site_report_version").on(table.siteId, table.reportDate, table.version),
+  index("idx_daily_site_report_scope_date").on(table.organisationId, table.siteId, table.reportDate),
+  index("idx_daily_site_report_status").on(table.organisationId, table.status),
+]);
+
+export const dailySiteReportComments = pgTable("daily_site_report_comments", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id").notNull().references(() => dailySiteReports.id, { onDelete: "cascade" }),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  authorUserId: varchar("author_user_id").notNull(),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_daily_site_report_comments_report").on(table.reportId, table.createdAt),
+  index("idx_daily_site_report_comments_scope").on(table.organisationId, table.siteId),
+]);
+
 export const creditTransactions = pgTable("credit_transactions", {
   id: serial("id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
@@ -826,6 +863,7 @@ export const insertSiteMemberSchema = createInsertSchema(siteMembers).omit({ id:
 export const insertSiteInvitationSchema = createInsertSchema(siteInvitations).omit({ id: true, createdAt: true });
 export const insertLegalAcceptanceSchema = createInsertSchema(legalAcceptances).omit({ id: true, acceptedAt: true });
 export const insertGarmentReturnCaseSchema = createInsertSchema(garmentReturnCases).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDailySiteReportSchema = createInsertSchema(dailySiteReports).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertGarmentReturnEventSchema = createInsertSchema(garmentReturnEvents).omit({ id: true, createdAt: true });
 
 // Types
@@ -891,6 +929,8 @@ export type InsertLegalAcceptance = z.infer<typeof insertLegalAcceptanceSchema>;
 export type GarmentReturnCase = typeof garmentReturnCases.$inferSelect;
 export type GarmentReturnEvent = typeof garmentReturnEvents.$inferSelect;
 export type GarmentReturnAttachment = typeof garmentReturnAttachments.$inferSelect;
+export type DailySiteReport = typeof dailySiteReports.$inferSelect;
+export type DailySiteReportComment = typeof dailySiteReportComments.$inferSelect;
 
 export type OrderWithCustomer = Order & { customer: Customer };
 export type PaymentWithEmployee = Payment & { collectedByEmployee?: Employee | null };

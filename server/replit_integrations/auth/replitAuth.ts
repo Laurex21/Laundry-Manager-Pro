@@ -96,6 +96,43 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_events_scope ON garment_return_events(organisation_id, site_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_attachments_case ON garment_return_attachments(return_case_id)`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_site_reports (
+      id serial PRIMARY KEY,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      site_id integer NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      report_date date NOT NULL,
+      version integer NOT NULL DEFAULT 1,
+      status varchar(20) NOT NULL DEFAULT 'draft',
+      metrics_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+      summary text NOT NULL DEFAULT '',
+      difficulties text NOT NULL DEFAULT '',
+      needs text NOT NULL DEFAULT '',
+      handover text NOT NULL DEFAULT '',
+      author_user_id varchar NOT NULL,
+      submitted_at timestamp,
+      acknowledged_by_user_id varchar,
+      acknowledged_at timestamp,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now(),
+      UNIQUE (site_id, report_date, version)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_site_report_comments (
+      id serial PRIMARY KEY,
+      report_id integer NOT NULL REFERENCES daily_site_reports(id) ON DELETE CASCADE,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      site_id integer NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      author_user_id varchar NOT NULL,
+      comment text NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_daily_site_report_scope_date ON daily_site_reports(organisation_id, site_id, report_date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_daily_site_report_status ON daily_site_reports(organisation_id, status)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_daily_site_report_comments_report ON daily_site_report_comments(report_id, created_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_daily_site_report_comments_scope ON daily_site_report_comments(organisation_id, site_id)`);
+  await pool.query(`
     INSERT INTO garment_return_cases (
       organisation_id, site_id, order_id, garment_item_id, status,
       complaint_reason, customer_comment, received_by_user_id,
