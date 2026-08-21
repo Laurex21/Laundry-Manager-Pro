@@ -94,7 +94,7 @@ type PerformanceData = {
   monthlyComparison: { month: string; income: number; expenses: number }[];
 };
 
-export default function Reports() {
+export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
@@ -220,13 +220,13 @@ export default function Reports() {
 
   return (
     <div className="space-y-8 page-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
+      <div className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 ${embedded ? "justify-end" : "justify-between"}`}>
+        {!embedded && <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-reports-title">
             {t("reports_analytics")}
           </h1>
           <p className="text-muted-foreground mt-1">{t("reports_subtitle")}</p>
-        </div>
+        </div>}
         <Button
           onClick={handleDownloadReport}
           disabled={!data || isLoading}

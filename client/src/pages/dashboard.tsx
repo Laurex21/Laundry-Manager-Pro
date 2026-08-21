@@ -137,14 +137,14 @@ export default function Dashboard() {
             )}
           </Button>
         </Link>
-        <Link href="/quality-operations" className="contents sm:inline-flex">
+        <Link href="/pilotage?view=quality" className="contents sm:inline-flex">
           <Button variant="ghost" size="sm" className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${openReturnCount > 0 ? " text-orange-700 dark:text-orange-400" : ""}`}>
             <RotateCcw className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             {t('quality_operations_open')}
             {openReturnCount > 0 && <span className="ml-1.5 rounded-sm bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-orange-700 dark:bg-orange-900/40 dark:text-orange-400">{openReturnCount}</span>}
           </Button>
         </Link>
-        <Link href="/daily-reports" className="contents sm:inline-flex">
+        <Link href="/pilotage?view=daily" className="contents sm:inline-flex">
           <Button variant="ghost" size="sm" className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${unacknowledgedReportCount > 0 ? " text-blue-700 dark:text-blue-400" : ""}`}>
             <FileText className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             {t('daily_reports')}
@@ -157,7 +157,7 @@ export default function Dashboard() {
             <Users className="w-3.5 h-3.5 mr-1.5" />{t('customers')}
           </Button>
         </Link>
-        <Link href="/reports" className="contents sm:inline-flex">
+        <Link href="/pilotage?view=reports" className="contents sm:inline-flex">
           <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
             <TrendingUp className="w-3.5 h-3.5 mr-1.5" />{t('reports')}
           </Button>

@@ -7,7 +7,7 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight,
-  ListChecks, RotateCcw, FileText,
+  ListChecks,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
@@ -27,13 +27,11 @@ import {
 const ALL_NAV_ITEMS = [
   { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
   { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
-  { icon: RotateCcw, labelKey: "quality_operations", href: "/quality-operations", page: "qualityOperations" },
-  { icon: FileText, labelKey: "daily_reports", href: "/daily-reports", page: "dailyReports" },
+  { icon: BarChart3, labelKey: "pilotage", href: "/pilotage", page: "pilotage" },
   { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
   { icon: Shirt, labelKey: "services", href: "/services", page: "services" },
   { icon: DollarSign, labelKey: "expenses", href: "/expenses", page: "expenses" },
   { icon: CreditCard, labelKey: "payments", href: "/payments", page: "payments" },
-  { icon: BarChart3, labelKey: "reports", href: "/reports", page: "reports" },
   { icon: Cog, labelKey: "machines", href: "/machines", page: "machines" },
   { icon: UserCheck, labelKey: "employees", href: "/employees", page: "employees" },
   { icon: TrendingUp, labelKey: "analytics", href: "/analytics", page: "analytics" },
@@ -66,13 +64,11 @@ const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
 const PAGE_TITLES: Record<string, string> = {
   "/": "dashboard",
   "/orders": "orders",
-  "/quality-operations": "quality_operations",
-  "/daily-reports": "daily_reports",
+  "/pilotage": "pilotage",
   "/customers": "customers",
   "/services": "services",
   "/expenses": "expenses",
   "/payments": "payments",
-  "/reports": "reports",
   "/machines": "machines",
   "/employees": "employees",
   "/analytics": "analytics",

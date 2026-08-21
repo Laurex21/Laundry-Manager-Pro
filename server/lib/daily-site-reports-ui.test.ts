@@ -11,7 +11,7 @@ const i18n = readFileSync("client/src/lib/i18n.ts", "utf8");
 
 assert.match(app, /path="\/daily-reports"/);
 assert.match(auth, /operatorPages[^\n]*dailyReports/);
-assert.match(layout, /href: "\/daily-reports"/);
+assert.match(layout, /href: "\/pilotage"/);
 assert.match(page, /allSites/);
 assert.match(form, /<form/);
 assert.match(form, /htmlFor=\{`report-\$\{field\}`\}/);

@@ -6,9 +6,9 @@ const quality = readFileSync("client/src/pages/quality-operations.tsx", "utf8");
 const dashboard = readFileSync("client/src/pages/dashboard.tsx", "utf8");
 
 for (const metric of ["returnsCreated", "returnsOpen", "returnsDecided"]) assert.match(metrics, new RegExp(metric));
-assert.match(quality, /href="\/daily-reports"/);
-assert.match(dashboard, /href="\/quality-operations"/);
-assert.match(dashboard, /href="\/daily-reports"/);
+assert.match(quality, /href="\/pilotage\?view=daily"/);
+assert.match(dashboard, /href="\/pilotage\?view=quality"/);
+assert.match(dashboard, /href="\/pilotage\?view=daily"/);
 assert.match(quality, /currentSite\?\.id/);
 assert.match(dashboard, /currentSite\?\.id/);
 assert.match(dashboard, /daily_report_unacknowledged/);

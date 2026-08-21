@@ -27,12 +27,10 @@ const Customers         = lazy(() => import("@/pages/customers"));
 const CustomerDetail    = lazy(() => import("@/pages/customer-detail"));
 const Orders            = lazy(() => import("@/pages/orders"));
 const OrderDetail       = lazy(() => import("@/pages/order-detail"));
-const QualityOperations = lazy(() => import("@/pages/quality-operations"));
-const DailySiteReports  = lazy(() => import("@/pages/daily-site-reports"));
+const Pilotage          = lazy(() => import("@/pages/pilotage"));
 const Services          = lazy(() => import("@/pages/services"));
 const Expenses          = lazy(() => import("@/pages/expenses"));
 const Payments          = lazy(() => import("@/pages/payments"));
-const Reports           = lazy(() => import("@/pages/reports"));
 const Machines          = lazy(() => import("@/pages/machines"));
 const Employees         = lazy(() => import("@/pages/employees"));
 const Analytics         = lazy(() => import("@/pages/analytics"));
@@ -93,6 +91,16 @@ function LegacySubscriptionDashboardRoute() {
   useEffect(() => setLocation("/membership-plans?view=revenue"), [setLocation]);
   return <PageSkeleton />;
 }
+
+function LegacyPilotageRoute({ view }: { view: "reports" | "quality" | "daily" }) {
+  const [, setLocation] = useLocation();
+  useEffect(() => setLocation(`/pilotage?view=${view}`), [setLocation, view]);
+  return <PageSkeleton />;
+}
+
+function LegacyReportsRoute() { return <LegacyPilotageRoute view="reports" />; }
+function LegacyQualityRoute() { return <LegacyPilotageRoute view="quality" />; }
+function LegacyDailyReportsRoute() { return <LegacyPilotageRoute view="daily" />; }
 
 function RootRoute() {
   const { user, isLoading } = useAuth();
@@ -183,11 +191,14 @@ function Router() {
         <Route path="/orders/:id">
           <ProtectedRoute component={OrderDetail} page="orders" />
         </Route>
+        <Route path="/pilotage">
+          <ProtectedRoute component={Pilotage} page="pilotage" />
+        </Route>
         <Route path="/quality-operations">
-          <ProtectedRoute component={QualityOperations} page="qualityOperations" />
+          <ProtectedRoute component={LegacyQualityRoute} page="qualityOperations" />
         </Route>
         <Route path="/daily-reports">
-          <ProtectedRoute component={DailySiteReports} page="dailyReports" />
+          <ProtectedRoute component={LegacyDailyReportsRoute} page="dailyReports" />
         </Route>
         <Route path="/services">
           <ProtectedRoute component={Services} page="services" />
@@ -199,7 +210,7 @@ function Router() {
           <ProtectedRoute component={Payments} page="payments" />
         </Route>
         <Route path="/reports">
-          <ProtectedRoute component={Reports} page="reports" />
+          <ProtectedRoute component={LegacyReportsRoute} page="reports" />
         </Route>
         <Route path="/machines">
           <ProtectedRoute component={Machines} page="machines" />

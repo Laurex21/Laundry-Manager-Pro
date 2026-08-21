@@ -103,9 +103,9 @@ export function useAuth() {
   };
 
   const canAccess = (page: string): boolean => {
-    const ownerPages = ["settings", "subscriptions", "reports", "dailyReports", "analytics", "team", "dashboard", "orders", "qualityOperations", "customers", "payments", "services", "expenses", "machines", "employees"];
-    const managerPages = ["orders", "qualityOperations", "dailyReports", "customers", "payments", "services", "expenses", "machines", "employees", "analytics", "dashboard"];
-    const operatorPages = ["orders", "qualityOperations", "dailyReports", "customers", "payments", "dashboard"];
+    const ownerPages = ["settings", "subscriptions", "pilotage", "reports", "dailyReports", "analytics", "team", "dashboard", "orders", "qualityOperations", "customers", "payments", "services", "expenses", "machines", "employees"];
+    const managerPages = ["orders", "pilotage", "reports", "qualityOperations", "dailyReports", "customers", "payments", "services", "expenses", "machines", "employees", "analytics", "dashboard"];
+    const operatorPages = ["orders", "pilotage", "qualityOperations", "dailyReports", "customers", "payments", "dashboard"];
 
     if (userRole === "owner") return ownerPages.includes(page) || page === "settings";
     if (userRole === "manager") return managerPages.includes(page);
