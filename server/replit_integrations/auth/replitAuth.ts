@@ -39,6 +39,87 @@ async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS color varchar(40)
   `);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS garment_return_cases (
+      id serial PRIMARY KEY,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      site_id integer NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      order_id integer NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      garment_item_id integer NOT NULL REFERENCES garment_items(id) ON DELETE CASCADE,
+      status varchar(30) NOT NULL DEFAULT 'pending_review',
+      complaint_reason varchar(50) NOT NULL,
+      customer_comment text NOT NULL,
+      decision varchar(50),
+      assigned_stage varchar(50),
+      decision_notes text,
+      received_by_user_id varchar NOT NULL,
+      decided_by_user_id varchar,
+      resolved_by_user_id varchar,
+      returned_at timestamp NOT NULL DEFAULT now(),
+      decided_at timestamp,
+      resolved_at timestamp,
+      legacy_source_key varchar(100) UNIQUE,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS garment_return_events (
+      id serial PRIMARY KEY,
+      return_case_id integer NOT NULL REFERENCES garment_return_cases(id) ON DELETE CASCADE,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      site_id integer NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      event_type varchar(50) NOT NULL,
+      from_status varchar(30),
+      to_status varchar(30) NOT NULL,
+      notes text,
+      actor_user_id varchar NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS garment_return_attachments (
+      id serial PRIMARY KEY,
+      return_case_id integer NOT NULL REFERENCES garment_return_cases(id) ON DELETE CASCADE,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      site_id integer NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+      mime_type varchar(50) NOT NULL,
+      size_bytes integer NOT NULL,
+      data_url text NOT NULL,
+      added_by_user_id varchar NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_org_site_status ON garment_return_cases(organisation_id, site_id, status)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_order ON garment_return_cases(order_id)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_garment_return_active_case ON garment_return_cases(organisation_id, garment_item_id) WHERE status NOT IN ('rejected', 'resolved')`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_events_case ON garment_return_events(return_case_id, created_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_events_scope ON garment_return_events(organisation_id, site_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_garment_return_attachments_case ON garment_return_attachments(return_case_id)`);
+  await pool.query(`
+    INSERT INTO garment_return_cases (
+      organisation_id, site_id, order_id, garment_item_id, status,
+      complaint_reason, customer_comment, received_by_user_id,
+      returned_at, resolved_at, legacy_source_key
+    )
+    SELECT
+      s.organisation_id,
+      o.site_id,
+      gi.order_id,
+      gi.id,
+      CASE WHEN gi.resolved_at IS NULL THEN 'in_rework' ELSE 'resolved' END,
+      'legacy_return',
+      COALESCE(NULLIF(gi.return_notes, ''), 'Legacy production return'),
+      'legacy',
+      COALESCE(gi.returned_at, now()),
+      gi.resolved_at,
+      'garment:' || gi.id::text
+    FROM garment_items gi
+    INNER JOIN orders o ON o.id = gi.order_id
+    INNER JOIN sites s ON s.id = o.site_id
+    WHERE (gi.returned_for_treatment = true OR gi.resolved_at IS NOT NULL)
+    ON CONFLICT DO NOTHING
+  `);
+  await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS user_type varchar(20) NOT NULL DEFAULT 'owner'
   `);

@@ -357,6 +357,65 @@ export const sites = pgTable("sites", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const garmentReturnCases = pgTable("garment_return_cases", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  garmentItemId: integer("garment_item_id").notNull().references(() => garmentItems.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 30 }).notNull().default("pending_review"),
+  complaintReason: varchar("complaint_reason", { length: 50 }).notNull(),
+  customerComment: text("customer_comment").notNull(),
+  decision: varchar("decision", { length: 50 }),
+  assignedStage: varchar("assigned_stage", { length: 50 }),
+  decisionNotes: text("decision_notes"),
+  receivedByUserId: varchar("received_by_user_id").notNull(),
+  decidedByUserId: varchar("decided_by_user_id"),
+  resolvedByUserId: varchar("resolved_by_user_id"),
+  returnedAt: timestamp("returned_at").notNull().defaultNow(),
+  decidedAt: timestamp("decided_at"),
+  resolvedAt: timestamp("resolved_at"),
+  legacySourceKey: varchar("legacy_source_key", { length: 100 }).unique(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_garment_return_org_site_status").on(table.organisationId, table.siteId, table.status),
+  index("idx_garment_return_order").on(table.orderId),
+  uniqueIndex("idx_garment_return_active_case")
+    .on(table.organisationId, table.garmentItemId)
+    .where(sql`${table.status} NOT IN ('rejected', 'resolved')`),
+]);
+
+export const garmentReturnEvents = pgTable("garment_return_events", {
+  id: serial("id").primaryKey(),
+  returnCaseId: integer("return_case_id").notNull().references(() => garmentReturnCases.id, { onDelete: "cascade" }),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  fromStatus: varchar("from_status", { length: 30 }),
+  toStatus: varchar("to_status", { length: 30 }).notNull(),
+  notes: text("notes"),
+  actorUserId: varchar("actor_user_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_garment_return_events_case").on(table.returnCaseId, table.createdAt),
+  index("idx_garment_return_events_scope").on(table.organisationId, table.siteId),
+]);
+
+export const garmentReturnAttachments = pgTable("garment_return_attachments", {
+  id: serial("id").primaryKey(),
+  returnCaseId: integer("return_case_id").notNull().references(() => garmentReturnCases.id, { onDelete: "cascade" }),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  mimeType: varchar("mime_type", { length: 50 }).notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  dataUrl: text("data_url").notNull(),
+  addedByUserId: varchar("added_by_user_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_garment_return_attachments_case").on(table.returnCaseId),
+]);
+
 export const creditTransactions = pgTable("credit_transactions", {
   id: serial("id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
@@ -766,6 +825,8 @@ export const insertSiteSchema = createInsertSchema(sites).omit({ id: true, creat
 export const insertSiteMemberSchema = createInsertSchema(siteMembers).omit({ id: true, createdAt: true });
 export const insertSiteInvitationSchema = createInsertSchema(siteInvitations).omit({ id: true, createdAt: true });
 export const insertLegalAcceptanceSchema = createInsertSchema(legalAcceptances).omit({ id: true, acceptedAt: true });
+export const insertGarmentReturnCaseSchema = createInsertSchema(garmentReturnCases).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertGarmentReturnEventSchema = createInsertSchema(garmentReturnEvents).omit({ id: true, createdAt: true });
 
 // Types
 export type Customer = typeof customers.$inferSelect;
@@ -827,6 +888,9 @@ export type InsertSite = z.infer<typeof insertSiteSchema>;
 export type LegalDocument = typeof legalDocuments.$inferSelect;
 export type LegalAcceptance = typeof legalAcceptances.$inferSelect;
 export type InsertLegalAcceptance = z.infer<typeof insertLegalAcceptanceSchema>;
+export type GarmentReturnCase = typeof garmentReturnCases.$inferSelect;
+export type GarmentReturnEvent = typeof garmentReturnEvents.$inferSelect;
+export type GarmentReturnAttachment = typeof garmentReturnAttachments.$inferSelect;
 
 export type OrderWithCustomer = Order & { customer: Customer };
 export type PaymentWithEmployee = Payment & { collectedByEmployee?: Employee | null };
