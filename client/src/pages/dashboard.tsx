@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
   AlertCircle, AlertTriangle, Info, Building2, MapPin, UserCheck,
-  TrendingUp, CalendarDays, Package, CreditCard, Wallet, RotateCcw
+  TrendingUp, CalendarDays, Package, CreditCard, Wallet, RotateCcw, FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +37,7 @@ const QUEUE_STAGES = [
 
 export default function Dashboard() {
   const { openWhatsApp } = useWhatsAppLauncher();
+  const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
@@ -57,13 +58,17 @@ export default function Dashboard() {
     }),
   });
   const { data: garmentReturns = [] } = useQuery<any[]>({
-    queryKey: ["/api/garment-returns"],
+    queryKey: ["/api/garment-returns", currentSite?.id ?? "all"],
     refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const { data: dailyReports = [] } = useQuery<any[]>({
+    queryKey: ["/api/daily-site-reports", currentSite?.id ?? "all"],
+    queryFn: () => fetch("/api/daily-site-reports", { credentials: "include" }).then((response) => response.ok ? response.json() : []),
     refetchOnWindowFocus: true,
   });
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
-  const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
   const symbol = getSymbol();
 
   const isAllSitesMode = isOwner && currentSite === null;
@@ -75,6 +80,7 @@ export default function Dashboard() {
   const overduePickupCount = overduePickupById.size;
   const churnCount = behaviorData?.churn?.atRiskCount ?? 0;
   const openReturnCount = garmentReturns.filter((item) => !["rejected", "resolved"].includes(item.returnCase.status)).length;
+  const unacknowledgedReportCount = dailyReports.filter((item) => item.report.status === "submitted").length;
 
   if (statsLoading) return <DashboardSkeleton />;
 
@@ -136,6 +142,13 @@ export default function Dashboard() {
             <RotateCcw className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             {t('quality_operations_open')}
             {openReturnCount > 0 && <span className="ml-1.5 rounded-sm bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-orange-700 dark:bg-orange-900/40 dark:text-orange-400">{openReturnCount}</span>}
+          </Button>
+        </Link>
+        <Link href="/daily-reports" className="contents sm:inline-flex">
+          <Button variant="ghost" size="sm" className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${unacknowledgedReportCount > 0 ? " text-blue-700 dark:text-blue-400" : ""}`}>
+            <FileText className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+            {t('daily_reports')}
+            {unacknowledgedReportCount > 0 && <span className="ml-1.5 rounded-sm bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" aria-label={t("daily_report_unacknowledged", { count: unacknowledgedReportCount })}>{unacknowledgedReportCount}</span>}
           </Button>
         </Link>
         <div className="hidden sm:block w-px h-4 bg-border/60 mx-1.5 shrink-0" />

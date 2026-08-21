@@ -2,19 +2,21 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, RotateCcw } from "lucide-react";
+import { ChevronRight, FileText, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDateTime } from "@/lib/date-time";
+import { useAuth } from "@/hooks/use-auth";
 
 const STATUSES = ["all", "pending_review", "approved", "in_rework", "quality_check", "rejected", "resolved"] as const;
 
 export default function QualityOperations() {
   const { t } = useTranslation();
+  const { currentSite } = useAuth();
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("all");
   const { data = [], isLoading, isError } = useQuery<any[]>({
-    queryKey: ["/api/garment-returns", status],
+    queryKey: ["/api/garment-returns", currentSite?.id ?? "all", status],
     queryFn: async () => {
       const suffix = status === "all" ? "" : `?status=${encodeURIComponent(status)}`;
       const response = await fetch(`/api/garment-returns${suffix}`, { credentials: "include" });
@@ -26,9 +28,10 @@ export default function QualityOperations() {
   });
 
   return <div className="space-y-4 page-fade-in">
-    <div>
-      <h1 className="text-lg font-semibold text-foreground">{t("quality_operations")}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">{t("quality_operations_subtitle")}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div><h1 className="text-lg font-semibold text-foreground">{t("quality_operations")}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{t("quality_operations_subtitle")}</p></div>
+      <Link href="/daily-reports"><span className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-xs font-medium hover:bg-muted"><FileText className="h-4 w-4" aria-hidden="true" />{t("daily_reports")}</span></Link>
     </div>
 
     <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label={t("quality_operations_filter")}>
