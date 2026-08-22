@@ -160,7 +160,7 @@ export interface IStorage {
   createStaffFromInvitation(token: string, data: { email?: string | null; phone?: string | null; passwordHash: string; firstName?: string | null; lastName?: string | null }): Promise<User | null>;
   acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null>;
   getPendingInvitations(organisationId: number): Promise<(SiteInvitation & { siteName: string })[]>;
-  revokeInvitation(id: number): Promise<boolean>;
+  revokeInvitation(id: number, organisationId: number): Promise<boolean>;
   switchSite(userId: string, siteId: number | null): Promise<void>;
   migrateToMultiSite(): Promise<void>;
   getUserSiteRole(userId: string, siteId: number): Promise<string | null>;
@@ -1786,8 +1786,15 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async revokeInvitation(id: number): Promise<boolean> {
-    const [updated] = await db.update(siteInvitations).set({ status: "expired" }).where(eq(siteInvitations.id, id)).returning();
+  async revokeInvitation(id: number, organisationId: number): Promise<boolean> {
+    const [updated] = await db.update(siteInvitations)
+      .set({ status: "expired" })
+      .where(and(
+        eq(siteInvitations.id, id),
+        eq(siteInvitations.organisationId, organisationId),
+        eq(siteInvitations.status, "pending"),
+      ))
+      .returning();
     return !!updated;
   }
 

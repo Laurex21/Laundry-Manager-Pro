@@ -9,6 +9,7 @@ const limiterSource = fs.readFileSync("server/lib/rate-limit.ts", "utf8");
 const tokenSource = fs.readFileSync("server/lib/public-access-token.ts", "utf8");
 const httpSecuritySource = fs.readFileSync("server/lib/http-security.ts", "utf8");
 const routesSource = fs.readFileSync("server/routes.ts", "utf8");
+const storageSource = fs.readFileSync("server/storage.ts", "utf8");
 const authRoutesSource = fs.readFileSync("server/replit_integrations/auth/routes.ts", "utf8");
 const calculatorSource = fs.readFileSync("server/lib/calculator-routes.ts", "utf8");
 
@@ -29,6 +30,15 @@ assert.match(httpSecuritySource, /originUrl\.host !== req\.get\("host"\)/);
 assert.doesNotMatch(routesSource, /fall back to first authorized site/);
 assert.match(routesSource, /z\.enum\(\["manager", "operator"\]\)/);
 assert.match(routesSource, /owner cannot be removed/);
+assert.match(routesSource, /revokeInvitation\(invitationId, org\.id\)/);
+assert.match(routesSource, /if \(!revoked\) return res\.status\(404\)/);
+assert.match(storageSource, /revokeInvitation\(id: number, organisationId: number\)[\s\S]{0,500}eq\(siteInvitations\.organisationId, organisationId\)/);
+assert.match(storageSource, /eq\(siteInvitations\.status, "pending"\)/);
+assert.match(authRoutesSource, /app\.post\("\/api\/auth\/register", registrationLimiter, passwordHashLimiter/);
+assert.match(authRoutesSource, /app\.post\("\/api\/staff\/onboard\/:token", staffOnboardingLimiter, passwordHashLimiter/);
+assert.match(authRoutesSource, /app\.post\("\/api\/auth\/password-reset\/confirm", passwordResetConfirmLimiter, passwordHashLimiter/);
+assert.match(authRoutesSource, /const invitation = await storage\.getInvitationByToken\(invitationToken\)[\s\S]{0,2200}const passwordHash = await bcrypt\.hash/);
+assert.match(authRoutesSource, /invitation\.status !== "pending"/);
 assert.match(authRoutesSource, /status\(405\).*Allow/);
 assert.doesNotMatch(calculatorSource, /json\(\{ message: err\.message \}\)/);
 

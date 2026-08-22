@@ -224,8 +224,35 @@ const passwordResetLimiter = rateLimit({
   key: (req) => String(req.body?.identifier || req.body?.email || "").trim().toLowerCase(),
 });
 
+const passwordHashLimiter = rateLimit({
+  name: "password-hash",
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+});
+
+const registrationLimiter = rateLimit({
+  name: "registration",
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  key: (req) => String(req.body?.email || "").trim().toLowerCase(),
+});
+
+const staffOnboardingLimiter = rateLimit({
+  name: "staff-onboarding",
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  key: (req) => String(req.params?.token || ""),
+});
+
+const passwordResetConfirmLimiter = rateLimit({
+  name: "password-reset-confirm",
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  key: (req) => String(req.body?.token || ""),
+});
+
 export function registerAuthRoutes(app: Express): void {
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", registrationLimiter, passwordHashLimiter, async (req, res) => {
     try {
       const { email, password, firstName, lastName, phone, businessName, acceptedLegal } = req.body;
       if (!email || !password) {
@@ -366,9 +393,10 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/staff/onboard/:token", async (req, res) => {
+  app.post("/api/staff/onboard/:token", staffOnboardingLimiter, passwordHashLimiter, async (req, res) => {
     try {
       const { email, phone, password, firstName, lastName } = req.body;
+      const invitationToken = String(req.params.token || "");
       const identifier = String(email || phone || "").trim();
       if (!identifier || !password) {
         return res.status(400).json({ message: "Email or phone number and password are required" });
@@ -378,6 +406,18 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: passwordError });
       }
 
+      const invitation = await storage.getInvitationByToken(invitationToken);
+      if (!invitation || invitation.status !== "pending" || invitation.expiresAt < new Date()) {
+        return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
+      }
+      const invitedIdentifier = invitation.identifier.trim().toLowerCase();
+      const suppliedIdentifiers = [email, phone]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .map((value) => value.trim().toLowerCase());
+      if (!suppliedIdentifiers.includes(invitedIdentifier)) {
+        return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
+      }
+
       const existingByEmail = email ? await authStorage.getUserByEmail(email) : undefined;
       const existingByPhone = phone ? await authStorage.getUserByPhone(phone) : undefined;
       if (existingByEmail || existingByPhone) {
@@ -385,7 +425,7 @@ export function registerAuthRoutes(app: Express): void {
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      const user = await storage.createStaffFromInvitation(req.params.token, {
+      const user = await storage.createStaffFromInvitation(invitationToken, {
         email: email || null,
         phone: phone || null,
         passwordHash,
@@ -449,7 +489,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/password-reset/confirm", async (req, res) => {
+  app.post("/api/auth/password-reset/confirm", passwordResetConfirmLimiter, passwordHashLimiter, async (req, res) => {
     try {
       const token = String(req.body.token || "").trim();
       const password = String(req.body.password || "");

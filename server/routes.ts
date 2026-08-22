@@ -2008,8 +2008,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/invitations/:id", isAuthenticated, async (req, res) => {
     try {
-      if (!(await requireOwnerOrganisation(req, res))) return;
-      await storage.revokeInvitation(Number(req.params.id));
+      const org = await requireOwnerOrganisation(req, res);
+      if (!org) return;
+      const invitationId = Number(req.params.id);
+      if (!Number.isInteger(invitationId) || invitationId <= 0) {
+        return res.status(400).json({ message: "A valid invitation is required" });
+      }
+      const revoked = await storage.revokeInvitation(invitationId, org.id);
+      if (!revoked) return res.status(404).json({ message: "Invitation not found" });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to revoke invitation" });
