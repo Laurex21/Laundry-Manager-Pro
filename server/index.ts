@@ -5,9 +5,13 @@ import { expireLoyaltyPoints } from "./lib/loyalty";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import crypto from "crypto";
+import { securityHeaders } from "./lib/http-security";
 
 const app = express();
 const httpServer = createServer(app);
+
+app.disable("x-powered-by");
+app.use(securityHeaders);
 
 declare module "http" {
   interface IncomingMessage {

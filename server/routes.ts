@@ -93,8 +93,7 @@ function resolveWriteSiteId(req: any): number | null {
   }
   const authorizedSiteIds = Array.isArray(req.authorizedSiteIds) ? req.authorizedSiteIds : [];
   if (authorizedSiteIds.length === 1) return authorizedSiteIds[0];
-  // "All Sites" mode with multiple sites — fall back to first authorized site
-  if (authorizedSiteIds.length > 1) return authorizedSiteIds[0];
+  // "All Sites" mode is intentionally read-only when multiple sites are available.
   return null;
 }
 
@@ -1910,9 +1909,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!updated) return res.status(404).json({ message: "Site not found" });
       res.json(updated);
     } catch (err: any) {
-      const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Failed to update site";
-      console.error("Failed to update site:", msg, err?.stack ?? "");
-      res.status(500).json({ message: msg });
+      console.error("Failed to update site:", err);
+      res.status(500).json({ message: "Failed to update site" });
     }
   });
 
@@ -1946,9 +1944,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/sites/:id/members/:userId/role", isAuthenticated, async (req, res) => {
     try {
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-      const updated = await storage.updateSiteMemberRole(Number(req.params.id), req.params.userId as string, req.body.role);
+      const role = z.enum(["manager", "operator"]).parse(req.body.role);
+      const organisation = await storage.getOrganisationByOwner((req.session as any).userId);
+      if (organisation?.ownerId === req.params.userId) {
+        return res.status(400).json({ message: "The organisation owner role cannot be changed" });
+      }
+      const updated = await storage.updateSiteMemberRole(Number(req.params.id), req.params.userId as string, role);
+      if (!updated) return res.status(404).json({ message: "Member not found" });
       res.json(updated);
     } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: "Role must be manager or operator" });
       res.status(500).json({ message: "Failed to update role" });
     }
   });
@@ -1956,6 +1961,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/sites/:id/members/:userId", isAuthenticated, async (req, res) => {
     try {
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+      const organisation = await storage.getOrganisationByOwner((req.session as any).userId);
+      if (organisation?.ownerId === req.params.userId) {
+        return res.status(400).json({ message: "The organisation owner cannot be removed" });
+      }
       await storage.removeSiteMember(Number(req.params.id), req.params.userId as string);
       res.json({ success: true });
     } catch (err) {
@@ -1969,8 +1978,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = (req.session as any).userId;
       const org = await requireOwnerOrganisation(req, res);
       if (!org) return;
-      const { siteId, identifier, role } = req.body;
-      if (!siteId || !identifier || !role) return res.status(400).json({ message: "siteId, identifier and role are required" });
+      const invitation = z.object({
+        siteId: z.coerce.number().int().positive(),
+        identifier: z.string().trim().min(3).max(255),
+        role: z.enum(["manager", "operator"]),
+      }).safeParse(req.body);
+      if (!invitation.success) return res.status(400).json({ message: "A valid site, identifier and staff role are required" });
+      const { siteId, identifier, role } = invitation.data;
       if (!(await canManageSite(req, Number(siteId)))) return res.status(403).json({ message: "Forbidden" });
       const inv = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role });
       const baseUrl = `${req.protocol}://${req.get("host")}`;

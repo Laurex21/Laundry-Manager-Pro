@@ -512,10 +512,7 @@ export function registerAuthRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/logout", (req, res) => {
-    req.session.destroy(() => {
-      res.clearCookie("connect.sid");
-      res.redirect("/auth");
-    });
+  app.get("/api/logout", (_req, res) => {
+    res.status(405).setHeader("Allow", "POST").json({ message: "Use POST /api/auth/logout" });
   });
 }

@@ -254,7 +254,7 @@ export function registerCalculatorRoutes(app: Express) {
       });
     } catch (err: any) {
       console.error("save-lead error:", err);
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: "Unable to save this request" });
     }
   });
 
@@ -276,7 +276,8 @@ export function registerCalculatorRoutes(app: Express) {
 
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      console.error("update-lead error:", err);
+      res.status(500).json({ message: "Unable to update this request" });
     }
   });
 
@@ -405,7 +406,8 @@ export function registerCalculatorRoutes(app: Express) {
         .where(eq(calculatorLeads.id, leadId));
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      console.error("track-expert-contact error:", err);
+      res.status(500).json({ message: "Unable to record this action" });
     }
   });
 
@@ -440,7 +442,8 @@ export function registerCalculatorRoutes(app: Express) {
         }) : null,
       });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      console.error("calculator report read error:", err);
+      res.status(500).json({ message: "Unable to load this report" });
     }
   });
 }

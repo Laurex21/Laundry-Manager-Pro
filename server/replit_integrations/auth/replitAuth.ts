@@ -3,6 +3,7 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { pool } from "../../db";
 import { ensureOrderItemQuantitySupportsDecimals } from "../../lib/order-item-quantity-schema";
+import { sameOriginMutations } from "../../lib/http-security";
 
 export function getSession() {
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
@@ -33,6 +34,7 @@ export function getSession() {
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
+  app.use(sameOriginMutations);
 }
 
 export async function ensureAuthSchema() {

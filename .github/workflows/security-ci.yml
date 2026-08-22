@@ -1,0 +1,29 @@
+name: Security CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm audit --omit=dev --audit-level=low
+      - run: npm run check
+      - run: npm run test:security-hardening
+      - run: npm run test:tenant-isolation
+      - run: npm run test:staff-invitation-boundary
+      - run: npm run test:membership-run3
+      - run: npm run test:schema-guard
+      - run: npm run build
