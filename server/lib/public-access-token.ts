@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const TOKEN_VERSION = "v2";
-const TOKEN_TTL_SECONDS = 24 * 60 * 60;
+const TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function secret(): string {
   const value = process.env.PUBLIC_ACCESS_TOKEN_SECRET || process.env.SESSION_SECRET;
