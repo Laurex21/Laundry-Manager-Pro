@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -675,6 +675,15 @@ export const siteInvitations = pgTable("site_invitations", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const securityRateLimits = pgTable("security_rate_limits", {
+  bucketKey: varchar("bucket_key", { length: 64 }).primaryKey(),
+  count: integer("count").notNull(),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  check("security_rate_limits_count_check", sql`${table.count} > 0`),
+  index("idx_security_rate_limits_reset_at").on(table.resetAt),
+]);
 
 export const legalDocuments = pgTable("legal_documents", {
   id: serial("id").primaryKey(),

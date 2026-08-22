@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 
-const CONTENT_SECURITY_POLICY = [
+const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
@@ -14,7 +14,16 @@ const CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 export const securityHeaders: RequestHandler = (_req, res, next) => {
-  res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  // Vite injects inline HMR and React-refresh bootstrap modules in development.
+  // Keep the deployed application's CSP strict while allowing the development
+  // server to run those local-only scripts.
+  const contentSecurityPolicy = process.env.NODE_ENV === "production"
+    ? PRODUCTION_CONTENT_SECURITY_POLICY
+    : PRODUCTION_CONTENT_SECURITY_POLICY
+      .replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
+      .replace("connect-src 'self'", "connect-src 'self' ws: wss:");
+
+  res.setHeader("Content-Security-Policy", contentSecurityPolicy);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
