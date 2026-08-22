@@ -47,6 +47,25 @@ export async function ensureAuthSchema() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_rate_limits_reset_at ON security_rate_limits(reset_at)`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS security_audit_events (
+      id bigserial PRIMARY KEY,
+      organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+      site_id integer REFERENCES sites(id) ON DELETE SET NULL,
+      actor_user_id varchar NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      action varchar(100) NOT NULL,
+      target_type varchar(80) NOT NULL,
+      target_id varchar(120),
+      before_state jsonb,
+      after_state jsonb,
+      request_id varchar(120),
+      ip_hash varchar(64) NOT NULL,
+      user_agent varchar(500),
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_audit_org_created ON security_audit_events(organisation_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_audit_actor_created ON security_audit_events(actor_user_id, created_at DESC)`);
+  await pool.query(`
     ALTER TABLE garment_items
     ADD COLUMN IF NOT EXISTS color varchar(40)
   `);

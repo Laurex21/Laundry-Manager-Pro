@@ -519,6 +519,7 @@ export function registerAuthRoutes(app: Express): void {
 
       const passwordHash = await bcrypt.hash(password, 10);
       await authStorage.updatePassword(user.id, passwordHash);
+      await authStorage.revokeUserSessions(user.id);
       await authStorage.markPasswordResetTokenUsed(resetToken.id);
 
       res.json({ message: "Password updated successfully", accountType });

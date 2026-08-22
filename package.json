@@ -37,7 +37,8 @@
     "test:security-hardening": "tsx server/lib/security-hardening.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push",
-    "db:migrate:reviewed": "tsx scripts/run-reviewed-migrations.ts"
+    "db:migrate:reviewed": "tsx scripts/run-reviewed-migrations.ts",
+    "db:seed:plans": "tsx scripts/seed-plans.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

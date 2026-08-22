@@ -1,7 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { checkSubscriptionNotifications } from "./lib/subscription-notifications";
-import { expireLoyaltyPoints } from "./lib/loyalty";
+import { runDailyJobsWithLock } from "./lib/daily-jobs";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import crypto from "crypto";
@@ -19,16 +18,37 @@ declare module "http" {
   }
 }
 
-app.use(
-  express.json({
-    limit: "10mb",
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
+const standardJsonParser = express.json({
+  limit: "250kb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+const evidenceJsonParser = express.json({
+  limit: "3mb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+const settingsJsonParser = express.json({
+  limit: "2mb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
 
-app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+app.use((req, res, next) => {
+  const isReturnEvidenceUpload = req.method === "POST" && /^\/api\/orders\/\d+\/garment-returns$/.test(req.path);
+  const isBusinessLogoUpdate = req.method === "PUT" && req.path === "/api/settings";
+  const parser = isReturnEvidenceUpload
+    ? evidenceJsonParser
+    : isBusinessLogoUpdate
+      ? settingsJsonParser
+      : standardJsonParser;
+  return parser(req, res, next);
+});
+
+app.use(express.urlencoded({ extended: false, limit: "100kb" }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -45,6 +65,7 @@ app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
   const requestId = req.get("x-request-id") || crypto.randomUUID();
+  (req as any).requestId = requestId;
   res.setHeader("X-Request-Id", requestId);
 
   res.on("finish", () => {
@@ -59,11 +80,9 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
-  checkSubscriptionNotifications().catch((error) => console.error("[Daily Job] Subscription notifications failed", error));
-  expireLoyaltyPoints().catch((error) => console.error("[Daily Job] Loyalty point expiry failed", error));
+  runDailyJobsWithLock().catch((error) => console.error("[Daily Job] Execution failed", error));
   const subscriptionNotificationTimer = setInterval(() => {
-    checkSubscriptionNotifications().catch((error) => console.error("[Daily Job] Subscription notifications failed", error));
-    expireLoyaltyPoints().catch((error) => console.error("[Daily Job] Loyalty point expiry failed", error));
+    runDailyJobsWithLock().catch((error) => console.error("[Daily Job] Execution failed", error));
   }, 24 * 60 * 60 * 1000);
   subscriptionNotificationTimer.unref();
 

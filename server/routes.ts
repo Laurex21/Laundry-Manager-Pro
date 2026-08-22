@@ -14,6 +14,7 @@ import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
+import { recordSecurityAudit } from "./lib/security-audit";
 import { registerGarmentReturnRoutes } from "./lib/garment-return-routes";
 import { registerDailySiteReportRoutes } from "./lib/daily-site-report-routes";
 import { awardOrderPoints, awardReferralPoints } from "./lib/loyalty";
@@ -263,22 +264,6 @@ async function effectivePlanSlug(req: any): Promise<string> {
   return sub?.plan?.slug || "starter";
 }
 
-async function seedDatabase() {
-  const servicesList = await storage.getServices();
-  if (servicesList.length === 0) {
-    console.log("Seeding database...");
-    const s1 = await storage.createService({ name: "Wash & Fold", unit: "kg", price: "15.00", category: "washing", description: "Regular wash and fold service", imageUrl: "", active: true });
-    const s2 = await storage.createService({ name: "Dry Cleaning (Suit)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Professional dry cleaning for suits", imageUrl: "", active: true });
-    const s3 = await storage.createService({ name: "Ironing (Shirt)", unit: "piece", price: "25.00", category: "ironing", description: "Steam ironing", imageUrl: "", active: true });
-    const c1 = await storage.createCustomer({ name: "John Doe", phone: "555-0101", email: "john@example.com", address: "123 Main St", notes: "Allergic to strong detergents" });
-    const c2 = await storage.createCustomer({ name: "Jane Smith", phone: "555-0102", email: "jane@example.com", address: "456 Oak Ave", notes: "" });
-    await storage.createOrder({ customerId: c1.id, status: "received", paymentStatus: "unpaid" }, [{ serviceId: s1.id, quantity: 5 }]);
-    await storage.createOrder({ customerId: c2.id, status: "ready", paymentStatus: "paid" }, [{ serviceId: s2.id, quantity: 2 }, { serviceId: s3.id, quantity: 3 }]);
-    console.log("Database seeded!");
-  }
-  await storage.seedPlans();
-}
-
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
@@ -291,7 +276,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDailySiteReportRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
-  seedDatabase().catch(console.error);
   startTemporalIntelligenceJob();
 
   app.get("/api/public/stats", async (_req, res) => {
@@ -1860,6 +1844,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await db.insert(loyaltyProgram).values({ organisationId: organisation.id })
           .onConflictDoNothing();
       }
+      await recordSecurityAudit({
+        req,
+        organisationId: organisation.id,
+        action: "settings.updated",
+        targetType: "business_settings",
+        targetId: userId,
+        beforeState: { state: "existing" },
+        afterState: { changedFields: Object.keys(parsed.data).filter((field) => field !== "logoBase64") },
+      });
       res.json(settings);
     } catch (err) {
       res.status(500).json({ message: "Failed to save settings" });
@@ -1943,14 +1936,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/sites/:id/members/:userId/role", isAuthenticated, async (req, res) => {
     try {
-      if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+      const siteId = Number(req.params.id);
+      if (!(await canManageSite(req, siteId))) return res.status(403).json({ message: "Forbidden" });
       const role = z.enum(["manager", "operator"]).parse(req.body.role);
       const organisation = await storage.getOrganisationByOwner((req.session as any).userId);
       if (organisation?.ownerId === req.params.userId) {
         return res.status(400).json({ message: "The organisation owner role cannot be changed" });
       }
-      const updated = await storage.updateSiteMemberRole(Number(req.params.id), req.params.userId as string, role);
+      const site = await storage.getSite(siteId);
+      if (!site) return res.status(404).json({ message: "Site not found" });
+      const previousRole = await storage.getUserSiteRole(req.params.userId as string, siteId);
+      const updated = await storage.updateSiteMemberRole(siteId, req.params.userId as string, role);
       if (!updated) return res.status(404).json({ message: "Member not found" });
+      await recordSecurityAudit({
+        req,
+        organisationId: site.organisationId,
+        siteId,
+        action: "staff.role_updated",
+        targetType: "site_member",
+        targetId: req.params.userId as string,
+        beforeState: { role: previousRole },
+        afterState: { role },
+      });
       res.json(updated);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: "Role must be manager or operator" });
@@ -1960,12 +1967,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/sites/:id/members/:userId", isAuthenticated, async (req, res) => {
     try {
-      if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
+      const siteId = Number(req.params.id);
+      if (!(await canManageSite(req, siteId))) return res.status(403).json({ message: "Forbidden" });
       const organisation = await storage.getOrganisationByOwner((req.session as any).userId);
       if (organisation?.ownerId === req.params.userId) {
         return res.status(400).json({ message: "The organisation owner cannot be removed" });
       }
-      await storage.removeSiteMember(Number(req.params.id), req.params.userId as string);
+      const site = await storage.getSite(siteId);
+      if (!site) return res.status(404).json({ message: "Site not found" });
+      const previousRole = await storage.getUserSiteRole(req.params.userId as string, siteId);
+      const removed = await storage.removeSiteMember(siteId, req.params.userId as string);
+      if (!removed) return res.status(404).json({ message: "Member not found" });
+      await recordSecurityAudit({
+        req,
+        organisationId: site.organisationId,
+        siteId,
+        action: "staff.removed",
+        targetType: "site_member",
+        targetId: req.params.userId as string,
+        beforeState: { role: previousRole },
+        afterState: { removed: true },
+      });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to remove member" });
@@ -1987,6 +2009,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { siteId, identifier, role } = invitation.data;
       if (!(await canManageSite(req, Number(siteId)))) return res.status(403).json({ message: "Forbidden" });
       const inv = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role });
+      await recordSecurityAudit({
+        req,
+        organisationId: org.id,
+        siteId,
+        action: "invitation.created",
+        targetType: "site_invitation",
+        targetId: inv.id,
+        afterState: { role, status: inv.status },
+      });
       const baseUrl = `${req.protocol}://${req.get("host")}`;
       res.status(201).json({ ...inv, invitationLink: `${baseUrl}/join/${inv.token}` });
     } catch (err) {
@@ -2016,6 +2047,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const revoked = await storage.revokeInvitation(invitationId, org.id);
       if (!revoked) return res.status(404).json({ message: "Invitation not found" });
+      await recordSecurityAudit({
+        req,
+        organisationId: org.id,
+        action: "invitation.revoked",
+        targetType: "site_invitation",
+        targetId: invitationId,
+        beforeState: { status: "pending" },
+        afterState: { status: "expired" },
+      });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to revoke invitation" });

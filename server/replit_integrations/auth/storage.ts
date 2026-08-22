@@ -1,6 +1,6 @@
-import { passwordResetTokens, users, type PasswordResetToken, type User, type UpsertUser } from "@shared/models/auth";
+import { passwordResetTokens, sessions, users, type PasswordResetToken, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -11,6 +11,7 @@ export interface IAuthStorage {
   getValidPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined>;
   markPasswordResetTokenUsed(id: string): Promise<void>;
   updatePassword(userId: string, passwordHash: string): Promise<void>;
+  revokeUserSessions(userId: string): Promise<void>;
 }
 
 class AuthStorage implements IAuthStorage {
@@ -68,6 +69,10 @@ class AuthStorage implements IAuthStorage {
 
   async updatePassword(userId: string, passwordHash: string): Promise<void> {
     await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
+  async revokeUserSessions(userId: string): Promise<void> {
+    await db.delete(sessions).where(sql`${sessions.sess}->>'userId' = ${userId}`);
   }
 }
 
