@@ -5,6 +5,9 @@ import { pool } from "../../db";
 import { ensureOrderItemQuantitySupportsDecimals } from "../../lib/order-item-quantity-schema";
 
 export function getSession() {
+  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+    throw new Error("SESSION_SECRET must be configured with at least 32 characters");
+  }
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
@@ -28,12 +31,19 @@ export function getSession() {
 }
 
 export async function setupAuth(app: Express) {
-  await ensureAuthSchema();
   app.set("trust proxy", 1);
   app.use(getSession());
 }
 
-async function ensureAuthSchema() {
+export async function ensureAuthSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS security_rate_limits (
+      bucket_key varchar(64) PRIMARY KEY,
+      count integer NOT NULL CHECK (count > 0),
+      reset_at timestamptz NOT NULL
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_rate_limits_reset_at ON security_rate_limits(reset_at)`);
   await pool.query(`
     ALTER TABLE garment_items
     ADD COLUMN IF NOT EXISTS color varchar(40)
@@ -458,17 +468,6 @@ async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_production_cycle_orders_order ON production_cycle_orders(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
-  // One-time data correction: kapnangsilva@gmail.com was accidentally
-  // onboarded as a staff member, overwriting their admin credentials.
-  // Restore owner access; guarded so it only fires when still in the
-  // wrong state and is a safe no-op on every subsequent restart.
-  await pool.query(`
-    UPDATE users
-    SET user_type = 'owner',
-        role      = 'owner'
-    WHERE email     = 'kapnangsilva@gmail.com'
-      AND user_type = 'staff'
-  `);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

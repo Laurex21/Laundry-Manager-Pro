@@ -34,8 +34,10 @@
     "test:production-cycles": "tsx server/lib/production-cycles.test.ts",
     "test:controlled-order-corrections": "tsx server/lib/controlled-order-corrections.test.ts",
     "test:garment-colors": "tsx server/lib/garment-colors.test.ts",
+    "test:security-hardening": "tsx server/lib/security-hardening.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:migrate:reviewed": "tsx scripts/run-reviewed-migrations.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
