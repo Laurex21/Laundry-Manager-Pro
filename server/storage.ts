@@ -1590,17 +1590,17 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings> {
+  async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>, executor: any = db): Promise<BusinessSettings> {
     await ensureBusinessSettingsSchema();
-    const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
+    const [existing] = await executor.select().from(businessSettings).where(eq(businessSettings.userId, userId));
     if (existing) {
-      const [updated] = await db.update(businessSettings)
+      const [updated] = await executor.update(businessSettings)
         .set({ ...data, updatedAt: new Date() })
         .where(eq(businessSettings.userId, userId))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(businessSettings).values({ userId, ...data }).returning();
+    const [created] = await executor.insert(businessSettings).values({ userId, ...data }).returning();
     return created;
   }
 
@@ -1682,22 +1682,22 @@ export class DatabaseStorage implements IStorage {
     return member;
   }
 
-  async removeSiteMember(siteId: number, userId: string): Promise<boolean> {
-    const [deleted] = await db.delete(siteMembers).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId))).returning();
+  async removeSiteMember(siteId: number, userId: string, executor: any = db): Promise<boolean> {
+    const [deleted] = await executor.delete(siteMembers).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId))).returning();
     return !!deleted;
   }
 
-  async updateSiteMemberRole(siteId: number, userId: string, role: string): Promise<SiteMember | undefined> {
-    const [updated] = await db.update(siteMembers).set({ role }).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId))).returning();
+  async updateSiteMemberRole(siteId: number, userId: string, role: string, executor: any = db): Promise<SiteMember | undefined> {
+    const [updated] = await executor.update(siteMembers).set({ role }).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId))).returning();
     return updated;
   }
 
-  async createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }): Promise<SiteInvitation> {
+  async createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }, executor: any = db): Promise<SiteInvitation> {
     const crypto = await import("crypto");
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    const [inv] = await db.insert(siteInvitations).values({ ...data, token, status: "pending", expiresAt }).returning();
+    const [inv] = await executor.insert(siteInvitations).values({ ...data, token, status: "pending", expiresAt }).returning();
     return inv;
   }
 
@@ -1790,8 +1790,8 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async revokeInvitation(id: number, organisationId: number): Promise<boolean> {
-    const [updated] = await db.update(siteInvitations)
+  async revokeInvitation(id: number, organisationId: number, executor: any = db): Promise<boolean> {
+    const [updated] = await executor.update(siteInvitations)
       .set({ status: "expired" })
       .where(and(
         eq(siteInvitations.id, id),

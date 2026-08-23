@@ -24,7 +24,7 @@ import {
   CreditOperationError,
   recordPaymentWithCredit,
 } from "./lib/customer-credit";
-import { pool } from "./db";
+import { db, pool } from "./db";
 import {
   createCorrectedOrderCopy,
   editOrderControlled,
@@ -1890,21 +1890,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
       }
-      const settings = await storage.upsertSettings(userId, parsed.data);
-      if (parsed.data.loyaltyProgramEnabled === true) {
-        const { db } = await import("./db");
-        const { loyaltyProgram } = await import("@shared/schema");
-        await db.insert(loyaltyProgram).values({ organisationId: organisation.id })
-          .onConflictDoNothing();
-      }
-      await recordSecurityAudit({
-        req,
-        organisationId: organisation.id,
-        action: "settings.updated",
-        targetType: "business_settings",
-        targetId: userId,
-        beforeState: { state: "existing" },
-        afterState: { changedFields: Object.keys(parsed.data).filter((field) => field !== "logoBase64") },
+      const settings = await db.transaction(async (tx) => {
+        const updated = await storage.upsertSettings(userId, parsed.data, tx);
+        if (parsed.data.loyaltyProgramEnabled === true) {
+          const { loyaltyProgram } = await import("@shared/schema");
+          await tx.insert(loyaltyProgram).values({ organisationId: organisation.id })
+            .onConflictDoNothing();
+        }
+        await recordSecurityAudit({
+          req,
+          organisationId: organisation.id,
+          action: "settings.updated",
+          targetType: "business_settings",
+          targetId: userId,
+          beforeState: { state: "existing" },
+          afterState: { changedFields: Object.keys(parsed.data).filter((field) => field !== "logoBase64") },
+        }, tx);
+        return updated;
       });
       res.json(settings);
     } catch (err) {
@@ -1999,18 +2001,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const site = await storage.getSite(siteId);
       if (!site) return res.status(404).json({ message: "Site not found" });
       const previousRole = await storage.getUserSiteRole(req.params.userId as string, siteId);
-      const updated = await storage.updateSiteMemberRole(siteId, req.params.userId as string, role);
-      if (!updated) return res.status(404).json({ message: "Member not found" });
-      await recordSecurityAudit({
-        req,
-        organisationId: site.organisationId,
-        siteId,
-        action: "staff.role_updated",
-        targetType: "site_member",
-        targetId: req.params.userId as string,
-        beforeState: { role: previousRole },
-        afterState: { role },
+      const updated = await db.transaction(async (tx) => {
+        const member = await storage.updateSiteMemberRole(siteId, req.params.userId as string, role, tx);
+        if (!member) return undefined;
+        await recordSecurityAudit({
+          req,
+          organisationId: site.organisationId,
+          siteId,
+          action: "staff.role_updated",
+          targetType: "site_member",
+          targetId: req.params.userId as string,
+          beforeState: { role: previousRole },
+          afterState: { role },
+        }, tx);
+        return member;
       });
+      if (!updated) return res.status(404).json({ message: "Member not found" });
       res.json(updated);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: "Role must be manager or operator" });
@@ -2029,18 +2035,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const site = await storage.getSite(siteId);
       if (!site) return res.status(404).json({ message: "Site not found" });
       const previousRole = await storage.getUserSiteRole(req.params.userId as string, siteId);
-      const removed = await storage.removeSiteMember(siteId, req.params.userId as string);
-      if (!removed) return res.status(404).json({ message: "Member not found" });
-      await recordSecurityAudit({
-        req,
-        organisationId: site.organisationId,
-        siteId,
-        action: "staff.removed",
-        targetType: "site_member",
-        targetId: req.params.userId as string,
-        beforeState: { role: previousRole },
-        afterState: { removed: true },
+      const removed = await db.transaction(async (tx) => {
+        const didRemove = await storage.removeSiteMember(siteId, req.params.userId as string, tx);
+        if (!didRemove) return false;
+        await recordSecurityAudit({
+          req,
+          organisationId: site.organisationId,
+          siteId,
+          action: "staff.removed",
+          targetType: "site_member",
+          targetId: req.params.userId as string,
+          beforeState: { role: previousRole },
+          afterState: { removed: true },
+        }, tx);
+        return true;
       });
+      if (!removed) return res.status(404).json({ message: "Member not found" });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to remove member" });
@@ -2061,15 +2071,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!invitation.success) return res.status(400).json({ message: "A valid site, identifier and staff role are required" });
       const { siteId, identifier, role } = invitation.data;
       if (!(await canManageSite(req, Number(siteId)))) return res.status(403).json({ message: "Forbidden" });
-      const inv = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role });
-      await recordSecurityAudit({
-        req,
-        organisationId: org.id,
-        siteId,
-        action: "invitation.created",
-        targetType: "site_invitation",
-        targetId: inv.id,
-        afterState: { role, status: inv.status },
+      const inv = await db.transaction(async (tx) => {
+        const created = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role }, tx);
+        await recordSecurityAudit({
+          req,
+          organisationId: org.id,
+          siteId,
+          action: "invitation.created",
+          targetType: "site_invitation",
+          targetId: created.id,
+          afterState: { role, status: created.status },
+        }, tx);
+        return created;
       });
       const baseUrl = `${req.protocol}://${req.get("host")}`;
       res.status(201).json({ ...inv, invitationLink: `${baseUrl}/join/${inv.token}` });
@@ -2098,17 +2111,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!Number.isInteger(invitationId) || invitationId <= 0) {
         return res.status(400).json({ message: "A valid invitation is required" });
       }
-      const revoked = await storage.revokeInvitation(invitationId, org.id);
-      if (!revoked) return res.status(404).json({ message: "Invitation not found" });
-      await recordSecurityAudit({
-        req,
-        organisationId: org.id,
-        action: "invitation.revoked",
-        targetType: "site_invitation",
-        targetId: invitationId,
-        beforeState: { status: "pending" },
-        afterState: { status: "expired" },
+      const revoked = await db.transaction(async (tx) => {
+        const didRevoke = await storage.revokeInvitation(invitationId, org.id, tx);
+        if (!didRevoke) return false;
+        await recordSecurityAudit({
+          req,
+          organisationId: org.id,
+          action: "invitation.revoked",
+          targetType: "site_invitation",
+          targetId: invitationId,
+          beforeState: { status: "pending" },
+          afterState: { status: "expired" },
+        }, tx);
+        return true;
       });
+      if (!revoked) return res.status(404).json({ message: "Invitation not found" });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ message: "Failed to revoke invitation" });

@@ -531,9 +531,18 @@ export function registerAuthRoutes(app: Express): void {
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      await authStorage.updatePassword(user.id, passwordHash);
-      await authStorage.revokeUserSessions(user.id);
-      await authStorage.markPasswordResetTokenUsed(resetToken.id);
+      const consumed = await db.transaction(async (tx) => {
+        const claimedToken = await authStorage.consumeValidPasswordResetToken(hashResetToken(token), tx);
+        if (!claimedToken || claimedToken.id !== resetToken.id || claimedToken.userId !== user.id) {
+          return false;
+        }
+        await authStorage.updatePassword(user.id, passwordHash, tx);
+        await authStorage.revokeUserSessions(user.id, tx);
+        return true;
+      });
+      if (!consumed) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
 
       res.json({ message: "Password updated successfully", accountType });
     } catch (error) {

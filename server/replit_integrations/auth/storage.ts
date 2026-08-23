@@ -9,9 +9,9 @@ export interface IAuthStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   createPasswordResetToken(data: { userId: string; tokenHash: string; accountType: "owner" | "staff"; expiresAt: Date }): Promise<PasswordResetToken>;
   getValidPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined>;
-  markPasswordResetTokenUsed(id: string): Promise<void>;
-  updatePassword(userId: string, passwordHash: string): Promise<void>;
-  revokeUserSessions(userId: string): Promise<void>;
+  consumeValidPasswordResetToken(tokenHash: string, executor?: any): Promise<PasswordResetToken | undefined>;
+  updatePassword(userId: string, passwordHash: string, executor?: any): Promise<void>;
+  revokeUserSessions(userId: string, executor?: any): Promise<void>;
 }
 
 class AuthStorage implements IAuthStorage {
@@ -63,16 +63,25 @@ class AuthStorage implements IAuthStorage {
     return token;
   }
 
-  async markPasswordResetTokenUsed(id: string): Promise<void> {
-    await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, id));
+  async consumeValidPasswordResetToken(tokenHash: string, executor: any = db): Promise<PasswordResetToken | undefined> {
+    const [token] = await executor
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(and(
+        eq(passwordResetTokens.tokenHash, tokenHash),
+        isNull(passwordResetTokens.usedAt),
+        gt(passwordResetTokens.expiresAt, new Date())
+      ))
+      .returning();
+    return token;
   }
 
-  async updatePassword(userId: string, passwordHash: string): Promise<void> {
-    await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+  async updatePassword(userId: string, passwordHash: string, executor: any = db): Promise<void> {
+    await executor.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
   }
 
-  async revokeUserSessions(userId: string): Promise<void> {
-    await db.delete(sessions).where(sql`${sessions.sess}->>'userId' = ${userId}`);
+  async revokeUserSessions(userId: string, executor: any = db): Promise<void> {
+    await executor.delete(sessions).where(sql`${sessions.sess}->>'userId' = ${userId}`);
   }
 }
 
