@@ -79,7 +79,20 @@ function hashResetToken(token: string) {
 }
 
 function buildBaseUrl(req: any) {
-  return process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+  const configured = process.env.APP_BASE_URL?.trim();
+  const replitDomain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
+  const candidate = configured || (replitDomain ? `https://${replitDomain}` : "");
+  if (!candidate) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("APP_BASE_URL or REPLIT_DOMAINS must be configured in production");
+    }
+    return `${req.protocol}://${req.get("host")}`;
+  }
+  const url = new URL(candidate);
+  if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+    throw new Error("The production password-reset base URL must use HTTPS");
+  }
+  return url.origin;
 }
 
 function escapeHtml(value: string) {

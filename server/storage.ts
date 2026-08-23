@@ -100,7 +100,7 @@ export interface IStorage {
   getMachines(siteId: number | number[] | null, userId: string): Promise<Machine[]>;
   getMachine(id: number): Promise<Machine | undefined>;
   createMachine(machine: InsertMachine): Promise<Machine>;
-  updateMachine(id: number, data: Partial<InsertMachine>): Promise<Machine | undefined>;
+  updateMachine(id: number, siteId: number, data: Partial<InsertMachine>): Promise<Machine | undefined>;
   deleteMachine(id: number): Promise<boolean>;
   createMachineUsage(data: InsertMachineUsage): Promise<any>;
 
@@ -108,7 +108,7 @@ export interface IStorage {
   getEmployee(id: number): Promise<Employee | undefined>;
   getOrCreateActorEmployee(actorUserId: string, siteId: number): Promise<Employee>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
-  updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
+  updateEmployee(id: number, siteId: number, data: Partial<InsertEmployee>): Promise<Employee | undefined>;
   deleteEmployee(id: number): Promise<boolean>;
   createEmployeeActivity(activity: InsertEmployeeActivity): Promise<any>;
   createEmployeeAttendance(attendance: InsertEmployeeAttendance): Promise<any>;
@@ -1014,8 +1014,10 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateMachine(id: number, data: Partial<InsertMachine>): Promise<Machine | undefined> {
-    const [updated] = await db.update(machines).set(data).where(eq(machines.id, id)).returning();
+  async updateMachine(id: number, siteId: number, data: Partial<InsertMachine>): Promise<Machine | undefined> {
+    const [updated] = await db.update(machines).set(data)
+      .where(and(eq(machines.id, id), eq(machines.siteId, siteId)))
+      .returning();
     return updated;
   }
 
@@ -1078,8 +1080,10 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee | undefined> {
-    const [updated] = await db.update(employees).set(data).where(eq(employees.id, id)).returning();
+  async updateEmployee(id: number, siteId: number, data: Partial<InsertEmployee>): Promise<Employee | undefined> {
+    const [updated] = await db.update(employees).set(data)
+      .where(and(eq(employees.id, id), eq(employees.siteId, siteId)))
+      .returning();
     return updated;
   }
 

@@ -8,7 +8,7 @@ import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
-import { insertBusinessSettingsSchema, insertEmployeeSchema, insertMachineSchema } from "@shared/schema";
+import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema } from "@shared/schema";
 import { parseLocalDateParam } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
@@ -289,6 +289,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   const VALID_PIPELINE_STATUSES = ["received", "sorting", "washing", "drying", "ironing", "packaging", "ready", "delivered", "cancelled", "cancellation_requested"];
   const NON_PAYABLE_ORDER_STATUSES = new Set(["cancelled", "cancellation_requested"]);
+  const garmentReturnUpdateSchema = z.object({
+    returnStage: z.enum(["sorting", "washing", "stain_treatment", "drying", "ironing", "packaging", "quality_check"]),
+    returnNotes: z.string().trim().max(1000).optional().default(""),
+  }).strict();
+  const cancellationRequestSchema = z.object({ reason: z.string().trim().min(1).max(500) }).strict();
+  const cancellationRejectionSchema = z.object({ note: z.string().trim().max(500).optional().default("") }).strict();
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
     const customers = await storage.getCustomersBySite(orgScopedSites(req));
@@ -645,7 +651,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/garment-items/:id/return", isAuthenticated, async (req, res) => {
-    const { returnStage, returnNotes } = req.body;
+    const parsed = garmentReturnUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid garment return details" });
+    const { returnStage, returnNotes } = parsed.data;
     const item = await storage.getGarmentItem(Number(req.params.id));
     if (!item) return res.status(404).json({ message: "Garment item not found" });
     if (!(await canAccessOrder(req, item.orderId))) return res.status(403).json({ message: "Forbidden" });
@@ -664,8 +672,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/orders/:id/request-cancellation", isAuthenticated, async (req, res) => {
-    const { reason } = req.body;
-    if (!reason) return res.status(400).json({ message: "reason is required" });
+    const parsed = cancellationRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "A valid reason is required" });
+    const { reason } = parsed.data;
     const userId = (req.session as any)?.userId || "unknown";
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const updated = await storage.requestCancellation(Number(req.params.id), reason, userId);
@@ -702,7 +711,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/orders/:id/reject-cancellation", isAuthenticated, async (req, res) => {
-    const { note } = req.body;
+    const parsed = cancellationRejectionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid rejection note" });
+    const { note } = parsed.data;
     const userId = (req.session as any)?.userId || "unknown";
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const order = await storage.getOrder(Number(req.params.id));
@@ -920,7 +931,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const body = { ...req.body };
       delete body.siteId;
       if (body.date && typeof body.date === "string") body.date = new Date(body.date);
-      const updated = await storage.updateExpenditure(Number(req.params.id), body);
+      const parsed = insertExpenditureSchema.omit({ siteId: true }).partial().strict().safeParse(body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid expenditure data" });
+      const updated = await storage.updateExpenditure(Number(req.params.id), parsed.data);
       if (!updated) return res.status(404).json({ message: "Expenditure not found" });
       res.json(updated);
     } catch (err) {
@@ -974,6 +987,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const MACHINE_NUMERIC = ["capacityKg", "utilizationRate", "cycleCount", "totalKgProcessed", "maintenanceIntervalHours", "maintenanceCost"];
   const MACHINE_INTEGER = ["maintenanceIntervalDays"];
   const MACHINE_DATES = ["purchaseDate", "lastMaintenanceDate"];
+  const machinePatchSchema = insertMachineSchema
+    .omit({ userId: true, siteId: true })
+    .partial()
+    .strict();
+  const machineUsageSchema = z.object({
+    orderId: z.coerce.number().int().positive().nullish(),
+    usageDate: z.coerce.date().optional(),
+    weightProcessed: z.coerce.number().min(0).max(1_000_000).default(0),
+    cycleDurationMinutes: z.coerce.number().int().min(0).max(100_000).default(0),
+  }).strict();
 
   app.post("/api/machines", isAuthenticated, async (req: any, res) => {
     try {
@@ -995,11 +1018,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/machines/:id", isAuthenticated, async (req, res) => {
-    if (!(await requireResourceRole(req, res, async () => (await storage.getMachine(Number(req.params.id)))?.siteId, ["owner", "manager"]))) return;
+    const machine = await storage.getMachine(Number(req.params.id));
+    if (!machine?.siteId) return res.status(404).json({ message: "Machine not found" });
+    if (!(await requireSiteRole(req, res, machine.siteId, ["owner", "manager"]))) return;
     let body = sanitizeNumeric(req.body, MACHINE_NUMERIC);
     body = sanitizeInteger(body, MACHINE_INTEGER);
     body = sanitizeDates(body, MACHINE_DATES);
-    const updated = await storage.updateMachine(Number(req.params.id), body);
+    const parsed = machinePatchSchema.safeParse(body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid machine data" });
+    const updated = await storage.updateMachine(Number(req.params.id), machine.siteId, parsed.data);
     if (!updated) return res.status(404).json({ message: "Machine not found" });
     res.json(updated);
   });
@@ -1016,14 +1043,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessMachine(req, machineId))) return res.status(403).json({ message: "Forbidden" });
     const machine = await storage.getMachine(machineId);
     if (!machine?.siteId) return res.status(404).json({ message: "Machine not found" });
-    const body = sanitizeNumeric(req.body, ["weightProcessed"]);
+    const parsed = machineUsageSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid machine usage data" });
+    const body = parsed.data;
+    const orderId = body.orderId ?? null;
+    if (orderId !== null) {
+      const order = await storage.getOrder(orderId);
+      if (!order || order.siteId !== machine.siteId || !(await canAccessOrder(req, orderId))) {
+        return res.status(400).json({ message: "Order must belong to the machine's site" });
+      }
+    }
     const usage = await storage.createMachineUsage({
       machineId,
-      orderId: body.orderId ? Number(body.orderId) : null,
+      orderId,
       siteId: machine.siteId,
-      usageDate: body.usageDate ? new Date(body.usageDate) : new Date(),
-      weightProcessed: body.weightProcessed || "0",
-      cycleDurationMinutes: Number(body.cycleDurationMinutes || 0),
+      usageDate: body.usageDate ?? new Date(),
+      weightProcessed: String(body.weightProcessed),
+      cycleDurationMinutes: body.cycleDurationMinutes,
     } as any);
     res.status(201).json(usage);
   });
@@ -1301,6 +1337,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const EMPLOYEE_NUMERIC = ["salary", "kgProcessed", "ordersHandled"];
   const EMPLOYEE_INTEGER = ["ordersHandled"];
   const EMPLOYEE_DATES = ["dateHired"];
+  const employeePatchSchema = insertEmployeeSchema
+    .omit({ userId: true, authUserId: true, siteId: true, kgProcessed: true, ordersHandled: true })
+    .partial()
+    .strict();
+  const attendanceSchema = z.object({
+    workDate: z.coerce.date().optional(),
+    checkInAt: z.coerce.date().nullish(),
+    checkOutAt: z.coerce.date().nullish(),
+    status: z.enum(["present", "late", "absent"]).default("present"),
+  }).strict();
 
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
@@ -1321,11 +1367,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/employees/:id", isAuthenticated, async (req, res) => {
-    if (!(await requireResourceRole(req, res, async () => (await storage.getEmployee(Number(req.params.id)))?.siteId, ["owner", "manager"]))) return;
+    const employee = await storage.getEmployee(Number(req.params.id));
+    if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    if (!(await requireSiteRole(req, res, employee.siteId, ["owner", "manager"]))) return;
     let body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
     body = sanitizeInteger(body, EMPLOYEE_INTEGER);
     body = sanitizeDates(body, EMPLOYEE_DATES);
-    const updated = await storage.updateEmployee(Number(req.params.id), body);
+    const parsed = employeePatchSchema.safeParse(body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid employee data" });
+    const updated = await storage.updateEmployee(Number(req.params.id), employee.siteId, parsed.data);
     if (!updated) return res.status(404).json({ message: "Employee not found" });
     res.json(updated);
   });
@@ -1342,13 +1392,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessEmployee(req, employeeId))) return res.status(403).json({ message: "Forbidden" });
     const employee = await storage.getEmployee(employeeId);
     if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    const parsed = attendanceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid attendance data" });
+    const body = parsed.data;
     const attendance = await storage.createEmployeeAttendance({
       employeeId,
       siteId: employee.siteId,
-      workDate: req.body.workDate ? new Date(req.body.workDate) : new Date(),
-      checkInAt: req.body.checkInAt ? new Date(req.body.checkInAt) : null,
-      checkOutAt: req.body.checkOutAt ? new Date(req.body.checkOutAt) : null,
-      status: req.body.status || "present",
+      workDate: body.workDate ?? new Date(),
+      checkInAt: body.checkInAt ?? null,
+      checkOutAt: body.checkOutAt ?? null,
+      status: body.status,
     } as any);
     res.status(201).json(attendance);
   });

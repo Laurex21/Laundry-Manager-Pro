@@ -65,6 +65,18 @@ assert.match(dailyJobsSource, /pg_try_advisory_lock/);
 assert.match(dailyJobsSource, /pg_advisory_unlock/);
 assert.match(authRoutesSource, /status\(405\).*Allow/);
 assert.doesNotMatch(calculatorSource, /json\(\{ message: err\.message \}\)/);
+assert.match(authRoutesSource, /APP_BASE_URL/);
+assert.match(authRoutesSource, /REPLIT_DOMAINS/);
+assert.doesNotMatch(authRoutesSource, /process\.env\.APP_BASE_URL \|\| `\$\{req\.protocol\}:\/\/\$\{req\.get\("host"\)\}`/);
+assert.match(routesSource, /machinePatchSchema[\s\S]{0,180}omit\(\{ userId: true, siteId: true \}\)[\s\S]{0,100}strict\(\)/);
+assert.match(routesSource, /employeePatchSchema[\s\S]{0,220}authUserId: true[\s\S]{0,100}strict\(\)/);
+assert.match(storageSource, /updateMachine\(id: number, siteId: number[\s\S]{0,300}eq\(machines\.siteId, siteId\)/);
+assert.match(storageSource, /updateEmployee\(id: number, siteId: number[\s\S]{0,300}eq\(employees\.siteId, siteId\)/);
+assert.match(routesSource, /Order must belong to the machine's site/);
+assert.match(calculatorSource, /calculatorLeadSchema\.safeParse\(req\.body\)/);
+assert.match(calculatorSource, /calculatorUpdateSchema\.safeParse\(req\.body\)/);
+assert.match(calculatorSource, /calculatorReportSchema\.safeParse\(req\.body\)/);
+assert.match(calculatorSource, /données utilisateur non fiables/);
 
 const { createPublicAccessToken, verifyPublicAccessToken } = await import("./public-access-token");
 const { sameOriginMutations, securityHeaders } = await import("./http-security");
