@@ -83,6 +83,8 @@ assert.match(calculatorSource, /calculatorLeadSchema\.safeParse\(req\.body\)/);
 assert.match(calculatorSource, /calculatorUpdateSchema\.safeParse\(req\.body\)/);
 assert.match(calculatorSource, /calculatorReportSchema\.safeParse\(req\.body\)/);
 assert.match(calculatorSource, /données utilisateur non fiables/);
+assert.match(routesSource, /api\.services\.create\.input\.safeParse\(req\.body\)[\s\S]{0,250}Invalid service data/);
+assert.match(routesSource, /api\.expenditures\.create\.input\.safeParse\(req\.body\)[\s\S]{0,250}Invalid expenditure data/);
 
 const { createPublicAccessToken, verifyPublicAccessToken } = await import("./public-access-token");
 const { sameOriginMutations, securityHeaders } = await import("./http-security");

@@ -371,8 +371,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const siteId = requireWriteSite(req, res);
     if (siteId === null) return;
     if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
-    const input = api.services.create.input.parse(req.body);
-    const service = await storage.createService({ ...input, siteId } as any);
+    const parsed = api.services.create.input.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid service data", errors: parsed.error.flatten() });
+    }
+    const service = await storage.createService({ ...parsed.data, siteId } as any);
     res.status(201).json(service);
   });
 
@@ -914,7 +917,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const siteId = requireWriteSite(req, res);
     if (siteId === null) return;
     if (!(await requireSiteRole(req, res, siteId, ["owner", "manager"]))) return;
-    const input = api.expenditures.create.input.parse(req.body);
+    const parsed = api.expenditures.create.input.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid expenditure data", errors: parsed.error.flatten() });
+    }
+    const input = parsed.data;
     const expenditure = await storage.createExpenditure({
       ...input,
       date: input.date ? new Date(input.date) : new Date(),
