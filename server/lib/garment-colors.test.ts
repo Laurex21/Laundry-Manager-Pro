@@ -12,6 +12,10 @@ assert.match(read("server/lib/order-corrections.ts"), /INSERT INTO garment_items
 assert.match(read("client/src/pages/orders.tsx"), /palette-garment-color-/);
 assert.match(read("client/src/components/garment-color-picker.tsx"), /aria-pressed/);
 assert.match(read("client/src/components/garment-color-picker.tsx"), /compact = false/);
+assert.match(read("client/src/components/garment-color-picker.tsx"), /garment_color_recent/);
+assert.match(read("client/src/components/garment-color-picker.tsx"), /GARMENT_COLOR_FAMILIES/);
+assert.match(read("client/src/lib/garment-colors.ts"), /value: "burgundy"/);
+assert.match(read("client/src/lib/garment-colors.ts"), /value: "turquoise"/);
 assert.match(read("client/src/pages/orders.tsx"), /<GarmentColorPicker compact/);
 assert.match(read("client/src/pages/orders.tsx"), /md:grid-cols-\[minmax\(0,1fr\)_5rem_minmax\(9rem,0\.65fr\)_2\.5rem\]/);
 assert.match(read("client/src/lib/i18n.ts"), /"garments_count": "\{\{count\}\} garments"/);
