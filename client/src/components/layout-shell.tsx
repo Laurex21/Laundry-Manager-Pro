@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { isDemoMode, exitDemoMode } from "@/lib/demo-mode";
 import { useCurrency, type Currency } from "@/hooks/use-currency";
+import { CURRENCIES, currencyName } from "@/lib/currency-registry";
 import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
@@ -19,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   DropdownMenuLabel, DropdownMenuSeparator,
@@ -50,15 +52,6 @@ const LANGUAGES = [
   { code: "pt", label: "Português", short: "PT" },
 ];
 
-const CURRENCIES: { code: Currency; labelKey: string; symbol: string }[] = [
-  { code: "FCFA", labelKey: "currency_fcfa", symbol: "FCFA" },
-  { code: "NGN", labelKey: "currency_naira", symbol: "₦" },
-  { code: "ZAR", labelKey: "currency_rand", symbol: "R" },
-  { code: "MRU", labelKey: "currency_ouguiya", symbol: "UM" },
-  { code: "USD", labelKey: "currency_us_dollar", symbol: "$" },
-  { code: "EUR", labelKey: "currency_euro", symbol: "€" },
-];
-
 const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
 
 const PAGE_TITLES: Record<string, string> = {
@@ -80,8 +73,23 @@ const PAGE_TITLES: Record<string, string> = {
 function RegionalSettings() {
   const { t, i18n } = useTranslation();
   const { currency, setCurrency } = useCurrency();
+  const [currencySearch, setCurrencySearch] = useState("");
   const currentLang = LANGUAGES.find((l) => l.code === i18n.language) || LANGUAGES[0];
   const currentCurrency = CURRENCIES.find((c) => c.code === currency) || CURRENCIES[0];
+  const filteredCurrencies = useMemo(() => {
+    const query = currencySearch.trim().toLocaleLowerCase(i18n.language);
+    if (!query) return CURRENCIES;
+    return CURRENCIES.filter((item) =>
+      `${item.symbol} ${item.code} ${currencyName(item.code, i18n.language)}`
+        .toLocaleLowerCase(i18n.language)
+        .includes(query),
+    );
+  }, [currencySearch, i18n.language]);
+  const searchLabel = i18n.language.startsWith("fr")
+    ? "Rechercher une monnaie"
+    : i18n.language.startsWith("pt")
+      ? "Pesquisar moeda"
+      : "Search currency";
 
   return (
     <div className="flex items-center gap-0.5" data-testid="regional-settings">
@@ -124,22 +132,44 @@ function RegionalSettings() {
             data-testid="button-currency-toggle"
           >
             <Banknote className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span className="text-xs font-medium hidden sm:inline">{t(currentCurrency.labelKey)}</span>
+            <span className="text-xs font-medium hidden sm:inline">{currentCurrency.symbol}</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-1rem))]">
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground pb-1">{t("currency_label")}</DropdownMenuLabel>
-          {CURRENCIES.map((cur) => (
-            <DropdownMenuItem
-              key={cur.code}
-              onClick={() => setCurrency(cur.code)}
-              className={cn("flex items-center justify-between gap-2 text-sm", currency === cur.code && "text-primary font-semibold")}
-              data-testid={`menu-item-currency-${cur.code}`}
-            >
-              <span>{cur.symbol} {t(cur.labelKey)}</span>
-              {currency === cur.code && <Check className="w-3.5 h-3.5 text-primary" />}
-            </DropdownMenuItem>
-          ))}
+          <div className="px-2 pb-2">
+            <Input
+              value={currencySearch}
+              onChange={(event) => setCurrencySearch(event.target.value)}
+              onKeyDown={(event) => event.stopPropagation()}
+              placeholder={searchLabel}
+              aria-label={searchLabel}
+              className="h-9"
+            />
+          </div>
+          <div className="max-h-[min(60vh,24rem)] overflow-y-auto overscroll-contain" role="listbox" aria-label={t("currency_label") }>
+            {filteredCurrencies.map((cur) => (
+              <DropdownMenuItem
+                key={cur.code}
+                onClick={() => { setCurrency(cur.code as Currency); setCurrencySearch(""); }}
+                className={cn("flex min-h-11 items-center justify-between gap-3 text-sm", currency === cur.code && "text-primary font-semibold")}
+                data-testid={`menu-item-currency-${cur.code}`}
+                role="option"
+                aria-selected={currency === cur.code}
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="w-12 shrink-0 font-semibold text-foreground">{cur.symbol}</span>
+                  <span className="truncate">{currencyName(cur.code, i18n.language)}</span>
+                </span>
+                {currency === cur.code && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+              </DropdownMenuItem>
+            ))}
+            {filteredCurrencies.length === 0 && (
+              <p className="px-3 py-4 text-center text-sm text-muted-foreground" role="status">
+                {i18n.language.startsWith("fr") ? "Aucune monnaie trouvée" : i18n.language.startsWith("pt") ? "Nenhuma moeda encontrada" : "No currency found"}
+              </p>
+            )}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

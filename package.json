@@ -34,6 +34,7 @@
     "test:production-cycles": "tsx server/lib/production-cycles.test.ts",
     "test:controlled-order-corrections": "tsx server/lib/controlled-order-corrections.test.ts",
     "test:garment-colors": "tsx server/lib/garment-colors.test.ts",
+    "test:african-currencies": "tsx server/lib/african-currency-registry.test.ts",
     "test:security-hardening": "tsx server/lib/security-hardening.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",
     "db:push": "drizzle-kit push",

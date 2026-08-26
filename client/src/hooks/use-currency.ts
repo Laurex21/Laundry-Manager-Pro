@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { currencyPrefix, DEFAULT_CURRENCY, normalizeCurrency, type Currency } from "@/lib/currency-registry";
 
-export type Currency = "FCFA" | "USD" | "NGN" | "EUR" | "ZAR" | "MRU";
+export type { Currency } from "@/lib/currency-registry";
 
 interface CurrencyStore {
   currency: Currency;
@@ -9,32 +10,16 @@ interface CurrencyStore {
   getSymbol: () => string;
 }
 
-const symbols: Record<Currency, string> = {
-  FCFA: "FCFA ",
-  USD: "$",
-  NGN: "₦",
-  EUR: "€",
-  ZAR: "R",
-  MRU: "UM ",
-};
-const SUPPORTED_CURRENCIES = new Set<Currency>(["FCFA", "USD", "NGN", "EUR", "ZAR", "MRU"]);
-
-function normalizeCurrency(value: unknown): Currency {
-  return typeof value === "string" && SUPPORTED_CURRENCIES.has(value as Currency)
-    ? (value as Currency)
-    : "FCFA";
-}
-
 export const useCurrency = create<CurrencyStore>()(
   persist(
     (set, get) => ({
-      currency: "FCFA",
+      currency: DEFAULT_CURRENCY,
       setCurrency: (currency: Currency) => set({ currency: normalizeCurrency(currency) }),
-      getSymbol: () => symbols[normalizeCurrency(get().currency)],
+      getSymbol: () => currencyPrefix(normalizeCurrency(get().currency)),
     }),
     {
       name: "currency-storage",
-      version: 1,
+      version: 2,
       migrate: (persisted: any) => ({
         ...persisted,
         currency: normalizeCurrency(persisted?.currency),
