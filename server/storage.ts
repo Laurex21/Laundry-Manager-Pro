@@ -25,7 +25,7 @@ import {
 } from "@shared/schema";
 import { users, type User } from "@shared/models/auth";
 import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
-import { formatReportingDay } from "./lib/reporting-date";
+import { formatReportingDay, reportingDateRange, reportingDateString, shiftReportingDate, validReportingTimeZone } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
@@ -89,7 +89,7 @@ export interface IStorage {
     monthlyComparison: { month: string; income: number; expenses: number }[];
   }>;
 
-  getReportData(startDate: Date, endDate: Date, siteId: number | number[] | null): Promise<{
+  getReportData(startDate: Date, endDate: Date, siteId: number | number[] | null, timeZone?: string): Promise<{
     totalRevenue: number; totalExpenses: number; netProfit: number; totalOrders: number;
     dailyRevenue: { date: string; revenue: number }[];
     serviceDistribution: { name: string; count: number }[];
@@ -133,7 +133,7 @@ export interface IStorage {
   getStatsBySite(siteId: number | number[] | null): Promise<{ totalOrders: number; totalRevenue: number; pendingOrders: number; activeCustomers: number }>;
   backfillNullSiteIds(): Promise<void>;
 
-  getDashboardData(siteId?: number | number[] | null, allSites?: boolean): Promise<any>;
+  getDashboardData(siteId?: number | number[] | null, allSites?: boolean, timeZone?: string): Promise<any>;
   getAnalyticsKpis(period: string, siteId: number | number[] | null): Promise<any>;
   getWasteAlerts(siteId: number | number[] | null): Promise<any[]>;
   getPerformanceScore(siteId: number | number[] | null): Promise<any>;
@@ -928,7 +928,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getReportData(startDate: Date, endDate: Date, siteId: number | number[] | null) {
+  async getReportData(startDate: Date, endDate: Date, siteId: number | number[] | null, timeZone: string = "UTC") {
     const orderSiteWhere = this.siteWhere(orders.siteId, siteId);
     const expenseSiteWhere = this.siteWhere(expenditures.siteId, siteId);
     const siteOrderWhere = orderSiteWhere
@@ -961,7 +961,7 @@ export class DatabaseStorage implements IStorage {
 
     const dailyRevenueMap = new Map<string, number>();
     for (const payment of filteredPayments) {
-      const day = formatReportingDay(payment.date);
+      const day = formatReportingDay(payment.date, timeZone);
       dailyRevenueMap.set(day, (dailyRevenueMap.get(day) || 0) + Number(payment.amount));
     }
     const dailyRevenue = Array.from(dailyRevenueMap.entries()).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date));
@@ -1160,14 +1160,15 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getDashboardData(siteId?: number | number[] | null, allSites?: boolean) {
+  async getDashboardData(siteId?: number | number[] | null, allSites?: boolean, requestedTimeZone: string = "UTC") {
     const scope = siteId ?? null;
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0);
+    const timeZone = validReportingTimeZone(requestedTimeZone);
+    const today = reportingDateString(now, timeZone);
+    const { start: todayStart, end: todayEnd } = reportingDateRange(today, today, timeZone);
+    const { start: monthStart, end: monthEnd } = reportingDateRange(`${today.slice(0, 7)}-01`, today, timeZone);
+    const weekStartDate = shiftReportingDate(today, -7);
+    const { start: weekStart, end: weekEnd } = reportingDateRange(weekStartDate, today, timeZone);
 
     const siteWhere = this.siteWhere(orders.siteId, scope) ?? sql`1=1`;
     const expSiteWhere = this.siteWhere(expenditures.siteId, scope) ?? sql`1=1`;
@@ -1179,15 +1180,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(siteWhere, sql`${orders.entryDate} >= ${todayStart}`, sql`${orders.entryDate} <= ${todayEnd}`, ne(orders.status, "cancelled")));
     const todayOrders = Number(todayOrdersResult[0]?.count || 0);
 
-    const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, now, scope);
+    const weekRevenue = await this.sumPaymentsInRangeBySite(weekStart, weekEnd, scope);
     const weekOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(siteWhere, sql`${orders.entryDate} >= ${weekStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
+      .where(and(siteWhere, sql`${orders.entryDate} >= ${weekStart}`, sql`${orders.entryDate} <= ${weekEnd}`, ne(orders.status, "cancelled")));
     const weekOrders = Number(weekOrdersResult[0]?.count || 0);
 
-    const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, now, scope);
-    const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, now, scope);
+    const monthRevenue = await this.sumPaymentsInRangeBySite(monthStart, monthEnd, scope);
+    const monthExpenses = await this.sumExpensesInRangeBySite(monthStart, monthEnd, scope);
     const monthOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-      .where(and(siteWhere, sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
+      .where(and(siteWhere, sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${monthEnd}`, ne(orders.status, "cancelled")));
     const monthOrders = Number(monthOrdersResult[0]?.count || 0);
 
     const profit = monthRevenue - monthExpenses;
@@ -1206,9 +1207,8 @@ export class DatabaseStorage implements IStorage {
     const revenueByDay: { date: string; value: number }[] = [];
     const kgByDay: { date: string; value: number }[] = [];
     for (let i = 29; i >= 0; i--) {
-      const dayStart = new Date(now); dayStart.setDate(dayStart.getDate() - i); dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart); dayEnd.setHours(23, 59, 59, 999);
-      const dateStr = dayStart.toISOString().split('T')[0];
+      const dateStr = shiftReportingDate(today, -i);
+      const { start: dayStart, end: dayEnd } = reportingDateRange(dateStr, dateStr, timeZone);
       const rev = await this.sumPaymentsInRangeBySite(dayStart, dayEnd, scope);
       revenueByDay.push({ date: dateStr, value: rev });
       kgByDay.push({ date: dateStr, value: 0 });
@@ -1246,9 +1246,9 @@ export class DatabaseStorage implements IStorage {
       }));
       for (const site of sitesOverview) {
         const siteOrdersResult = await db.select({ count: sql<number>`count(*)` }).from(orders)
-          .where(and(eq(orders.siteId, site.id), sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${now}`, ne(orders.status, "cancelled")));
+          .where(and(eq(orders.siteId, site.id), sql`${orders.entryDate} >= ${monthStart}`, sql`${orders.entryDate} <= ${monthEnd}`, ne(orders.status, "cancelled")));
         (site as any).orders = Number(siteOrdersResult[0]?.count || 0);
-        (site as any).revenue = await this.sumPaymentsInRangeBySite(monthStart, now, site.id);
+        (site as any).revenue = await this.sumPaymentsInRangeBySite(monthStart, monthEnd, site.id);
       }
     }
 

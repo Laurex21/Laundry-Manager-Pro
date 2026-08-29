@@ -4,6 +4,9 @@ import {
   getOrderReportingDate,
   isWithinReportingRange,
   parseLocalDateParam,
+  reportingDateRange,
+  reportingDateString,
+  validReportingTimeZone,
 } from "./reporting-date";
 
 const mayStart = parseLocalDateParam("2026-05-01", new Date("2026-01-01"));
@@ -47,5 +50,16 @@ const futureOrderDateAlias = {
 
 assert.equal(formatReportingDay(getOrderReportingDate(futureOrderDateAlias)), "2026-05-20");
 assert.equal(isWithinReportingRange(futureOrderDateAlias, mayStart, mayEnd), true);
+
+const doualaDay = reportingDateRange("2026-08-30", "2026-08-30", "Africa/Douala");
+assert.equal(doualaDay.start.toISOString(), "2026-08-29T23:00:00.000Z");
+assert.equal(doualaDay.end.toISOString(), "2026-08-30T22:59:59.999Z");
+
+const johannesburgMonth = reportingDateRange("2026-08-01", "2026-08-31", "Africa/Johannesburg");
+assert.equal(johannesburgMonth.start.toISOString(), "2026-07-31T22:00:00.000Z");
+assert.equal(johannesburgMonth.end.toISOString(), "2026-08-31T21:59:59.999Z");
+
+assert.equal(reportingDateString(new Date("2026-08-29T23:30:00.000Z"), "Africa/Douala"), "2026-08-30");
+assert.equal(validReportingTimeZone("Not/A_Timezone"), "UTC");
 
 console.log("reporting-date historical order tests passed");

@@ -1,5 +1,10 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+function clientTimeZoneHeaders(): Record<string, string> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return timeZone ? { "X-Client-Timezone": timeZone } : {};
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -14,7 +19,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: { ...clientTimeZoneHeaders(), ...(data ? { "Content-Type": "application/json" } : {}) },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -31,6 +36,7 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
+      headers: clientTimeZoneHeaders(),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

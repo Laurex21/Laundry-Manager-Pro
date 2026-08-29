@@ -33,7 +33,7 @@ assert.ok(storage.includes("COALESCE(SUM(${expenditures.amount}), 0)`"), "expens
 assert.doesNotMatch(storage, /from\(payments\)[\s\S]{0,200}SUM\(\$\{expenditures\.amount\}\)/);
 assert.doesNotMatch(storage, /from\(expenditures\)[\s\S]{0,200}SUM\(\$\{payments\.amount\}\)/);
 assert.match(storage, /const paymentWhere = orderSiteWhere/);
-assert.match(storage, /formatReportingDay\(payment\.date\)/);
+assert.match(storage, /formatReportingDay\(payment\.date, timeZone\)/);
 assert.doesNotMatch(storage, /activity\.actionType === "payment_collected"\) stat\.totalPaymentsCollected \+=/);
 assert.match(storage, /if \(activity\.actionType !== "payment_collected"\) stat\.totalRevenueHandled \+=/);
 assert.match(storage, /stat\.totalPaymentsCollected \+= amount;/);

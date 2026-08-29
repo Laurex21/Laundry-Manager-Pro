@@ -9,7 +9,7 @@ import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema } from "@shared/schema";
-import { parseLocalDateParam } from "./lib/reporting-date";
+import { reportingDateRange, reportingDateString, validReportingTimeZone } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
@@ -82,6 +82,10 @@ function sanitizeDates(obj: Record<string, any>, fields: string[]): Record<strin
 
 function scopedSites(req: any): number[] {
   return Array.isArray(req.siteScope) ? req.siteScope : [];
+}
+
+function reportingTimeZone(req: any): string {
+  return validReportingTimeZone(req.get("X-Client-Timezone"));
 }
 
 function orgScopedSites(req: any): number[] {
@@ -964,8 +968,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get(api.performance.get.path, isAuthenticated, async (req: any, res) => {
     const { start, end } = req.query;
     const now = new Date();
-    const startDate = parseLocalDateParam(start as string | undefined, new Date(now.getFullYear(), now.getMonth(), 1));
-    const endDate = parseLocalDateParam(end as string | undefined, now, true);
+    const timeZone = reportingTimeZone(req);
+    const today = reportingDateString(now, timeZone);
+    const { start: startDate, end: endDate } = reportingDateRange(
+      (start as string | undefined) ?? `${today.slice(0, 7)}-01`,
+      (end as string | undefined) ?? today,
+      timeZone,
+    );
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
     const data = await storage.getPerformanceData(scopedSites(req), startDate, endDate);
     res.json(data);
@@ -974,10 +983,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get(api.reports.get.path, isAuthenticated, async (req: any, res) => {
     const { start, end } = req.query;
     const now = new Date();
-    const startDate = parseLocalDateParam(start as string | undefined, new Date(now.getFullYear(), now.getMonth(), 1));
-    const endDate = parseLocalDateParam(end as string | undefined, now, true);
+    const timeZone = reportingTimeZone(req);
+    const today = reportingDateString(now, timeZone);
+    const { start: startDate, end: endDate } = reportingDateRange(
+      (start as string | undefined) ?? `${today.slice(0, 7)}-01`,
+      (end as string | undefined) ?? today,
+      timeZone,
+    );
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
-    const data = await storage.getReportData(startDate, endDate, scopedSites(req));
+    const data = await storage.getReportData(startDate, endDate, scopedSites(req), timeZone);
     res.json(data);
   });
 
@@ -1449,7 +1463,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       siteId = userRow[0]?.currentSiteId ?? null;
     }
     const allSites = siteId === null || siteId === undefined;
-    const data = await storage.getDashboardData(allSites ? scopedSites(req) : (siteId as number), allSites);
+    const data = await storage.getDashboardData(allSites ? scopedSites(req) : (siteId as number), allSites, reportingTimeZone(req));
     res.json(data);
   });
 
