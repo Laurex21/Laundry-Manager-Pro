@@ -142,6 +142,18 @@ function buildTermsHtml(settings: ReceiptSettings, lang: string): string {
   return `<ol style="padding-left:18px;margin:0;">${lines.map(line => `<li style="font-size:10.5px;color:#64748b;line-height:1.6;margin-bottom:8px;">${escapeHtml(line.trim())}</li>`).join("")}</ol>`;
 }
 
+function buildReceiptQrHtml(settings: ReceiptSettings, thermal = false): string {
+  if (!settings.receiptQrCodeBase64) return "";
+  const size = thermal ? "26mm" : "92px";
+  const caption = settings.receiptQrCodeLabel
+    ? `<div style="margin-top:5px;font-size:${thermal ? "9px" : "11px"};line-height:1.3;color:#475569;">${escapeHtml(settings.receiptQrCodeLabel)}</div>`
+    : "";
+  return `<div class="business-qr" style="margin:${thermal ? "7px" : "12px"} auto 0;text-align:center;break-inside:avoid;">
+    <img src="${escapeHtml(settings.receiptQrCodeBase64)}" alt="Business QR code" style="display:block;width:${size};height:${size};object-fit:contain;margin:0 auto;background:#fff;padding:3px;border:1px solid #e2e8f0;border-radius:4px;" />
+    ${caption}
+  </div>`;
+}
+
 function getContactLines(settings: ReceiptSettings): string[] {
   const addressPart = [settings.address, settings.city].filter(Boolean).join(", ");
   const registrationLine = settings.companyRegistrationNumber
@@ -339,6 +351,8 @@ function buildThermalReceiptHtml(args: {
   lang: string;
   logoBase64?: string | null;
   showLogo?: boolean;
+  receiptQrCodeBase64?: string | null;
+  receiptQrCodeLabel?: string | null;
   paymentLine?: string;
   methodLine?: string;
   creditApplied?: number;
@@ -450,6 +464,7 @@ function buildThermalReceiptHtml(args: {
     ${paidInFull ? `<div class="paid">PAID IN FULL</div>` : ""}
     ${thermalDivider()}
     <div class="footer">${escapeHtml(args.footerNote)}</div>
+    ${buildReceiptQrHtml({ ...DEFAULT_SETTINGS, receiptQrCodeBase64: args.receiptQrCodeBase64, receiptQrCodeLabel: args.receiptQrCodeLabel }, true)}
   </main>
   <script>
     window.addEventListener("load", function () {
@@ -677,6 +692,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     <div class="footer">
       <p class="thanks">${footerNote}</p>
       <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
+      ${buildReceiptQrHtml(settings)}
     </div>
   </div>
 </body>
@@ -726,6 +742,8 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
     lang,
     logoBase64: settings.logoBase64,
     showLogo: settings.showLogo,
+    receiptQrCodeBase64: settings.receiptQrCodeBase64,
+    receiptQrCodeLabel: settings.receiptQrCodeLabel,
     creditBalance: availableCredit,
     agentName: agentFirstName(order.createdByEmployee),
     agentLabel: label("Agent", "Agent", lang),
@@ -780,6 +798,8 @@ export function generateThermalPaymentReceipt(
     lang,
     logoBase64: settings.logoBase64,
     showLogo: settings.showLogo,
+    receiptQrCodeBase64: settings.receiptQrCodeBase64,
+    receiptQrCodeLabel: settings.receiptQrCodeLabel,
     paymentLine: thermalMoney(currentPaymentAmount, symbol),
     methodLine: payment.method,
     creditApplied: Number(payment.creditApplied || 0),
@@ -980,6 +1000,7 @@ export function generatePaymentReceipt(
     <div class="footer">
       <p class="thanks">${footerNote}</p>
       <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
+      ${buildReceiptQrHtml(settings)}
     </div>
   </div>
 </body>

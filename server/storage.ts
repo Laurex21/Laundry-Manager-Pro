@@ -42,6 +42,12 @@ async function ensureBusinessSettingsSchema(): Promise<void> {
     ALTER TABLE business_settings
     ADD COLUMN IF NOT EXISTS whatsapp_app_preference varchar(20) NOT NULL DEFAULT 'ask'
   `);
+  await db.execute(sql`
+    ALTER TABLE business_settings
+    ADD COLUMN IF NOT EXISTS receipt_qr_code_base64 text,
+    ADD COLUMN IF NOT EXISTS receipt_qr_code_target varchar(1000) DEFAULT '',
+    ADD COLUMN IF NOT EXISTS receipt_qr_code_label varchar(160) DEFAULT ''
+  `);
   businessSettingsSchemaReady = true;
 }
 

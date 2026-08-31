@@ -3,6 +3,9 @@ export interface ReceiptSettings {
   companyRegistrationNumber?: string | null;
   tagline?: string | null;
   logoBase64?: string | null;
+  receiptQrCodeBase64?: string | null;
+  receiptQrCodeTarget?: string | null;
+  receiptQrCodeLabel?: string | null;
   address?: string | null;
   city?: string | null;
   country?: string | null;
@@ -27,6 +30,9 @@ export const DEFAULT_SETTINGS: ReceiptSettings = {
   companyRegistrationNumber: "",
   tagline: "Laundry Management",
   logoBase64: null,
+  receiptQrCodeBase64: null,
+  receiptQrCodeTarget: "",
+  receiptQrCodeLabel: "",
   address: "",
   city: "",
   country: "",

@@ -1911,6 +1911,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
       }
+      if (parsed.data.receiptQrCodeBase64) {
+        const allowedQrImage = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+        if (!allowedQrImage.test(parsed.data.receiptQrCodeBase64) || parsed.data.receiptQrCodeBase64.length > 700_000) {
+          return res.status(400).json({ message: "Invalid QR code image" });
+        }
+      }
+      if (parsed.data.receiptQrCodeTarget) {
+        try {
+          const qrTarget = new URL(parsed.data.receiptQrCodeTarget);
+          if (!["http:", "https:"].includes(qrTarget.protocol)) throw new Error("Unsupported protocol");
+        } catch {
+          return res.status(400).json({ message: "Invalid QR code destination" });
+        }
+      }
       const settings = await db.transaction(async (tx) => {
         const updated = await storage.upsertSettings(userId, parsed.data, tx);
         if (parsed.data.loyaltyProgramEnabled === true) {

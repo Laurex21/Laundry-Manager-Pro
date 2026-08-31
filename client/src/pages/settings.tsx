@@ -24,9 +24,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Building2, Receipt, FileText, Users, Save, Plus, Trash2, Copy,
   Link as LinkIcon, Shield, Clock, Upload, X, Globe2, MoreVertical,
-  MessageCircle,
+  MessageCircle, QrCode,
   Gift,
 } from "lucide-react";
+import QRCode from "qrcode";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -56,8 +57,12 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
     website: settings.website || "",
     whatsappAppPreference: settings.whatsappAppPreference || "ask",
     logoBase64: settings.logoBase64 || "",
+    receiptQrCodeBase64: settings.receiptQrCodeBase64 || "",
+    receiptQrCodeTarget: settings.receiptQrCodeTarget || "",
+    receiptQrCodeLabel: settings.receiptQrCodeLabel || "",
   });
   const fileRef = useRef<HTMLInputElement>(null);
+  const qrFileRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,6 +74,43 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
     const reader = new FileReader();
     reader.onload = (ev) => {
       setForm((f) => ({ ...f, logoBase64: ev.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const generateReceiptQr = async () => {
+    const target = form.receiptQrCodeTarget.trim();
+    if (!/^https?:\/\//i.test(target)) {
+      alert(t("receipt_qr_invalid_link"));
+      return;
+    }
+    const receiptQrCodeBase64 = await QRCode.toDataURL(target, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 320,
+      color: { dark: "#111827", light: "#ffffff" },
+    });
+    setForm((current) => ({ ...current, receiptQrCodeBase64 }));
+  };
+
+  const handleQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      alert(t("receipt_qr_invalid_file"));
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      alert(t("receipt_qr_file_size_error"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setForm((current) => ({
+        ...current,
+        receiptQrCodeBase64: ev.target?.result as string,
+        receiptQrCodeTarget: "",
+      }));
     };
     reader.readAsDataURL(file);
   };
@@ -190,6 +232,78 @@ function BusinessIdentityTab({ settings, onSave, saving }: { settings: any; onSa
                 {form.logoBase64 ? t("change_logo") : t("upload_logo")}
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <QrCode className="h-4 w-4" aria-hidden="true" />
+            {t("receipt_qr_title")}
+          </CardTitle>
+          <CardDescription className="text-xs">{t("receipt_qr_description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-4">
+            {form.receiptQrCodeBase64 ? (
+              <div className="relative shrink-0">
+                <img src={form.receiptQrCodeBase64} alt={t("receipt_qr_preview_alt")} className="h-24 w-24 rounded-lg border bg-white object-contain p-1" />
+                <button
+                  type="button"
+                  onClick={() => setForm((current) => ({ ...current, receiptQrCodeBase64: "", receiptQrCodeTarget: "", receiptQrCodeLabel: "" }))}
+                  className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+                  aria-label={t("receipt_qr_remove")}
+                  data-testid="button-remove-receipt-qr"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30">
+                <QrCode className="h-8 w-8 text-muted-foreground/50" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={form.receiptQrCodeTarget}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    receiptQrCodeTarget: event.target.value,
+                    receiptQrCodeBase64: current.receiptQrCodeTarget === event.target.value ? current.receiptQrCodeBase64 : "",
+                  }))}
+                  placeholder={t("receipt_qr_link_placeholder")}
+                  aria-label={t("receipt_qr_link_label")}
+                  data-testid="input-receipt-qr-target"
+                />
+                <Button type="button" variant="outline" onClick={generateReceiptQr} data-testid="button-generate-receipt-qr">
+                  <QrCode className="mr-2 h-4 w-4" />
+                  {t("receipt_qr_generate")}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("receipt_qr_or")}</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <input ref={qrFileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleQrUpload} data-testid="input-receipt-qr-file" />
+              <Button type="button" variant="outline" size="sm" onClick={() => qrFileRef.current?.click()} data-testid="button-upload-receipt-qr">
+                <Upload className="mr-2 h-4 w-4" />
+                {t("receipt_qr_upload")}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="receiptQrCodeLabel">{t("receipt_qr_caption")}</Label>
+            <Input
+              id="receiptQrCodeLabel"
+              value={form.receiptQrCodeLabel}
+              onChange={F("receiptQrCodeLabel")}
+              placeholder={t("receipt_qr_caption_placeholder")}
+              maxLength={160}
+              data-testid="input-receipt-qr-label"
+            />
           </div>
         </CardContent>
       </Card>

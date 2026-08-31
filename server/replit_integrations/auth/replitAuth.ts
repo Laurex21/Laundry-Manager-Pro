@@ -237,6 +237,12 @@ export async function ensureAuthSchema() {
     ADD COLUMN IF NOT EXISTS loyalty_program_enabled boolean NOT NULL DEFAULT false
   `);
   await pool.query(`
+    ALTER TABLE business_settings
+    ADD COLUMN IF NOT EXISTS receipt_qr_code_base64 text,
+    ADD COLUMN IF NOT EXISTS receipt_qr_code_target varchar(1000) DEFAULT '',
+    ADD COLUMN IF NOT EXISTS receipt_qr_code_label varchar(160) DEFAULT ''
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS loyalty_program (
       id serial PRIMARY KEY,
       organisation_id integer NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,

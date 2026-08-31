@@ -8,6 +8,14 @@ function usageRate(total: unknown, remaining: unknown) {
   if (!Number.isFinite(allowance) || allowance <= 0) return null;
   return Math.min(100, Math.max(0, ((allowance - Number(remaining || 0)) / allowance) * 100));
 }
+function businessQr(settings: any, thermal = false) {
+  if (!settings?.receiptQrCodeBase64) return "";
+  const size = thermal ? 76 : 92;
+  const caption = settings.receiptQrCodeLabel
+    ? `<div style="margin-top:5px;font-size:${thermal ? "8px" : "11px"};color:#555">${esc(settings.receiptQrCodeLabel)}</div>`
+    : "";
+  return `<div style="margin-top:10px;text-align:center;break-inside:avoid"><img src="${esc(settings.receiptQrCodeBase64)}" alt="QR entreprise" width="${size}" height="${size}" style="display:block;margin:auto;background:#fff;padding:3px;border:1px solid #ddd">${caption}</div>`;
+}
 
 export function generateSubscriberReceiptHTML(data: any, thermalWidth?: 58 | 80) {
   const { order, customer, subscription, plan, coverage, settings, items, garments = [], card, paymentSummary } = data;
@@ -68,7 +76,7 @@ export function generateSubscriberReceiptHTML(data: any, thermalWidth?: 58 | 80)
   <section class="section"><h2 class="section-title">Cette commande</h2><div class="usage">${number(coverage.piecesConsumed)} pièces${Number(coverage.kgConsumed || 0) > 0 ? ` · ${number(coverage.kgConsumed)} kg` : ""}</div></section>
   <section class="section"><h2 class="section-title">Utilisation cumulée</h2>${thermal ? "" : `<div class="progress"><span></span></div>`}<div>Niveau le plus élevé : ${number(primaryRate)} %</div><div style="margin-top:7px">${rateRows || "Non applicable"}</div>${usageWarning}</section>
   <section class="section"><h2 class="section-title">Solde de votre abonnement</h2><div class="stats"><div class="stat"><strong>${subscription.remainingPieces ?? "—"}</strong>pièces restantes</div><div class="stat"><strong>${subscription.remainingOrders ?? "—"}</strong>commandes restantes</div><div class="stat"><strong>${esc(subscription.renewalDate || subscription.expiryDate)}</strong>renouvellement</div></div></section>
-  <footer style="text-align:center;border-top:1px dashed #999;padding-top:10px">Merci d’être un membre fidèle.<br>À très bientôt.<br>${esc(settings?.receiptFooterNote || "")}</footer></main></body></html>`;
+  <footer style="text-align:center;border-top:1px dashed #999;padding-top:10px">Merci d’être un membre fidèle.<br>À très bientôt.<br>${esc(settings?.receiptFooterNote || "")}${businessQr(settings, thermal)}</footer></main></body></html>`;
 }
 
 export function generateSubscriberThermalReceiptHTML(data: any, width: 58 | 80) {
@@ -84,7 +92,7 @@ export function generateSubscriptionPaymentReceiptHTML(data: any) {
   <section class="section"><h2>Abonné</h2><div class="row"><span>Client</span><strong>${esc(customer.name)}</strong></div><div class="row"><span>Téléphone</span><strong>${esc(customer.phone)}</strong></div><div class="row"><span>N° membre</span><strong>${esc(subscription.membershipNumber)}</strong></div><div class="row"><span>Plan</span><strong>${esc(plan.name)}</strong></div></section>
   <section class="section"><h2>Paiement reçu</h2><div class="row"><span>Montant versé</span><strong class="amount">${money(payment.amount)}</strong></div><div class="row"><span>Moyen de paiement</span><strong>${esc(payment.paymentMethod || "—")}</strong></div><div class="row"><span>Référence</span><strong>${esc(payment.reference || "Aucune")}</strong></div></section>
   <section class="section"><h2>Situation après ce paiement</h2><div class="row"><span>Coût du cycle</span><strong>${money(paymentPosition.cost)}</strong></div><div class="row"><span>Total affecté</span><strong>${money(paymentPosition.paid)}</strong></div><div class="row"><span>Solde restant</span><strong>${money(paymentPosition.due)}</strong></div><div class="row"><span>Statut</span><strong class="status ${paymentPosition.due <= 0 ? "paid" : ""}">${esc(status)}</strong></div></section>
-  <footer>Merci pour votre paiement.<br>${esc(settings?.receiptFooterNote || "")}</footer></main>
+  <footer>Merci pour votre paiement.<br>${esc(settings?.receiptFooterNote || "")}${businessQr(settings)}</footer></main>
   <script>
     window.addEventListener("load", function () {
       var images = Array.prototype.slice.call(document.images || []);
