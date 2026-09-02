@@ -31,6 +31,8 @@ assert.match(service, /available\.production_cycle_orders && available\.producti
 assert.match(service, /enabled \? `EXISTS\(\$\{sql\}\)` : "false"/);
 assert.match(service, /before_snapshot, after_snapshot/);
 assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? Number\(service\.price\)/);
+assert.match(service, /const discountPct = input\.discountPct/);
+assert.match(service, /discount_pct = \$6, discount_amount = \$7/);
 assert.match(service, /Replaced by corrected order/);
 assert.match(
   service,
@@ -45,6 +47,7 @@ assert.match(routes, /Reference: \$\{reference\}/);
 assert.match(routes, /\/api\/orders\/:id\/correct"/);
 assert.match(routes, /\/api\/orders\/:id\/corrected-copy/);
 assert.match(routes, /requireSiteRole\(req, res, order\.siteId, \["owner", "manager"\]\)/);
+assert.match(routes, /discountPct: z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
 
 assert.match(component, /<fieldset/);
 assert.match(component, /correction_audit_notice/);
@@ -55,12 +58,15 @@ assert.match(component, /data-testid="order-correction-error"/);
 assert.match(component, /data-testid="order-correction-role-restricted"/);
 assert.match(component, /refetchEligibility/);
 assert.match(component, /eligibility\?\.canEdit/);
+assert.match(component, /data-testid="input-correction-discount"/);
+assert.match(component, /discountPct,/);
 assert.match(translations, /order_correction_check_failed:/);
 assert.match(translations, /retry:/);
 assert.match(translations, /unknown_error:/);
 assert.match(orderDetail, /OrderCorrectionActions/);
 assert.match(orderDetail, /data-testid="order-correction-history"/);
 assert.match(orderDetail, /correctionSummary/);
+assert.match(orderDetail, /correction_discount_changed/);
 assert.match(auth, /CREATE TABLE IF NOT EXISTS production_cycles/);
 assert.match(auth, /CREATE TABLE IF NOT EXISTS production_cycle_orders/);
 

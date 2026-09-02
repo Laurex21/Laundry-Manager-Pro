@@ -31,6 +31,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
   const [customerId, setCustomerId] = useState(String(order.customerId || order.customer?.id || ""));
   const [entryDate, setEntryDate] = useState(String(order.entryDate || "").slice(0, 10));
   const [pickupDate, setPickupDate] = useState(String(order.pickupDate || "").slice(0, 10));
+  const [discountPct, setDiscountPct] = useState(Number(order.discountPct || 0));
   const [reason, setReason] = useState("");
   const [copyReason, setCopyReason] = useState("");
   const [items, setItems] = useState<EditableItem[]>([]);
@@ -56,6 +57,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
     setCustomerId(String(order.customerId || order.customer?.id || ""));
     setEntryDate(String(order.entryDate || "").slice(0, 10));
     setPickupDate(String(order.pickupDate || "").slice(0, 10));
+    setDiscountPct(Number(order.discountPct || 0));
     setReason("");
     setItems((order.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: Number(item.quantity) })));
     setGarments((order.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "" })));
@@ -64,6 +66,9 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
   const activeServices = useMemo(() => services.filter((service: any) => service.active !== false), [services]);
   const validEdit = Number(customerId) > 0
     && entryDate
+    && Number.isFinite(discountPct)
+    && discountPct >= 0
+    && discountPct <= 100
     && reason.trim().length >= 5
     && items.length > 0
     && items.every((item) => item.serviceId > 0 && item.quantity > 0)
@@ -78,6 +83,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
         customerId: Number(customerId),
         entryDate: new Date(`${entryDate}T00:00:00`).toISOString(),
         pickupDate: pickupDate ? new Date(`${pickupDate}T00:00:00`).toISOString() : null,
+        discountPct,
         reason: reason.trim(),
         items,
         garments: garments.map((garment) => ({ ...garment, itemName: garment.itemName.trim(), color: garment.color?.trim() || null })),
@@ -187,6 +193,20 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
               <div className="space-y-2">
                 <Label htmlFor="correction-pickup-date">{t("pickup_date")}</Label>
                 <Input id="correction-pickup-date" type="date" value={pickupDate} onChange={(event) => setPickupDate(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="correction-discount">{t("discount")} (%)</Label>
+                <Input
+                  id="correction-discount"
+                  data-testid="input-correction-discount"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={discountPct}
+                  onChange={(event) => setDiscountPct(Number(event.target.value))}
+                  required
+                />
               </div>
             </div>
 

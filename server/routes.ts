@@ -523,6 +523,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     customerId: z.coerce.number().int().positive(),
     entryDate: z.coerce.date(),
     pickupDate: z.coerce.date().nullable(),
+    discountPct: z.coerce.number().min(0).max(100),
     reason: z.string().trim().min(5).max(500),
     items: z.array(z.object({
       serviceId: z.coerce.number().int().positive(),

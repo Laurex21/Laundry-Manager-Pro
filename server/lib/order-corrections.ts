@@ -11,6 +11,7 @@ export type ControlledOrderEditInput = {
   customerId: number;
   entryDate: Date;
   pickupDate: Date | null;
+  discountPct: number;
   reason: string;
   items: Array<{ serviceId: number; quantity: number }>;
   garments: Array<{ itemName: string; quantity: number; color?: string | null }>;
@@ -179,7 +180,7 @@ export async function editOrderControlled(
       existingPrices.get(Number(service.id)) ?? Number(service.price),
     ]));
     const subtotal = input.items.reduce((sum, item) => sum + (prices.get(item.serviceId) ?? 0) * item.quantity, 0);
-    const discountPct = Number(order.discount_pct || 0);
+    const discountPct = input.discountPct;
     const discountAmount = Math.min(
       subtotal,
       discountPct > 0 ? subtotal * (discountPct / 100) : Number(order.discount_amount || order.discount || 0),
@@ -190,10 +191,10 @@ export async function editOrderControlled(
 
     await client.query(
       `UPDATE orders SET customer_id = $2, entry_date = $3, pickup_date = $4,
-         original_price = $5, discount_amount = $6, discount = $6,
-         total_amount = $7, correction_reason = $8, updated_at = NOW()
+         original_price = $5, discount_pct = $6, discount_amount = $7, discount = $7,
+         total_amount = $8, correction_reason = $9, updated_at = NOW()
        WHERE id = $1`,
-      [orderId, input.customerId, input.entryDate, input.pickupDate, subtotal, discountAmount, totalAmount, input.reason],
+      [orderId, input.customerId, input.entryDate, input.pickupDate, subtotal, discountPct, discountAmount, totalAmount, input.reason],
     );
     await client.query(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
     for (const item of input.items) {

@@ -68,6 +68,12 @@ function correctionSummary(entry: any, t: (key: string, options?: any) => string
   if (beforeOrder.customer_id !== afterOrder.customer_id) changes.push(t("correction_customer_changed"));
   if (String(beforeOrder.entry_date || "") !== String(afterOrder.entry_date || "")) changes.push(t("correction_entry_date_changed"));
   if (String(beforeOrder.pickup_date || "") !== String(afterOrder.pickup_date || "")) changes.push(t("correction_pickup_date_changed"));
+  if (Number(beforeOrder.discount_amount || beforeOrder.discount || 0) !== Number(afterOrder.discount_amount || afterOrder.discount || 0)) {
+    changes.push(t("correction_discount_changed", {
+      before: `${symbol}${Number(beforeOrder.discount_amount || beforeOrder.discount || 0).toFixed(2)}`,
+      after: `${symbol}${Number(afterOrder.discount_amount || afterOrder.discount || 0).toFixed(2)}`,
+    }));
+  }
   if (Number(beforeOrder.total_amount || 0) !== Number(afterOrder.total_amount || 0)) {
     changes.push(t("correction_total_changed", {
       before: `${symbol}${Number(beforeOrder.total_amount || 0).toFixed(2)}`,
