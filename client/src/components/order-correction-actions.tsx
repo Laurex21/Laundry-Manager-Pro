@@ -196,17 +196,24 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
               </div>
               <div className="space-y-2">
                 <Label htmlFor="correction-discount">{t("discount")} (%)</Label>
-                <Input
-                  id="correction-discount"
-                  data-testid="input-correction-discount"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={discountPct}
-                  onChange={(event) => setDiscountPct(Number(event.target.value))}
-                  required
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="correction-discount"
+                    data-testid="input-correction-discount"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={discountPct}
+                    onChange={(event) => setDiscountPct(Number(event.target.value))}
+                    required
+                  />
+                  {discountPct > 0 && (
+                    <Button type="button" variant="outline" onClick={() => setDiscountPct(0)} data-testid="button-remove-correction-discount">
+                      {t("remove_discount")}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 

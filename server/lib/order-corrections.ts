@@ -181,10 +181,7 @@ export async function editOrderControlled(
     ]));
     const subtotal = input.items.reduce((sum, item) => sum + (prices.get(item.serviceId) ?? 0) * item.quantity, 0);
     const discountPct = input.discountPct;
-    const discountAmount = Math.min(
-      subtotal,
-      discountPct > 0 ? subtotal * (discountPct / 100) : Number(order.discount_amount || order.discount || 0),
-    );
+    const discountAmount = Math.min(subtotal, subtotal * (discountPct / 100));
     const pickupCost = Number(order.pickup_cost || 0);
     const totalAmount = Math.max(0, subtotal - discountAmount + pickupCost);
     const before = await snapshot(client, orderId);

@@ -32,6 +32,8 @@ assert.match(service, /enabled \? `EXISTS\(\$\{sql\}\)` : "false"/);
 assert.match(service, /before_snapshot, after_snapshot/);
 assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? Number\(service\.price\)/);
 assert.match(service, /const discountPct = input\.discountPct/);
+assert.match(service, /subtotal \* \(discountPct \/ 100\)/);
+assert.doesNotMatch(service, /discountPct > 0 \? subtotal/);
 assert.match(service, /discount_pct = \$6, discount_amount = \$7/);
 assert.match(service, /Replaced by corrected order/);
 assert.match(
@@ -59,6 +61,8 @@ assert.match(component, /data-testid="order-correction-role-restricted"/);
 assert.match(component, /refetchEligibility/);
 assert.match(component, /eligibility\?\.canEdit/);
 assert.match(component, /data-testid="input-correction-discount"/);
+assert.match(component, /data-testid="button-remove-correction-discount"/);
+assert.match(component, /setDiscountPct\(0\)/);
 assert.match(component, /discountPct,/);
 assert.match(translations, /order_correction_check_failed:/);
 assert.match(translations, /retry:/);
