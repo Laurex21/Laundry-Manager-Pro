@@ -88,6 +88,8 @@ import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { useToast } from "@/hooks/use-toast";
 import { GarmentColorPicker } from "@/components/garment-color-picker";
+import { Textarea } from "@/components/ui/textarea";
+import { queryClient } from "@/lib/queryClient";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
@@ -322,6 +324,20 @@ export default function Orders() {
   const symbol = getSymbol();
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
+  const correctionOrderId = Number(new URLSearchParams(window.location.search).get("correct"));
+  const { data: correctionOrder } = useQuery<any>({
+    queryKey: ["/api/orders/:id", correctionOrderId],
+    queryFn: async () => {
+      const response = await fetch(`/api/orders/${correctionOrderId}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Unable to load order correction");
+      return response.json();
+    },
+    enabled: Number.isInteger(correctionOrderId) && correctionOrderId > 0,
+  });
+
+  useEffect(() => {
+    if (correctionOrder) setOpen(true);
+  }, [correctionOrder]);
 
   const createdOrderWhatsAppPhone = normalizeWhatsAppPhone(createdOrder?.customer?.phone);
 
@@ -414,12 +430,12 @@ export default function Orders() {
           <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('orders')}</h1>
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next && correctionOrderId) window.history.replaceState({}, "", "/orders"); }}>
           <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-y-auto lg:px-5 lg:py-3">
             <DialogHeader className="sticky top-0 z-20 -mx-2 bg-background/95 px-2 pb-3 backdrop-blur-sm lg:pb-1">
-              <DialogTitle>{t("create_new_order")}</DialogTitle>
+              <DialogTitle>{correctionOrder ? `${t("correct_order")} #${orderDisplayId(correctionOrder)}` : t("create_new_order")}</DialogTitle>
             </DialogHeader>
-            <OrderForm onSuccess={(orderDetails) => {
+            <OrderForm correctionOrder={correctionOrder} onSuccess={(orderDetails) => {
               setCreatedOrder(orderDetails);
               setOpen(false);
             }} />
@@ -747,7 +763,7 @@ function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boo
   );
 }
 
-function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
+function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: any) => void; correctionOrder?: any }) {
   const { t, i18n } = useTranslation();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
@@ -767,6 +783,8 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [discountMode, setDiscountMode] = useState<"fixed" | "percentage">("fixed");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [isCorrecting, setIsCorrecting] = useState(false);
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
@@ -799,6 +817,28 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
     control: form.control,
     name: "garmentItems"
   });
+
+  useEffect(() => {
+    if (!correctionOrder) return;
+    const pct = Number(correctionOrder.discountPct || 0);
+    setDiscountMode(pct > 0 ? "percentage" : "fixed");
+    setCorrectionReason("");
+    form.reset({
+      status: correctionOrder.status,
+      paymentStatus: correctionOrder.paymentStatus,
+      customerId: Number(correctionOrder.customerId),
+      entryDate: String(correctionOrder.entryDate || "").slice(0, 10),
+      pickupDate: correctionOrder.pickupDate ? String(correctionOrder.pickupDate).slice(0, 10) : undefined,
+      discount: String(correctionOrder.discountAmount || correctionOrder.discount || 0),
+      discountPct: pct,
+      pickupCost: String(correctionOrder.pickupCost || 0),
+      advancePayment: "0",
+      advancePaymentMethod: "Cash",
+      items: (correctionOrder.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: Number(item.quantity) })),
+      garmentItems: (correctionOrder.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "" })),
+      machineUsages: [],
+    });
+  }, [correctionOrder, form]);
 
   const watchedItems = useWatch({
     control: form.control,
@@ -925,6 +965,37 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
         cycleDurationMinutes: Number(m.cycleDurationMinutes || 0),
       })),
     };
+
+    if (correctionOrder) {
+      if (correctionReason.trim().length < 5) return;
+      setIsCorrecting(true);
+      try {
+        const response = await fetch(`/api/orders/${correctionOrder.id}/correct`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: formattedData.customerId,
+            entryDate: new Date(`${formattedData.entryDate}T00:00:00`).toISOString(),
+            pickupDate: formattedData.pickupDate ? new Date(`${formattedData.pickupDate}T00:00:00`).toISOString() : null,
+            discountPct: discountMode === "percentage" ? Number(formattedData.discountPct || 0) : subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(4)) : 0,
+            reason: correctionReason.trim(),
+            items: formattedData.items,
+            garments: formattedData.garmentItems,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || "Unable to correct order");
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", correctionOrder.id] });
+        window.location.assign(`/orders/${correctionOrder.id}`);
+      } catch (error) {
+        toast({ title: t("order_correction_failed"), description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+      } finally {
+        setIsCorrecting(false);
+      }
+      return;
+    }
 
     if (activeSub?.id) {
       try {
@@ -1440,7 +1511,7 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                 <span className="font-mono text-primary">{symbol}{total.toFixed(2)}</span>
               </div>
 
-              <div className="border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 rounded-lg p-4 lg:p-3 space-y-2">
+              {!correctionOrder && <div className="border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 rounded-lg p-4 lg:p-3 space-y-2">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">{t("advance_payment")} — {t("enter_advance")}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <FormField
@@ -1491,13 +1562,18 @@ function OrderForm({ onSuccess }: { onSuccess: (orderDetails: any) => void }) {
                     </span>
                   </div>
                 )}
-              </div>
+              </div>}
+              {correctionOrder && <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="correction-reason-section">
+                <FormLabel htmlFor="order-correction-reason">{t("correction_reason")}</FormLabel>
+                <Textarea id="order-correction-reason" value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} minLength={5} required />
+                <p className="text-xs text-muted-foreground">{t("correction_audit_notice")}</p>
+              </div>}
               </div>
             </div>
 
             <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:pt-1">
-              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending}>
-                {isOrderPending ? t("saving") : t("create_new_order")}
+              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && correctionReason.trim().length < 5)}>
+                {isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}
               </Button>
             </div>
           </form>

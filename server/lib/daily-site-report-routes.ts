@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { dailySiteReportComments, dailySiteReports, organisations, siteMembers, sites } from "@shared/schema";
+import { dailySiteReportComments, dailySiteReports, orderCorrections, organisations, siteMembers, sites } from "@shared/schema";
 import { users } from "@shared/models/auth";
 import { snapshotDailySiteMetrics } from "./daily-site-report-metrics";
 
@@ -53,7 +53,12 @@ export function registerDailySiteReportRoutes(app: Express) {
     if (["draft", "submitted", "acknowledged"].includes(req.query.status)) clauses.push(eq(dailySiteReports.status, req.query.status));
     const reports = await db.select({ report: dailySiteReports, site: sites }).from(dailySiteReports).innerJoin(sites, eq(dailySiteReports.siteId, sites.id)).where(and(...clauses)).orderBy(desc(dailySiteReports.reportDate), desc(dailySiteReports.version));
     const comments = reports.length ? await db.select().from(dailySiteReportComments).where(and(eq(dailySiteReportComments.organisationId, organisationId), inArray(dailySiteReportComments.reportId, reports.map(({ report }) => report.id)))) : [];
-    res.json(reports.map((row) => ({ ...row, comments: comments.filter((item) => item.reportId === row.report.id) })));
+    const correctionRows = reports.length ? await db.select().from(orderCorrections).where(inArray(orderCorrections.siteId, [...new Set(reports.map(({ report }) => report.siteId))])).orderBy(desc(orderCorrections.createdAt)) : [];
+    res.json(reports.map((row) => ({
+      ...row,
+      comments: comments.filter((item) => item.reportId === row.report.id),
+      orderCorrections: correctionRows.filter((item) => item.siteId === row.report.siteId && item.createdAt && item.createdAt.toISOString().slice(0, 10) === row.report.reportDate),
+    })));
   });
 
   app.post("/api/daily-site-reports/draft", isAuthenticated, async (req: any, res) => {

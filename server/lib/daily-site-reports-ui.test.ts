@@ -22,6 +22,8 @@ assert.match(card, /daily_report_status_/);
 assert.match(card, /<dl/);
 assert.match(card, /daily_report_comment/);
 assert.match(card, /daily_report_acknowledge/);
+assert.match(card, /daily-report-order-corrections/);
+assert.match(card, /daily_report_original_order/);
 
 for (const key of ["daily_reports", "daily_reports_subtitle", "daily_report_optional", "daily_report_create", "daily_report_submit", "daily_report_comment", "daily_report_acknowledge", "daily_report_status_draft", "daily_report_status_submitted", "daily_report_status_acknowledged"]) {
   assert.equal((i18n.match(new RegExp(`"${key}"`, "g")) || []).length >= 3, true, `${key} needs EN/FR/PT translations`);
