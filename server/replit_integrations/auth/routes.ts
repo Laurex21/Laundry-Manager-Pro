@@ -3,8 +3,8 @@ import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
 import { db } from "../../db";
-import { organisations, siteMembers } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { organisations, siteMembers, sites } from "@shared/schema";
+import { and, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { rateLimit } from "../../lib/rate-limit";
@@ -40,7 +40,18 @@ async function buildUserResponse(userId: string) {
   if (user.organisationId) {
     if (!isOrgOwner) {
       // User is not the org owner — find their highest-priority site member role
-      const memberships = await db.select().from(siteMembers).where(eq(siteMembers.userId, userId));
+      const memberships = await db
+        .select({
+          id: siteMembers.id,
+          siteId: siteMembers.siteId,
+          role: siteMembers.role,
+        })
+        .from(siteMembers)
+        .innerJoin(sites, eq(siteMembers.siteId, sites.id))
+        .where(and(
+          eq(siteMembers.userId, userId),
+          eq(sites.organisationId, user.organisationId),
+        ));
       if (memberships.length > 0) {
         // Priority: manager > operator (owners are handled above)
         if (memberships.some(m => m.role === "manager")) effectiveRole = "manager";
@@ -57,7 +68,10 @@ async function buildUserResponse(userId: string) {
   let currentSite = null;
   let allSites: any[] = [];
   if (user.currentSiteId) {
-    currentSite = await storage.getSite(user.currentSiteId);
+    const candidateSite = await storage.getSite(user.currentSiteId);
+    if (candidateSite && candidateSite.organisationId === user.organisationId) {
+      currentSite = candidateSite;
+    }
   }
   if (isOrgOwner && user.organisationId) {
     allSites = await storage.getSites(user.organisationId);

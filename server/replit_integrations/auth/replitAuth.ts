@@ -495,6 +495,50 @@ export async function ensureAuthSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_production_cycle_orders_order ON production_cycle_orders(order_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_cycle_per_machine ON production_cycles(machine_id) WHERE status IN ('preparing', 'running')`);
 
+  await repairKnownAccountOrganisationLinks();
+}
+
+/**
+ * Repairs the one known legacy account association without changing any
+ * customers, orders, or other business records. The account is the owner of
+ * its own organisation/site, so its users row should point there.
+ */
+export async function repairKnownAccountOrganisationLinks() {
+  await pool.query(`
+    WITH owner_site AS (
+      SELECT
+        u.id AS user_id,
+        owner_org.id AS organisation_id,
+        MIN(site.id) AS site_id
+      FROM users AS u
+      INNER JOIN organisations AS owner_org
+        ON owner_org.owner_id = u.id
+      INNER JOIN sites AS site
+        ON site.organisation_id = owner_org.id
+       AND site.is_active = true
+      INNER JOIN site_members AS sm
+        ON sm.site_id = site.id
+       AND sm.user_id = u.id
+       AND sm.role = 'owner'
+      WHERE lower(trim(u.email)) = 'xpress@gmail.com'
+      GROUP BY u.id, owner_org.id
+    )
+    UPDATE users AS u
+    SET
+      organisation_id = owner_site.organisation_id,
+      current_site_id = owner_site.site_id,
+      user_type = 'owner',
+      role = 'owner',
+      updated_at = now()
+    FROM owner_site
+    WHERE u.id = owner_site.user_id
+      AND (
+        u.organisation_id IS DISTINCT FROM owner_site.organisation_id
+        OR u.current_site_id IS DISTINCT FROM owner_site.site_id
+        OR u.user_type IS DISTINCT FROM 'owner'
+        OR u.role IS DISTINCT FROM 'owner'
+      )
+  `);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
@@ -547,17 +591,25 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
           .select({ siteId: siteMembers.siteId })
           .from(siteMembers)
           .innerJoin(sites, eq(siteMembers.siteId, sites.id))
-          .where(and(eq(siteMembers.userId, req.userId), eq(sites.isActive, true)));
+          .where(and(
+            eq(siteMembers.userId, req.userId),
+            eq(sites.isActive, true),
+            eq(sites.organisationId, user.organisationId),
+          ));
         authorizedSiteIds = memberships.map((membership) => membership.siteId);
       }
     }
 
-    if (authorizedSiteIds.length === 0) {
+    if (authorizedSiteIds.length === 0 && user?.organisationId) {
       const memberships = await db
         .select({ siteId: siteMembers.siteId })
         .from(siteMembers)
         .innerJoin(sites, eq(siteMembers.siteId, sites.id))
-        .where(and(eq(siteMembers.userId, req.userId), eq(sites.isActive, true)));
+        .where(and(
+          eq(siteMembers.userId, req.userId),
+          eq(sites.isActive, true),
+          eq(sites.organisationId, user.organisationId),
+        ));
       authorizedSiteIds = memberships.map((membership) => membership.siteId);
     }
 
