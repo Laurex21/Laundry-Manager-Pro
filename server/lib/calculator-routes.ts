@@ -386,7 +386,6 @@ export function registerCalculatorRoutes(app: Express) {
         const maxB = standardTier?.totalBudget?.max ?? report.totalBudget?.max ?? 0;
         whatsappSent = await sendReportViaWhatsApp({
           toWhatsApp: lead.whatsapp,
-          firstName:  lead.firstName ?? "",
           city:       lead.city,
           countryLabel,
           minBudget:  minB,

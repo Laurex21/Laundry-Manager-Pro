@@ -228,9 +228,7 @@ async function sendPasswordResetLink(user: { phone: string | null; email: string
     }
   }
 
-  console.info("Password reset link generated:", {
-    email: user.email,
-    phone: user.phone,
+  console.info("Password reset link generated without a configured delivery provider:", {
     resetTokenGenerated: true,
     deliveryConfigured: false,
   });

@@ -85,6 +85,10 @@ assert.match(calculatorSource, /calculatorReportSchema\.safeParse\(req\.body\)/)
 assert.match(calculatorSource, /données utilisateur non fiables/);
 assert.match(routesSource, /api\.services\.create\.input\.safeParse\(req\.body\)[\s\S]{0,250}Invalid service data/);
 assert.match(routesSource, /api\.expenditures\.create\.input\.safeParse\(req\.body\)[\s\S]{0,250}Invalid expenditure data/);
+assert.doesNotMatch(authRoutesSource, /Password reset link generated:[\s\S]{0,180}(email: user\.email|phone: user\.phone)/);
+assert.match(routesSource, /const raw = pickSiteUpdate\(req\.body\)[\s\S]{0,220}storage\.createSite\(org\.id/);
+assert.match(storageSource, /INVALID_INVITATION_SCOPE/);
+assert.match(storageSource, /CROSS_ORGANISATION_SITE_MEMBERSHIP/);
 
 const { createPublicAccessToken, verifyPublicAccessToken } = await import("./public-access-token");
 const { sameOriginMutations, securityHeaders } = await import("./http-security");

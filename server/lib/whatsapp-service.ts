@@ -16,7 +16,6 @@ if (hasTwilio) {
 
 export async function sendReportViaWhatsApp(params: {
   toWhatsApp: string;
-  firstName: string;
   city: string;
   countryLabel: string;
   minBudget: number;
@@ -25,11 +24,11 @@ export async function sendReportViaWhatsApp(params: {
   reportUrl: string;
 }): Promise<boolean> {
   if (!twilioClient) return false;
-  const { toWhatsApp, firstName, city, countryLabel, minBudget, maxBudget, currency, reportUrl } = params;
+  const { toWhatsApp, city, countryLabel, minBudget, maxBudget, currency, reportUrl } = params;
   const fmt = (n: number) => n.toLocaleString("fr-FR");
 
   const body =
-    `Bonjour ${firstName} 👋\n\n` +
+    `Bonjour 👋\n\n` +
     `Votre estimation pressing est prête !\n\n` +
     `📍 *${city}, ${countryLabel}*\n` +
     `💰 *Budget estimé : ${fmt(minBudget)} — ${fmt(maxBudget)} ${currency}*\n\n` +

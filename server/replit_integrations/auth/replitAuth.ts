@@ -571,6 +571,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
 
     let authorizedSiteIds: number[] = [];
     let organisationSiteIds: number[] = [];
+    let isOrganisationOwner = false;
     if (user?.organisationId) {
       const [org] = await db
         .select({ ownerId: organisations.ownerId })
@@ -584,7 +585,8 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         .where(and(eq(sites.organisationId, user.organisationId), eq(sites.isActive, true))))
         .map((site) => site.id);
 
-      if (org?.ownerId === req.userId) {
+      isOrganisationOwner = org?.ownerId === req.userId;
+      if (isOrganisationOwner) {
         authorizedSiteIds = organisationSiteIds;
       } else {
         const memberships = await db
@@ -625,7 +627,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     req.siteId = currentSiteId ?? null;
     req.organisationId = user?.organisationId ?? null;
     req.authorizedSiteIds = authorizedSiteIds;
-    req.organisationSiteIds = organisationSiteIds.length > 0 ? organisationSiteIds : authorizedSiteIds;
+    req.organisationSiteIds = isOrganisationOwner ? organisationSiteIds : authorizedSiteIds;
     req.siteScope = currentSiteId === null ? authorizedSiteIds : [Number(currentSiteId)].filter((siteId) => authorizedSiteIds.includes(siteId));
     req.organisationSiteScope = req.organisationSiteIds;
 

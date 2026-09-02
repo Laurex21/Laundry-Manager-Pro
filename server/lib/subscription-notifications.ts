@@ -110,19 +110,38 @@ export function registerSubscriptionNotificationRoutes(app: Express) {
   });
   app.get("/api/subscriptions/notifications", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); if (!organisationId) return res.status(403).json({ message: "Organisation required" });
+    const siteScope = Array.isArray(req.siteScope) ? req.siteScope : [];
+    if (siteScope.length === 0) return res.json([]);
     const status = z.enum(["pending", "sent", "failed"]).optional().safeParse(req.query.status);
     const trigger = triggerSchema.optional().safeParse(req.query.trigger);
     if (!status.success || !trigger.success) return res.status(400).json({ message: "Invalid notification filter" });
-    const rows = await db.select().from(subscriptionNotifications).where(and(eq(subscriptionNotifications.organisationId, organisationId), ...(status.data ? [eq(subscriptionNotifications.status, status.data)] : []), ...(trigger.data ? [eq(subscriptionNotifications.trigger, trigger.data)] : []))).orderBy(desc(subscriptionNotifications.createdAt)).limit(50);
-    res.json(rows);
+    const rows = await db
+      .select({ notification: subscriptionNotifications })
+      .from(subscriptionNotifications)
+      .innerJoin(customers, eq(subscriptionNotifications.clientId, customers.id))
+      .where(and(
+        eq(subscriptionNotifications.organisationId, organisationId),
+        inArray(customers.siteId, siteScope),
+        ...(status.data ? [eq(subscriptionNotifications.status, status.data)] : []),
+        ...(trigger.data ? [eq(subscriptionNotifications.trigger, trigger.data)] : []),
+      ))
+      .orderBy(desc(subscriptionNotifications.createdAt))
+      .limit(50);
+    res.json(rows.map((row) => row.notification));
   });
   app.get("/api/subscriptions/notifications/due", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); if (!organisationId) return res.status(403).json({ message: "Organisation required" });
+    const siteScope = Array.isArray(req.siteScope) ? req.siteScope : [];
+    if (siteScope.length === 0) return res.json([]);
     const rows = await db.select({ notification: subscriptionNotifications, clientName: customers.name, planName: subscriptionPlans.name }).from(subscriptionNotifications)
       .innerJoin(customers, eq(subscriptionNotifications.clientId, customers.id))
       .innerJoin(customerSubscriptions, and(eq(subscriptionNotifications.customerSubscriptionId, customerSubscriptions.id), eq(customerSubscriptions.organisationId, organisationId)))
       .innerJoin(subscriptionPlans, and(eq(customerSubscriptions.subscriptionPlanId, subscriptionPlans.id), eq(subscriptionPlans.organisationId, organisationId)))
-      .where(and(eq(subscriptionNotifications.organisationId, organisationId), eq(subscriptionNotifications.status, "pending"))).orderBy(desc(subscriptionNotifications.createdAt)).limit(50);
+      .where(and(
+        eq(subscriptionNotifications.organisationId, organisationId),
+        eq(subscriptionNotifications.status, "pending"),
+        inArray(customers.siteId, siteScope),
+      )).orderBy(desc(subscriptionNotifications.createdAt)).limit(50);
     res.json(rows.map(row => ({ ...row.notification, clientName: row.clientName, planName: row.planName })));
   });
   app.post("/api/subscriptions/notifications/send", isAuthenticated, notificationWriteLimiter, async (req: any, res) => {
@@ -136,6 +155,19 @@ export function registerSubscriptionNotificationRoutes(app: Express) {
   app.patch("/api/subscriptions/notifications/:id/sent", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid notification" });
+    const siteScope = Array.isArray(req.siteScope) ? req.siteScope : [];
+    if (siteScope.length === 0) return res.status(404).json({ message: "Notification not found" });
+    const [accessible] = await db
+      .select({ id: subscriptionNotifications.id })
+      .from(subscriptionNotifications)
+      .innerJoin(customers, eq(subscriptionNotifications.clientId, customers.id))
+      .where(and(
+        eq(subscriptionNotifications.id, id),
+        eq(subscriptionNotifications.organisationId, organisationId),
+        inArray(customers.siteId, siteScope),
+      ))
+      .limit(1);
+    if (!accessible) return res.status(404).json({ message: "Notification not found" });
     const [updated] = await db.update(subscriptionNotifications).set({ status: "sent", sentAt: new Date() }).where(and(eq(subscriptionNotifications.id, id), eq(subscriptionNotifications.organisationId, organisationId))).returning();
     if (!updated) return res.status(404).json({ message: "Notification not found" });
     res.json(updated);

@@ -127,12 +127,12 @@ async function canAccessSite(req: any, siteId: number): Promise<boolean> {
 
 async function canAccessCustomer(req: any, customerId: number): Promise<boolean> {
   const customer = await storage.getCustomer(customerId);
-  return !!customer && customer.siteId != null && orgScopedSites(req).includes(customer.siteId);
+  return !!customer && customer.siteId != null && scopedSites(req).includes(customer.siteId);
 }
 
 async function canAccessService(req: any, serviceId: number): Promise<boolean> {
   const service = await storage.getService(serviceId);
-  return !!service && service.siteId != null && orgScopedSites(req).includes(service.siteId);
+  return !!service && service.siteId != null && scopedSites(req).includes(service.siteId);
 }
 
 async function canAccessOrder(req: any, orderId: number): Promise<boolean> {
@@ -1271,14 +1271,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
       await client.query(
         `UPDATE orders SET status = $2, updated_at = NOW()
-         WHERE id IN (SELECT order_id FROM production_cycle_orders WHERE cycle_id = $1)`,
-        [cycleId, cycle.stage],
+         WHERE site_id = $3
+           AND id IN (SELECT order_id FROM production_cycle_orders WHERE cycle_id = $1)`,
+        [cycleId, cycle.stage, cycle.site_id],
       );
       await client.query(
         `INSERT INTO order_status_history (order_id, status, changed_by, notes)
-         SELECT order_id, $2, $3, 'Production cycle #' || $1
-         FROM production_cycle_orders WHERE cycle_id = $1`,
-        [cycleId, cycle.stage, userId],
+         SELECT pco.order_id, $2, $3, 'Production cycle #' || $1
+         FROM production_cycle_orders pco
+         INNER JOIN orders o ON o.id = pco.order_id AND o.site_id = $4
+         WHERE pco.cycle_id = $1`,
+        [cycleId, cycle.stage, userId, cycle.site_id],
       );
       await client.query("COMMIT");
       res.json({ success: true });
@@ -1326,20 +1329,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         `UPDATE machines
          SET cycle_count = cycle_count + 1,
              total_kg_processed = total_kg_processed + $2
-         WHERE id = $1`,
-        [cycle.machine_id, cycle.total_weight_kg],
+         WHERE id = $1 AND site_id = $3`,
+        [cycle.machine_id, cycle.total_weight_kg, cycle.site_id],
       );
       await client.query(
         `UPDATE orders SET status = $2, updated_at = NOW()
-         WHERE id IN (SELECT order_id FROM production_cycle_orders WHERE cycle_id = $1)`,
-        [cycleId, nextStatus],
+         WHERE site_id = $3
+           AND id IN (SELECT order_id FROM production_cycle_orders WHERE cycle_id = $1)`,
+        [cycleId, nextStatus, cycle.site_id],
       );
       await client.query(
         `INSERT INTO order_status_history (order_id, status, changed_by, notes)
-         SELECT order_id, $2, started_by, 'Completed production cycle #' || $1
-         FROM production_cycle_orders, production_cycles
-         WHERE production_cycle_orders.cycle_id = $1 AND production_cycles.id = $1`,
-        [cycleId, nextStatus],
+         SELECT pco.order_id, $2, pc.started_by, 'Completed production cycle #' || $1
+         FROM production_cycle_orders pco
+         INNER JOIN production_cycles pc ON pc.id = pco.cycle_id
+         INNER JOIN orders o ON o.id = pco.order_id AND o.site_id = $3
+         WHERE pco.cycle_id = $1`,
+        [cycleId, nextStatus, cycle.site_id],
       );
       await client.query("COMMIT");
       res.json({ success: true, nextStatus, actualDurationMinutes: actualDuration });
@@ -1971,7 +1977,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!org) {
         return res.status(403).json({ message: "Only organisation owners can create sites" });
       }
-      const site = await storage.createSite(org.id, req.body);
+      const raw = pickSiteUpdate(req.body);
+      if (!raw.name?.trim()) return res.status(400).json({ message: "Site name is required" });
+      const site = await storage.createSite(org.id, {
+        name: raw.name.trim(),
+        address: raw.address ?? "",
+        city: raw.city ?? "",
+        phone: raw.phone ?? "",
+      });
       res.status(201).json(site);
     } catch (err) {
       res.status(500).json({ message: "Failed to create site" });
@@ -2189,6 +2202,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
       res.json({ success: true, invitation: result });
     } catch (err) {
+      if (err instanceof Error && err.message === "CROSS_ORGANISATION_INVITATION") {
+        return res.status(409).json({ message: "A staff account cannot be moved between organisations by accepting an invitation." });
+      }
       if (err instanceof Error && err.message === "OWNER_ACCOUNT_CANNOT_ACCEPT_STAFF_INVITATION") {
         return res.status(409).json({ message: "Owner accounts cannot be converted to staff. Use a different email for staff access." });
       }

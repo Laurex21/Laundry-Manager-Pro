@@ -10,7 +10,7 @@ const authRoutes = readFileSync(join(root, "server/replit_integrations/auth/rout
 const authModel = readFileSync(join(root, "shared/models/auth.ts"), "utf8");
 
 assert.match(auth, /req\.authorizedSiteIds = authorizedSiteIds/);
-assert.match(auth, /req\.organisationSiteIds = organisationSiteIds\.length > 0 \? organisationSiteIds : authorizedSiteIds/);
+assert.match(auth, /req\.organisationSiteIds = isOrganisationOwner \? organisationSiteIds : authorizedSiteIds/);
 assert.match(auth, /req\.siteScope = currentSiteId === null \? authorizedSiteIds/);
 assert.match(auth, /req\.organisationSiteScope = req\.organisationSiteIds/);
 assert.match(auth, /!authorizedSiteIds\.includes\(Number\(currentSiteId\)\)/);
@@ -35,7 +35,7 @@ assert.match(routes, /resolveWriteSiteId/);
 assert.match(routes, /storage\.getOrdersBySite\(scopedSites\(req\)\)/);
 assert.match(routes, /storage\.getCustomersBySite\(orgScopedSites\(req\)\)/);
 assert.match(routes, /storage\.getServicesBySite\(orgScopedSites\(req\)\)/);
-assert.match(routes, /storage\.getReportData\(startDate, endDate, scopedSites\(req\)\)/);
+assert.match(routes, /storage\.getReportData\(startDate, endDate, scopedSites\(req\), timeZone\)/);
 assert.match(routes, /storage\.getDashboardData\(allSites \? scopedSites\(req\)/);
 assert.match(routes, /resolvedSiteId !== null && !\(await canAccessSite\(req, resolvedSiteId\)\)/);
 assert.match(routes, /Select a specific site before saving/);

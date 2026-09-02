@@ -1646,7 +1646,13 @@ export class DatabaseStorage implements IStorage {
 
   async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
     return await db.transaction(async (tx) => {
-      const [site] = await tx.insert(sites).values({ organisationId, ...data }).returning();
+      const [site] = await tx.insert(sites).values({
+        organisationId,
+        name: data.name,
+        address: data.address,
+        city: data.city,
+        phone: data.phone,
+      }).returning();
       const [org] = await tx.select().from(organisations).where(eq(organisations.id, organisationId));
       if (org?.ownerId) {
         await tx.insert(siteMembers).values({ siteId: site.id, userId: org.ownerId, role: "owner" });
@@ -1679,6 +1685,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addSiteMember(siteId: number, userId: string, role: string): Promise<SiteMember> {
+    const [scope] = await db
+      .select({
+        siteOrganisationId: sites.organisationId,
+        userOrganisationId: users.organisationId,
+      })
+      .from(sites)
+      .innerJoin(users, eq(users.id, userId))
+      .where(eq(sites.id, siteId))
+      .limit(1);
+    if (!scope || scope.userOrganisationId !== scope.siteOrganisationId) {
+      throw new Error("CROSS_ORGANISATION_SITE_MEMBERSHIP");
+    }
     const [existing] = await db.select().from(siteMembers).where(and(eq(siteMembers.siteId, siteId), eq(siteMembers.userId, userId)));
     if (existing) {
       const [updated] = await db.update(siteMembers).set({ role }).where(eq(siteMembers.id, existing.id)).returning();
@@ -1699,6 +1717,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }, executor: any = db): Promise<SiteInvitation> {
+    const [scope] = await executor
+      .select({
+        siteOrganisationId: sites.organisationId,
+        ownerId: organisations.ownerId,
+      })
+      .from(sites)
+      .innerJoin(organisations, eq(sites.organisationId, organisations.id))
+      .where(and(
+        eq(sites.id, data.siteId),
+        eq(organisations.id, data.organisationId),
+      ))
+      .limit(1);
+    if (!scope || scope.ownerId !== data.invitedBy) {
+      throw new Error("INVALID_INVITATION_SCOPE");
+    }
     const crypto = await import("crypto");
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date();
@@ -1712,6 +1745,7 @@ export class DatabaseStorage implements IStorage {
     if (!inv) return null;
     const [site] = await db.select().from(sites).where(eq(sites.id, inv.siteId));
     const [org] = await db.select().from(organisations).where(eq(organisations.id, inv.organisationId));
+    if (!site || !org || site.organisationId !== org.id || org.ownerId !== inv.invitedBy) return null;
     const [inviter] = await db.select().from(users).where(eq(users.id, inv.invitedBy));
     return {
       ...inv,
@@ -1765,6 +1799,9 @@ export class DatabaseStorage implements IStorage {
     if (!user || user.userType !== "staff") {
       throw new Error("OWNER_ACCOUNT_CANNOT_ACCEPT_STAFF_INVITATION");
     }
+    if (user.organisationId !== null && user.organisationId !== inv.organisationId) {
+      throw new Error("CROSS_ORGANISATION_INVITATION");
+    }
     const invitedIdentifier = inv.identifier.trim().toLowerCase();
     const userIdentifiers = [user.email, user.phone]
       .filter((value): value is string => !!value)
@@ -1773,12 +1810,16 @@ export class DatabaseStorage implements IStorage {
       throw new Error("INVITATION_IDENTIFIER_MISMATCH");
     }
     return await db.transaction(async (tx) => {
+      const [site] = await tx.select().from(sites).where(and(
+        eq(sites.id, inv.siteId),
+        eq(sites.organisationId, inv.organisationId),
+      ));
+      if (!site) return null;
       const existing = await tx.select().from(siteMembers).where(and(eq(siteMembers.siteId, inv.siteId), eq(siteMembers.userId, userId)));
       if (existing.length === 0) {
         await tx.insert(siteMembers).values({ siteId: inv.siteId, userId, role: inv.role });
       }
-      const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
-      await tx.update(users).set({ currentSiteId: inv.siteId, organisationId: site?.organisationId, userType: "staff", role: inv.role }).where(eq(users.id, userId));
+      await tx.update(users).set({ currentSiteId: inv.siteId, organisationId: site.organisationId, userType: "staff", role: inv.role }).where(eq(users.id, userId));
       const [updated] = await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id)).returning();
       return updated;
     });
