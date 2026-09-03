@@ -841,7 +841,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!managerOrOwner) { params.push(userId); where += ` AND e.user_id = $${params.length}`; }
     const result = await pool.query(
       `SELECT p.id, p.order_id AS "orderId", p.amount, p.method, p.reference, p.date,
-              o.site_id AS "siteId", c.name AS "customerName", c.phone AS "customerPhone",
+              o.site_id AS "siteId", o.payment_status AS "paymentStatus",
+              ROW_NUMBER() OVER (PARTITION BY o.site_id ORDER BY o.created_at, o.id) AS "orderNumber",
+              c.name AS "customerName", c.phone AS "customerPhone",
               e.name AS "employeeName", s.name AS "siteName"
        FROM payments p
        JOIN orders o ON o.id = p.order_id
