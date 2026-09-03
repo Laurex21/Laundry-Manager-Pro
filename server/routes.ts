@@ -817,6 +817,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(payments);
   });
 
+  app.get("/api/payments/ledger", isAuthenticated, async (req: any, res) => {
+    const parsed = z.object({
+      from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      siteId: z.coerce.number().int().positive().optional(),
+      method: z.string().trim().max(50).optional(),
+      search: z.string().trim().max(100).optional(),
+    }).safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid payment ledger filters" });
+    const authorised = orgScopedSites(req).filter(Number.isInteger);
+    const siteIds = parsed.data.siteId ? authorised.filter((id) => id === parsed.data.siteId) : authorised;
+    if (!siteIds.length) return res.json({ payments: [], totals: { amount: 0, count: 0, byMethod: {} } });
+    const from = new Date(`${parsed.data.from}T00:00:00.000Z`);
+    const to = new Date(`${parsed.data.to}T23:59:59.999Z`);
+    if (from > to) return res.status(400).json({ message: "Start date must be before end date" });
+    const userId = (req.session as any)?.userId as string;
+    const managerOrOwner = await Promise.all(siteIds.map((siteId) => effectiveSiteRole(req, siteId))).then((roles) => roles.every((role) => role === "owner" || role === "manager"));
+    const params: any[] = [siteIds, from, to];
+    let where = `o.site_id = ANY($1::int[]) AND p.date BETWEEN $2 AND $3`;
+    if (parsed.data.method) { params.push(parsed.data.method); where += ` AND p.method = $${params.length}`; }
+    if (parsed.data.search) { params.push(`%${parsed.data.search}%`); where += ` AND (c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length} OR CAST(o.id AS text) ILIKE $${params.length} OR COALESCE(p.reference, '') ILIKE $${params.length})`; }
+    if (!managerOrOwner) { params.push(userId); where += ` AND e.user_id = $${params.length}`; }
+    const result = await pool.query(
+      `SELECT p.id, p.order_id AS "orderId", p.amount, p.method, p.reference, p.date,
+              o.site_id AS "siteId", c.name AS "customerName", c.phone AS "customerPhone",
+              e.name AS "employeeName", s.name AS "siteName"
+       FROM payments p
+       JOIN orders o ON o.id = p.order_id
+       JOIN customers c ON c.id = o.customer_id
+       JOIN sites s ON s.id = o.site_id
+       LEFT JOIN employees e ON e.id = p.collected_by_employee_id
+       WHERE ${where}
+       ORDER BY p.date DESC, p.id DESC LIMIT 5000`,
+      params,
+    );
+    const byMethod: Record<string, number> = {};
+    let amount = 0;
+    for (const payment of result.rows) { const value = Number(payment.amount); amount += value; byMethod[payment.method] = (byMethod[payment.method] || 0) + value; }
+    res.json({ payments: result.rows, totals: { amount, count: result.rows.length, byMethod } });
+  });
+
   app.get("/api/customers/:id/credit", isAuthenticated, async (req: any, res) => {
     const customerId = Number(req.params.id);
     const organisationId = Number(req.organisationId);

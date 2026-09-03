@@ -9,6 +9,7 @@ import { generatePaymentReceipt, generateThermalPaymentReceipt } from "@/lib/rec
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { paymentDateWithRegistrationTime } from "@/lib/payment-date";
+import { useAuth } from "@/hooks/use-auth";
 import {
   CreditCard,
   CheckCircle2,
@@ -58,6 +59,18 @@ function todayInputDate() {
 
 const NON_PAYABLE_ORDER_STATUSES = new Set(["cancelled", "cancellation_requested"]);
 
+function PaymentLedger() {
+  const { t } = useTranslation(); const { getSymbol } = useCurrency(); const symbol = getSymbol();
+  const { allSites, currentSite, isOwner } = useAuth();
+  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
+  const [to, setTo] = useState(todayInputDate); const [siteId, setSiteId] = useState(""); const [method, setMethod] = useState(""); const [search, setSearch] = useState("");
+  const query = new URLSearchParams({ from, to }); if (siteId) query.set("siteId", siteId); if (method) query.set("method", method); if (search.trim()) query.set("search", search.trim());
+  const { data, isLoading, isError } = useQuery<any>({ queryKey: ["/api/payments/ledger", from, to, siteId, method, search], queryFn: async () => { const r = await fetch(`/api/payments/ledger?${query}`, { credentials: "include" }); if (!r.ok) throw new Error(); return r.json(); } });
+  const rows = data?.payments || [];
+  function exportCsv() { const cells = [["Date", "Order", "Customer", "Site", "Method", "Reference", "Employee", "Amount"], ...rows.map((p: any) => [p.date, p.orderId, p.customerName, p.siteName, p.method, p.reference || "", p.employeeName || "", p.amount])]; const csv = cells.map((row: any[]) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `payments-${from}-${to}.csv`; a.click(); URL.revokeObjectURL(a.href); }
+  return <div className="space-y-4" data-testid="payment-ledger"><div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-5"><div><label className="text-xs font-medium">{t("start_date")}</label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div><div><label className="text-xs font-medium">{t("end_date")}</label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>{(isOwner || allSites.length > 1) && <div><label className="text-xs font-medium">{t("site")}</label><Select value={siteId || "all"} onValueChange={(v) => setSiteId(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all_sites")}</SelectItem>{allSites.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent></Select></div>}<div><label className="text-xs font-medium">{t("payment_method")}</label><Select value={method || "all"} onValueChange={(v) => setMethod(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all")}</SelectItem>{PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div><div><label className="text-xs font-medium">{t("search")}</label><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("search_order_placeholder")} /></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{t("total")}</p><p className="text-xl font-bold">{symbol}{Number(data?.totals?.amount || 0).toLocaleString()}</p></div><div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{t("payments")}</p><p className="text-xl font-bold">{data?.totals?.count || 0}</p></div><Button variant="outline" className="h-full min-h-14" onClick={exportCsv} disabled={!rows.length}><Download className="mr-2 h-4 w-4" />CSV</Button></div>{data?.totals?.byMethod && <div className="flex flex-wrap gap-2">{Object.entries(data.totals.byMethod).map(([key, value]) => <Badge key={key} variant="secondary">{key}: {symbol}{Number(value).toLocaleString()}</Badge>)}</div>}{isLoading ? <p>{t("loading")}</p> : isError ? <p className="text-destructive">{t("error")}</p> : <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[850px] text-sm"><thead className="bg-muted/40"><tr>{[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("reference"), t("employee"), t("amount")].map((h) => <th key={h} className="p-3 text-left text-xs">{h}</th>)}</tr></thead><tbody>{rows.map((p: any) => <tr key={p.id} className="border-t"><td className="p-3">{new Date(p.date).toLocaleString()}</td><td className="p-3">#{p.orderId}</td><td className="p-3">{p.customerName}</td><td className="p-3">{p.siteName}</td><td className="p-3">{p.method}</td><td className="p-3">{p.reference || "—"}</td><td className="p-3">{p.employeeName || "—"}</td><td className="p-3 font-mono font-semibold">{symbol}{Number(p.amount).toLocaleString()}</td></tr>)}</tbody></table>{!rows.length && <p className="p-8 text-center text-muted-foreground">{t("no_payments")}</p>}</div>}</div>;
+}
+
 export default function Payments() {
   const { data: allOrders, isLoading: ordersLoading } = useOrders();
   const { t, i18n } = useTranslation();
@@ -89,6 +102,7 @@ export default function Payments() {
     amountReceived?: string;
     changeReturned?: string;
   } | null>(null);
+  const [view, setView] = useState<"register" | "history">("register");
 
   const { data: orderPayments } = usePaymentsByOrder(selectedOrderId || 0);
   const { mutate: createPayment, isPending } = useCreatePayment();
@@ -312,6 +326,8 @@ export default function Payments() {
         <h1 className="text-2xl font-display font-bold leading-tight">{t("payments")}</h1>
         <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
       </div>
+      <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1"><Button variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>{t("record_payment")}</Button><Button variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>{t("payment_history")}</Button></div>
+      {view === "history" ? <PaymentLedger /> : <>
 
       {successPayment && (
         <div
@@ -780,7 +796,7 @@ export default function Payments() {
             )}
           </div>
         </div>
-      </div>
+      </div></>}
     </div>
   );
 }
