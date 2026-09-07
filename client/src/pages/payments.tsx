@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useOrders } from "@/hooks/use-orders";
 import { usePaymentsByOrder, useCreatePayment } from "@/hooks/use-payments";
@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { paymentDateWithRegistrationTime } from "@/lib/payment-date";
 import { useAuth } from "@/hooks/use-auth";
+import { useSearch } from "wouter";
 import {
   CreditCard,
   CheckCircle2,
@@ -103,7 +104,13 @@ export default function Payments() {
     amountReceived?: string;
     changeReturned?: string;
   } | null>(null);
-  const [view, setView] = useState<"register" | "history">("register");
+  const searchParams = new URLSearchParams(useSearch());
+  const requestedView = searchParams.get("view");
+  const [view, setView] = useState<"register" | "history">(requestedView === "history" ? "history" : "register");
+
+  useEffect(() => {
+    setView(requestedView === "history" ? "history" : "register");
+  }, [requestedView]);
 
   const { data: orderPayments } = usePaymentsByOrder(selectedOrderId || 0);
   const { mutate: createPayment, isPending } = useCreatePayment();

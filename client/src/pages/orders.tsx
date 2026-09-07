@@ -110,7 +110,7 @@ const STATUS_SELECT_COLORS: Record<string, string> = {
 type OrderStatusFilter = "all" | "active" | "ready" | "unpaid" | "received" | "washing" | "delivered";
 type OrderPeriodFilter = "all" | "today" | "week" | "month";
 
-function dashboardOrderFilters(): { status: OrderStatusFilter; period: OrderPeriodFilter } {
+function dashboardOrderFilters(): { status: OrderStatusFilter; period: OrderPeriodFilter; discounted: boolean } {
   const params = new URLSearchParams(window.location.search);
   const statusParam = params.get("status") || "all";
   const periodParam = params.get("period") || "all";
@@ -122,7 +122,7 @@ function dashboardOrderFilters(): { status: OrderStatusFilter; period: OrderPeri
     periodParam === "today" || periodParam === "week" || periodParam === "month"
       ? periodParam
       : "all";
-  return { status, period };
+  return { status, period, discounted: params.get("discounted") === "true" };
 }
 
 function normalizeWhatsAppPhone(phone?: string | null): string {
@@ -317,6 +317,7 @@ export default function Orders() {
   const initialDashboardFilters = useMemo(dashboardOrderFilters, []);
   const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(initialDashboardFilters.status);
   const [periodFilter, setPeriodFilter] = useState<OrderPeriodFilter>(initialDashboardFilters.period);
+  const [discountedOnly, setDiscountedOnly] = useState(initialDashboardFilters.discounted);
   const [open, setOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
@@ -387,6 +388,9 @@ export default function Orders() {
     if (PIPELINE_STATUSES.has(statusFilter) && statusFilter !== "ready") {
       result = result.filter((o: any) => o.status === statusFilter);
     }
+    if (discountedOnly) {
+      result = result.filter((o: any) => Number(o.discountAmount ?? o.discount ?? 0) > 0);
+    }
     if (periodFilter !== "all") {
       const now = new Date();
       const start = new Date(now);
@@ -405,7 +409,7 @@ export default function Orders() {
       });
     }
     return result;
-  }, [orders, search, statusFilter, periodFilter]);
+  }, [orders, search, statusFilter, periodFilter, discountedOnly]);
 
   const chips: { key: OrderStatusFilter; labelKey: string; count: number; color: string }[] = [
     { key: "all",    labelKey: "all",           count: summary.total,  color: "bg-muted text-foreground" },
@@ -514,6 +518,18 @@ export default function Orders() {
           >
             <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
             {periodFilter === "today" ? t("today") : periodFilter === "week" ? t("this_week") : t("this_month")}
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
+        {discountedOnly && (
+          <button
+            type="button"
+            onClick={() => setDiscountedOnly(false)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-primary bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={`${t("clear_filter")}: ${t("discounts")}`}
+            data-testid="button-clear-discount-filter"
+          >
+            {t("discounts")}
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}

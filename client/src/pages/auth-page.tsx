@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Shirt, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useTranslation } from "react-i18next";
@@ -296,7 +296,13 @@ export default function AuthPage() {
   const { t, i18n } = useTranslation();
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"login" | "register">("login");
+  const search = useSearch();
+  const requestedTab = new URLSearchParams(search).get("tab");
+  const [tab, setTab] = useState<"login" | "register">(requestedTab === "register" ? "register" : "login");
+
+  useEffect(() => {
+    setTab(requestedTab === "register" ? "register" : "login");
+  }, [requestedTab]);
 
   useEffect(() => {
     if (!isLoading && user) setLocation("/");

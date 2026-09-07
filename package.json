@@ -28,6 +28,7 @@
     "test:expenses-redesign": "tsx server/lib/expenses-redesign.test.ts",
     "test:dashboard-quick-links": "tsx server/lib/dashboard-quick-links.test.ts",
     "test:dashboard-churn-deep-link": "tsx server/lib/dashboard-churn-deep-link.test.ts",
+    "test:navigation-destinations": "tsx server/lib/navigation-destinations.test.ts",
     "test:inline-order-status": "tsx server/lib/inline-order-status.test.ts",
     "test:customer-credit": "tsx server/lib/customer-credit.test.ts",
     "test:customer-credit-analytics": "tsx server/lib/customer-credit-analytics.test.ts",

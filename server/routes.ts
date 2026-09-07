@@ -1792,7 +1792,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         severity: outstandingRatio >= 50 ? "high" : "medium",
         value: number(current.outstanding),
         evidence: { outstandingRatio: Math.round(outstandingRatio * 10) / 10 },
-        href: "/payments",
+        href: "/payments?view=history",
       });
     }
     if (marginPct != null && marginPct < 10) {
@@ -1810,7 +1810,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         severity: discountRatio >= 10 ? "high" : "medium",
         value: number(current.discounts),
         evidence: { discountRatio: Math.round(discountRatio * 10) / 10 },
-        href: "/orders",
+        href: "/orders?discounted=true",
       });
     }
     if (loadEfficiency != null && number(machine.cycles) >= 3 && loadEfficiency < 60) {
@@ -1828,7 +1828,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         severity: qualityRate < 90 ? "high" : "medium",
         value: Math.round(qualityRate * 10) / 10,
         evidence: { qualityRate: Math.round(qualityRate * 10) / 10, incidents: qualityIncidents },
-        href: "/orders",
+        href: "/pilotage?view=quality",
       });
     }
     predictiveAlerts.sort((a, b) => {
