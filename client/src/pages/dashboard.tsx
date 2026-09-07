@@ -197,7 +197,7 @@ export default function Dashboard() {
       )}
 
       {churnCount > 0 && (
-        <Link href="/analytics">
+        <Link href="/analytics#churn-risk">
           <div className="flex items-center gap-3 px-3.5 py-2 rounded-lg border bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-950/30 dark:border-orange-900 dark:text-orange-300 cursor-pointer" data-testid="banner-churn-risk">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             <span className="font-medium">{churnCount} clients à risque de perte</span>

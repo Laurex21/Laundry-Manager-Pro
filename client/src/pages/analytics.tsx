@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
@@ -746,6 +746,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const churnRiskRef = useRef<HTMLDivElement>(null);
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/analytics/customer-behavior", period],
     queryFn: () => fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }).then((res) => res.json()),
@@ -759,6 +760,14 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   const dayData = data.activityByDayOfWeek || [];
   const churn = data.churn || {};
   const metrics = data.metrics || {};
+
+  useEffect(() => {
+    if (window.location.hash !== "#churn-risk") return;
+    window.requestAnimationFrame(() => {
+      churnRiskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      churnRiskRef.current?.focus({ preventScroll: true });
+    });
+  }, [data]);
 
   return (
     <div className="space-y-4" data-testid="section-customer-behavior">
@@ -811,7 +820,13 @@ function CustomerBehaviorSection({ period }: { period: string }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="shadow-sm lg:col-span-2">
+        <Card
+          id="churn-risk"
+          ref={churnRiskRef}
+          tabIndex={-1}
+          className="scroll-mt-24 shadow-sm lg:col-span-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          data-testid="card-churn-risk"
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               {t("churn_risk")}
