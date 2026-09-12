@@ -48,6 +48,7 @@ assert.match(storageSource, /eq\(siteInvitations\.status, "pending"\)/);
 assert.match(authRoutesSource, /app\.post\("\/api\/auth\/register", registrationLimiter, passwordHashLimiter/);
 assert.match(authRoutesSource, /app\.post\("\/api\/staff\/onboard\/:token", staffOnboardingLimiter, passwordHashLimiter/);
 assert.match(authRoutesSource, /app\.post\("\/api\/auth\/password-reset\/confirm", passwordResetConfirmLimiter, passwordHashLimiter/);
+assert.match(authRoutesSource, /connectors\.proxy\("resend", "\/emails"/);
 assert.match(authRoutesSource, /const invitation = await storage\.getInvitationByToken\(invitationToken\)[\s\S]{0,2200}const passwordHash = await bcrypt\.hash/);
 assert.match(authRoutesSource, /invitation\.status !== "pending"/);
 assert.match(authRoutesSource, /db\.transaction\(async \(tx\)[\s\S]{0,350}consumeValidPasswordResetToken\(hashResetToken\(token\), tx\)[\s\S]{0,350}updatePassword\(user\.id, passwordHash, tx\)[\s\S]{0,200}revokeUserSessions\(user\.id, tx\)/);

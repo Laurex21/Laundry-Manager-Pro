@@ -7,6 +7,7 @@ import { organisations, siteMembers, sites } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { ReplitConnectors } from "@replit/connectors-sdk";
 import { rateLimit } from "../../lib/rate-limit";
 import {
   CURRENT_LEGAL_DOCUMENTS,
@@ -151,7 +152,7 @@ function passwordResetEmailHtml(resetLink: string) {
 
 async function sendPasswordResetEmail(user: { email: string | null }, resetLink: string): Promise<boolean> {
   if (!user.email) return false;
-  const from = process.env.PASSWORD_RESET_EMAIL_FROM || process.env.EMAIL_FROM || "XPRESSPRO <noreply@xpresspro.app>";
+  const from = process.env.PASSWORD_RESET_EMAIL_FROM || process.env.EMAIL_FROM || "XPRESSPRO <onboarding@resend.dev>";
 
   if (process.env.RESEND_API_KEY) {
     try {
@@ -173,6 +174,34 @@ async function sendPasswordResetEmail(user: { email: string | null }, resetLink:
     } catch (error) {
       console.error("Password reset Resend delivery error:", error);
     }
+  }
+
+  try {
+    const connectors = new ReplitConnectors();
+    const response = await connectors.proxy("resend", "/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: user.email,
+        subject: "Réinitialisation de votre mot de passe XPRESSPRO",
+        html: passwordResetEmailHtml(resetLink),
+      }),
+    });
+    if (response.ok) return true;
+
+    let providerError = `HTTP ${response.status}`;
+    try {
+      const errorBody = await response.json() as { name?: string; message?: string };
+      providerError = [errorBody.name, errorBody.message].filter(Boolean).join(": ") || providerError;
+    } catch {
+      // Keep the status-only error so response bodies never expose message content.
+    }
+    console.error("Password reset Resend connector delivery failed:", providerError);
+  } catch (error) {
+    console.error("Password reset Resend connector delivery error:", error);
   }
 
   if (process.env.SENDGRID_API_KEY) {
