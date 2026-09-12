@@ -349,6 +349,14 @@ export const organisations = pgTable("organisations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const platformAdmins = pgTable("platform_admins", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  grantedBy: varchar("granted_by").references(() => users.id, { onDelete: "set null" }),
+  isActive: boolean("is_active").notNull().default(true),
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at"),
+});
+
 export const sites = pgTable("sites", {
   id: serial("id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),

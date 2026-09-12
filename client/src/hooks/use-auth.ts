@@ -20,6 +20,7 @@ export type AuthUser = User & {
   currentSite?: any;
   allSites?: any[];
   legalAcceptance?: LegalAcceptanceState;
+  isPlatformAdmin?: boolean;
 };
 
 async function fetchUser(): Promise<User | null> {
@@ -83,6 +84,7 @@ export function useAuth() {
   const currentSite = (user as any)?.currentSite ?? null;
   const allSites: any[] = (user as any)?.allSites ?? [];
   const isOwner = userRole === "owner";
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
 
   const hasFeature = (feature: string): boolean => {
     const featureMap: Record<string, string[]> = {
@@ -125,6 +127,7 @@ export function useAuth() {
     currentSite,
     allSites,
     isOwner,
+    isPlatformAdmin,
     switchSite: switchSiteMutation.mutate,
     isSwitchingSite: switchSiteMutation.isPending,
     canAccess,

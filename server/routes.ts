@@ -31,6 +31,7 @@ import {
   getOrderCorrectionEligibility,
   OrderCorrectionError,
 } from "./lib/order-corrections";
+import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -280,6 +281,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDailySiteReportRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
+  registerPlatformAdminRoutes(app);
   startTemporalIntelligenceJob();
 
   app.get("/api/public/stats", async (_req, res) => {

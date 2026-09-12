@@ -14,6 +14,7 @@ import {
   getCurrentLegalAcceptanceStatus,
   recordCurrentLegalAcceptance,
 } from "../../lib/legal";
+import { isActivePlatformAdmin } from "../../lib/platform-admin-routes";
 
 async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
   if (!organisationId) return null;
@@ -77,8 +78,9 @@ async function buildUserResponse(userId: string) {
     allSites = await storage.getSites(user.organisationId);
   }
   const legalAcceptance = await getCurrentLegalAcceptanceStatus(userId);
+  const isPlatformAdmin = await isActivePlatformAdmin(userId);
 
-  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites, legalAcceptance };
+  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites, legalAcceptance, isPlatformAdmin };
 }
 
 async function ensureUserOrganisation(userId: string) {

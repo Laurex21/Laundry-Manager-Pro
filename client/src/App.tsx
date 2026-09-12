@@ -38,6 +38,7 @@ const Subscriptions     = lazy(() => import("@/pages/subscriptions"));
 const MembershipPlans   = lazy(() => import("@/pages/membership-plans"));
 const SettingsPage      = lazy(() => import("@/pages/settings"));
 const AcceptInvitation  = lazy(() => import("@/pages/accept-invitation"));
+const PlatformAdmin     = lazy(() => import("@/pages/platform-admin"));
 
 // ─── Skeleton fallback while a chunk loads ────────────────────────────────────
 function PageSkeleton() {
@@ -107,8 +108,14 @@ function RootRoute() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!isLoading && user) setLocation("/dashboard");
+    const hostname = window.location.hostname.toLowerCase();
+    const isPlatformAdminHost = hostname === "superadmin.xpressclean.cm" || hostname.startsWith("superadmin.");
+    if (!isPlatformAdminHost && !isLoading && user) setLocation("/dashboard");
   }, [isLoading, user, setLocation]);
+
+  const hostname = window.location.hostname.toLowerCase();
+  const isPlatformAdminHost = hostname === "superadmin.xpressclean.cm" || hostname.startsWith("superadmin.");
+  if (isPlatformAdminHost) return <PlatformAdmin />;
 
   if (isLoading) {
     return (
@@ -172,6 +179,8 @@ function Router() {
         <Route path="/reset-password" component={ResetPasswordPage} />
         <Route path="/reset-password/:token" component={ResetPasswordPage} />
         <Route path="/join/:token" component={AcceptInvitation} />
+        <Route path="/platform-admin" component={PlatformAdmin} />
+        <Route path="/superadmin" component={PlatformAdmin} />
 
         <Route path="/">
           <RootRoute />
