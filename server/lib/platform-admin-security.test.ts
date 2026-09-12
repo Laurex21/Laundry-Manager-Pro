@@ -27,12 +27,15 @@ assert.match(app, /\/platform-admin/);
 const replit = readFileSync(new URL("../../.replit", import.meta.url), "utf8");
 const serverIndex = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../../migrations/20260912_platform_admin_mfa.sql", import.meta.url), "utf8");
+const reviewedMigrations = readFileSync(new URL("../../scripts/run-reviewed-migrations.ts", import.meta.url), "utf8");
 const client = readFileSync(new URL("../../client/src/pages/platform-admin.tsx", import.meta.url), "utf8");
 
 assert.doesNotMatch(replit, /PLATFORM_ADMIN_EMAILS/);
 assert.doesNotMatch(serverIndex, /ensurePlatformAdminSchema/);
 assert.match(migration, /mfa_secret_ciphertext/);
 assert.match(migration, /platform_admin_audit_events/);
+assert.match(reviewedMigrations, /20260912_platform_admin_mfa\.sql/);
+assert.match(reviewedMigrations, /pool\.query\(sql\)/);
 assert.match(client, /Authenticator setup QR code/);
 assert.match(client, /\/api\/platform-admin\/login/);
 
