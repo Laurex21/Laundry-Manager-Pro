@@ -6,6 +6,7 @@ import { createServer } from "http";
 import crypto from "crypto";
 import { securityHeaders } from "./lib/http-security";
 import { repairKnownAccountOrganisationLinks } from "./replit_integrations/auth/replitAuth";
+import { syncConfiguredPlatformAdmins } from "./lib/platform-admin-bootstrap";
 
 const app = express();
 const httpServer = createServer(app);
@@ -81,6 +82,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await repairKnownAccountOrganisationLinks();
+  await syncConfiguredPlatformAdmins();
   await registerRoutes(httpServer, app);
   runDailyJobsWithLock().catch((error) => console.error("[Daily Job] Execution failed", error));
   const subscriptionNotificationTimer = setInterval(() => {

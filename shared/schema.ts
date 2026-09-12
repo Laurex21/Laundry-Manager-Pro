@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, bigserial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check, bigint } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -355,7 +355,27 @@ export const platformAdmins = pgTable("platform_admins", {
   isActive: boolean("is_active").notNull().default(true),
   grantedAt: timestamp("granted_at").notNull().defaultNow(),
   revokedAt: timestamp("revoked_at"),
+  mfaSecretCiphertext: text("mfa_secret_ciphertext"),
+  mfaSecretIv: varchar("mfa_secret_iv", { length: 32 }),
+  mfaSecretTag: varchar("mfa_secret_tag", { length: 32 }),
+  mfaEnabledAt: timestamp("mfa_enabled_at", { withTimezone: true }),
+  lastTotpStep: bigint("last_totp_step", { mode: "number" }),
 });
+
+export const platformAdminAuditEvents = pgTable("platform_admin_audit_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 100 }).notNull(),
+  outcome: varchar("outcome", { length: 30 }).notNull(),
+  requestId: varchar("request_id", { length: 120 }),
+  ipHash: varchar("ip_hash", { length: 64 }).notNull(),
+  userAgent: varchar("user_agent", { length: 500 }),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_platform_admin_audit_user_created").on(table.userId, table.createdAt),
+  index("idx_platform_admin_audit_action_created").on(table.action, table.createdAt),
+]);
 
 export const sites = pgTable("sites", {
   id: serial("id").primaryKey(),
