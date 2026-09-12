@@ -5,7 +5,7 @@ import { usePaymentsByOrder, useCreatePayment } from "@/hooks/use-payments";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-methods";
-import { generatePaymentReceipt, generateThermalPaymentReceipt } from "@/lib/receipt";
+import { generatePaymentReceipt, generateThermalPaymentReceipt, reserveReceiptPrintWindow } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { paymentDateWithRegistrationTime } from "@/lib/payment-date";
@@ -240,6 +240,11 @@ export default function Payments() {
 
   async function handleReceipt(action: "download" | "thermal") {
     if (!successPayment) return;
+    const receiptWindow = action === "thermal" ? reserveReceiptPrintWindow() : null;
+    if (action === "thermal" && !receiptWindow) {
+      alert("Please allow pop-ups for XpressPro to print the thermal receipt.");
+      return;
+    }
     setReceiptLoading(true);
     try {
       let orderDetails: any = null;
@@ -294,7 +299,8 @@ export default function Payments() {
           discount,
           symbol,
           mergedSettings,
-          pickupCost
+          pickupCost,
+          receiptWindow
         );
       } else {
         await generatePaymentReceipt(
@@ -313,6 +319,9 @@ export default function Payments() {
           "download"
         );
       }
+    } catch (error) {
+      receiptWindow?.close();
+      throw error;
     } finally {
       setReceiptLoading(false);
     }

@@ -485,13 +485,29 @@ function buildThermalReceiptHtml(args: {
 </html>`;
 }
 
-function openThermalReceiptPrintWindow(html: string): void {
+export type ReceiptPrintWindow = Window;
+
+export function reserveReceiptPrintWindow(): ReceiptPrintWindow | null {
   const win = window.open("", "_blank", "width=420,height=760");
-  if (!win) return;
+  if (!win) return null;
+  win.document.open();
+  win.document.write('<!doctype html><title>Preparing receipt...</title><p style="font-family:Arial,sans-serif;padding:24px">Preparing receipt...</p>');
+  win.document.close();
+  return win;
+}
+
+export function renderReceiptInPrintWindow(win: ReceiptPrintWindow, html: string): void {
   win.document.open();
   win.document.write(html);
   win.document.close();
   win.focus();
+}
+
+function openThermalReceiptPrintWindow(html: string, reservedWindow?: ReceiptPrintWindow | null): boolean {
+  const win = reservedWindow || reserveReceiptPrintWindow();
+  if (!win) return false;
+  renderReceiptInPrintWindow(win, html);
+  return true;
 }
 
 function openReceiptPrintWindow(html: string): void {
@@ -706,7 +722,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
 }
 
-export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
+export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, reservedWindow?: ReceiptPrintWindow | null) {
   const lang = settings.receiptLanguage || "en";
   const displayOrderId = orderDisplayId(order);
   const customer = order.customer || {};
@@ -748,7 +764,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
     agentName: agentFirstName(order.createdByEmployee),
     agentLabel: label("Agent", "Agent", lang),
   });
-  openThermalReceiptPrintWindow(html);
+  return openThermalReceiptPrintWindow(html, reservedWindow);
 }
 
 export function printDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS) {
@@ -766,7 +782,8 @@ export function generateThermalPaymentReceipt(
   discount: number,
   symbol: string,
   settings: ReceiptSettings = DEFAULT_SETTINGS,
-  pickupCost: number = 0
+  pickupCost: number = 0,
+  reservedWindow?: ReceiptPrintWindow | null
 ) {
   const lang = settings.receiptLanguage || "en";
   const subtotal = orderSubtotal(items);
@@ -808,7 +825,7 @@ export function generateThermalPaymentReceipt(
     agentName: agentFirstName(payment.agentName),
     agentLabel: label("Agent", "Agent", lang),
   });
-  openThermalReceiptPrintWindow(html);
+  return openThermalReceiptPrintWindow(html, reservedWindow);
 }
 
 export function generatePaymentReceipt(

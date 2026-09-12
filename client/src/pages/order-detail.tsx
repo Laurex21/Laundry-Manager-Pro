@@ -27,7 +27,7 @@ import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { queryClient } from "@/lib/queryClient";
-import { downloadReceiptHtml, generateDepositReceipt, generateThermalDepositReceipt } from "@/lib/receipt";
+import { downloadReceiptHtml, generateDepositReceipt, generateThermalDepositReceipt, renderReceiptInPrintWindow, reserveReceiptPrintWindow } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
@@ -224,18 +224,27 @@ export default function OrderDetail() {
   }
 
   async function handlePrintThermalReceipt() {
-    const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=thermal80`, { credentials: "include" });
-    if (subscriberReceipt.ok) {
-      const html = await subscriberReceipt.text(); const receiptWindow = window.open("", "_blank");
-      if (receiptWindow) { receiptWindow.document.write(html); receiptWindow.document.close(); receiptWindow.print(); }
+    const receiptWindow = reserveReceiptPrintWindow();
+    if (!receiptWindow) {
+      toast({ title: t("error"), description: "Please allow pop-ups for XpressPro to print the thermal receipt.", variant: "destructive" });
       return;
     }
-    const mergedSettings = {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
-    generateThermalDepositReceipt(order, symbol, mergedSettings);
+    try {
+      const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=thermal80`, { credentials: "include" });
+      if (subscriberReceipt.ok) {
+        renderReceiptInPrintWindow(receiptWindow, await subscriberReceipt.text());
+        return;
+      }
+      const mergedSettings = {
+        ...DEFAULT_SETTINGS,
+        ...(settings || {}),
+        receiptLanguage: settings?.receiptLanguage || i18n.language,
+      };
+      generateThermalDepositReceipt(order, symbol, mergedSettings, receiptWindow);
+    } catch {
+      receiptWindow.close();
+      toast({ title: t("error"), description: "Could not prepare the thermal receipt.", variant: "destructive" });
+    }
   }
 
   function buildCustomerWhatsAppMessage(): string {
