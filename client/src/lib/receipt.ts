@@ -430,7 +430,7 @@ function buildThermalReceiptHtml(args: {
   </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">${escapeHtml(label("Print", "Imprimer", args.lang))}</button></div>
+  <div class="toolbar"><button type="button" id="receipt-print-button">${escapeHtml(label("Print", "Imprimer", args.lang))}</button></div>
   <main class="ticket">
     <section class="center">
       ${logoHtml}
@@ -501,6 +501,15 @@ export function renderReceiptInPrintWindow(win: ReceiptPrintWindow, html: string
   win.document.write(html);
   win.document.close();
   win.focus();
+  const attachPrintHandler = () => {
+    const printButton = win.document.getElementById("receipt-print-button");
+    if (printButton) printButton.addEventListener("click", () => win.print());
+  };
+  if (win.document.readyState === "loading") {
+    win.addEventListener("DOMContentLoaded", attachPrintHandler, { once: true });
+  } else {
+    attachPrintHandler();
+  }
 }
 
 function openThermalReceiptPrintWindow(html: string, reservedWindow?: ReceiptPrintWindow | null): boolean {
