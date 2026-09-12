@@ -326,7 +326,12 @@ export default function Orders() {
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const correctionOrderId = Number(new URLSearchParams(window.location.search).get("correct"));
-  const { data: correctionOrder } = useQuery<any>({
+  const {
+    data: correctionOrder,
+    error: correctionOrderError,
+    isLoading: correctionOrderIsLoading,
+    refetch: refetchCorrectionOrder,
+  } = useQuery<any>({
     queryKey: ["/api/orders/:id", correctionOrderId],
     queryFn: async () => {
       const response = await fetch(`/api/orders/${correctionOrderId}`, { credentials: "include" });
@@ -337,8 +342,8 @@ export default function Orders() {
   });
 
   useEffect(() => {
-    if (correctionOrder) setOpen(true);
-  }, [correctionOrder]);
+    if (Number.isInteger(correctionOrderId) && correctionOrderId > 0) setOpen(true);
+  }, [correctionOrderId]);
 
   const createdOrderWhatsAppPhone = normalizeWhatsAppPhone(createdOrder?.customer?.phone);
 
@@ -439,10 +444,30 @@ export default function Orders() {
             <DialogHeader className="sticky top-0 z-20 -mx-2 bg-background/95 px-2 pb-3 backdrop-blur-sm lg:pb-1">
               <DialogTitle>{correctionOrder ? `${t("correct_order")} #${orderDisplayId(correctionOrder)}` : t("create_new_order")}</DialogTitle>
             </DialogHeader>
-            <OrderForm correctionOrder={correctionOrder} onSuccess={(orderDetails) => {
-              setCreatedOrder(orderDetails);
-              setOpen(false);
-            }} />
+            {correctionOrderId > 0 && correctionOrderIsLoading ? (
+              <div className="grid min-h-[280px] place-items-center" role="status" data-testid="order-correction-form-loading">
+                <div className="text-center text-muted-foreground">
+                  <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" aria-hidden="true" />
+                  <p>{t("checking_order_correction")}</p>
+                </div>
+              </div>
+            ) : correctionOrderId > 0 && correctionOrderError ? (
+              <div className="grid min-h-[280px] place-items-center" role="alert" data-testid="order-correction-form-error">
+                <div className="max-w-md space-y-4 text-center">
+                  <AlertTriangle className="mx-auto h-8 w-8 text-destructive" aria-hidden="true" />
+                  <p className="font-semibold">{t("order_correction_load_failed")}</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button type="button" variant="outline" onClick={() => refetchCorrectionOrder()}>{t("retry")}</Button>
+                    <Button type="button" asChild><Link href={`/orders/${correctionOrderId}`}>{t("return_to_order")}</Link></Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <OrderForm correctionOrder={correctionOrder} onSuccess={(orderDetails) => {
+                setCreatedOrder(orderDetails);
+                setOpen(false);
+              }} />
+            )}
           </DialogContent>
         </Dialog>
       </div>
