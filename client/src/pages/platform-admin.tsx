@@ -1,5 +1,5 @@
-import { FormEvent, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Activity,
   Building2,
@@ -13,6 +13,7 @@ import {
   Store,
   Users,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,15 @@ type AuditEvent = {
   createdAt: string;
 };
 
+type AdminStatus = {
+  isPlatformAdmin: boolean;
+  mfaEnrolled: boolean;
+  mfaVerified: boolean;
+  pendingAuthentication: boolean;
+};
+
+type AdminAuthStep = "credentials" | "enroll" | "verify";
+
 async function apiJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { credentials: "include" });
   if (!response.ok) {
@@ -84,14 +94,34 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function AdminLogin() {
-  const queryClient = useQueryClient();
+function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthStep }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<AdminAuthStep>(initialStep);
+  const [setup, setSetup] = useState<{ secret: string; otpauthUri: string; qrCode: string } | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (step !== "enroll" || setup) return;
+    fetch("/api/platform-admin/mfa/setup", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || "MFA setup failed");
+        return payload as { secret: string; otpauthUri: string };
+      })
+      .then(async (payload) => setSetup({ ...payload, qrCode: await QRCode.toDataURL(payload.otpauthUri, { width: 220, margin: 1 }) }))
+      .catch((error) => setSetupError(error instanceof Error ? error.message : "MFA setup failed"));
+  }, [setup, step]);
 
   const login = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/platform-admin/login", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -101,14 +131,32 @@ function AdminLogin() {
       if (!response.ok) throw new Error(payload?.message || "Sign in failed");
       return payload;
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/auth/user"], user);
+    onSuccess: (payload) => {
+      setPassword("");
+      setStep(payload.enrollmentRequired ? "enroll" : "verify");
     },
+  });
+
+  const verify = useMutation({
+    mutationFn: async () => {
+      const endpoint = step === "enroll" ? "/api/platform-admin/mfa/confirm" : "/api/platform-admin/mfa/verify";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "Verification failed");
+      return payload;
+    },
+    onSuccess: () => window.location.reload(),
   });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    login.mutate();
+    if (step === "credentials") login.mutate();
+    else verify.mutate();
   }
 
   return (
@@ -150,10 +198,19 @@ function AdminLogin() {
             <Badge className="bg-cyan-400/10 text-cyan-300 border-cyan-400/20 hover:bg-cyan-400/10">
               superadmin.xpressclean.cm
             </Badge>
-            <h2 className="font-display text-3xl font-bold mt-5">Administrator sign in</h2>
-            <p className="text-slate-400 mt-2">Use an account authorised for platform administration.</p>
+            <h2 className="font-display text-3xl font-bold mt-5">
+              {step === "credentials" ? "Administrator sign in" : step === "enroll" ? "Secure your account" : "Verification code"}
+            </h2>
+            <p className="text-slate-400 mt-2">
+              {step === "credentials"
+                ? "Use an account authorised for platform administration."
+                : step === "enroll"
+                  ? "Scan this code with an authenticator app, then enter the current six-digit code."
+                  : "Enter the six-digit code from your authenticator app."}
+            </p>
           </div>
           <form onSubmit={submit} className="space-y-5">
+            {step === "credentials" ? <>
             <div>
               <label htmlFor="admin-email" className="text-sm font-medium text-slate-300">Email address</label>
               <Input
@@ -179,47 +236,46 @@ function AdminLogin() {
                 className="mt-2 h-12 bg-white/5 border-white/10 text-white focus-visible:ring-cyan-400"
               />
             </div>
-            {login.error && (
+            </> : <>
+              {step === "enroll" && setup && (
+                <div className="rounded-xl border border-white/10 bg-white p-4 text-center">
+                  <img src={setup.qrCode} alt="Authenticator setup QR code" className="mx-auto h-[220px] w-[220px]" />
+                  <p className="mt-3 break-all font-mono text-xs text-slate-700">{setup.secret}</p>
+                </div>
+              )}
+              {step === "enroll" && !setup && !setupError && <div className="grid place-items-center py-8"><Loader2 className="h-6 w-6 animate-spin text-cyan-300" /></div>}
+              <div>
+                <label htmlFor="admin-code" className="text-sm font-medium text-slate-300">Six-digit code</label>
+                <Input
+                  id="admin-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  required
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="mt-2 h-12 bg-white/5 border-white/10 text-center text-xl tracking-[0.35em] text-white focus-visible:ring-cyan-400"
+                  placeholder="000000"
+                />
+              </div>
+            </>}
+            {(setupError || login.error || verify.error) && (
               <p className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200" role="alert">
-                {login.error.message}
+                {setupError || (login.error || verify.error)?.message}
               </p>
             )}
             <Button
               type="submit"
-              disabled={login.isPending}
+              disabled={login.isPending || verify.isPending || (step === "enroll" && !setup)}
               className="w-full h-12 bg-cyan-400 text-slate-950 hover:bg-cyan-300 font-semibold"
             >
-              {login.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LockKeyhole className="mr-2 h-4 w-4" />}
-              Sign in securely
+              {(login.isPending || verify.isPending) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LockKeyhole className="mr-2 h-4 w-4" />}
+              {step === "credentials" ? "Continue securely" : step === "enroll" ? "Enable MFA" : "Verify and open portal"}
             </Button>
           </form>
         </div>
       </section>
-    </main>
-  );
-}
-
-function AccessDenied({ logout }: { logout: () => void }) {
-  return (
-    <main className="min-h-screen bg-slate-950 text-white grid place-items-center p-6">
-      <Card className="w-full max-w-lg border-white/10 bg-slate-900 text-white">
-        <CardHeader>
-          <div className="h-12 w-12 rounded-xl bg-amber-400/10 text-amber-300 grid place-items-center mb-3">
-            <LockKeyhole className="h-6 w-6" />
-          </div>
-          <CardTitle className="text-2xl">Platform access not authorised</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5 text-slate-300">
-          <p>This account is valid, but it has not been granted platform-administrator access.</p>
-          <p className="text-sm text-slate-400">
-            Add its email to the controlled PLATFORM_ADMIN_EMAILS environment setting and restart the application.
-          </p>
-          <Button onClick={logout} variant="secondary">
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
-          </Button>
-        </CardContent>
-      </Card>
     </main>
   );
 }
@@ -243,7 +299,7 @@ function MetricCard({ label, value, icon: Icon }: { label: string; value: string
 }
 
 function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -259,12 +315,6 @@ function AdminDashboard() {
     queryKey: ["/api/platform-admin/audit-events"],
     queryFn: () => apiJson("/api/platform-admin/audit-events?limit=8"),
   });
-
-  const initials = useMemo(() => {
-    const first = user?.firstName?.[0] || "";
-    const last = user?.lastName?.[0] || "";
-    return (first + last || user?.email?.[0] || "A").toUpperCase();
-  }, [user]);
 
   const metrics = overview.data;
   const loading = overview.isLoading || subscribers.isLoading;
@@ -283,12 +333,8 @@ function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-right">
-              <p className="text-sm font-semibold">{user?.firstName} {user?.lastName}</p>
-              <p className="text-xs text-slate-500">{user?.email}</p>
-            </div>
             <Avatar className="h-9 w-9 border border-slate-200">
-              <AvatarFallback className="bg-slate-100 text-xs font-bold">{initials}</AvatarFallback>
+              <AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback>
             </Avatar>
             <Button variant="ghost" size="icon" onClick={() => logout()} aria-label="Sign out">
               <LogOut className="h-4 w-4" />
@@ -435,12 +481,20 @@ function AdminDashboard() {
 }
 
 export default function PlatformAdminPage() {
-  const { user, isLoading, isPlatformAdmin, logout } = useAuth();
+  const { logout } = useAuth();
+  const status = useQuery<AdminStatus>({
+    queryKey: ["/api/platform-admin/status"],
+    queryFn: () => apiJson("/api/platform-admin/status"),
+    retry: false,
+    staleTime: 0,
+  });
 
-  if (isLoading) {
+  if (status.isLoading) {
     return <div className="min-h-screen bg-slate-950 text-cyan-300 grid place-items-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
-  if (!user) return <AdminLogin />;
-  if (!isPlatformAdmin) return <AccessDenied logout={() => logout()} />;
+  if (!status.data?.isPlatformAdmin) return <AdminLogin />;
+  if (!status.data.mfaVerified) {
+    return <AdminLogin initialStep={status.data.pendingAuthentication ? (status.data.mfaEnrolled ? "verify" : "enroll") : "credentials"} />;
+  }
   return <AdminDashboard />;
 }

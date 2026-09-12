@@ -1,38 +1,138 @@
 import type { Express, RequestHandler } from "express";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { pool } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
+import { authStorage } from "../replit_integrations/auth/storage";
+import { rateLimit } from "./rate-limit";
+import {
+  buildTotpUri,
+  decryptTotpSecret,
+  encryptTotpSecret,
+  generateTotpSecret,
+  verifyTotp,
+} from "./totp";
 
-export async function ensurePlatformAdminSchema(): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS platform_admins (
-      user_id varchar PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      granted_by varchar REFERENCES users(id) ON DELETE SET NULL,
-      is_active boolean NOT NULL DEFAULT true,
-      granted_at timestamptz NOT NULL DEFAULT now(),
-      revoked_at timestamptz
-    )
-  `);
+const ADMIN_PENDING_TTL_MS = 10 * 60 * 1000;
+const ADMIN_SESSION_TTL_MS = 30 * 60 * 1000;
 
-  const configuredEmails = String(process.env.PLATFORM_ADMIN_EMAILS || "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
+type PlatformAdminRecord = {
+  user_id: string;
+  mfa_secret_ciphertext: string | null;
+  mfa_secret_iv: string | null;
+  mfa_secret_tag: string | null;
+  mfa_enabled_at: Date | null;
+  last_totp_step: string | number | null;
+};
 
-  if (configuredEmails.length > 0) {
-    await pool.query(
-      `
-        INSERT INTO platform_admins (user_id, granted_by, is_active, revoked_at)
-        SELECT id, id, true, NULL
-        FROM users
-        WHERE lower(trim(email)) = ANY($1::text[])
-        ON CONFLICT (user_id) DO UPDATE SET
-          is_active = true,
-          revoked_at = NULL
-      `,
-      [configuredEmails],
-    );
-  }
+const platformAdminLoginLimiter = rateLimit({
+  name: "platform-admin-login",
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  key: (req) => String(req.body?.email || "").trim().toLowerCase(),
+});
+
+const platformAdminMfaLimiter = rateLimit({
+  name: "platform-admin-mfa",
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  key: (req) => String(req.session?.userId || "anonymous"),
+  keyOnly: true,
+});
+
+async function getPlatformAdmin(userId: string | null | undefined): Promise<PlatformAdminRecord | null> {
+  if (!userId) return null;
+  const result = await pool.query<PlatformAdminRecord>(
+    `SELECT user_id, mfa_secret_ciphertext, mfa_secret_iv, mfa_secret_tag, mfa_enabled_at, last_totp_step
+     FROM platform_admins
+     WHERE user_id = $1 AND is_active = true AND revoked_at IS NULL
+     LIMIT 1`,
+    [userId],
+  );
+  return result.rows[0] ?? null;
 }
+
+function requestIp(req: any): string {
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+async function recordPlatformAdminEvent(
+  req: any,
+  action: string,
+  outcome: "success" | "denied" | "failure",
+  userId: string | null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  const ipHash = crypto.createHash("sha256").update(requestIp(req)).digest("hex");
+  await pool.query(
+    `INSERT INTO platform_admin_audit_events
+       (user_id, action, outcome, request_id, ip_hash, user_agent, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+    [
+      userId,
+      action,
+      outcome,
+      req.requestId || null,
+      ipHash,
+      String(req.get?.("user-agent") || "").slice(0, 500) || null,
+      JSON.stringify(metadata),
+    ],
+  );
+}
+
+async function recordPlatformAdminEventBestEffort(
+  req: any,
+  action: string,
+  outcome: "success" | "denied" | "failure",
+  userId: string | null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  await recordPlatformAdminEvent(req, action, outcome, userId, metadata).catch((error) => {
+    console.error("Platform administrator audit recording failed:", error);
+  });
+}
+
+function regenerateSession(req: any): Promise<void> {
+  return new Promise((resolve, reject) => req.session.regenerate((error: unknown) => error ? reject(error) : resolve()));
+}
+
+function saveSession(req: any): Promise<void> {
+  return new Promise((resolve, reject) => req.session.save((error: unknown) => error ? reject(error) : resolve()));
+}
+
+function pendingAdminSession(req: any, userId: string): void {
+  req.session.userId = userId;
+  req.session.platformAdminPendingAt = Date.now();
+  req.session.platformAdminVerifiedAt = undefined;
+  req.session.platformAdminSetupSecret = undefined;
+  req.session.cookie.maxAge = ADMIN_PENDING_TTL_MS;
+}
+
+function verifiedAdminSession(req: any, userId: string): void {
+  req.session.userId = userId;
+  req.session.platformAdminPendingAt = undefined;
+  req.session.platformAdminVerifiedAt = Date.now();
+  req.session.platformAdminSetupSecret = undefined;
+  req.session.cookie.maxAge = ADMIN_SESSION_TTL_MS;
+}
+
+function isFreshTimestamp(value: unknown, ttlMs: number): boolean {
+  return typeof value === "number" && value <= Date.now() && Date.now() - value <= ttlMs;
+}
+
+const requirePendingPlatformAdmin: RequestHandler = async (req: any, res, next) => {
+  try {
+    const admin = await getPlatformAdmin(req.session?.userId);
+    if (!admin || !isFreshTimestamp(req.session?.platformAdminPendingAt, ADMIN_PENDING_TTL_MS)) {
+      return res.status(401).json({ message: "Administrator reauthentication required" });
+    }
+    req.platformAdmin = admin;
+    next();
+  } catch (error) {
+    console.error("Pending platform administrator authorization failed:", error);
+    res.status(500).json({ message: "Unable to verify administrator access" });
+  }
+};
 
 export async function isActivePlatformAdmin(userId: string | null | undefined): Promise<boolean> {
   if (!userId) return false;
@@ -45,9 +145,12 @@ export async function isActivePlatformAdmin(userId: string | null | undefined): 
 
 export const requirePlatformAdmin: RequestHandler = async (req: any, res, next) => {
   try {
-    const allowed = await isActivePlatformAdmin(req.session?.userId);
-    if (!allowed) {
+    const admin = await getPlatformAdmin(req.session?.userId);
+    if (!admin) {
       return res.status(403).json({ message: "Platform administrator access required" });
+    }
+    if (!admin.mfa_enabled_at || !isFreshTimestamp(req.session?.platformAdminVerifiedAt, ADMIN_SESSION_TTL_MS)) {
+      return res.status(401).json({ message: "Multi-factor authentication required", code: "PLATFORM_ADMIN_MFA_REQUIRED" });
     }
     req.isPlatformAdmin = true;
     next();
@@ -64,8 +167,129 @@ function safeLimit(value: unknown, fallback = 100, maximum = 200): number {
 }
 
 export function registerPlatformAdminRoutes(app: Express): void {
-  app.get("/api/platform-admin/status", isAuthenticated, async (req: any, res) => {
-    res.json({ isPlatformAdmin: await isActivePlatformAdmin(req.session?.userId) });
+  app.post("/api/platform-admin/login", platformAdminLoginLimiter, async (req: any, res) => {
+    const identifier = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    if (!identifier || !password) return res.status(400).json({ message: "Email and password are required" });
+    let userId: string | null = null;
+    try {
+      const user = await authStorage.getUserByEmail(identifier);
+      userId = user?.id ?? null;
+      const validPassword = !!(user?.passwordHash && await bcrypt.compare(password, user.passwordHash));
+      const admin = validPassword ? await getPlatformAdmin(user?.id) : null;
+      if (!user || !validPassword || !admin) {
+        await recordPlatformAdminEventBestEffort(req, "platform_admin.login", "denied", userId);
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      await regenerateSession(req);
+      pendingAdminSession(req, user.id);
+      await saveSession(req);
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.login", "success", user.id, { mfaEnrolled: !!admin.mfa_enabled_at });
+      res.json({ mfaRequired: true, enrollmentRequired: !admin.mfa_enabled_at });
+    } catch (error) {
+      console.error("Platform administrator login failed:", error);
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.login", "failure", userId);
+      res.status(500).json({ message: "Administrator sign in failed" });
+    }
+  });
+
+  app.post("/api/platform-admin/mfa/setup", platformAdminMfaLimiter, requirePendingPlatformAdmin, async (req: any, res) => {
+    try {
+      const admin = req.platformAdmin as PlatformAdminRecord;
+      if (admin.mfa_enabled_at) return res.status(409).json({ message: "Multi-factor authentication is already enabled" });
+      const user = await authStorage.getUser(admin.user_id);
+      if (!user?.email) return res.status(400).json({ message: "Administrator email is required" });
+      const secret = String(req.session.platformAdminSetupSecret || generateTotpSecret());
+      req.session.platformAdminSetupSecret = secret;
+      await saveSession(req);
+      res.json({ secret, otpauthUri: buildTotpUri(secret, user.email) });
+    } catch (error) {
+      console.error("Platform administrator MFA setup failed:", error);
+      res.status(500).json({ message: "Unable to prepare multi-factor authentication" });
+    }
+  });
+
+  app.post("/api/platform-admin/mfa/confirm", platformAdminMfaLimiter, requirePendingPlatformAdmin, async (req: any, res) => {
+    const code = String(req.body?.code || "");
+    const secret = String(req.session?.platformAdminSetupSecret || "");
+    const userId = req.session?.userId as string;
+    const step = secret ? verifyTotp(secret, code) : null;
+    if (step === null) {
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.mfa_enrollment", "denied", userId);
+      return res.status(401).json({ message: "Invalid verification code" });
+    }
+    try {
+      const encrypted = encryptTotpSecret(secret);
+      const updated = await pool.query(
+        `UPDATE platform_admins
+         SET mfa_secret_ciphertext = $2, mfa_secret_iv = $3, mfa_secret_tag = $4,
+             mfa_enabled_at = now(), last_totp_step = $5
+         WHERE user_id = $1 AND is_active = true AND revoked_at IS NULL AND mfa_enabled_at IS NULL`,
+        [userId, encrypted.ciphertext, encrypted.iv, encrypted.tag, step],
+      );
+      if (updated.rowCount !== 1) {
+        return res.status(409).json({ message: "Multi-factor authentication enrollment is no longer available" });
+      }
+      verifiedAdminSession(req, userId);
+      await saveSession(req);
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.mfa_enrollment", "success", userId);
+      res.json({ verified: true, expiresInSeconds: ADMIN_SESSION_TTL_MS / 1000 });
+    } catch (error) {
+      console.error("Platform administrator MFA enrollment failed:", error);
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.mfa_enrollment", "failure", userId);
+      res.status(500).json({ message: "Unable to enable multi-factor authentication" });
+    }
+  });
+
+  app.post("/api/platform-admin/mfa/verify", platformAdminMfaLimiter, requirePendingPlatformAdmin, async (req: any, res) => {
+    const admin = req.platformAdmin as PlatformAdminRecord;
+    const code = String(req.body?.code || "");
+    try {
+      if (!admin.mfa_enabled_at || !admin.mfa_secret_ciphertext || !admin.mfa_secret_iv || !admin.mfa_secret_tag) {
+        return res.status(409).json({ message: "Multi-factor authentication enrollment required" });
+      }
+      const secret = decryptTotpSecret({
+        ciphertext: admin.mfa_secret_ciphertext,
+        iv: admin.mfa_secret_iv,
+        tag: admin.mfa_secret_tag,
+      });
+      const step = verifyTotp(secret, code);
+      const lastStep = admin.last_totp_step === null ? null : Number(admin.last_totp_step);
+      if (step === null || (lastStep !== null && step <= lastStep)) {
+        await recordPlatformAdminEventBestEffort(req, "platform_admin.mfa_verification", "denied", admin.user_id);
+        return res.status(401).json({ message: "Invalid or already used verification code" });
+      }
+      const updated = await pool.query(
+        `UPDATE platform_admins SET last_totp_step = $2
+         WHERE user_id = $1 AND is_active = true AND revoked_at IS NULL
+           AND (last_totp_step IS NULL OR last_totp_step < $2)`,
+        [admin.user_id, step],
+      );
+      if (updated.rowCount !== 1) return res.status(401).json({ message: "Verification code already used" });
+      verifiedAdminSession(req, admin.user_id);
+      await saveSession(req);
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.mfa_verification", "success", admin.user_id);
+      res.json({ verified: true, expiresInSeconds: ADMIN_SESSION_TTL_MS / 1000 });
+    } catch (error) {
+      console.error("Platform administrator MFA verification failed:", error);
+      await recordPlatformAdminEventBestEffort(req, "platform_admin.mfa_verification", "failure", admin.user_id);
+      res.status(500).json({ message: "Unable to verify multi-factor authentication" });
+    }
+  });
+
+  app.get("/api/platform-admin/status", async (req: any, res) => {
+    try {
+      const admin = await getPlatformAdmin(req.session?.userId);
+      res.json({
+        isPlatformAdmin: !!admin,
+        mfaEnrolled: !!admin?.mfa_enabled_at,
+        mfaVerified: !!admin?.mfa_enabled_at && isFreshTimestamp(req.session?.platformAdminVerifiedAt, ADMIN_SESSION_TTL_MS),
+        pendingAuthentication: !!admin && isFreshTimestamp(req.session?.platformAdminPendingAt, ADMIN_PENDING_TTL_MS),
+      });
+    } catch (error) {
+      console.error("Platform administrator status failed:", error);
+      res.status(500).json({ message: "Unable to verify administrator status" });
+    }
   });
 
   app.get("/api/platform-admin/overview", isAuthenticated, requirePlatformAdmin, async (_req, res) => {

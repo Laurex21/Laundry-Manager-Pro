@@ -339,6 +339,9 @@ export function registerAuthRoutes(app: Express): void {
         role: "owner",
       });
 
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate((err) => (err ? reject(err) : resolve()))
+      );
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
@@ -396,6 +399,9 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(403).json({ message: "Staff accounts must use the staff login page" });
       }
 
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate((err) => (err ? reject(err) : resolve()))
+      );
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
@@ -436,6 +442,9 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(403).json({ message: "Owner accounts must use the owner login page" });
       }
 
+      await new Promise<void>((resolve, reject) =>
+        req.session.regenerate((err) => (err ? reject(err) : resolve()))
+      );
       (req.session as any).userId = user.id;
       const response = await buildUserResponse(user.id);
       (req.session as any).currentSiteId = (response as any)?.currentSiteId ?? null;
