@@ -339,11 +339,11 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const NavContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-border/60">
+      <div className="px-5 py-5 border-b border-white/10">
         <div className="flex items-center gap-3" data-testid="xpresspro-brand">
-          <img src="/xpresspro-mark.svg" alt="" className="h-10 w-10 shrink-0" aria-hidden="true" />
-          <h1 className="font-display text-[20px] font-bold leading-none tracking-[-0.035em] text-[#082D5B] dark:text-white">
-            Xpress<span className="text-[#6B5CFF]">Pro</span>
+          <img src="/xpresspro-mark-white.svg" alt="" className="h-9 w-9 shrink-0" aria-hidden="true" />
+          <h1 className="font-display text-[20px] font-bold leading-none tracking-[-0.035em] text-white">
+            Xpress<span className="text-[#8B82FF]">Pro</span>
           </h1>
         </div>
       </div>
@@ -363,8 +363,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer group",
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-sidebar-primary text-white shadow-sm shadow-black/10"
+                    : "text-white/68 hover:bg-white/8 hover:text-white"
                 )}
                 onClick={() => setMobileOpen(false)}
                 data-testid={`nav-${item.page}`}
@@ -372,11 +372,11 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 <item.icon
                   className={cn(
                     "w-4 h-4 shrink-0",
-                    isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"
+                    isActive ? "text-white" : "text-white/55 group-hover:text-white"
                   )}
                 />
                 <span className="flex-1">{t(item.labelKey)}</span>
-                {isActive && <ChevronRight className="w-3.5 h-3.5 text-primary-foreground/60 shrink-0" />}
+                {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/65 shrink-0" />}
               </div>
             </Link>
           );
@@ -435,13 +435,13 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-muted/30 flex overflow-x-hidden w-full">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:block w-60 bg-card border-r border-border fixed inset-y-0 z-30">
+      <aside className="hidden lg:block w-60 bg-sidebar text-sidebar-foreground border-r border-sidebar-border fixed inset-y-0 z-30 shadow-[8px_0_30px_rgba(8,45,91,0.08)]">
         <NavContent />
       </aside>
 
       {/* Mobile sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="p-0 w-64">
+        <SheetContent side="left" className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border">
           <NavContent />
         </SheetContent>
       </Sheet>
@@ -449,7 +449,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       <main className="flex-1 lg:ml-60 min-h-screen flex flex-col min-w-0 overflow-x-hidden">
         {/* Top header */}
         <header
-          className="h-14 bg-card/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 sm:px-5 sticky top-0 z-20"
+          className="h-14 bg-card/95 backdrop-blur-sm border-b border-[#082D5B]/10 flex items-center justify-between px-4 sm:px-5 sticky top-0 z-20"
           data-testid="top-navbar"
         >
           <div className="flex items-center gap-3">

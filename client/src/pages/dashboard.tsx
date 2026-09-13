@@ -89,12 +89,12 @@ export default function Dashboard() {
   const ordersByStatus = dashData?.ordersByStatus;
 
   return (
-    <div className="space-y-4 page-fade-in">
+    <div className="space-y-5 page-fade-in">
 
       {/* Header */}
       <div className="flex items-center justify-between min-h-[2rem]">
         <div>
-          <h1 className="text-sm font-semibold text-foreground" data-testid="text-dashboard-title">
+          <h1 className="text-xl font-bold text-foreground" data-testid="text-dashboard-title">
             {t('dashboard')}
           </h1>
           <p className="text-[11px] text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
@@ -110,7 +110,7 @@ export default function Dashboard() {
       </div>
 
       {/* Operations command strip */}
-      <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-row sm:items-center sm:gap-px bg-muted/20 border border-border/50 rounded-lg p-1 w-full min-w-0">
+      <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-row sm:items-center sm:gap-px bg-card border border-[#082D5B]/10 rounded-xl p-1.5 shadow-[0_1px_2px_rgba(8,45,91,0.04)] w-full min-w-0">
         <Link href="/orders?status=ready" className="contents sm:inline-flex">
           <Button size="sm" className="h-7 text-xs px-3 rounded-md font-medium w-full sm:w-auto" data-testid="button-new-order">
             <Plus className="w-3.5 h-3.5 mr-1.5" />{t('new_order')}
@@ -495,8 +495,8 @@ function MetricCard({ label, value, icon: Icon, color, href, ...props }: any) {
   };
   const content = (
     <div className={cn(
-      "rounded-lg border border-border/50 bg-card p-3 min-w-0",
-      href && "group h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:border-border hover:shadow-sm"
+      "rounded-xl border border-[#082D5B]/10 bg-card p-3.5 min-w-0 shadow-[0_1px_2px_rgba(8,45,91,0.04)]",
+      href && "group h-full cursor-pointer transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(8,45,91,0.08)]"
     )} {...props}>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[11px] text-muted-foreground leading-tight truncate">{label}</p>
@@ -505,7 +505,7 @@ function MetricCard({ label, value, icon: Icon, color, href, ...props }: any) {
           {href && <ChevronRight className="h-3 w-3 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />}
         </div>
       </div>
-      <p className="text-lg font-semibold tabular-nums leading-none">{value}</p>
+      <p className="text-lg font-bold text-[#082D5B] dark:text-foreground tabular-nums leading-none">{value}</p>
     </div>
   );
   if (!href) return content;
