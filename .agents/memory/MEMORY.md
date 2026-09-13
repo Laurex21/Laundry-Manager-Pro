@@ -2,3 +2,4 @@
 - [Stain treatment DB rollback procedure](stain-treatment-rollback.md) — full list of dev DB objects to drop when reverting the stain treatment / order-money-foundation migrations.
 - [Cross-organisation auth boundaries](auth-organisation-boundaries.md) — owner access and site memberships must remain within the same organisation; never move business records to repair identity links.
 - [Platform administrator boundary](platform-admin-boundary.md) — platform-wide access is separate from tenant roles and bootstrapped only through owner-controlled configuration.
+- [Order correction authority](order-correction-authority.md) — owners correct without entering a reason; managers must provide one, while all corrections remain audited.
