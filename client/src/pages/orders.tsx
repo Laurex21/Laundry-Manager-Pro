@@ -432,11 +432,15 @@ export default function Orders() {
   }
 
   return (
-    <div className="space-y-5 page-fade-in">
+    <div className="space-y-6 page-fade-in" data-testid="orders-page-redesign">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col gap-4 rounded-2xl border border-primary/10 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t('orders')}</h1>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+            <Shirt className="h-4 w-4" aria-hidden="true" />
+            {t("orders")}
+          </div>
+          <h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl">{t('orders')}</h1>
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next && correctionOrderId) window.history.replaceState({}, "", "/orders"); }}>
@@ -511,13 +515,14 @@ export default function Orders() {
       </Dialog>
 
       {/* Summary chips */}
-      <div className="flex flex-wrap gap-2">
+      <div className="rounded-2xl border border-primary/10 bg-card p-3 shadow-sm">
+        <div className="flex flex-wrap gap-2">
         {chips.map(chip => (
           <button
             key={chip.key}
             onClick={() => setStatusFilter(chip.key)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+              "inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all",
               statusFilter === chip.key
                 ? "border-primary ring-1 ring-primary/30 shadow-sm"
                 : "border-transparent hover:border-border",
@@ -558,22 +563,23 @@ export default function Orders() {
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
+        </div>
       </div>
 
       {/* Operations toolbar */}
-      <div className="flex gap-2 p-2 rounded-lg border border-border bg-muted/30">
+      <div className="flex flex-col gap-2 rounded-2xl border border-primary/10 bg-card p-3 shadow-sm sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder={t('search_orders')}
-            className="pl-8 h-8 text-sm bg-background border-border"
+            className="h-10 rounded-xl border-primary/15 bg-background pl-9 text-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="h-8 shadow-sm shadow-primary/20 hover:-translate-y-px transition-all">
+            <Button size="sm" className="h-10 rounded-xl px-4 shadow-sm shadow-primary/20 transition-all hover:-translate-y-px">
               <Plus className="w-3.5 h-3.5 mr-1.5" /> {t('new_order')}
             </Button>
           </DialogTrigger>
@@ -581,10 +587,10 @@ export default function Orders() {
       </div>
 
       {/* Desktop table */}
-      <Card className="hidden md:block border-border/50 shadow-sm overflow-hidden">
+      <Card className="hidden overflow-hidden rounded-2xl border-primary/10 shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-muted/60 text-muted-foreground text-xs font-semibold uppercase tracking-wide border-b border-border">
+            <thead className="border-b border-[#082D5B]/10 bg-[#082D5B] text-xs font-semibold uppercase tracking-wide text-white">
               <tr>
                 <th className="px-3 py-2.5">{t("order_id_col")}</th>
                 <th className="px-3 py-2.5">{t('customers')}</th>
@@ -618,7 +624,7 @@ export default function Orders() {
                 </tr>
               ) : (
                 filteredOrders.map((order: any) => (
-                  <tr key={order.id} className="group hover:bg-muted/25 transition-colors">
+                  <tr key={order.id} className="group transition-colors hover:bg-primary/[0.035]">
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-muted-foreground">
                       #{orderDisplayId(order)}
                     </td>
@@ -661,7 +667,7 @@ export default function Orders() {
       </Card>
 
       {/* Mobile cards */}
-      <div className="md:hidden space-y-2">
+      <div className="space-y-3 md:hidden">
         {isLoading ? (
           <div className="space-y-2">
             {[1,2,3].map(i => <div key={i} className="h-20 bg-muted/40 rounded-xl animate-pulse" />)}
