@@ -67,7 +67,7 @@ async function buildAll() {
     execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 
   await writeFile(
-    "dist/build-manifest.json",
+    "dist/public/build-manifest.json",
     JSON.stringify(
       {
         commit,

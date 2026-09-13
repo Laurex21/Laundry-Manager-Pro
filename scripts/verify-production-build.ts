@@ -4,7 +4,7 @@ import path from "path";
 const requiredFiles = [
   "dist/public/index.html",
   "dist/index.cjs",
-  "dist/build-manifest.json",
+  "dist/public/build-manifest.json",
 ];
 
 const requiredMarkers = [
@@ -16,7 +16,7 @@ const requiredMarkers = [
 
 async function verifyProductionBuild() {
   const manifest = JSON.parse(
-    await readFile("dist/build-manifest.json", "utf8"),
+    await readFile("dist/public/build-manifest.json", "utf8"),
   ) as {
     commit?: string;
     buildStartedAt?: string;
@@ -37,7 +37,7 @@ async function verifyProductionBuild() {
     if (!fileStat.isFile() || fileStat.size === 0) {
       throw new Error(`Production build verification failed: ${file} is empty.`);
     }
-    if (file !== "dist/build-manifest.json" && fileStat.mtimeMs < buildStartedAt - 1000) {
+    if (file !== "dist/public/build-manifest.json" && fileStat.mtimeMs < buildStartedAt - 1000) {
       throw new Error(
         `Production build verification failed: ${file} was not freshly generated.`,
       );
