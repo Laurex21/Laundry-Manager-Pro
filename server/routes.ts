@@ -526,7 +526,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     entryDate: z.coerce.date(),
     pickupDate: z.coerce.date().nullable(),
     discountPct: z.coerce.number().min(0).max(100),
-    reason: z.string().trim().min(5).max(500),
+    reason: z.string().trim().max(500).optional(),
     items: z.array(z.object({
       serviceId: z.coerce.number().int().positive(),
       quantity: z.coerce.number().positive().max(100000),
@@ -555,9 +555,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/orders/:id/correct", isAuthenticated, async (req: any, res) => {
     const order = await storage.getOrder(Number(req.params.id));
     if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
-    if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
+    const correctionRole = await effectiveSiteRole(req, order.siteId);
+    if (roleRank(correctionRole) < roleRank("manager")) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
     try {
-      const input = controlledOrderEditSchema.parse(req.body);
+      const parsedInput = controlledOrderEditSchema.parse(req.body);
+      const input = {
+        ...parsedInput,
+        reason: correctionRole === "owner"
+          ? parsedInput.reason?.trim() || "Owner correction"
+          : parsedInput.reason?.trim() || "",
+      };
+      if (correctionRole !== "owner" && input.reason.length < 5) {
+        return res.status(400).json({ message: "A correction reason is required" });
+      }
       const result = await editOrderControlled(
         order.id,
         order.siteId,
@@ -581,9 +593,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/orders/:id/corrected-copy", isAuthenticated, async (req: any, res) => {
     const order = await storage.getOrder(Number(req.params.id));
     if (!order?.siteId) return res.status(404).json({ message: "Order not found" });
-    if (!(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
+    const correctionRole = await effectiveSiteRole(req, order.siteId);
+    if (roleRank(correctionRole) < roleRank("manager")) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
     try {
-      const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).parse(req.body);
+      const parsed = z.object({ reason: z.string().trim().max(500).optional() }).parse(req.body);
+      const reason = correctionRole === "owner"
+        ? parsed.reason?.trim() || "Owner correction"
+        : parsed.reason?.trim() || "";
+      if (correctionRole !== "owner" && reason.length < 5) {
+        return res.status(400).json({ message: "A correction reason is required" });
+      }
       const employee = await actorEmployee(req, order.siteId);
       const result = await createCorrectedOrderCopy(
         order.id,

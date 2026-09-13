@@ -51,6 +51,8 @@ assert.match(routes, /\/api\/orders\/:id\/correct"/);
 assert.match(routes, /\/api\/orders\/:id\/corrected-copy/);
 assert.match(routes, /requireSiteRole\(req, res, order\.siteId, \["owner", "manager"\]\)/);
 assert.match(routes, /discountPct: z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
+assert.match(routes, /correctionRole === "owner"/);
+assert.match(routes, /Owner correction/);
 
 assert.match(ordersPage, /correction_audit_notice/);
 assert.match(component, /paid_order_correction_locked/);

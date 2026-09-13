@@ -5,6 +5,7 @@ import { AlertCircle, Copy, Loader2, Pencil, RefreshCw, ShieldCheck } from "luci
 import { useTranslation } from "react-i18next";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ async function readJson(response: Response) {
 export function OrderCorrectionActions({ order, isManager }: { order: any; isManager: boolean }) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { isOwner } = useAuth();
   const [, navigate] = useLocation();
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyReason, setCopyReason] = useState("");
@@ -88,7 +90,17 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
           </Button>
         )}
         {!eligibility?.canEdit && eligibility?.canCreateCorrectedCopy && (
-          <Button type="button" variant="outline" size="sm" onClick={() => { setCopyReason(""); setCopyOpen(true); }} data-testid="button-create-corrected-copy">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setCopyReason("");
+              if (isOwner) copyMutation.mutate();
+              else setCopyOpen(true);
+            }}
+            data-testid="button-create-corrected-copy"
+          >
             <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
             {t("create_corrected_order")}
           </Button>
@@ -101,7 +113,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
         )}
       </div>
 
-      <Dialog open={copyOpen} onOpenChange={setCopyOpen}>
+      <Dialog open={copyOpen && !isOwner} onOpenChange={setCopyOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("create_corrected_order")}</DialogTitle></DialogHeader>
           <div className="space-y-3">

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useOrders, useCreateOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useServices } from "@/hooks/use-services";
+import { useAuth } from "@/hooks/use-auth";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createOrderWithItemsSchema } from "@shared/routes";
@@ -812,6 +813,7 @@ function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boo
 
 function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: any) => void; correctionOrder?: any }) {
   const { t, i18n } = useTranslation();
+  const { isOwner } = useAuth();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { toast } = useToast();
@@ -1014,7 +1016,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     };
 
     if (correctionOrder) {
-      if (correctionReason.trim().length < 5) return;
+      if (!isOwner && correctionReason.trim().length < 5) return;
       setIsCorrecting(true);
       try {
         const response = await fetch(`/api/orders/${correctionOrder.id}/correct`, {
@@ -1026,7 +1028,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
             entryDate: new Date(`${formattedData.entryDate}T00:00:00`).toISOString(),
             pickupDate: formattedData.pickupDate ? new Date(`${formattedData.pickupDate}T00:00:00`).toISOString() : null,
             discountPct: discountMode === "percentage" ? Number(formattedData.discountPct || 0) : subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(4)) : 0,
-            reason: correctionReason.trim(),
+            reason: correctionReason.trim() || "Owner correction",
             items: formattedData.items,
             garments: formattedData.garmentItems,
           }),
@@ -1610,7 +1612,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                   </div>
                 )}
               </div>}
-              {correctionOrder && <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="correction-reason-section">
+              {correctionOrder && !isOwner && <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="correction-reason-section">
                 <FormLabel htmlFor="order-correction-reason">{t("correction_reason")}</FormLabel>
                 <Textarea id="order-correction-reason" value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} minLength={5} required />
                 <p className="text-xs text-muted-foreground">{t("correction_audit_notice")}</p>
@@ -1619,7 +1621,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
             </div>
 
             <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:pt-1">
-              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && correctionReason.trim().length < 5)}>
+              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && !isOwner && correctionReason.trim().length < 5)}>
                 {isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}
               </Button>
             </div>
