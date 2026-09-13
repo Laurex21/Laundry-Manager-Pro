@@ -219,10 +219,11 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const monthChartBottomMargin = formattedMonthlyComparison.length > 4 ? 36 : 12;
 
   return (
-    <div className="space-y-8 page-fade-in">
-      <div className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 ${embedded ? "justify-end" : "justify-between"}`}>
+    <div className="space-y-8 page-fade-in" data-testid="reports-page-redesign">
+      <div className={`${embedded ? "flex justify-end" : "rounded-2xl border border-primary/10 bg-card p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between"}`}>
         {!embedded && <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-reports-title">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary"><Activity className="h-4 w-4" aria-hidden="true" />{t("reports")}</div>
+          <h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl" data-testid="text-reports-title">
             {t("reports_analytics")}
           </h1>
           <p className="text-muted-foreground mt-1">{t("reports_subtitle")}</p>
@@ -238,7 +239,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3" data-testid="card-date-filter">
+      <div className="flex flex-col items-start gap-3 rounded-2xl border border-primary/10 bg-card p-4 shadow-sm sm:flex-row sm:items-center" data-testid="card-date-filter">
         <span className="text-sm font-medium text-muted-foreground">{t("date_range")}:</span>
         <div className="flex items-center gap-2 flex-wrap">
           <DatePickerButton
@@ -302,7 +303,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
         </div>
       )}
 
-      <Card data-testid="card-performance-monitor">
+      <Card className="rounded-2xl border-primary/10 shadow-sm" data-testid="card-performance-monitor">
         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
           <div>
             <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -432,7 +433,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2" data-testid="card-daily-revenue-chart">
+        <Card className="rounded-2xl border-primary/10 shadow-sm lg:col-span-2" data-testid="card-daily-revenue-chart">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-base font-semibold">{t("daily_revenue_trend")}</CardTitle>
           </CardHeader>

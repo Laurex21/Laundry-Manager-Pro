@@ -38,10 +38,10 @@ function AnalyticsContent() {
   ];
 
   return (
-    <div className="space-y-8 page-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-analytics-title">{t("analytics_kpis")}</h1>
-        <div className="flex gap-1 bg-muted p-1 rounded-lg">
+    <div className="space-y-8 page-fade-in" data-testid="analytics-page-redesign">
+      <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-primary/10 bg-card p-5 shadow-sm sm:flex-row sm:items-center">
+        <h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl" data-testid="text-analytics-title">{t("analytics_kpis")}</h1>
+        <div className="flex gap-1 rounded-xl border border-primary/10 bg-muted/30 p-1">
           {periods.map(p => (
             <Button key={p.key} variant={period === p.key ? "default" : "ghost"} size="sm" onClick={() => setPeriod(p.key)}
               className={period === p.key ? "bg-primary text-white" : ""} data-testid={`button-period-${p.key}`}>

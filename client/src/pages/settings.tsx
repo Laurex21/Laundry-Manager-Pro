@@ -1101,14 +1101,14 @@ export default function Settings() {
   }
 
   return (
-    <div className="space-y-6 page-fade-in">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-display font-bold">{t("settings")}</h1>
+    <div className="space-y-6 page-fade-in" data-testid="settings-page-redesign">
+      <div className="rounded-2xl border border-primary/10 bg-card p-5 shadow-sm">
+        <h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl">{t("settings")}</h1>
         <p className="text-muted-foreground mt-1">{t("settings_subtitle")}</p>
       </div>
 
       <Tabs defaultValue="identity">
-        <TabsList className="grid w-full max-w-2xl grid-cols-5" data-testid="settings-tabs">
+        <TabsList className="grid h-auto w-full max-w-2xl grid-cols-5 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm" data-testid="settings-tabs">
           <TabsTrigger value="identity" className="gap-2" data-testid="tab-identity">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">{t("business")}</span>
@@ -1133,7 +1133,7 @@ export default function Settings() {
 
         <div className="mt-6">
           <TabsContent value="identity">
-            <Card>
+            <Card className="rounded-2xl border-primary/10 shadow-sm">
               <CardHeader>
                 <CardTitle>{t("business_identity")}</CardTitle>
                 <CardDescription>{t("business_identity_desc")}</CardDescription>
@@ -1145,7 +1145,7 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="receipt">
-            <Card>
+            <Card className="rounded-2xl border-primary/10 shadow-sm">
               <CardHeader>
                 <CardTitle>{t("receipt_layout")}</CardTitle>
                 <CardDescription>{t("receipt_layout_desc")}</CardDescription>
@@ -1157,7 +1157,7 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="terms">
-            <Card>
+            <Card className="rounded-2xl border-primary/10 shadow-sm">
               <CardHeader>
                 <CardTitle>{t("terms_conditions")}</CardTitle>
                 <CardDescription>{t("terms_conditions_desc")}</CardDescription>
@@ -1169,7 +1169,7 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="team">
-            <Card>
+            <Card className="rounded-2xl border-primary/10 shadow-sm">
               <CardHeader>
                 <CardTitle>{t("team_sites")}</CardTitle>
                 <CardDescription>{t("team_sites_desc")}</CardDescription>
@@ -1180,7 +1180,7 @@ export default function Settings() {
             </Card>
           </TabsContent>
           <TabsContent value="loyalty">
-            <Card>
+            <Card className="rounded-2xl border-primary/10 shadow-sm">
               <CardHeader>
                 <CardTitle>{t("loyalty_program")}</CardTitle>
                 <CardDescription>{t("loyalty_program_desc")}</CardDescription>
