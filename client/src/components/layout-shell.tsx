@@ -7,7 +7,7 @@ import { CURRENCIES, currencyName } from "@/lib/currency-registry";
 import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
-  Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight,
+  Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight, ArrowLeft,
   ListChecks,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
@@ -69,6 +69,44 @@ const PAGE_TITLES: Record<string, string> = {
   "/membership-plans": "subscription_plans",
   "/settings": "settings",
 };
+
+const ROOT_APP_ROUTES = new Set([
+  "/", "/dashboard", "/orders", "/pilotage", "/customers", "/services",
+  "/expenses", "/payments", "/machines", "/employees", "/analytics",
+  "/subscriptions", "/membership-plans", "/settings",
+]);
+
+function BackButton({ location }: { location: string }) {
+  const [, setLocation] = useLocation();
+  const { t } = useTranslation();
+  const path = location.split(/[?#]/)[0];
+  const hasDeepLink = location.includes("?") || location.includes("#");
+  const shouldShow = !ROOT_APP_ROUTES.has(path) || hasDeepLink;
+
+  if (!shouldShow || path.startsWith("/orders/") || path.startsWith("/customers/")) return null;
+
+  const goBack = () => {
+    const referrer = document.referrer ? new URL(document.referrer) : null;
+    const hasInternalReferrer = referrer?.origin === window.location.origin;
+    if (window.history.length > 1 && hasInternalReferrer) window.history.back();
+    else setLocation("/dashboard");
+  };
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+      onClick={goBack}
+      aria-label={t("back", "Back")}
+      data-testid="button-page-back"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      <span className="hidden sm:inline">{t("back", "Back")}</span>
+    </Button>
+  );
+}
 
 function RegionalSettings() {
   const { t, i18n } = useTranslation();
@@ -302,14 +340,11 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="px-5 py-5 border-b border-border/60">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-sm shadow-primary/30">
-            <Shirt className="w-5 h-5 text-primary-foreground" strokeWidth={2} />
-          </div>
-          <div>
-            <h1 className="font-display font-bold text-[15px] tracking-tight leading-tight">XpressPro</h1>
-            <p className="text-[10px] text-muted-foreground font-medium tracking-wide uppercase">{t("laundry_manager")}</p>
-          </div>
+        <div className="flex items-center gap-3" data-testid="xpresspro-brand">
+          <img src="/xpresspro-mark.svg" alt="" className="h-10 w-10 shrink-0" aria-hidden="true" />
+          <h1 className="font-display text-[20px] font-bold leading-none tracking-[-0.035em] text-[#082D5B] dark:text-white">
+            Xpress<span className="text-[#6B5CFF]">Pro</span>
+          </h1>
         </div>
       </div>
 
@@ -427,6 +462,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             >
               <Menu className="w-4.5 h-4.5" />
             </Button>
+            <BackButton location={location} />
             <div>
               <h2 className="font-display font-bold text-base leading-tight capitalize">
                 {t(pageTitleKey)}
