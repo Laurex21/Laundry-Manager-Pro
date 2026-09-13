@@ -1,0 +1,56 @@
+Tâche : diagnostiquer et corriger le déploiement d’un frontend obsolète
+
+Le dépôt GitHub main contient les redesigns XpressPro des phases 2 et 3, notamment les commits f1cad64 et f266970. Pourtant, app.xpressclean.cm continue de servir une ancienne interface, même après plusieurs publications Replit.
+
+Symptômes vérifiés
+
+• Replit génère de nouveaux noms de bundles, mais leur contenu et leur taille restent pratiquement identiques à l’ancien frontend.
+• Les marqueurs suivants existent dans main, mais sont absents du bundle production :
+  • orders-page-redesign
+  • payments-page-redesign
+  • payment-ledger-redesign
+  • analytics-page-redesign
+  • settings-page-redesign
+• Les routes répondent en HTTP 200, mais affichent l’ancienne UI.
+• package-lock.json référence @replit/connectors-sdk via package-firewall.replit.internal.
+• Le script post-merge utilise actuellement npm install.
+• Le build attendu est npm run build et la sortie frontend doit être dist/public.
+
+Résultat attendu
+La production doit être reconstruite depuis le dernier commit de main et servir le frontend contenant réellement les phases 2 et 3. Aucun ancien artefact dist ne doit être réutilisé après un build incomplet ou échoué.
+
+Travail demandé
+
+1. Confirmer le commit exact utilisé par le déploiement Replit.
+2. Inspecter les logs complets de l’installation, du build et du déploiement.
+3. Déterminer si npm install, @replit/connectors-sdk, le cache ou un ancien dist empêche la reconstruction.
+4. Corriger la cause racine, pas seulement relancer Publish.
+5. Si possible, remplacer npm install par npm ci pour une installation reproductible.
+6. Retirer @replit/connectors-sdk uniquement si son retrait ne casse pas l’envoi des emails. Resend direct et SendGrid existent déjà comme fournisseurs alternatifs.
+7. Supprimer de .replit la variable versionnée PLATFORM_ADMIN_EMAILS; ne pas restaurer l’auto-promotion Super Admin.
+8. Faire échouer explicitement le déploiement si dist/public/index.html, le bundle frontend ou dist/index.cjs ne sont pas nouvellement générés.
+9. Ajouter une vérification post-build recherchant au minimum les marqueurs orders-page-redesign, payments-page-redesign, analytics-page-redesign et settings-page-redesign dans dist/public/assets/*.js.
+10. Exécuter les tests pertinents, TypeScript et le build complet.
+11. Déployer la correction, puis vérifier le bundle réellement servi par app.xpressclean.cm avec cache désactivé.
+
+Contraintes
+
+• Ne modifier aucun workflow métier, donnée de production ou schéma de base de données.
+• Ne pas supprimer les correctifs Super Admin/MFA.
+• Ne pas réintroduire PLATFORM_ADMIN_EMAILS.
+• Ne pas contourner un build en copiant manuellement un ancien dossier dist.
+• Préserver les phases 1, 2 et 3 du redesign.
+• Ne jamais afficher de secrets dans les logs ou la réponse.
+
+Preuves obligatoires dans la réponse finale
+
+• cause racine confirmée ;
+• commit déployé ;
+• fichiers modifiés ;
+• commande d’installation et de build réellement exécutée ;
+• résultats des tests et du build ;
+• nouveau nom et taille du bundle production ;
+• confirmation que les quatre marqueurs sont présents dans le bundle live ;
+• confirmation visuelle que Commandes, Paiements, Analytique et Paramètres utilisent la nouvelle charte.
+
+Ne réponds pas seulement avec “redeploy successful”. Continue jusqu’à avoir vérifié le contenu du bundle réellement servi par le domaine de production.
