@@ -752,6 +752,14 @@ function CustomerBehaviorSection({ period }: { period: string }) {
     queryFn: () => fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }).then((res) => res.json()),
   });
 
+  useEffect(() => {
+    if (!data || window.location.hash !== "#churn-risk") return;
+    window.requestAnimationFrame(() => {
+      churnRiskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      churnRiskRef.current?.focus({ preventScroll: true });
+    });
+  }, [data]);
+
   if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
   if (!data) return null;
 
@@ -760,14 +768,6 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   const dayData = data.activityByDayOfWeek || [];
   const churn = data.churn || {};
   const metrics = data.metrics || {};
-
-  useEffect(() => {
-    if (window.location.hash !== "#churn-risk") return;
-    window.requestAnimationFrame(() => {
-      churnRiskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      churnRiskRef.current?.focus({ preventScroll: true });
-    });
-  }, [data]);
 
   return (
     <div className="space-y-4" data-testid="section-customer-behavior">

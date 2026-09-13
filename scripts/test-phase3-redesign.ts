@@ -14,6 +14,15 @@ assert.match(files.pilotage, /pilotage-page-redesign/);
 assert.match(files.pilotage, /canAccess\("reports"\)/);
 assert.match(files.analytics, /analytics-page-redesign/);
 assert.match(files.analytics, /hasFeature\("analytics"\)/);
+const customerBehaviorSection = files.analytics.slice(
+  files.analytics.indexOf("function CustomerBehaviorSection"),
+  files.analytics.indexOf("function WasteAnalyticsSection"),
+);
+assert.ok(
+  customerBehaviorSection.indexOf("useEffect(") <
+    customerBehaviorSection.indexOf("if (isLoading)"),
+  "CustomerBehaviorSection hooks must run before conditional returns",
+);
 assert.match(files.settings, /settings-page-redesign/);
 assert.match(files.settings, /if \(!isOwner\)/);
 assert.match(files.settings, /data-testid="settings-tabs"/);
