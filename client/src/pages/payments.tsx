@@ -398,9 +398,9 @@ export default function Payments() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:items-start">
         {/* Payment form - 2/3 */}
-        <div className="lg:col-span-2 overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm">
+        <div className="order-2 overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm lg:order-1 lg:col-span-2">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-[#082D5B] text-white">
             <CreditCard className="w-4 h-4 text-violet-200" />
             <span className="font-semibold text-sm">{t("register_payment")}</span>
@@ -733,7 +733,7 @@ export default function Payments() {
         </div>
 
         {/* Unpaid queue - 1/3 */}
-        <div className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm">
+        <div className="order-1 overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm lg:order-2">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-[#082D5B] text-white">
             <ClipboardList className="w-4 h-4 text-violet-200" />
             <span className="font-semibold text-sm">{t("unpaid_queue")}</span>
@@ -756,7 +756,7 @@ export default function Payments() {
             </div>
           </div>
 
-          <div className="overflow-y-auto max-h-[480px]">
+          <div className="max-h-[360px] overflow-y-auto lg:max-h-[560px]">
             {ordersLoading ? (
               <div className="divide-y divide-border">
                 {[1, 2, 3].map((i) => (

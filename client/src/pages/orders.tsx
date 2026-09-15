@@ -445,9 +445,9 @@ export default function Orders() {
           <p className="text-muted-foreground mt-0.5 text-sm">{t("orders_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next && correctionOrderId) window.history.replaceState({}, "", "/orders"); }}>
-          <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-y-auto lg:px-5 lg:py-3">
-            <DialogHeader className="sticky top-0 z-20 -mx-2 bg-background/95 px-2 pb-3 backdrop-blur-sm lg:pb-1">
-              <DialogTitle>{correctionOrder ? `${t("correct_order")} #${orderDisplayId(correctionOrder)}` : t("create_new_order")}</DialogTitle>
+          <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 bg-[#F8FAFC] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-y-auto lg:px-5 lg:py-3">
+            <DialogHeader className="sticky top-0 z-20 -mx-2 rounded-xl border border-primary/10 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-sm lg:mb-1">
+              <DialogTitle className="text-[#082D5B]">{correctionOrder ? `${t("correct_order")} #${orderDisplayId(correctionOrder)}` : t("create_new_order")}</DialogTitle>
             </DialogHeader>
             {correctionOrderId > 0 && correctionOrderIsLoading ? (
               <div className="grid min-h-[280px] place-items-center" role="status" data-testid="order-correction-form-loading">

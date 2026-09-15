@@ -38,6 +38,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCurrency } from "@/hooks/use-currency";
 
 export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
@@ -50,6 +51,7 @@ export default function Customers() {
   const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({ queryKey: ["/api/customer-subscription-summaries"] });
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
+  const symbol = useCurrency((state) => state.getSymbol());
   const [, navigate] = useLocation();
 
   const filteredCustomers = customers?.filter((c) => {
@@ -70,15 +72,19 @@ export default function Customers() {
   ] as const;
 
   return (
-    <div className="space-y-4 sm:space-y-6 page-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+    <div className="space-y-5 page-fade-in" data-testid="customers-page-redesign">
+      <div className="flex flex-col gap-4 rounded-2xl border border-primary/10 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold leading-tight">{t("customers")}</h1>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            {t("customers")}
+          </div>
+          <h1 className="text-2xl font-display font-bold leading-tight text-[#082D5B] sm:text-3xl">{t("customers")}</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{t("clients_subtitle")}</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="shrink-0">
+            <Button size="sm" className="h-10 shrink-0 rounded-xl px-4 shadow-sm shadow-primary/20">
               <Plus className="w-4 h-4 mr-1.5" /> {t("add_customer")}
             </Button>
           </DialogTrigger>
@@ -91,12 +97,12 @@ export default function Customers() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:gap-3">
+      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-primary/10 bg-card p-3 shadow-sm sm:flex sm:items-center">
         <div className="relative min-w-0 sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder={t("search_customers")}
-            className="pl-9 h-9 bg-background"
+            className="h-10 rounded-xl border-primary/15 bg-background pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             name="customerSearch"
@@ -109,12 +115,12 @@ export default function Customers() {
           id="customer-category-filter"
           value={filter}
           onChange={(event) => setFilter(event.target.value as typeof filter)}
-          className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground sm:hidden"
+          className="h-11 w-full rounded-xl border border-primary/15 bg-background px-3 text-sm text-foreground sm:hidden"
           aria-label="Catégorie client"
         >
           {customerFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-        <div className="hidden flex-wrap rounded-md border bg-background p-0.5 sm:flex">{customerFilters.map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 px-3 text-xs" onClick={() => setFilter(value)}>{label}</Button>)}</div>
+        <div className="hidden flex-wrap rounded-xl border border-primary/10 bg-background p-1 sm:flex">{customerFilters.map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 rounded-lg px-3 text-xs" onClick={() => setFilter(value)}>{label}</Button>)}</div>
         <Button
           className="hidden xl:inline-flex"
           variant={showMembershipColumns ? "secondary" : "outline"}
@@ -146,10 +152,10 @@ export default function Customers() {
           ))}
         </div>
       ) : filteredCustomers && filteredCustomers.length > 0 ? (
-        <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+        <div className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm">
           {showMembershipColumns && (
             <div
-              className="hidden xl:grid grid-cols-[minmax(0,1fr)_430px_180px_200px_16px] items-center gap-4 bg-muted/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              className="hidden xl:grid grid-cols-[minmax(0,1fr)_430px_180px_200px_16px] items-center gap-4 bg-[#082D5B] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-white"
               aria-hidden="true"
             >
               <span>{t("customer")}</span>
@@ -170,7 +176,7 @@ export default function Customers() {
             <button
               key={customer.id}
               type="button"
-              className="group flex min-h-16 w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:gap-4 sm:px-4"
+              className="group flex min-h-16 w-full items-center gap-3 border-b border-border/60 px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-primary/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:gap-4 sm:px-4"
               onClick={() => navigate(`/customers/${customer.id}`)}
               data-testid={`card-customer-${customer.id}`}
             >
@@ -194,7 +200,7 @@ export default function Customers() {
                 {Number((customer as any).creditBalance ?? 0) > 0 && (
                   <Badge className="mt-1 ml-1 h-5 bg-emerald-100 px-1.5 text-[10px] text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400">
                     <Wallet className="mr-1 h-3 w-3" />
-                    {t("customer_credit")} {Number((customer as any).creditBalance).toFixed(2)}
+                    {t("customer_credit")} {symbol}{Number((customer as any).creditBalance).toLocaleString()}
                   </Badge>
                 )}
                 <Badge variant={subscription?.status === "active" ? "default" : "secondary"} className="mt-1 ml-1 h-5 px-1.5 text-[10px] sm:hidden">
