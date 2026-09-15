@@ -8,7 +8,7 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight, ArrowLeft,
-  ListChecks,
+  ListChecks, CircleHelp,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
@@ -26,21 +26,47 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-const ALL_NAV_ITEMS = [
-  { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
-  { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
-  { icon: BarChart3, labelKey: "pilotage", href: "/pilotage", page: "pilotage" },
-  { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
-  { icon: Shirt, labelKey: "services", href: "/services", page: "services" },
-  { icon: DollarSign, labelKey: "expenses", href: "/expenses", page: "expenses" },
-  { icon: CreditCard, labelKey: "payments", href: "/payments", page: "payments" },
-  { icon: Cog, labelKey: "machines", href: "/machines", page: "machines" },
-  { icon: UserCheck, labelKey: "employees", href: "/employees", page: "employees" },
-  { icon: TrendingUp, labelKey: "analytics", href: "/analytics", page: "analytics" },
-  { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
-  { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
-  { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
-];
+const NAV_GROUPS = [
+  {
+    key: "operations",
+    fallback: "Operations",
+    items: [
+      { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
+      { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
+      { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
+      { icon: CreditCard, labelKey: "payments", href: "/payments", page: "payments" },
+    ],
+  },
+  {
+    key: "production",
+    fallback: "Production",
+    items: [
+      { icon: Cog, labelKey: "machines", href: "/machines", page: "machines" },
+      { icon: Shirt, labelKey: "services", href: "/services", page: "services" },
+    ],
+  },
+  {
+    key: "management",
+    fallback: "Management",
+    items: [
+      { icon: BarChart3, labelKey: "pilotage", href: "/pilotage", page: "pilotage" },
+      { icon: TrendingUp, labelKey: "analytics", href: "/analytics", page: "analytics" },
+      { icon: UserCheck, labelKey: "employees", href: "/employees", page: "employees" },
+      { icon: DollarSign, labelKey: "expenses", href: "/expenses", page: "expenses" },
+    ],
+  },
+  {
+    key: "administration",
+    fallback: "Administration",
+    items: [
+      { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
+      { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
+      { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
+    ],
+  },
+] as const;
+
+const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 
 // Use exact routes here. Several subscription screens intentionally share the
 // "customers" permission, but must not become duplicate bottom-nav entries.
@@ -304,31 +330,13 @@ function DemoBanner() {
   );
 }
 
-function WhatsAppContactButton() {
-  const { t } = useTranslation();
-  const { openWhatsApp } = useWhatsAppLauncher();
-
-  return (
-    <button
-      type="button"
-      onClick={() => openWhatsApp({ phone: WHATSAPP_SUPPORT_URL.replace("https://wa.me/", "") })}
-      className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-[#1ebe5d] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 lg:bottom-6 lg:right-6"
-      aria-label={t("whatsapp_contact_support")}
-      data-testid="button-whatsapp-support"
-    >
-      <FaWhatsapp className="h-5 w-5" aria-hidden="true" />
-      <span className="hidden sm:inline">{t("whatsapp_contact_support")}</span>
-    </button>
-  );
-}
-
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { openWhatsApp } = useWhatsAppLauncher();
   const { user, logout, planSlug, canAccess } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { t } = useTranslation();
 
-  const navItems = ALL_NAV_ITEMS.filter((item) => canAccess(item.page));
   const bottomNavItems = ALL_NAV_ITEMS.filter(
     (item) => BOTTOM_NAV_HREFS.includes(item.href) && canAccess(item.page)
   );
@@ -354,31 +362,39 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 px-3 pb-3 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = location === item.href;
+      <nav className="flex-1 overflow-y-auto px-3 pb-3" data-testid="grouped-navigation">
+        {NAV_GROUPS.map((group) => {
+          const items = group.items.filter((item) => canAccess(item.page));
+          if (!items.length) return null;
           return (
-            <Link key={item.href} href={item.href}>
-              <div
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer group",
-                  isActive
-                    ? "bg-sidebar-primary text-white shadow-sm shadow-black/10"
-                    : "text-white/68 hover:bg-white/8 hover:text-white"
-                )}
-                onClick={() => setMobileOpen(false)}
-                data-testid={`nav-${item.page}`}
-              >
-                <item.icon
-                  className={cn(
-                    "w-4 h-4 shrink-0",
-                    isActive ? "text-white" : "text-white/55 group-hover:text-white"
-                  )}
-                />
-                <span className="flex-1">{t(item.labelKey)}</span>
-                {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/65 shrink-0" />}
+            <div key={group.key} className="mb-4 last:mb-0">
+              <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38">
+                {t(group.key, group.fallback)}
+              </p>
+              <div className="space-y-0.5">
+                {items.map((item) => {
+                  const isActive = location === item.href;
+                  return (
+                    <Link key={item.href} href={item.href}>
+                      <div
+                        className={cn(
+                          "group flex min-h-10 cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                          isActive
+                            ? "bg-sidebar-primary text-white shadow-sm shadow-black/10"
+                            : "text-white/68 hover:bg-white/8 hover:text-white"
+                        )}
+                        onClick={() => setMobileOpen(false)}
+                        data-testid={`nav-${item.page}`}
+                      >
+                        <item.icon className={cn("h-4 w-4 shrink-0", isActive ? "text-white" : "text-white/55 group-hover:text-white")} />
+                        <span className="flex-1">{t(item.labelKey)}</span>
+                        {isActive && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/65" />}
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
-            </Link>
+            </div>
           );
         })}
       </nav>
@@ -452,7 +468,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           className="h-14 bg-card/95 backdrop-blur-sm border-b border-[#082D5B]/10 flex items-center justify-between px-4 sm:px-5 sticky top-0 z-20"
           data-testid="top-navbar"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
@@ -463,25 +479,39 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               <Menu className="w-4.5 h-4.5" />
             </Button>
             <BackButton location={location} />
-            <div>
+            <div className="min-w-0">
               <h2 className="font-display font-bold text-base leading-tight capitalize">
                 {t(pageTitleKey)}
               </h2>
             </div>
           </div>
-          <RegionalSettings />
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label={t("help", "Help")} data-testid="button-help-menu">
+                  <CircleHelp className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => openWhatsApp({ phone: WHATSAPP_SUPPORT_URL.replace("https://wa.me/", "") })}>
+                  <FaWhatsapp className="mr-2 h-4 w-4 text-[#25D366]" aria-hidden="true" />
+                  {t("whatsapp_contact_support")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <RegionalSettings />
+          </div>
         </header>
 
         {/* Demo banner */}
         <DemoBanner />
 
         {/* Page content */}
-        <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full pb-24 lg:pb-8 min-w-0 overflow-x-hidden">
+        <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] mx-auto w-full pb-24 lg:pb-8 min-w-0 overflow-x-hidden">
           {children}
         </div>
       </main>
-
-      <WhatsAppContactButton />
       <LegalAcceptanceGate />
 
       {/* Mobile bottom nav */}

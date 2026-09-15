@@ -87,17 +87,18 @@ export default function Dashboard() {
   const alerts = dashData?.alerts || [];
   const monthProfit = (dashData?.monthRevenue || 0) - (dashData?.monthExpenses || 0);
   const ordersByStatus = dashData?.ordersByStatus;
+  const priorityCount = overduePickupCount + openReturnCount + unacknowledgedReportCount;
 
   return (
-    <div className="space-y-5 page-fade-in">
+    <div className="space-y-5 page-fade-in" data-testid="dashboard-global-redesign">
 
       {/* Header */}
-      <div className="flex items-center justify-between min-h-[2rem]">
+      <div className="flex flex-col gap-3 rounded-2xl border border-[#082D5B]/10 bg-card p-4 shadow-[0_1px_3px_rgba(8,45,91,0.05)] sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground" data-testid="text-dashboard-title">
+          <h1 className="text-2xl font-bold tracking-tight text-[#082D5B] dark:text-foreground" data-testid="text-dashboard-title">
             {t('dashboard')}
           </h1>
-          <p className="text-[11px] text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy", { locale: dateLocaleFor(i18n.language) })}</p>
         </div>
         {!isAllSitesMode && currentSite && (
           <div className="flex items-center gap-1.5" data-testid="banner-current-site">
@@ -110,7 +111,7 @@ export default function Dashboard() {
       </div>
 
       {/* Operations command strip */}
-      <div className="grid grid-cols-2 gap-1 sm:flex sm:flex-row sm:items-center sm:gap-px bg-card border border-[#082D5B]/10 rounded-xl p-1.5 shadow-[0_1px_2px_rgba(8,45,91,0.04)] w-full min-w-0">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl border border-[#082D5B]/10 bg-card p-1.5 shadow-[0_1px_2px_rgba(8,45,91,0.04)] sm:flex sm:flex-row sm:items-center sm:gap-px">
         <Link href="/orders?status=ready" className="contents sm:inline-flex">
           <Button size="sm" className="h-7 text-xs px-3 rounded-md font-medium w-full sm:w-auto" data-testid="button-new-order">
             <Plus className="w-3.5 h-3.5 mr-1.5" />{t('new_order')}
@@ -174,9 +175,22 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Core KPI strip */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="dashboard-core-kpis">
+        <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
+        <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
+        <MetricCard href="/orders?status=received" label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
+        <MetricCard href="/orders?status=ready" label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
+      </div>
+
       {/* Alerts */}
-      {alerts.length > 0 && (
-        <div className="space-y-1.5" data-testid="dashboard-alerts">
+      {(alerts.length > 0 || churnCount > 0) && (
+        <div className="rounded-xl border border-[#082D5B]/10 bg-card p-3 shadow-[0_1px_2px_rgba(8,45,91,0.04)]" data-testid="dashboard-alerts">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#082D5B] dark:text-foreground">{t('alerts')}</p>
+            <Badge variant="secondary" className="h-5 text-[10px]">{alerts.length + (churnCount > 0 ? 1 : 0)}</Badge>
+          </div>
+          <div className="space-y-1.5">
           {alerts.map((alert: any, i: number) => {
             const styles: Record<string, { bg: string; icon: any }> = {
               danger:  { bg: "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-900 dark:text-red-400",    icon: AlertCircle },
@@ -193,17 +207,17 @@ export default function Dashboard() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {churnCount > 0 && (
-        <Link href="/analytics#churn-risk">
-          <div className="flex items-center gap-3 px-3.5 py-2 rounded-lg border bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-950/30 dark:border-orange-900 dark:text-orange-300 cursor-pointer" data-testid="banner-churn-risk">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span className="font-medium">{churnCount} clients à risque de perte</span>
-            <ChevronRight className="w-4 h-4 ml-auto" />
+          {churnCount > 0 && (
+            <Link href="/analytics#churn-risk">
+              <div className="flex cursor-pointer items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-3.5 py-2 text-orange-800 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300" data-testid="banner-churn-risk">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span className="font-medium">{churnCount} clients à risque de perte</span>
+                <ChevronRight className="ml-auto h-4 w-4" />
+              </div>
+            </Link>
+          )}
           </div>
-        </Link>
+        </div>
       )}
 
       {/* Workflow queue strip */}
@@ -233,44 +247,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* KPI groups */}
+      {/* Supporting period metrics */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" data-testid="dashboard-supporting-kpis">
+        <MetricCard href="/orders?period=today" label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
+        <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
+        <MetricCard href="/orders?period=week" label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
+        <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
+        <MetricCard href="/orders?period=month" label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
+        <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
+      </div>
       <div className="space-y-3">
-        {/* Today */}
-        <div>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-            <CalendarDays className="w-3 h-3" />{t('today')}
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <MetricCard href="/orders?period=today" label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
-            <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
-            <MetricCard href="/orders?status=received" label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
-            <MetricCard href="/orders?status=ready" label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
-          </div>
-        </div>
-
-        {/* This Week */}
-        <div>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-            <TrendingUp className="w-3 h-3" />{t('this_week')}
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <MetricCard href="/orders?period=week" label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
-            <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
-          </div>
-        </div>
-
-        {/* This Month */}
-        <div>
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-            <CalendarDays className="w-3 h-3" />{t('this_month')}
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <MetricCard href="/orders?period=month" label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
-            <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
-            <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
-            <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
-          </div>
-        </div>
         {Number(creditSummary?.totalCreditBalance ?? 0) > 0 && (
           <Link href="/customers?filter=credit">
             <div className="cursor-pointer" data-testid="card-credit-liability">
@@ -337,10 +323,10 @@ export default function Dashboard() {
       )}
 
       {/* Main grid: Recent Orders + Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
 
         {/* Recent Orders */}
-        <Card className="lg:col-span-2 border-border/50" data-testid="card-recent-orders">
+        <Card className="border-[#082D5B]/10 shadow-[0_1px_3px_rgba(8,45,91,0.05)] xl:col-span-2" data-testid="card-recent-orders">
           <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold">{t('recent_orders')}</CardTitle>
             <Link href="/orders">
@@ -381,7 +367,22 @@ export default function Dashboard() {
         </Card>
 
         {/* Sidebar */}
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="dashboard-action-center">
+
+          <Card className="border-[#082D5B]/10 shadow-[0_1px_3px_rgba(8,45,91,0.05)]">
+            <CardHeader className="px-4 pb-2 pt-4">
+              <CardTitle className="flex items-center justify-between text-sm font-semibold text-[#082D5B] dark:text-foreground">
+                {t('what_should_owner_do')}
+                <Badge variant="secondary" className="text-[10px]">{priorityCount}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 px-4 pb-4">
+              {overduePickupCount > 0 && <ActionRow href="/orders?status=ready" label={`${overduePickupCount} ${t('delays_overdue')}`} tone="orange" />}
+              {openReturnCount > 0 && <ActionRow href="/pilotage?view=quality" label={`${openReturnCount} ${t('quality_operations_open')}`} tone="orange" />}
+              {unacknowledgedReportCount > 0 && <ActionRow href="/pilotage?view=daily" label={`${unacknowledgedReportCount} ${t('daily_reports')}`} tone="blue" />}
+              {priorityCount === 0 && <p className="rounded-lg border border-dashed border-border/50 py-4 text-center text-xs text-muted-foreground">{t('no_alerts')}</p>}
+            </CardContent>
+          </Card>
 
           {/* Ready for Pickup */}
           <Card className={overduePickupCount > 0 ? "border-orange-200 dark:border-orange-900/60" : "border-border/50"} data-testid="card-ready-for-pickup">
@@ -516,6 +517,21 @@ function MetricCard({ label, value, icon: Icon, color, href, ...props }: any) {
       aria-label={`${label}: ${value}`}
     >
       {content}
+    </Link>
+  );
+}
+
+function ActionRow({ href, label, tone }: { href: string; label: string; tone: "orange" | "blue" }) {
+  const toneClasses = tone === "orange"
+    ? "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300"
+    : "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300";
+  return (
+    <Link href={href}>
+      <div className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold", toneClasses)}>
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1">{label}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      </div>
     </Link>
   );
 }

@@ -6,6 +6,10 @@ const resources = {
   en: {
     translation: {
       "dashboard": "Dashboard",
+      "production": "Production",
+      "management": "Management",
+      "administration": "Administration",
+      "help": "Help",
       "orders": "Orders",
       "customers": "Customers",
       "services": "Services",
@@ -882,6 +886,10 @@ const resources = {
   fr: {
     translation: {
       "dashboard": "Tableau de bord",
+      "production": "Production",
+      "management": "Gestion",
+      "administration": "Administration",
+      "help": "Aide",
       "orders": "Commandes",
       "customers": "Clients",
       "services": "Services",
@@ -1758,6 +1766,10 @@ const resources = {
   pt: {
     translation: {
       "dashboard": "Painel",
+      "production": "Produção",
+      "management": "Gestão",
+      "administration": "Administração",
+      "help": "Ajuda",
       "orders": "Pedidos",
       "customers": "Clientes",
       "services": "Serviços",
