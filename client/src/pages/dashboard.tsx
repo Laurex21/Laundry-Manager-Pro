@@ -88,7 +88,8 @@ export default function Dashboard() {
   const alerts = dashData?.alerts || [];
   const monthProfit = (dashData?.monthRevenue || 0) - (dashData?.monthExpenses || 0);
   const ordersByStatus = dashData?.ordersByStatus;
-  const priorityCount = overduePickupCount + openReturnCount + unacknowledgedReportCount;
+  const priorityCount = openReturnCount + unacknowledgedReportCount;
+  const hasDistinctOwnerActions = openReturnCount > 0 || unacknowledgedReportCount > 0;
 
   return (
     <div className="space-y-5 page-fade-in" data-testid="dashboard-global-redesign">
@@ -370,7 +371,7 @@ export default function Dashboard() {
         {/* Sidebar */}
         <div className="space-y-4" data-testid="dashboard-action-center">
 
-          <Card className="border-[#082D5B]/10 shadow-[0_1px_3px_rgba(8,45,91,0.05)]">
+          {hasDistinctOwnerActions && <Card className="border-[#082D5B]/10 shadow-[0_1px_3px_rgba(8,45,91,0.05)]" data-testid="card-owner-actions">
             <CardHeader className="px-4 pb-2 pt-4">
               <CardTitle className="flex items-center justify-between text-sm font-semibold text-[#082D5B] dark:text-foreground">
                 {t('what_should_owner_do')}
@@ -382,14 +383,14 @@ export default function Dashboard() {
               {unacknowledgedReportCount > 0 && <ActionRow href="/pilotage?view=daily" label={`${unacknowledgedReportCount} ${t('daily_reports')}`} tone="blue" />}
               {priorityCount === 0 && <p className="rounded-lg border border-dashed border-border/50 py-4 text-center text-xs text-muted-foreground">{t('no_alerts')}</p>}
             </CardContent>
-          </Card>
+          </Card>}
 
           {/* Ready for Pickup */}
           <Card className={overduePickupCount > 0 ? "border-orange-200 dark:border-orange-900/60" : "border-border/50"} data-testid="card-ready-for-pickup">
             <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Package className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                {t('ready_for_pickup')}
+                {overduePickupCount > 0 ? t('overdue_pickups') : t('ready_for_pickup')}
                 {readyForPickup.length > 0 && (
                   <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] h-4 px-1">
                     {readyForPickup.length}

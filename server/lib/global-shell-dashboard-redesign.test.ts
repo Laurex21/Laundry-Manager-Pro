@@ -30,6 +30,12 @@ for (const marker of [
 assert.match(dashboard, /card-orders-status-chart/, "Production pipeline must remain available");
 assert.match(dashboard, /card-recent-orders/, "Recent orders must remain available");
 assert.match(dashboard, /card-ready-for-pickup/, "Pickup priorities must remain available");
+assert.match(dashboard, /hasDistinctOwnerActions && <Card[\s\S]*data-testid="card-owner-actions"/, "Empty owner action card must be hidden");
+assert.match(dashboard, /const priorityCount = openReturnCount \+ unacknowledgedReportCount;/, "Owner action count must exclude pickup delays shown in the separate pickup card");
+assert.match(dashboard, /overduePickupCount > 0 \? t\('overdue_pickups'\) : t\('ready_for_pickup'\)/, "Detailed pickup card must distinguish overdue collections");
+assert.match(shell, /min-h-0 flex-1 overflow-y-auto overscroll-contain/, "Only the navigation area should scroll on short desktop screens");
+assert.match(shell, /shrink-0 border-t border-white\/10/, "Plan and user controls must remain visible at the bottom of the sidebar");
+assert.equal(i18n.match(/"overdue_pickups"/g)?.length, 3, "Missing EN/FR/PT overdue pickup labels");
 assert.match(dashboard, /toLocaleString\(i18n\.language/, "Dashboard money must follow the selected locale");
 assert.match(dashboard, /MessageCircle/, "Pickup WhatsApp actions must use a compact accessible icon");
 assert.doesNotMatch(dashboard, /ActionRow href="\/orders\?status=ready"/, "Pickup delays must not be duplicated in the action centre");
