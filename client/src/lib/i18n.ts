@@ -6,6 +6,12 @@ const resources = {
   en: {
     translation: {
       "dashboard": "Dashboard",
+      "dashboard_alert_pending_orders": "You have {{count}} pending orders",
+      "dashboard_alert_pending_orders_detail": "Consider processing them soon",
+      "dashboard_alert_expenses_exceed_revenue": "Expenses exceed revenue this month",
+      "dashboard_alert_expenses_exceed_revenue_detail": "Review your expenditure logs",
+      "dashboard_alert_returned_garments": "{{count}} garment(s) returned for treatment",
+      "dashboard_alert_returned_garments_detail": "Check orders with returned items",
       "production": "Production",
       "management": "Management",
       "administration": "Administration",
@@ -886,6 +892,12 @@ const resources = {
   fr: {
     translation: {
       "dashboard": "Tableau de bord",
+      "dashboard_alert_pending_orders": "Vous avez {{count}} commandes en attente",
+      "dashboard_alert_pending_orders_detail": "Traitez-les prochainement",
+      "dashboard_alert_expenses_exceed_revenue": "Les dépenses dépassent le chiffre d’affaires ce mois-ci",
+      "dashboard_alert_expenses_exceed_revenue_detail": "Vérifiez les dépenses enregistrées",
+      "dashboard_alert_returned_garments": "{{count}} article(s) retourné(s) pour retraitement",
+      "dashboard_alert_returned_garments_detail": "Vérifiez les commandes contenant des articles retournés",
       "production": "Production",
       "management": "Gestion",
       "administration": "Administration",
@@ -1766,6 +1778,12 @@ const resources = {
   pt: {
     translation: {
       "dashboard": "Painel",
+      "dashboard_alert_pending_orders": "Você tem {{count}} pedidos pendentes",
+      "dashboard_alert_pending_orders_detail": "Considere processá-los em breve",
+      "dashboard_alert_expenses_exceed_revenue": "As despesas superam a receita deste mês",
+      "dashboard_alert_expenses_exceed_revenue_detail": "Revise as despesas registradas",
+      "dashboard_alert_returned_garments": "{{count}} peça(s) devolvida(s) para retratamento",
+      "dashboard_alert_returned_garments_detail": "Verifique os pedidos com peças devolvidas",
       "production": "Produção",
       "management": "Gestão",
       "administration": "Administração",

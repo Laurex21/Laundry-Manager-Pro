@@ -6,6 +6,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const shell = fs.readFileSync(path.join(root, "client/src/components/layout-shell.tsx"), "utf8");
 const dashboard = fs.readFileSync(path.join(root, "client/src/pages/dashboard.tsx"), "utf8");
 const i18n = fs.readFileSync(path.join(root, "client/src/lib/i18n.ts"), "utf8");
+const storage = fs.readFileSync(path.join(root, "server/storage.ts"), "utf8");
 
 for (const group of ["operations", "production", "management", "administration"]) {
   assert.match(shell, new RegExp(`key: "${group}"`), `Missing navigation group: ${group}`);
@@ -29,5 +30,17 @@ for (const marker of [
 assert.match(dashboard, /card-orders-status-chart/, "Production pipeline must remain available");
 assert.match(dashboard, /card-recent-orders/, "Recent orders must remain available");
 assert.match(dashboard, /card-ready-for-pickup/, "Pickup priorities must remain available");
+assert.match(dashboard, /toLocaleString\(i18n\.language/, "Dashboard money must follow the selected locale");
+assert.match(dashboard, /MessageCircle/, "Pickup WhatsApp actions must use a compact accessible icon");
+assert.doesNotMatch(dashboard, /ActionRow href="\/orders\?status=ready"/, "Pickup delays must not be duplicated in the action centre");
+assert.match(storage, /messageKey: "dashboard_alert_pending_orders"/, "Dashboard alerts must be localized by the client");
+assert.doesNotMatch(storage, /You have \$\{pendingCount\} pending orders/, "Server must not hard-code English Dashboard alerts");
+for (const key of [
+  "dashboard_alert_pending_orders",
+  "dashboard_alert_expenses_exceed_revenue",
+  "dashboard_alert_returned_garments",
+]) {
+  assert.equal(i18n.match(new RegExp(`"${key}"`, "g"))?.length, 3, `Missing EN/FR/PT translations for ${key}`);
+}
 
 console.log("Global shell and Dashboard redesign checks passed.");

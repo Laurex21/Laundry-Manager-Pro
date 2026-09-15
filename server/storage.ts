@@ -1223,17 +1223,17 @@ export class DatabaseStorage implements IStorage {
     const costPerKg = monthRevenue > 0 ? monthExpenses / Math.max(monthOrders, 1) : 0;
     const profitPerKg = monthRevenue > 0 ? profit / Math.max(monthOrders, 1) : 0;
 
-    const alerts: { type: string; message: string; detail?: string }[] = [];
+    const alerts: { type: string; messageKey: string; detailKey?: string; params?: Record<string, number> }[] = [];
     const pendingResult = await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(siteWhere, eq(orders.status, "received")));
     const pendingCount = Number(pendingResult[0]?.count || 0);
-    if (pendingCount > 10) alerts.push({ type: "warning", message: `You have ${pendingCount} pending orders`, detail: "Consider processing them soon" });
-    if (monthExpenses > monthRevenue && monthRevenue > 0) alerts.push({ type: "danger", message: "Expenses exceed revenue this month", detail: "Review your expenditure logs" });
+    if (pendingCount > 10) alerts.push({ type: "warning", messageKey: "dashboard_alert_pending_orders", detailKey: "dashboard_alert_pending_orders_detail", params: { count: pendingCount } });
+    if (monthExpenses > monthRevenue && monthRevenue > 0) alerts.push({ type: "danger", messageKey: "dashboard_alert_expenses_exceed_revenue", detailKey: "dashboard_alert_expenses_exceed_revenue_detail" });
 
     const returnedGarments = await db.select({ count: sql<number>`count(*)` }).from(garmentItems)
       .innerJoin(orders, eq(garmentItems.orderId, orders.id))
       .where(and(siteWhere, eq(garmentItems.returnedForTreatment, true), sql`${garmentItems.resolvedAt} IS NULL`));
     const returnedCount = Number(returnedGarments[0]?.count || 0);
-    if (returnedCount > 0) alerts.push({ type: "warning", message: `${returnedCount} garment(s) returned for treatment`, detail: "Check orders with returned items" });
+    if (returnedCount > 0) alerts.push({ type: "warning", messageKey: "dashboard_alert_returned_garments", detailKey: "dashboard_alert_returned_garments_detail", params: { count: returnedCount } });
 
     // Build site overview for All Sites mode
     let sitesOverview: { id: number; name: string; city?: string | null; memberCount: number; isActive: boolean }[] = [];

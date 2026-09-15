@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ShoppingBag, Users, DollarSign, Clock, ChevronRight, Plus,
   AlertCircle, AlertTriangle, Info, Building2, MapPin, UserCheck,
-  TrendingUp, CalendarDays, Package, CreditCard, Wallet, RotateCcw, FileText
+  TrendingUp, CalendarDays, Package, CreditCard, Wallet, RotateCcw, FileText, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,6 +70,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${symbol}`;
 
   const isAllSitesMode = isOwner && currentSite === null;
   const sitesOverview: any[] = dashData?.sitesOverview ?? [];
@@ -177,8 +178,8 @@ export default function Dashboard() {
 
       {/* Core KPI strip */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="dashboard-core-kpis">
-        <MetricCard label={t('total_revenue')} value={`${symbol}${(dashData?.monthRevenue || stats?.totalRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-month-revenue" />
-        <MetricCard label={t('net_profit')} value={`${symbol}${monthProfit.toFixed(2)}`} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
+        <MetricCard label={t('total_revenue')} value={money(dashData?.monthRevenue || stats?.totalRevenue)} icon={DollarSign} color="green" data-testid="card-month-revenue" />
+        <MetricCard label={t('net_profit')} value={money(monthProfit)} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
         <MetricCard href="/orders?status=received" label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
         <MetricCard href="/orders?status=ready" label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
       </div>
@@ -202,8 +203,8 @@ export default function Dashboard() {
             return (
               <div key={i} className={`flex items-center gap-3 px-3.5 py-2 rounded-lg border text-sm ${s.bg}`} data-testid={`alert-banner-${i}`}>
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                <span className="font-medium">{alert.message}</span>
-                {alert.detail && <span className="ml-1 opacity-75">{alert.detail}</span>}
+                <span className="font-medium">{t(alert.messageKey, alert.params)}</span>
+                {alert.detailKey && <span className="ml-1 opacity-75">{t(alert.detailKey, alert.params)}</span>}
               </div>
             );
           })}
@@ -250,11 +251,11 @@ export default function Dashboard() {
       {/* Supporting period metrics */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" data-testid="dashboard-supporting-kpis">
         <MetricCard href="/orders?period=today" label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
-        <MetricCard label={t('today_revenue')} value={`${symbol}${(dashData?.todayRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-today-revenue" />
+        <MetricCard label={t('today_revenue')} value={money(dashData?.todayRevenue)} icon={DollarSign} color="green" data-testid="card-today-revenue" />
         <MetricCard href="/orders?period=week" label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
-        <MetricCard label={t('week_revenue')} value={`${symbol}${(dashData?.weekRevenue || 0).toFixed(2)}`} icon={DollarSign} color="green" data-testid="card-week-revenue" />
+        <MetricCard label={t('week_revenue')} value={money(dashData?.weekRevenue)} icon={DollarSign} color="green" data-testid="card-week-revenue" />
         <MetricCard href="/orders?period=month" label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
-        <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={t('total_expenses_label')} value={`${symbol}${(dashData?.monthExpenses || 0).toFixed(2)}`} icon={DollarSign} color="red" data-testid="card-month-expenses" />
+        <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={t('total_expenses_label')} value={money(dashData?.monthExpenses)} icon={DollarSign} color="red" data-testid="card-month-expenses" />
       </div>
       <div className="space-y-3">
         {Number(creditSummary?.totalCreditBalance ?? 0) > 0 && (
@@ -262,7 +263,7 @@ export default function Dashboard() {
             <div className="cursor-pointer" data-testid="card-credit-liability">
               <MetricCard
                 label={t("credit_to_honor", { count: creditSummary.clientsWithCredit })}
-                value={`${symbol}${Number(creditSummary.totalCreditBalance).toFixed(2)}`}
+                value={money(creditSummary.totalCreditBalance)}
                 icon={Wallet}
                 color="emerald"
               />
@@ -352,7 +353,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       <StatusBadge status={order.status} />
-                      <span className="font-mono text-sm w-16 text-right">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
+                      <span className="w-28 text-right font-mono text-sm">{money(order.totalAmount)}</span>
                       <Link href={`/orders/${order.id}`}>
                         <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
                           <ChevronRight className="w-3.5 h-3.5" />
@@ -377,7 +378,6 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 px-4 pb-4">
-              {overduePickupCount > 0 && <ActionRow href="/orders?status=ready" label={`${overduePickupCount} ${t('delays_overdue')}`} tone="orange" />}
               {openReturnCount > 0 && <ActionRow href="/pilotage?view=quality" label={`${openReturnCount} ${t('quality_operations_open')}`} tone="orange" />}
               {unacknowledgedReportCount > 0 && <ActionRow href="/pilotage?view=daily" label={`${unacknowledgedReportCount} ${t('daily_reports')}`} tone="blue" />}
               {priorityCount === 0 && <p className="rounded-lg border border-dashed border-border/50 py-4 text-center text-xs text-muted-foreground">{t('no_alerts')}</p>}
@@ -423,7 +423,7 @@ export default function Dashboard() {
                         <div className="min-w-0">
                           <p className="text-sm font-medium leading-tight truncate">{order.customer?.name || `#${orderDisplayId(order)}`}</p>
                           <p className="text-xs text-muted-foreground">
-                            {symbol}{Number(order.totalAmount).toFixed(2)}
+                            {money(order.totalAmount)}
                             {overdueOrder && <> · <span className="text-orange-700 dark:text-orange-400">{t('days_value', { count: overdueOrder.daysWaiting })} · {t('delays_overdue')}</span></>}
                           </p>
                         </div>
@@ -431,12 +431,13 @@ export default function Dashboard() {
                           {overdueOrder?.whatsappUrl && (
                             <Button
                               type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-[#128C7E] hover:bg-emerald-50 hover:text-[#128C7E]"
                               onClick={() => openWhatsApp(whatsappRequestFromUrl(overdueOrder.whatsappUrl))}
+                              aria-label={`WhatsApp ${order.customer?.name || orderDisplayId(order)}`}
                             >
-                              WhatsApp
+                              <MessageCircle className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           )}
                           <Button asChild variant="ghost" size="icon" className="h-7 w-7">
