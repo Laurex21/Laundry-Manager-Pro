@@ -318,6 +318,7 @@ function buildOrderConfirmationWhatsAppMessage({
 
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
+  const { currentSite, allSites, switchSite, isOwner } = useAuth() as any;
   const [search, setSearch] = useState("");
   const [savedDraft, setSavedDraft] = useState<any | null>(null);
   const initialDashboardFilters = useMemo(dashboardOrderFilters, []);
@@ -442,6 +443,10 @@ export default function Orders() {
     { key: "ready",  labelKey: "orders_ready",  count: summary.ready,  color: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300" },
     { key: "unpaid", labelKey: "orders_unpaid", count: summary.unpaid, color: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
   ];
+  const emptySiteMessage = currentSite?.name
+    ? t("no_orders_for_site", "Aucune commande trouvée pour le site {{site}}.", { site: currentSite.name })
+    : t("no_orders_found");
+  const canViewAllSites = isOwner && currentSite && allSites?.length > 1;
   if (PIPELINE_STATUSES.has(statusFilter) && !chips.some((chip) => chip.key === statusFilter)) {
     chips.push({
       key: statusFilter,
@@ -643,7 +648,8 @@ export default function Orders() {
                   <td colSpan={7} className="px-3 py-14 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <PackageOpen className="w-8 h-8 text-muted-foreground/40" />
-                      <p className="text-muted-foreground text-sm">{t("no_orders_found")}</p>
+                      <p className="text-muted-foreground text-sm">{emptySiteMessage}</p>
+                      {canViewAllSites && <Button size="sm" variant="outline" onClick={() => switchSite(null)}>{t("view_all_sites", "Voir tous les sites")}</Button>}
                       {!search && statusFilter === "all" && (
                         <Dialog open={open} onOpenChange={setOpen}>
                           <DialogTrigger asChild>
@@ -708,7 +714,8 @@ export default function Orders() {
           <div className="flex flex-col items-center gap-4 py-16 border-2 border-dashed border-border rounded-xl text-center">
             <PackageOpen className="w-10 h-10 text-muted-foreground/40" />
             <div>
-              <p className="font-medium text-foreground">{t("no_orders_found")}</p>
+              <p className="font-medium text-foreground">{emptySiteMessage}</p>
+              {canViewAllSites && <Button size="sm" variant="outline" className="mt-3" onClick={() => switchSite(null)}>{t("view_all_sites", "Voir tous les sites")}</Button>}
               {!search && statusFilter === "all" && (
                 <p className="text-sm text-muted-foreground mt-1">{t("orders_empty_hint")}</p>
               )}
