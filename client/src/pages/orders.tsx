@@ -883,6 +883,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   const [correctionReason, setCorrectionReason] = useState("");
   const [isCorrecting, setIsCorrecting] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
+  const [submitExplicitlyRequested, setSubmitExplicitlyRequested] = useState(false);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
@@ -1147,6 +1148,8 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   }
 
   async function onSubmit(data: CreateOrderFormValues) {
+    if (wizardStep !== 5 || !submitExplicitlyRequested) return;
+    setSubmitExplicitlyRequested(false);
     const formattedData = {
       ...data,
       discount: discountAmount,
@@ -1333,7 +1336,21 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
         </Form>
       ) : (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 lg:space-y-2">
+          <form
+            onSubmit={(event) => {
+              if (wizardStep !== 5 || !submitExplicitlyRequested) {
+                event.preventDefault();
+                return;
+              }
+              void form.handleSubmit(onSubmit)(event);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && event.target instanceof HTMLElement && event.target.tagName !== "TEXTAREA") {
+                event.preventDefault();
+              }
+            }}
+            className="space-y-4 lg:space-y-2"
+          >
             <div className={cn("grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6", wizardStep !== 1 && "hidden")} data-testid="order-wizard-step-client">
               <FormField
                 control={form.control}
@@ -1816,7 +1833,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
 
             <div className="flex gap-2 border-t bg-background px-1 pb-[env(safe-area-inset-bottom)] pt-3">
               {wizardStep > 1 && <Button type="button" variant="outline" size="lg" onClick={() => setWizardStep((step) => Math.max(1, step - 1))}><ChevronLeft className="mr-2 h-4 w-4" />{t("back", "Retour")}</Button>}
-              {wizardStep < 5 ? <Button type="button" className="flex-1" size="lg" onClick={goToNextStep}>{t("next", "Suivant")}</Button> : <Button type="submit" className="flex-1" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && correctionReason.trim().length < 5)}>{isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}</Button>}
+              {wizardStep < 5 ? <Button type="button" className="flex-1" size="lg" onClick={goToNextStep}>{t("next", "Suivant")}</Button> : <Button type="submit" className="flex-1" size="lg" onClick={() => setSubmitExplicitlyRequested(true)} disabled={isOrderPending || isCorrecting || (!!correctionOrder && correctionReason.trim().length < 5)}>{isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}</Button>}
             </div>
           </form>
         </Form>
