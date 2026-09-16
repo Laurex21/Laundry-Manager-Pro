@@ -98,6 +98,18 @@ export const orders = pgTable("orders", {
   index("idx_orders_corrected_from").on(table.correctedFromOrderId),
 ]);
 
+export const orderDrafts = pgTable("order_drafts", {
+  id: serial("id").primaryKey(),
+  siteId: integer("site_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  currentStep: integer("current_step").notNull().default(1),
+  payload: jsonb("payload").notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_order_drafts_user_site_updated").on(table.userId, table.siteId, table.updatedAt),
+]);
+
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => orders.id),
@@ -893,6 +905,7 @@ export const insertMachineUsageSchema = createInsertSchema(machineUsage).omit({ 
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true, createdAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, ordersUsed: true });
 export const insertOrderStatusHistorySchema = createInsertSchema(orderStatusHistory).omit({ id: true, changedAt: true });
+export const insertOrderDraftSchema = createInsertSchema(orderDrafts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertBusinessSettingsSchema = createInsertSchema(businessSettings)
   .omit({ id: true, userId: true, updatedAt: true })
   .extend({
@@ -954,6 +967,7 @@ export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type SubscriptionPayment = typeof subscriptionPayments.$inferSelect;
 
 export type OrderStatusHistoryEntry = typeof orderStatusHistory.$inferSelect;
+export type OrderDraft = typeof orderDrafts.$inferSelect;
 
 export type BusinessSettings = typeof businessSettings.$inferSelect;
 export type InsertBusinessSettings = z.infer<typeof insertBusinessSettingsSchema>;

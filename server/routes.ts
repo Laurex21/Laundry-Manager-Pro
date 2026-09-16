@@ -8,7 +8,7 @@ import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
-import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema } from "@shared/schema";
+import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema, orderDrafts } from "@shared/schema";
 import { reportingDateRange, reportingDateString, validReportingTimeZone } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
@@ -32,6 +32,7 @@ import {
   OrderCorrectionError,
 } from "./lib/order-corrections";
 import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
+import { and, desc, eq } from "drizzle-orm";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -301,6 +302,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }).strict();
   const cancellationRequestSchema = z.object({ reason: z.string().trim().min(1).max(500) }).strict();
   const cancellationRejectionSchema = z.object({ note: z.string().trim().max(500).optional().default("") }).strict();
+  const orderDraftSchema = z.object({
+    currentStep: z.number().int().min(1).max(5),
+    payload: z.record(z.unknown()),
+  }).strict();
+
+  app.get("/api/order-drafts/current", isAuthenticated, async (req: any, res) => {
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
+    const userId = (req.session as any).userId as string;
+    const [draft] = await db.select().from(orderDrafts)
+      .where(and(eq(orderDrafts.userId, userId), eq(orderDrafts.siteId, siteId)))
+      .orderBy(desc(orderDrafts.updatedAt)).limit(1);
+    res.json(draft ?? null);
+  });
+
+  app.put("/api/order-drafts/current", isAuthenticated, async (req: any, res) => {
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
+    const parsed = orderDraftSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid order draft", issues: parsed.error.issues });
+    const userId = (req.session as any).userId as string;
+    const [existing] = await db.select().from(orderDrafts)
+      .where(and(eq(orderDrafts.userId, userId), eq(orderDrafts.siteId, siteId)))
+      .orderBy(desc(orderDrafts.updatedAt)).limit(1);
+    const values = { currentStep: parsed.data.currentStep, payload: parsed.data.payload, updatedAt: new Date() };
+    const [draft] = existing
+      ? await db.update(orderDrafts).set(values).where(eq(orderDrafts.id, existing.id)).returning()
+      : await db.insert(orderDrafts).values({ ...values, siteId, userId }).returning();
+    res.json(draft);
+  });
+
+  app.delete("/api/order-drafts/current", isAuthenticated, async (req: any, res) => {
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
+    const userId = (req.session as any).userId as string;
+    await db.delete(orderDrafts).where(and(eq(orderDrafts.userId, userId), eq(orderDrafts.siteId, siteId)));
+    res.status(204).end();
+  });
 
   app.get(api.customers.list.path, isAuthenticated, async (req: any, res) => {
     const customers = await storage.getCustomersBySite(orgScopedSites(req));

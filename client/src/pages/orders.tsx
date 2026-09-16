@@ -30,6 +30,8 @@ import {
   Eye,
   Star,
   CalendarDays,
+  ChevronLeft,
+  Save,
   X,
   Loader2,
   Wallet,
@@ -156,6 +158,7 @@ function ServiceCombobox({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<any | null>(null);
   const selectedService = services.find((service) => service.id === value);
   const groupedServices = useMemo(() => {
     const groups = new Map<string, Service[]>();
@@ -347,6 +350,19 @@ export default function Orders() {
     if (Number.isInteger(correctionOrderId) && correctionOrderId > 0) setOpen(true);
   }, [correctionOrderId]);
 
+  useEffect(() => {
+    fetch("/api/order-drafts/current", { credentials: "include" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then(setSavedDraft)
+      .catch(() => setSavedDraft(null));
+  }, [open]);
+
+  async function deleteSavedDraft() {
+    if (!window.confirm(t("delete_draft_confirm", "Supprimer définitivement ce brouillon ?"))) return;
+    const response = await fetch("/api/order-drafts/current", { method: "DELETE", credentials: "include" });
+    if (response.ok) setSavedDraft(null);
+  }
+
   const createdOrderWhatsAppPhone = normalizeWhatsAppPhone(createdOrder?.customer?.phone);
 
   async function handleCreatedOrderWhatsApp() {
@@ -477,6 +493,17 @@ export default function Orders() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {savedDraft && !correctionOrderId && <div className="flex flex-col gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="saved-order-draft-banner">
+        <div>
+          <p className="font-semibold text-[#082D5B]">{t("order_draft_available", "Brouillon de commande disponible")}</p>
+          <p className="text-sm text-muted-foreground">{t("order_draft_available_hint", "Reprenez votre saisie à l’étape enregistrée. Le brouillon n’affecte ni les revenus ni la production.")}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={deleteSavedDraft}>{t("delete")}</Button>
+          <Button type="button" onClick={() => setOpen(true)}>{t("resume_draft", "Reprendre le brouillon")}</Button>
+        </div>
+      </div>}
 
       <Dialog open={!!createdOrder} onOpenChange={(isOpen) => !isOpen && setCreatedOrder(null)}>
         <DialogContent className="sm:max-w-[440px]">
@@ -835,6 +862,10 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   const [discountMode, setDiscountMode] = useState<"fixed" | "percentage">("fixed");
   const [correctionReason, setCorrectionReason] = useState("");
   const [isCorrecting, setIsCorrecting] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [draftId, setDraftId] = useState<number | null>(null);
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [textileReserve, setTextileReserve] = useState("");
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
@@ -924,6 +955,67 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     control: form.control,
     name: "customerId"
   });
+  const watchedForm = useWatch({ control: form.control });
+
+  useEffect(() => {
+    if (correctionOrder) return;
+    let cancelled = false;
+    fetch("/api/order-drafts/current", { credentials: "include" })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((draft) => {
+        if (cancelled || !draft?.payload) return;
+        setDraftId(draft.id);
+        setWizardStep(Math.min(5, Math.max(1, Number(draft.currentStep) || 1)));
+        const payload = draft.payload as any;
+        if (payload.form) form.reset({ ...form.getValues(), ...payload.form });
+        if (payload.discountMode === "fixed" || payload.discountMode === "percentage") setDiscountMode(payload.discountMode);
+        if (typeof payload.textileReserve === "string") setTextileReserve(payload.textileReserve);
+        setDraftState("saved");
+      })
+      .catch(() => setDraftState("error"));
+    return () => { cancelled = true; };
+  }, [correctionOrder, form]);
+
+  useEffect(() => {
+    if (correctionOrder) return;
+    const timer = window.setTimeout(async () => {
+      setDraftState("saving");
+      try {
+        const response = await fetch("/api/order-drafts/current", {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentStep: wizardStep, payload: { form: watchedForm, discountMode, textileReserve } }),
+        });
+        if (!response.ok) throw new Error();
+        const draft = await response.json();
+        setDraftId(draft.id);
+        setDraftState("saved");
+      } catch {
+        setDraftState("error");
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [correctionOrder, discountMode, textileReserve, watchedForm, wizardStep]);
+
+  const wizardSteps = [
+    { id: 1, label: t("customers") },
+    { id: 2, label: t("order_services") },
+    { id: 3, label: t("pickup_date") },
+    { id: 4, label: t("pricing", "Tarification") },
+    { id: 5, label: t("review", "Vérification") },
+  ];
+
+  async function goToNextStep() {
+    const fieldsByStep: Record<number, any[]> = {
+      1: ["customerId", "entryDate"],
+      2: ["items", "garmentItems"],
+      3: ["pickupDate", "pickupCost"],
+      4: ["discount", "discountPct"],
+    };
+    const valid = await form.trigger(fieldsByStep[wizardStep] as any, { shouldFocus: true });
+    if (valid) setWizardStep((step) => Math.min(5, step + 1));
+  }
   const { data: subscriptionStatus } = useQuery<any>({
     queryKey: ["customer-subscription-status", watchedCustomerId],
     queryFn: async () => {
@@ -1017,7 +1109,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     };
 
     if (correctionOrder) {
-      if (!isOwner && correctionReason.trim().length < 5) return;
+      if (correctionReason.trim().length < 5) return;
       setIsCorrecting(true);
       try {
         const response = await fetch(`/api/orders/${correctionOrder.id}/correct`, {
@@ -1029,7 +1121,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
             entryDate: new Date(`${formattedData.entryDate}T00:00:00`).toISOString(),
             pickupDate: formattedData.pickupDate ? new Date(`${formattedData.pickupDate}T00:00:00`).toISOString() : null,
             discountPct: discountMode === "percentage" ? Number(formattedData.discountPct || 0) : subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(4)) : 0,
-            reason: correctionReason.trim() || "Owner correction",
+            reason: correctionReason.trim(),
             items: formattedData.items,
             garments: formattedData.garmentItems,
           }),
@@ -1097,6 +1189,10 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
           });
         }
         form.reset();
+        await fetch("/api/order-drafts/current", { method: "DELETE", credentials: "include" }).catch(() => undefined);
+        setDraftId(null);
+        setDraftState("idle");
+        setWizardStep(1);
         onSuccess(orderDetails);
       }
     });
@@ -1104,6 +1200,18 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
 
   return (
     <div className="min-w-0 space-y-4 sm:space-y-6 lg:space-y-3">
+      <div className={cn("rounded-xl border p-3 sm:p-4", correctionOrder ? "border-amber-300 bg-amber-50 dark:bg-amber-950/20" : "border-primary/20 bg-primary/5")} data-testid="order-wizard-header">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#082D5B] dark:text-white">{correctionOrder ? t("correct_order") : t("new_order")}</p>
+            <p className="text-xs text-muted-foreground">{correctionOrder ? t("correction_audit_notice") : draftState === "saving" ? t("saving") : draftState === "error" ? t("save_failed", "Sauvegarde impossible") : draftId ? t("draft_saved", "Brouillon enregistré") : t("draft_auto_save", "Sauvegarde automatique activée")}</p>
+          </div>
+          {!correctionOrder && draftId && <Badge variant="secondary"><Save className="mr-1 h-3 w-3" />{t("daily_report_status_draft")}</Badge>}
+        </div>
+        <ol className="mt-4 grid grid-cols-5 gap-1" aria-label={t("new_order")}>
+          {wizardSteps.map((step) => <li key={step.id}><button type="button" onClick={() => step.id <= wizardStep && setWizardStep(step.id)} className={cn("flex min-h-11 w-full flex-col items-center justify-center rounded-lg px-1 text-center text-[10px] font-medium sm:text-xs", step.id === wizardStep ? "bg-[#6B5CFF] text-white" : step.id < wizardStep ? "bg-violet-100 text-violet-800" : "bg-white text-muted-foreground dark:bg-card")} aria-current={step.id === wizardStep ? "step" : undefined}><span className="mb-0.5 font-bold">{step.id}</span><span className="hidden sm:block">{step.label}</span></button></li>)}
+        </ol>
+      </div>
       <div className="flex min-w-0 items-center justify-between gap-2 border-b pb-3 sm:pb-4">
         <h3 className="min-w-0 text-base font-semibold sm:text-lg">{t("order_details")}</h3>
         <Button
@@ -1165,7 +1273,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 lg:space-y-2">
-            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+            <div className={cn("grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:gap-6", wizardStep !== 1 && "hidden")} data-testid="order-wizard-step-client">
               <FormField
                 control={form.control}
                 name="customerId"
@@ -1238,20 +1346,9 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="pickupDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("pickup_date")}</FormLabel>
-                      <FormControl><Input type="date" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
             </div>
-            {selectedCustomerCredit > 0 && (
+            {wizardStep === 1 && selectedCustomerCredit > 0 && (
               <div
                 className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100 sm:flex-row sm:items-center sm:justify-between sm:p-4"
                 role="status"
@@ -1267,10 +1364,21 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 </div>
               </div>
             )}
-            {subscriptionStatus && <div role="status" data-testid="selected-customer-subscription-status" className={cn("rounded-xl border p-3 sm:p-4", subscriptionStatus.status === "active" ? "border-blue-200 bg-blue-50 dark:bg-blue-950/20" : "border-amber-300 bg-amber-50 dark:bg-amber-950/20")}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", subscriptionStatus.status === "active" ? "bg-primary" : "bg-amber-600")}><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold">Abonné · {subscriptionStatus.planName}</span><Badge variant={subscriptionStatus.status === "active" ? "default" : "secondary"}>{subscriptionLabel(subscriptionStatus.status)}</Badge><span className="shrink-0 text-xs text-muted-foreground">#{subscriptionStatus.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {subscriptionStatus.expiryDate}</span></div>{subscriptionStatus.status !== "active" && <p className="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">Cet abonnement ne peut pas couvrir la commande tant que son statut est {subscriptionLabel(subscriptionStatus.status).toLowerCase()}.</p>}<div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{subscriptionStatus.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{subscriptionStatus.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{subscriptionStatus.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
+            {wizardStep === 1 && subscriptionStatus && <div role="status" data-testid="selected-customer-subscription-status" className={cn("rounded-xl border p-3 sm:p-4", subscriptionStatus.status === "active" ? "border-blue-200 bg-blue-50 dark:bg-blue-950/20" : "border-amber-300 bg-amber-50 dark:bg-amber-950/20")}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", subscriptionStatus.status === "active" ? "bg-primary" : "bg-amber-600")}><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold">Abonné · {subscriptionStatus.planName}</span><Badge variant={subscriptionStatus.status === "active" ? "default" : "secondary"}>{subscriptionLabel(subscriptionStatus.status)}</Badge><span className="shrink-0 text-xs text-muted-foreground">#{subscriptionStatus.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {subscriptionStatus.expiryDate}</span></div>{subscriptionStatus.status !== "active" && <p className="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">Cet abonnement ne peut pas couvrir la commande tant que son statut est {subscriptionLabel(subscriptionStatus.status).toLowerCase()}.</p>}<div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{subscriptionStatus.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{subscriptionStatus.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{subscriptionStatus.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
+
+            {wizardStep === 3 && <section className="space-y-4 rounded-xl border bg-muted/10 p-4" data-testid="order-wizard-step-delivery">
+              <div>
+                <h3 className="font-semibold text-[#082D5B] dark:text-white">{t("deadlines_delivery", "Délais et livraison")}</h3>
+                <p className="text-sm text-muted-foreground">{t("deadlines_delivery_hint", "Confirmez la date promise et les éventuels frais de collecte ou livraison.")}</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField control={form.control} name="pickupDate" render={({ field }) => <FormItem><FormLabel>{t("pickup_date")}</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>} />
+                <FormField control={form.control} name="pickupCost" render={({ field }) => <FormItem><FormLabel>{t("pickup_cost")} ({symbol})</FormLabel><FormControl><Input type="number" step="0.01" min="0" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>} />
+              </div>
+            </section>}
 
             <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-start lg:gap-4">
-              <div className="min-w-0 space-y-4 lg:space-y-2" data-testid="order-form-primary-column">
+              <div className={cn("min-w-0 space-y-4 lg:space-y-2", wizardStep !== 2 && "hidden")} data-testid="order-form-primary-column">
                 <div className="space-y-3 lg:space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-muted-foreground">{t('order_services', 'Order Services')}</h3>
@@ -1426,7 +1534,20 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 </div>
               </div>
 
-              <div className="min-w-0 space-y-2 rounded-xl border bg-muted/10 p-4 lg:p-3 lg:space-y-2 lg:sticky lg:top-0" data-testid="order-form-summary-column">
+              <div className={cn("min-w-0 space-y-2 rounded-xl border bg-muted/10 p-4 lg:p-3 lg:space-y-2 lg:sticky lg:top-0", wizardStep < 4 && "hidden")} data-testid="order-form-summary-column">
+              {wizardStep === 5 && <div className="mb-3 space-y-2 rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-900/50 dark:bg-violet-950/20" data-testid="order-wizard-review">
+                <p className="text-sm font-semibold text-[#082D5B] dark:text-white">{t("review_order", "Vérification de la commande")}</p>
+                <p className="text-xs text-muted-foreground">{t("review_order_hint", "Vérifiez le client, les articles, les délais et le total avant confirmation.")}</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <span>{t("customers")}</span><strong className="text-right">{customers?.find((customer) => customer.id === watchedCustomerId)?.name || "—"}</strong>
+                  <span>{t("garment_inventory")}</span><strong className="text-right">{totalRegisteredGarments}</strong>
+                  <span>{t("pickup_date")}</span><strong className="text-right">{watchedForm.pickupDate || "—"}</strong>
+                </div>
+                <div className="space-y-1 pt-2">
+                  <FormLabel htmlFor="textile-reserve">{t("textile_reserve", "Réserve textile (facultative)")}</FormLabel>
+                  <Textarea id="textile-reserve" value={textileReserve} onChange={(event) => setTextileReserve(event.target.value)} placeholder={t("textile_reserve_placeholder", "Fragilité, tache, risque ou réserve acceptée par le client…")} />
+                </div>
+              </div>}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{t("subtotal")}:</span>
                 <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
@@ -1524,7 +1645,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                     <p className="text-xs text-primary">{t("customer_default_discount", { percentage: customerDiscountPct })}</p>
                   )}
                 </div>
-                <FormField
+                {wizardStep === 3 && <FormField
                   control={form.control}
                   name="pickupCost"
                   render={({ field }) => (
@@ -1538,7 +1659,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                       <FormMessage />
                     </FormItem>
                   )}
-                />
+                />}
               </div>
               {(Number(watchedPickupCost) > 0 || discountAmount > 0) && (
                 <div className="text-xs text-muted-foreground space-y-1 px-1">
@@ -1613,7 +1734,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                   </div>
                 )}
               </div>}
-              {correctionOrder && !isOwner && <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="correction-reason-section">
+              {correctionOrder && wizardStep === 5 && <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="correction-reason-section">
                 <FormLabel htmlFor="order-correction-reason">{t("correction_reason")}</FormLabel>
                 <Textarea id="order-correction-reason" value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} minLength={5} required />
                 <p className="text-xs text-muted-foreground">{t("correction_audit_notice")}</p>
@@ -1621,10 +1742,9 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-20 -mx-1 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:pt-1">
-              <Button type="submit" className="w-full" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && !isOwner && correctionReason.trim().length < 5)}>
-                {isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}
-              </Button>
+            <div className="sticky bottom-0 z-20 -mx-1 flex gap-2 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:pt-1">
+              {wizardStep > 1 && <Button type="button" variant="outline" size="lg" onClick={() => setWizardStep((step) => Math.max(1, step - 1))}><ChevronLeft className="mr-2 h-4 w-4" />{t("back")}</Button>}
+              {wizardStep < 5 ? <Button type="button" className="flex-1" size="lg" onClick={goToNextStep}>{t("next", "Suivant")}</Button> : <Button type="submit" className="flex-1" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && correctionReason.trim().length < 5)}>{isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}</Button>}
             </div>
           </form>
         </Form>
