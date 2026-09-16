@@ -1108,24 +1108,24 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="identity">
-        <TabsList className="grid h-auto w-full max-w-2xl grid-cols-5 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm" data-testid="settings-tabs">
-          <TabsTrigger value="identity" className="gap-2" data-testid="tab-identity">
+        <TabsList className="flex h-auto w-full max-w-full gap-1 overflow-x-auto rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm sm:grid sm:max-w-2xl sm:grid-cols-5" data-testid="settings-tabs">
+          <TabsTrigger value="identity" className="min-w-[3rem] shrink-0 gap-2 sm:min-w-0" data-testid="tab-identity">
             <Building2 className="w-4 h-4" />
             <span className="hidden sm:inline">{t("business")}</span>
           </TabsTrigger>
-          <TabsTrigger value="receipt" className="gap-2" data-testid="tab-receipt">
+          <TabsTrigger value="receipt" className="min-w-[3rem] shrink-0 gap-2 sm:min-w-0" data-testid="tab-receipt">
             <Receipt className="w-4 h-4" />
             <span className="hidden sm:inline">{t("receipt")}</span>
           </TabsTrigger>
-          <TabsTrigger value="terms" className="gap-2" data-testid="tab-terms">
+          <TabsTrigger value="terms" className="min-w-[3rem] shrink-0 gap-2 sm:min-w-0" data-testid="tab-terms">
             <FileText className="w-4 h-4" />
             <span className="hidden sm:inline">{t("terms")}</span>
           </TabsTrigger>
-          <TabsTrigger value="team" className="gap-2" data-testid="tab-team">
+          <TabsTrigger value="team" className="min-w-[3rem] shrink-0 gap-2 sm:min-w-0" data-testid="tab-team">
             <Users className="w-4 h-4" />
             <span className="hidden sm:inline">{t("team")}</span>
           </TabsTrigger>
-          <TabsTrigger value="loyalty" className="gap-2" data-testid="tab-loyalty">
+          <TabsTrigger value="loyalty" className="min-w-[3rem] shrink-0 gap-2 sm:min-w-0" data-testid="tab-loyalty">
             <Gift className="w-4 h-4" />
             <span className="hidden sm:inline">{t("loyalty")}</span>
           </TabsTrigger>

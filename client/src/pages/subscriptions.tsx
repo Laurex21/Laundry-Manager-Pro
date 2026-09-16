@@ -42,8 +42,12 @@ export default function Subscriptions() {
   }
 
   return (
-    <div className="space-y-8 page-fade-in">
-      <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-subscriptions-title">{t("subscription")}</h1>
+    <div className="space-y-8 page-fade-in" data-testid="current-subscription-redesign">
+      <div className="rounded-2xl border border-primary/10 bg-card p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">{t("administration")}</p>
+        <h1 className="mt-1 text-2xl font-display font-bold text-[#082D5B] sm:text-3xl" data-testid="text-subscriptions-title">{t("subscription")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{i18n.language.startsWith("fr") ? "Consultez votre forfait XpressPro actuel et comparez les offres disponibles." : i18n.language.startsWith("pt") ? "Consulte o seu plano XpressPro atual e compare as ofertas disponíveis." : "Review your current XpressPro plan and compare available offers."}</p>
+      </div>
 
       {currentSub && (
         <Card className="shadow-sm border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20" data-testid="card-current-subscription">
@@ -66,7 +70,7 @@ export default function Subscriptions() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         {plans?.map((plan) => {
           const isActive = plan.id === activePlanId;
           const isBusiness = plan.slug === "business";
@@ -82,7 +86,7 @@ export default function Subscriptions() {
               <CardHeader>
                 <CardTitle className="text-xl">{plan.name}</CardTitle>
                 <div className="mt-2">
-                  <span className="text-3xl font-bold font-display">{symbol}{Number(plan.price).toLocaleString()}</span>
+                  <span className="text-3xl font-bold font-display">{Number(plan.price).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} {symbol}</span>
                   <span className="text-muted-foreground text-sm"> {t("per_month")}</span>
                 </div>
               </CardHeader>
