@@ -101,7 +101,7 @@ export default function Customers() {
         <div className="relative min-w-0 sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder={t("search_customers")}
+            placeholder={t("search_customer_short", { defaultValue: "Rechercher un client" })}
             className="h-10 rounded-xl border-primary/15 bg-background pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -192,7 +192,7 @@ export default function Customers() {
                   <Phone className="w-3 h-3 shrink-0" />
                   <span className="truncate">{customer.phone}</span>
                 </p>
-                {customer.segment && (
+                {customer.segment && customer.segment !== "new" && (
                   <Badge variant="secondary" className="mt-1 h-5 px-1.5 text-[10px] capitalize">
                     {String(customer.segment).replace(/_/g, " ")}
                   </Badge>

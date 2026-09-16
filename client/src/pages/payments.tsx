@@ -78,6 +78,7 @@ export default function Payments() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const formatMoney = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 2 })} ${symbol}`;
   const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
 
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
@@ -344,7 +345,7 @@ export default function Payments() {
         <h1 className="text-2xl font-display font-bold leading-tight text-[#082D5B]">{t("payments")}</h1>
         <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
       </div>
-      <div className="grid grid-cols-2 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm"><Button variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>{t("record_payment")}</Button><Button variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>{t("payment_history")}</Button></div>
+      <div className="grid grid-cols-2 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm"><Button variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>{t("register_payment")}</Button><Button variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>{t("payment_history")}</Button></div>
       {view === "history" ? <PaymentLedger /> : <>
 
       {successPayment && (
@@ -409,7 +410,9 @@ export default function Payments() {
           <form onSubmit={handleSubmit} className="p-4 space-y-5">
             {/* Order selector - shown when no order selected */}
             {!selectedOrder && (
-              <div className="space-y-1.5">
+              <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-primary/15 bg-muted/15 p-6 text-center">
+                <div className="max-w-sm space-y-2">
+                  <CreditCard className="mx-auto h-7 w-7 text-primary/70" aria-hidden="true" />
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   {t("select_order")}
                 </label>
@@ -420,6 +423,7 @@ export default function Payments() {
                     ? t("no_unpaid_orders")
                     : t("select_order_from_queue")}
                 </p>
+                </div>
               </div>
             )}
 
@@ -452,19 +456,19 @@ export default function Payments() {
                   <div className="bg-background px-3 py-2.5 text-center">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("order_total")}</p>
                     <p className="font-mono font-bold text-base mt-0.5" data-testid="text-order-total">
-                      {symbol}{totalAmount.toFixed(2)}
+                      {formatMoney(totalAmount)}
                     </p>
                   </div>
                   <div className="bg-background px-3 py-2.5 text-center">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("amount_paid")}</p>
                     <p className="font-mono font-bold text-base mt-0.5 text-green-600 dark:text-green-400" data-testid="text-amount-paid">
-                      {symbol}{totalPaid.toFixed(2)}
+                      {formatMoney(totalPaid)}
                     </p>
                   </div>
                   <div className="bg-background px-3 py-2.5 text-center">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("remaining")}</p>
                     <p className="font-mono font-bold text-base mt-0.5 text-orange-600 dark:text-orange-400" data-testid="text-remaining-balance">
-                      {symbol}{remainingBalance.toFixed(2)}
+                      {formatMoney(remainingBalance)}
                     </p>
                   </div>
                 </div>
@@ -482,7 +486,7 @@ export default function Payments() {
                         <div>
                           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{t("credit_available")}</p>
                           <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                            {symbol}{availableCredit.toFixed(2)} {t("on_account")}
+                            {formatMoney(availableCredit)} {t("on_account")}
                           </p>
                         </div>
                       </div>
@@ -556,8 +560,8 @@ export default function Payments() {
 
                 {appliedCredit > 0 && (
                   <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
-                    <div className="flex justify-between"><span>{t("credit_applied")}</span><strong>-{symbol}{appliedCredit.toFixed(2)}</strong></div>
-                    <div className="flex justify-between"><span>{t("remaining_to_pay")}</span><strong>{symbol}{remainingAfterCredit.toFixed(2)}</strong></div>
+                    <div className="flex justify-between"><span>{t("credit_applied")}</span><strong>-{formatMoney(appliedCredit)}</strong></div>
+                    <div className="flex justify-between"><span>{t("remaining_to_pay")}</span><strong>{formatMoney(remainingAfterCredit)}</strong></div>
                   </div>
                 )}
 
@@ -629,7 +633,7 @@ export default function Payments() {
                 >
                   {isPending
                     ? t("saving")
-                    : `${t("record_payment_of")} ${symbol}${(Math.min(amountReceived, remainingAfterCredit) + appliedCredit).toFixed(2)}`}
+                    : `${t("record_payment_of")} ${formatMoney(Math.min(amountReceived, remainingAfterCredit) + appliedCredit)}`}
                 </Button>
 
                 <AlertDialog open={showSurplusConfirmation} onOpenChange={setShowSurplusConfirmation}>
@@ -641,7 +645,7 @@ export default function Payments() {
                       <AlertDialogTitle>{t("overpayment_detected")}</AlertDialogTitle>
                       <AlertDialogDescription>
                         {t("overpayment_credit_question", {
-                          surplus: `${symbol}${surplus.toFixed(2)}`,
+                          surplus: formatMoney(surplus),
                           customer: (selectedOrder as any)?.customer?.name || t("customer"),
                         })}
                       </AlertDialogDescription>
@@ -649,15 +653,15 @@ export default function Payments() {
                     <div className="min-w-0 rounded-md border bg-muted/40 p-3 text-sm" aria-live="polite">
                       <div className="flex justify-between gap-4">
                         <span>{t("amount_due")}</span>
-                        <strong>{symbol}{remainingAfterCredit.toFixed(2)}</strong>
+                        <strong>{formatMoney(remainingAfterCredit)}</strong>
                       </div>
                       <div className="mt-1 flex justify-between gap-4">
                         <span>{t("amount_received")}</span>
-                        <strong>{symbol}{amountReceived.toFixed(2)}</strong>
+                        <strong>{formatMoney(amountReceived)}</strong>
                       </div>
                       <div className="mt-1 flex justify-between gap-4 text-emerald-700 dark:text-emerald-300">
                         <span>{t("credit_to_add")}</span>
-                        <strong>{symbol}{surplus.toFixed(2)}</strong>
+                        <strong>{formatMoney(surplus)}</strong>
                       </div>
                     </div>
                     <AlertDialogFooter className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 sm:space-x-0">
@@ -716,7 +720,7 @@ export default function Payments() {
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-mono font-medium text-green-600 dark:text-green-400">
-                            {symbol}{Number(p.amount).toFixed(2)}
+                            {formatMoney(p.amount)}
                           </span>
                           <span className="text-muted-foreground flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
@@ -803,7 +807,7 @@ export default function Payments() {
                           {order.paymentStatus === "partial" ? t("partial") : t("unpaid")}
                         </Badge>
                         <span className="font-mono text-xs text-muted-foreground">
-                          {symbol}{Number(order.totalAmount).toFixed(2)}
+                          {formatMoney(order.totalAmount)}
                         </span>
                       </div>
                     </div>
