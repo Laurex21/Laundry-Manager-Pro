@@ -22,6 +22,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger,
+} from "@/components/ui/sheet";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -112,6 +115,7 @@ export default function OrderDetail() {
   const [stageMachineId, setStageMachineId] = useState("");
   const [stageWeightKg, setStageWeightKg] = useState("");
   const [stageDurationMinutes, setStageDurationMinutes] = useState("");
+  const [mobileStagesOpen, setMobileStagesOpen] = useState(false);
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const formatLocalDate = (date: Date | string, pattern: string) =>
     format(new Date(date), pattern, { locale: dateLocaleFor(i18n.language) });
@@ -477,7 +481,7 @@ export default function OrderDetail() {
           <CardTitle className="text-base">{t("order_pipeline")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-0 overflow-x-auto pb-2">
+          <div className="hidden md:flex items-center gap-0 overflow-x-auto pb-2" data-testid="pipeline-desktop-timeline">
             {PIPELINE_STAGES.map((stage, i) => {
               const isPast = i < currentStageIndex;
               const isCurrent = i === currentStageIndex;
@@ -515,7 +519,51 @@ export default function OrderDetail() {
               );
             })}
           </div>
-          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+          <div className="md:hidden space-y-4" data-testid="pipeline-mobile-focus">
+            <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+              <span>{t("step", "Étape")} {currentStageIndex + 1} / {PIPELINE_STAGES.length}</span>
+              <span>{Math.round(((currentStageIndex + 1) / PIPELINE_STAGES.length) * 100)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${((currentStageIndex + 1) / PIPELINE_STAGES.length) * 100}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <div className="min-w-0 text-left">
+                {currentStageIndex > 0 && (
+                  <>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-green-700">{t("completed", "Terminé")}</p>
+                    <p className="truncate text-xs text-muted-foreground">{t("stage_" + PIPELINE_STAGES[currentStageIndex - 1].key)}</p>
+                  </>
+                )}
+              </div>
+              <div className="flex min-w-[132px] flex-col items-center gap-2 text-center">
+                {(() => {
+                  const ActiveIcon = PIPELINE_STAGES[currentStageIndex].icon;
+                  return (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-primary bg-white text-primary shadow-sm ring-4 ring-primary/10">
+                      <ActiveIcon className="h-7 w-7" />
+                    </div>
+                  );
+                })()}
+                <div>
+                  <p className="font-bold text-primary">{t("stage_" + PIPELINE_STAGES[currentStageIndex].key)}</p>
+                  <p className="text-xs text-muted-foreground">{t("current_stage")}</p>
+                </div>
+              </div>
+              <div className="min-w-0 text-right">
+                {nextPipelineStage && (
+                  <>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("next", "Suivant")}</p>
+                    <p className="truncate text-xs text-muted-foreground">{t("stage_" + nextPipelineStage.key)}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 mt-4 pt-4 border-t md:flex-row md:flex-wrap">
             {order.status === "cancellation_requested" && isManager ? (
               <>
                 <Button size="sm" variant="destructive" onClick={handleApproveCancellation} disabled={isUpdating} data-testid="button-approve-cancellation">
@@ -534,18 +582,18 @@ export default function OrderDetail() {
             ) : order.status !== "delivered" && order.status !== "cancelled" && order.status !== "cancellation_requested" ? (
               <>
                 {currentStageIndex < PIPELINE_STAGES.length - 1 && (
-                  <Button size="sm" onClick={handleAdvanceStatus} disabled={isUpdating} data-testid="button-advance-status">
+                  <Button size="sm" className="w-full md:w-auto" onClick={handleAdvanceStatus} disabled={isUpdating} data-testid="button-advance-status">
                     {t("advance_to", { stage: t("stage_" + PIPELINE_STAGES[currentStageIndex + 1]?.key) })}
                   </Button>
                 )}
-                <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setCancelDialogOpen(true)} data-testid="button-request-cancellation">
+                <Button size="sm" variant="outline" className="hidden text-red-600 border-red-200 hover:bg-red-50 md:inline-flex" onClick={() => setCancelDialogOpen(true)} data-testid="button-request-cancellation">
                   <XCircle className="w-4 h-4 mr-1" /> {t("request_cancellation")}
                 </Button>
               </>
             ) : null}
             {order.status !== "delivered" && order.status !== "cancelled" && (
               <Select onValueChange={handleSetStatus}>
-                <SelectTrigger className="w-[170px] h-9" data-testid="select-set-status">
+                <SelectTrigger className="hidden w-[170px] h-9 md:flex" data-testid="select-set-status">
                   <SelectValue placeholder={t("jump_to_stage")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -554,6 +602,71 @@ export default function OrderDetail() {
                   ))}
                 </SelectContent>
               </Select>
+            )}
+            {order.status !== "delivered" && order.status !== "cancelled" && (
+              <Sheet open={mobileStagesOpen} onOpenChange={setMobileStagesOpen}>
+                <SheetTrigger asChild>
+                  <Button type="button" variant="ghost" className="w-full md:hidden" data-testid="button-mobile-all-stages">
+                    {t("view_all_stages", "Voir toutes les étapes")}
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="max-h-[82vh] overflow-y-auto rounded-t-2xl">
+                  <SheetHeader className="text-left">
+                    <SheetTitle>{t("order_pipeline")}</SheetTitle>
+                    <SheetDescription>{t("choose_stage_carefully", "Consultez la progression ou choisissez une étape autorisée.")}</SheetDescription>
+                  </SheetHeader>
+                  <div className="mt-5 space-y-3">
+                    {PIPELINE_STAGES.map((stage, index) => {
+                      const StageIcon = stage.icon;
+                      const isPast = index < currentStageIndex;
+                      const isCurrent = index === currentStageIndex;
+                      return (
+                        <button
+                          key={stage.key}
+                          type="button"
+                          className={cn(
+                            "flex min-h-12 w-full items-center gap-3 rounded-xl border p-3 text-left",
+                            isCurrent ? "border-primary bg-primary/5" : "border-border bg-background"
+                          )}
+                          onClick={() => {
+                            if (isPast) handleSetStatus(stage.key);
+                            setMobileStagesOpen(false);
+                          }}
+                          disabled={isUpdating || !isPast}
+                        >
+                          <span className={cn(
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2",
+                            isPast ? "border-green-500 bg-green-50 text-green-600" :
+                            isCurrent ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted text-muted-foreground"
+                          )}>
+                            {isPast ? <CheckCircle2 className="h-5 w-5" /> : <StageIcon className="h-5 w-5" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium">{t("stage_" + stage.key)}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {isPast ? t("completed", "Terminé") : isCurrent ? t("current_stage") : t("upcoming", "À venir")}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-6 border-t pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                      onClick={() => {
+                        setMobileStagesOpen(false);
+                        setCancelDialogOpen(true);
+                      }}
+                      data-testid="button-mobile-request-cancellation"
+                    >
+                      <XCircle className="mr-2 h-4 w-4" /> {t("request_cancellation")}
+                    </Button>
+                  </div>
+                </SheetContent>
+              </Sheet>
             )}
           </div>
           {shouldShowMachineAssignment && (
