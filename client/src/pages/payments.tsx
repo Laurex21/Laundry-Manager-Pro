@@ -345,7 +345,14 @@ export default function Payments() {
         <h1 className="text-2xl font-display font-bold leading-tight text-[#082D5B]">{t("payments")}</h1>
         <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
       </div>
-      <div className="grid grid-cols-2 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm"><Button variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>{t("register_payment")}</Button><Button variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>{t("payment_history")}</Button></div>
+      <div className="grid grid-cols-2 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm">
+        <Button className="min-w-0 px-2 sm:px-4" variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>
+          <span className="sm:hidden">{t("collect_payment_short")}</span><span className="hidden sm:inline">{t("register_payment")}</span>
+        </Button>
+        <Button className="min-w-0 px-2 sm:px-4" variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>
+          <span className="sm:hidden">{t("history_short")}</span><span className="hidden sm:inline">{t("payment_history")}</span>
+        </Button>
+      </div>
       {view === "history" ? <PaymentLedger /> : <>
 
       {successPayment && (

@@ -324,6 +324,7 @@ export default function Orders() {
   const { getSymbol } = useCurrency();
   const { openWhatsApp } = useWhatsAppLauncher();
   const symbol = getSymbol();
+  const formatListMoney = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 2 })} ${symbol}`;
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const correctionOrderId = Number(new URLSearchParams(window.location.search).get("correct"));
@@ -650,7 +651,7 @@ export default function Orders() {
                       <StatusBadge status={order.paymentStatus} />
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-sm font-semibold tabular-nums">
-                      {symbol}{Number(order.totalAmount).toFixed(2)}
+                      {formatListMoney(order.totalAmount)}
                     </td>
                     <td className="px-2 py-2.5 text-right">
                       <Link href={`/orders/${order.id}`}>
@@ -713,7 +714,7 @@ export default function Orders() {
                     </div>
                     {/* Right: amount + chevron */}
                     <Link href={`/orders/${order.id}`} className="flex shrink-0 items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                      <span className="font-mono font-bold text-sm tabular-nums">{symbol}{Number(order.totalAmount).toFixed(2)}</span>
+                      <span className="font-mono font-bold text-sm tabular-nums">{formatListMoney(order.totalAmount)}</span>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
                     </Link>
                   </div>
