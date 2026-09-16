@@ -227,6 +227,7 @@ export default function SubscriptionDashboardPage({
         <SubscriberOverview
           subscribers={data?.subscribers ?? []}
           money={money}
+          searchLabel={copy.search}
         />
       </main>
     );
@@ -513,7 +514,11 @@ export default function SubscriptionDashboardPage({
         </Card>
       </section>
 
-      <SubscriberOverview subscribers={data?.subscribers ?? []} money={money} />
+      <SubscriberOverview
+        subscribers={data?.subscribers ?? []}
+        money={money}
+        searchLabel={copy.search}
+      />
 
       <Card>
         <CardHeader>
@@ -561,9 +566,11 @@ export default function SubscriptionDashboardPage({
 function SubscriberOverview({
   subscribers,
   money,
+  searchLabel,
 }: {
   subscribers: DashboardData["subscribers"];
   money: (value: number) => string;
+  searchLabel: string;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -613,11 +620,11 @@ function SubscriberOverview({
             </p>
           </div>
           <label className="block w-full sm:w-72">
-            <span className="sr-only">{copy.search}</span>
+            <span className="sr-only">{searchLabel}</span>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={copy.search}
+              placeholder={searchLabel}
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
             />
           </label>
