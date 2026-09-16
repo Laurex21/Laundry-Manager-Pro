@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { isDemoMode, exitDemoMode } from "@/lib/demo-mode";
@@ -8,12 +8,14 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight, ArrowLeft,
-  ListChecks, CircleHelp,
+  ListChecks, CircleHelp, Download,
 } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
 import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
+import { PwaInstallDialog } from "@/components/pwa-install-dialog";
 import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
+import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -79,6 +81,8 @@ const LANGUAGES = [
 ];
 
 const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
+const PWA_DISMISS_STORAGE_KEY = "xpresspro-install-dismissed-at";
+const PWA_DISMISS_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "dashboard",
@@ -335,7 +339,24 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const { openWhatsApp } = useWhatsAppLauncher();
   const { user, logout, planSlug, canAccess } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
+  const pwaInstaller = usePwaInstall();
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (pwaInstaller.installed || (!pwaInstaller.canInstall && !pwaInstaller.isIosSafari)) return;
+    const dismissedAt = Number(window.localStorage.getItem(PWA_DISMISS_STORAGE_KEY) || 0);
+    if (Date.now() - dismissedAt < PWA_DISMISS_DURATION_MS) return;
+    const timer = window.setTimeout(() => setInstallOpen(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIosSafari]);
+
+  const handleInstallOpenChange = (open: boolean) => {
+    setInstallOpen(open);
+    if (!open && !pwaInstaller.installed) {
+      window.localStorage.setItem(PWA_DISMISS_STORAGE_KEY, String(Date.now()));
+    }
+  };
 
   const bottomNavItems = ALL_NAV_ITEMS.filter(
     (item) => BOTTOM_NAV_HREFS.includes(item.href) && canAccess(item.page)
@@ -498,6 +519,12 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
+                {!pwaInstaller.installed && (
+                  <DropdownMenuItem onClick={() => setInstallOpen(true)} data-testid="menu-item-install-xpresspro">
+                    <Download className="mr-2 h-4 w-4 text-[#6B5CFF]" aria-hidden="true" />
+                    {t("install_xpresspro", "Installer XpressPro")}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => openWhatsApp({ phone: WHATSAPP_SUPPORT_URL.replace("https://wa.me/", "") })}>
                   <FaWhatsapp className="mr-2 h-4 w-4 text-[#25D366]" aria-hidden="true" />
                   {t("whatsapp_contact_support")}
@@ -517,6 +544,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </div>
       </main>
       <LegalAcceptanceGate />
+      <PwaInstallDialog open={installOpen} onOpenChange={handleInstallOpenChange} installer={pwaInstaller} />
 
       {/* Mobile bottom nav */}
       <nav
