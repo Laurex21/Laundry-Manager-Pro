@@ -45,6 +45,7 @@ export const createOrderWithItemsSchema = z.object({
     itemName: z.string(),
     quantity: z.number(),
     color: z.string().trim().max(40).optional().nullable(),
+    textileReserve: z.string().trim().max(500).optional().nullable(),
   })).optional().default([]),
   machineUsages: z.array(z.object({
     machineId: z.number().min(1),

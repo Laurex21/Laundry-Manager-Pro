@@ -14,7 +14,7 @@ export type ControlledOrderEditInput = {
   discountPct: number;
   reason: string;
   items: Array<{ serviceId: number; quantity: number }>;
-  garments: Array<{ itemName: string; quantity: number; color?: string | null }>;
+  garments: Array<{ itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }>;
 };
 
 async function dependencies(client: PoolClient, orderId: number) {
@@ -203,8 +203,8 @@ export async function editOrderControlled(
     await client.query(`DELETE FROM garment_items WHERE order_id = $1`, [orderId]);
     for (const garment of input.garments) {
       await client.query(
-        `INSERT INTO garment_items (order_id, item_name, quantity, color) VALUES ($1, $2, $3, $4)`,
-        [orderId, garment.itemName, garment.quantity, garment.color || null],
+        `INSERT INTO garment_items (order_id, item_name, quantity, color, textile_reserve) VALUES ($1, $2, $3, $4, $5)`,
+        [orderId, garment.itemName, garment.quantity, garment.color || null, garment.textileReserve || null],
       );
     }
     const after = await snapshot(client, orderId);
@@ -272,8 +272,8 @@ export async function createCorrectedOrderCopy(
       [orderId, newOrderId],
     );
     await client.query(
-      `INSERT INTO garment_items (order_id, item_name, quantity, color)
-       SELECT $2, item_name, quantity, color FROM garment_items WHERE order_id = $1`,
+      `INSERT INTO garment_items (order_id, item_name, quantity, color, textile_reserve)
+       SELECT $2, item_name, quantity, color, textile_reserve FROM garment_items WHERE order_id = $1`,
       [orderId, newOrderId],
     );
     await client.query(

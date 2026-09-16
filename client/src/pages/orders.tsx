@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -466,6 +467,7 @@ export default function Orders() {
           <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 bg-[#F8FAFC] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-y-auto lg:px-5 lg:py-3">
             <DialogHeader className="sticky top-0 z-20 -mx-2 rounded-xl border border-primary/10 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-sm lg:mb-1">
               <DialogTitle className="text-[#082D5B]">{correctionOrder ? `${t("correct_order")} #${orderDisplayId(correctionOrder)}` : t("create_new_order")}</DialogTitle>
+              <DialogClose asChild><Button type="button" variant="outline" size="sm" className="absolute right-3 top-2.5"><X className="mr-1 h-4 w-4" />{t("close", "Fermer")}</Button></DialogClose>
             </DialogHeader>
             {correctionOrderId > 0 && correctionOrderIsLoading ? (
               <div className="grid min-h-[280px] place-items-center" role="status" data-testid="order-correction-form-loading">
@@ -866,7 +868,6 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   const [wizardStep, setWizardStep] = useState(1);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [textileReserve, setTextileReserve] = useState("");
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
@@ -917,7 +918,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
       advancePayment: "0",
       advancePaymentMethod: "Cash",
       items: (correctionOrder.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: Number(item.quantity) })),
-      garmentItems: (correctionOrder.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "" })),
+      garmentItems: (correctionOrder.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "", textileReserve: garment.textileReserve || "" })),
       machineUsages: [],
     });
   }, [correctionOrder, form]);
@@ -970,7 +971,6 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
         const payload = draft.payload as any;
         if (payload.form) form.reset({ ...form.getValues(), ...payload.form });
         if (payload.discountMode === "fixed" || payload.discountMode === "percentage") setDiscountMode(payload.discountMode);
-        if (typeof payload.textileReserve === "string") setTextileReserve(payload.textileReserve);
         setDraftState("saved");
       })
       .catch(() => setDraftState("error"));
@@ -986,7 +986,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
           method: "PUT",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentStep: wizardStep, payload: { form: watchedForm, discountMode, textileReserve } }),
+          body: JSON.stringify({ currentStep: wizardStep, payload: { form: watchedForm, discountMode } }),
         });
         if (!response.ok) throw new Error();
         const draft = await response.json();
@@ -997,7 +997,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
       }
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [correctionOrder, discountMode, textileReserve, watchedForm, wizardStep]);
+  }, [correctionOrder, discountMode, watchedForm, wizardStep]);
 
   const wizardSteps = [
     { id: 1, label: t("customers") },
@@ -1028,6 +1028,22 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     staleTime: 0,
     refetchOnMount: "always",
   });
+  const { data: selectedCustomerOrders = [] } = useQuery<any[]>({
+    queryKey: ["customer-orders-for-order", watchedCustomerId],
+    queryFn: async () => {
+      const response = await fetch(`/api/customers/${watchedCustomerId}/orders`, { credentials: "include" });
+      if (!response.ok) throw new Error("Unable to load customer orders");
+      return response.json();
+    },
+    enabled: !!watchedCustomerId,
+  });
+  const customerOutstanding = useMemo(() => selectedCustomerOrders.reduce((summary, order: any) => {
+    if (order.status === "cancelled") return summary;
+    const paid = (order.payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount || 0), 0);
+    const balance = Math.max(0, Number(order.totalAmount || 0) - paid);
+    if (balance > 0) { summary.count += 1; summary.amount += balance; }
+    return summary;
+  }, { count: 0, amount: 0 }), [selectedCustomerOrders]);
   const activeSub = subscriptionStatus?.status === "active" ? subscriptionStatus : null;
   const subscriptionLabel = (status: string) => status === "active" ? "Abonné" : t(`membership_status_${status}`);
 
@@ -1101,6 +1117,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
         itemName: g.itemName.trim(),
         quantity: Number(g.quantity),
         color: g.color?.trim() || null,
+        textileReserve: g.textileReserve?.trim() || null,
       })),
       machineUsages: (data.machineUsages || []).filter(m => Number(m.machineId) > 0).map(m => ({
         machineId: Number(m.machineId),
@@ -1365,6 +1382,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 </div>
               </div>
             )}
+            {wizardStep === 1 && customerOutstanding.count > 0 && <div className="flex gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" role="alert" data-testid="customer-outstanding-alert"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" /><div><p className="text-sm font-semibold">{t("customer_has_outstanding", "Ce client a {{count}} facture(s) en attente", { count: customerOutstanding.count })}</p><p className="text-xs">{t("customer_outstanding_amount", "Solde total restant : {{amount}}", { amount: `${customerOutstanding.amount.toLocaleString(i18n.language)} ${symbol}` })}</p><Link href={`/customers/${watchedCustomerId}`} className="mt-1 inline-block text-xs font-semibold underline">{t("view_outstanding", "Voir les impayés")}</Link></div></div>}
             {wizardStep === 1 && subscriptionStatus && <div role="status" data-testid="selected-customer-subscription-status" className={cn("rounded-xl border p-3 sm:p-4", subscriptionStatus.status === "active" ? "border-blue-200 bg-blue-50 dark:bg-blue-950/20" : "border-amber-300 bg-amber-50 dark:bg-amber-950/20")}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", subscriptionStatus.status === "active" ? "bg-primary" : "bg-amber-600")}><Star className="h-3.5 w-3.5 text-white" aria-hidden="true" /></span><span className="truncate text-sm font-semibold">Abonné · {subscriptionStatus.planName}</span><Badge variant={subscriptionStatus.status === "active" ? "default" : "secondary"}>{subscriptionLabel(subscriptionStatus.status)}</Badge><span className="shrink-0 text-xs text-muted-foreground">#{subscriptionStatus.membershipNumber}</span></div><span className="text-xs text-muted-foreground">{t("expires")} {subscriptionStatus.expiryDate}</span></div>{subscriptionStatus.status !== "active" && <p className="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">Cet abonnement ne peut pas couvrir la commande tant que son statut est {subscriptionLabel(subscriptionStatus.status).toLowerCase()}.</p>}<div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3">{subscriptionStatus.remainingKg != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingKg} kg</p><p className="text-muted-foreground">{t("remaining_balance")}</p></div>}{subscriptionStatus.remainingPieces != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingPieces}</p><p className="text-muted-foreground">Pièces</p></div>}{subscriptionStatus.remainingOrders != null && <div className="rounded-lg bg-white p-2 dark:bg-card"><p className="font-bold text-primary">{subscriptionStatus.remainingOrders}</p><p className="text-muted-foreground">Commandes</p></div>}</div></div>}
 
             {wizardStep === 3 && <section className="space-y-4 rounded-xl border bg-muted/10 p-4" data-testid="order-wizard-step-delivery">
@@ -1463,7 +1481,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                   <div className="rounded-md border bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground" aria-live="polite" data-testid="text-total-registered-garments">
                     {t('garments_count', { count: totalRegisteredGarments })}
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1, color: "" })}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => appendGarment({ itemName: "", quantity: 1, color: "", textileReserve: "" })}>
                     <Plus className="w-3 h-3 mr-1" /> {t('add_garment', 'Add Garment')}
                   </Button>
                 </div>
@@ -1491,6 +1509,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                       </FormItem>
                     )}
                   />
+                  <FormField control={form.control} name={`garmentItems.${index}.textileReserve`} render={({ field }) => <FormItem className="order-last col-span-3 min-w-0 md:col-span-4"><FormLabel className="text-xs">{t("textile_reserve", "Réserve textile (facultative)")}</FormLabel><FormControl><Input placeholder={t("textile_reserve_placeholder", "Fragilité, tache ou risque constaté…")} {...field} value={field.value || ""} /></FormControl><FormMessage /></FormItem>} />
                   <FormField
                     control={form.control}
                     name={`garmentItems.${index}.color`}
@@ -1544,10 +1563,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                   <span>{t("garment_inventory")}</span><strong className="text-right">{totalRegisteredGarments}</strong>
                   <span>{t("pickup_date")}</span><strong className="text-right">{watchedForm.pickupDate || "—"}</strong>
                 </div>
-                <div className="space-y-1 pt-2">
-                  <FormLabel htmlFor="textile-reserve">{t("textile_reserve", "Réserve textile (facultative)")}</FormLabel>
-                  <Textarea id="textile-reserve" value={textileReserve} onChange={(event) => setTextileReserve(event.target.value)} placeholder={t("textile_reserve_placeholder", "Fragilité, tache, risque ou réserve acceptée par le client…")} />
-                </div>
+                {(watchedGarmentItems || []).some((garment: any) => garment.textileReserve?.trim()) && <div className="space-y-1 pt-2"><p className="text-xs font-semibold">{t("textile_reserves", "Réserves textiles")}</p>{(watchedGarmentItems || []).filter((garment: any) => garment.textileReserve?.trim()).map((garment: any, index: number) => <p key={index} className="text-xs text-muted-foreground">{garment.itemName || t("item_name")}: {garment.textileReserve}</p>)}</div>}
               </div>}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{t("subtotal")}:</span>

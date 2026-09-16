@@ -359,7 +359,7 @@ export class DatabaseStorage implements IStorage {
 
       if (garments && garments.length > 0) {
         for (const garment of garments) {
-          await tx.insert(garmentItems).values({ orderId: order.id, itemName: garment.itemName, quantity: garment.quantity, color: garment.color || null });
+          await tx.insert(garmentItems).values({ orderId: order.id, itemName: garment.itemName, quantity: garment.quantity, color: garment.color || null, textileReserve: garment.textileReserve || null });
         }
       }
 

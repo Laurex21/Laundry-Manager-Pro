@@ -143,23 +143,22 @@ export function GarmentColorPicker({ value, onChange, testId, compact = false }:
 
   if (compact) {
     return <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="h-10 w-full justify-between px-3 font-normal" data-testid={testId} aria-label={t("select_color")}>
+      <Dialog open={open} onOpenChange={setOpen}>
+          <Button type="button" variant="outline" className="h-10 w-full justify-between px-3 font-normal" data-testid={testId} aria-label={t("select_color")} onClick={() => setOpen(true)}>
             <span className="flex min-w-0 items-center gap-2">
               <span className="h-6 w-6 shrink-0 rounded-full border" style={{ background: selectedColor?.swatch || (isCustom ? "hsl(var(--muted))" : "transparent") }} aria-hidden="true" />
               <span className="truncate">{selectedColor ? t(`color_${selectedColor.value}`) : isCustom ? value : t("no_color")}</span>
             </span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[min(22rem,calc(100vw-2rem))] p-3" align="start">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm rounded-2xl p-4">
+          <DialogHeader className="pr-8 text-left"><DialogTitle>{t("garment_color")}</DialogTitle><DialogDescription>{t("garment_color_mosaic_hint")}</DialogDescription></DialogHeader>
           {quickPalette}
           <Button type="button" variant="ghost" className="mt-2 w-full justify-start text-primary" onClick={openMosaic}>
             <Palette className="mr-2 h-4 w-4" aria-hidden="true" />{t("garment_color_more")}
           </Button>
-        </PopoverContent>
-      </Popover>
+        </DialogContent>
+      </Dialog>
       {mosaic}
     </>;
   }

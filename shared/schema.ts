@@ -162,6 +162,7 @@ export const garmentItems = pgTable("garment_items", {
   orderId: integer("order_id").notNull().references(() => orders.id),
   itemName: text("item_name").notNull(),
   color: varchar("color", { length: 40 }),
+  textileReserve: text("textile_reserve"),
   quantity: integer("quantity").notNull().default(1),
   returnedForTreatment: boolean("returned_for_treatment").default(false),
   returnStage: text("return_stage"),
