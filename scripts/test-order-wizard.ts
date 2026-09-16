@@ -5,6 +5,7 @@ const orders = fs.readFileSync("client/src/pages/orders.tsx", "utf8");
 const routes = fs.readFileSync("server/routes.ts", "utf8");
 const schema = fs.readFileSync("shared/schema.ts", "utf8");
 const migration = fs.readFileSync("migrations/20260916_order_drafts.sql", "utf8");
+const reviewedMigrations = fs.readFileSync("scripts/run-reviewed-migrations.ts", "utf8");
 
 assert.match(orders, /const wizardSteps = \[/);
 assert.match(orders, /data-testid="order-wizard-step-client"/);
@@ -18,5 +19,6 @@ assert.match(routes, /app\.put\("\/api\/order-drafts\/current"/);
 assert.match(routes, /app\.delete\("\/api\/order-drafts\/current"/);
 assert.match(schema, /export const orderDrafts = pgTable\("order_drafts"/);
 assert.match(migration, /CREATE TABLE IF NOT EXISTS order_drafts/);
+assert.match(reviewedMigrations, /20260916_order_drafts\.sql/);
 
 console.log("Order wizard and persistent draft regression checks passed.");
