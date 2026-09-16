@@ -757,6 +757,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
   const churnRiskRef = useRef<HTMLDivElement>(null);
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/analytics/customer-behavior", period],
@@ -858,7 +859,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
               </div>
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground">{t("revenue_at_risk")}</p>
-                <p className="text-2xl font-bold">{symbol}{Number(churn.revenueAtRisk || 0).toFixed(0)}</p>
+                <p className="text-2xl font-bold">{money(churn.revenueAtRisk)}</p>
               </div>
             </div>
             <div className="space-y-2">
