@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Employee } from "@shared/schema";
 
 export default function Employees() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { hasFeature } = useAuth();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
@@ -110,6 +110,16 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data: employees, isLoading } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
+  const roleLabels: Record<string, string> = {
+    owner: t("role_owner", "Propriétaire"),
+    manager: t("role_manager", "Gérant"),
+    operator: t("role_operator", "Opérateur"),
+  };
+  const statusLabels: Record<string, string> = {
+    active: t("active", "Actif"),
+    inactive: t("inactive", "Inactif"),
+  };
+  const formatAmount = (value: string | number) => Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 0 });
 
   if (isLoading) {
     return <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded" />)}</div>;
@@ -129,7 +139,7 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card shadow-sm divide-y divide-[#082D5B]/10">
-      <div className="hidden xl:grid grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] gap-4 px-4 py-3 bg-[#082D5B] text-xs font-semibold uppercase tracking-wider text-white">
+      <div className="hidden lg:grid grid-cols-[minmax(170px,1.4fr)_minmax(125px,.85fr)_minmax(195px,1.45fr)_88px_105px_120px_104px] gap-3 px-4 py-3 bg-[#082D5B] text-xs font-semibold uppercase tracking-wider text-white">
         <span>{t("employee_name")}</span>
         <span>{t("employee_position", "Position")}</span>
         <span>{t("phone")} / {t("email")}</span>
@@ -143,31 +153,31 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
         const bgColor = AVATAR_COLORS[emp.id % AVATAR_COLORS.length];
 
         return (
-          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-primary/[0.035] transition-colors xl:grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] xl:gap-x-4 xl:gap-y-1 xl:items-center xl:py-3" data-testid={`card-employee-${emp.id}`}>
+          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-primary/[0.035] transition-colors lg:grid-cols-[minmax(170px,1.4fr)_minmax(125px,.85fr)_minmax(195px,1.45fr)_88px_105px_120px_104px] lg:gap-x-3 lg:gap-y-1 lg:items-center lg:py-3" data-testid={`card-employee-${emp.id}`}>
             <div className="flex items-center gap-3 min-w-0">
               <div className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0`}>
                 {initial}
               </div>
               <div className="min-w-0">
                 <span className="block font-medium text-sm truncate">{emp.name}</span>
-                <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">
+                <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">
                   {t("employee_name")}
                 </span>
               </div>
             </div>
             <div className="flex flex-col gap-1 items-start">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">
                 {t("employee_position", "Position")}
               </span>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded w-fit">{emp.position || emp.role}</span>
-              <Badge variant={emp.status === "inactive" ? "outline" : "default"} className="text-[10px]">{t(`employee_status_${emp.status}`, emp.status)}</Badge>
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded w-fit">{emp.position && emp.position !== emp.role ? emp.position : (roleLabels[emp.role] || emp.role)}</span>
+              <Badge variant={emp.status === "inactive" ? "outline" : "default"} className="text-[10px]">{statusLabels[emp.status] || emp.status}</Badge>
             </div>
             <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-w-0">
-              <span className="mb-0.5 font-semibold uppercase tracking-wide xl:hidden">
+              <span className="mb-0.5 font-semibold uppercase tracking-wide lg:hidden">
                 {t("phone")} / {t("email")}
               </span>
               {emp.employeeCode && (
-                <span className="flex items-center gap-1 truncate">
+                <span className="flex items-center gap-1 truncate text-[11px] text-muted-foreground/70">
                   <IdCard className="w-3 h-3 shrink-0" />{emp.employeeCode}
                 </span>
               )}
@@ -182,30 +192,30 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-3 rounded-xl border border-[#082D5B]/5 bg-muted/35 p-3 xl:contents">
+            <div className="grid grid-cols-3 gap-3 rounded-xl border border-[#082D5B]/5 bg-muted/35 p-3 lg:contents">
               <div className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("kg_processed")}</span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("kg_processed")}</span>
                 <span className="text-sm font-mono">{emp.kgProcessed}</span>
               </div>
               <div className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("orders_handled")}</span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("orders_handled")}</span>
                 <span className="text-sm font-mono">{emp.ordersHandled}</span>
               </div>
               <div className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("monthly_salary")}</span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("monthly_salary")}</span>
                 <span className="text-sm font-medium">
-                  {emp.salary ? `${symbol}${Number(emp.salary).toFixed(0)}` : "-"}
+                  {emp.salary ? `${formatAmount(emp.salary)} ${symbol}` : "-"}
                 </span>
               </div>
             </div>
-            <div className="flex gap-1 justify-end border-t pt-3 xl:border-t-0 xl:pt-0">
-              <Button variant="ghost" size="icon" className="h-8 w-8 xl:h-7 xl:w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} aria-label={`${t("attendance", "Pointage")} - ${emp.name}`} data-testid={`button-attendance-employee-${emp.id}`}>
+            <div className="flex gap-1 justify-end border-t pt-3 lg:border-t-0 lg:pt-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-7 lg:w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} aria-label={`${t("attendance", "Pointage")} - ${emp.name}`} data-testid={`button-attendance-employee-${emp.id}`}>
                 <Clock className="w-3.5 h-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 xl:h-7 xl:w-7" onClick={() => onEdit(emp)} aria-label={`${t("edit", "Edit")} - ${emp.name}`} data-testid={`button-edit-employee-${emp.id}`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-7 lg:w-7" onClick={() => onEdit(emp)} aria-label={`${t("edit", "Edit")} - ${emp.name}`} data-testid={`button-edit-employee-${emp.id}`}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 xl:h-7 xl:w-7 text-destructive" onClick={() => onDelete(emp)} aria-label={`${t("delete", "Delete")} - ${emp.name}`} data-testid={`button-delete-employee-${emp.id}`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-7 lg:w-7 text-destructive" onClick={() => onDelete(emp)} aria-label={`${t("delete", "Delete")} - ${emp.name}`} data-testid={`button-delete-employee-${emp.id}`}>
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
             </div>

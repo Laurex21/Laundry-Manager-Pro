@@ -14,6 +14,7 @@ import {
   Pencil,
   Trash2,
   Tag,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,9 +69,12 @@ export default function Services() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editService, setEditService] = useState<Service | null>(null);
   const [deleteService, setDeleteService] = useState<Service | null>(null);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [expressOnly, setExpressOnly] = useState(false);
   const { mutate: deleteMutate, isPending: isDeleting } = useDeleteService();
 
   const existingCategories = services
@@ -80,13 +84,24 @@ export default function Services() {
 
   const grouped = useMemo(() => {
     const groups: Record<string, Service[]> = {};
-    services?.forEach((s) => {
+    const normalizedSearch = search.trim().toLocaleLowerCase(i18n.language);
+    services?.filter((service) => {
+      const matchesCategory = categoryFilter === "all" || (service.category || t("uncategorized")) === categoryFilter;
+      const matchesExpress = !expressOnly || service.expressAvailable;
+      const searchable = `${service.name} ${service.description || ""}`.toLocaleLowerCase(i18n.language);
+      return matchesCategory && matchesExpress && (!normalizedSearch || searchable.includes(normalizedSearch));
+    }).forEach((s) => {
       const cat = s.category || t("uncategorized");
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(s);
     });
     return groups;
-  }, [services]);
+  }, [services, search, categoryFilter, expressOnly, i18n.language, t]);
+
+  const formatAmount = (value: string | number) =>
+    Number(value).toLocaleString(i18n.language, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+  const unitLabel = (unit: string) => unit === "piece" ? t("unit_piece", "Pièce") : unit === "kg" ? "kg" : unit;
 
   function handleDelete() {
     if (!deleteService) return;
@@ -123,6 +138,27 @@ export default function Services() {
       </div>
       </section>
 
+      {!!services?.length && (
+        <section className="grid gap-3 rounded-2xl border border-[#082D5B]/10 bg-card p-3 shadow-sm md:grid-cols-[minmax(220px,1fr)_220px_auto] md:items-center">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("search_services", "Rechercher un service")} className="pl-9" data-testid="input-search-services" />
+          </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger data-testid="select-service-category-filter"><SelectValue placeholder={t("category", "Catégorie")} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("all_categories", "Toutes les catégories")}</SelectItem>
+              {existingCategories.map((category) => (
+                <SelectItem key={category} value={category}>{labelForCategory(category, t)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button type="button" variant={expressOnly ? "default" : "outline"} onClick={() => setExpressOnly((value) => !value)} aria-pressed={expressOnly} data-testid="button-filter-express">
+            <Zap className="mr-2 h-4 w-4" /> {t("express")}
+          </Button>
+        </section>
+      )}
+
       {isLoading ? (
         <div className="space-y-6">
           {[1, 2].map((g) => (
@@ -141,9 +177,9 @@ export default function Services() {
           <p className="mt-1 text-sm">{t("add_service")}</p>
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="columns-1 gap-5 lg:columns-2">
           {Object.entries(grouped).map(([category, items]) => (
-            <section key={category} className="overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card shadow-sm">
+            <section key={category} className="mb-5 inline-block w-full break-inside-avoid overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card align-top shadow-sm">
               <div className="flex items-center justify-between border-b border-[#082D5B]/10 bg-[#082D5B] px-4 py-3 text-white">
                 <span className="text-xs font-semibold uppercase tracking-wider">{labelForCategory(category, t)}</span>
                 <Badge className="border-white/20 bg-white/10 text-white hover:bg-white/10">{items.length}</Badge>
@@ -182,17 +218,17 @@ export default function Services() {
                       )}
                       {service.minimumCharge && service.unit === "kg" && (
                         <span data-testid={`text-min-charge-${service.id}`}>
-                          {t("min")}: {symbol}{Number(service.minimumCharge).toFixed(2)}
+                          {t("min")}: {formatAmount(service.minimumCharge)} {symbol}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-3 sm:col-start-2 sm:row-span-2 sm:flex-col sm:items-end sm:justify-center">
                     <div className="text-right shrink-0">
                       <span className="font-mono font-bold text-base text-primary" data-testid={`text-service-price-${service.id}`}>
-                        {symbol}{Number(service.price).toFixed(2)}
+                        {formatAmount(service.price)} {symbol}
                       </span>
                       <span className="text-xs text-muted-foreground ml-1" data-testid={`text-service-category-${service.id}`}>
-                        / {service.unit}
+                        / {unitLabel(service.unit)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 opacity-100 sm:opacity-60 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">

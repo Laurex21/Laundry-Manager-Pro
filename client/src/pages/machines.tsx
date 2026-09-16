@@ -356,7 +356,7 @@ function MachineDialog({ open, onOpenChange, machine }: { open: boolean; onOpenC
               <FormItem>
                 <FormLabel>{t("machine_type")}</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl><SelectTrigger data-testid="select-machine-type"><SelectValue /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger data-testid="select-machine-type"><SelectValue placeholder={t("select_machine")} /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="washer">{t("machine_type_washer")}</SelectItem>
                     <SelectItem value="dryer">{t("machine_type_dryer")}</SelectItem>
