@@ -403,18 +403,21 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap md:items-center md:justify-end" data-testid="order-mobile-actions-grid">
-          <Button className="w-full md:w-auto" variant="outline" size="sm" onClick={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
+          <Button className="w-full min-w-0 md:w-auto" variant="outline" size="sm" onClick={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
             {isDownloadingReceipt
               ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               : <Download className="w-4 h-4 mr-2" />}
-            {isDownloadingReceipt ? t("generating", "Generating…") : t("download_receipt")}
+            <span className="md:hidden">{isDownloadingReceipt ? t("generating", "Generating…") : t("receipt_short")}</span>
+            <span className="hidden md:inline">{isDownloadingReceipt ? t("generating", "Generating…") : t("download_receipt")}</span>
           </Button>
-          <Button className="w-full md:w-auto" variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
-            <Printer className="w-4 h-4 mr-2" /> {t("print_thermal_receipt")}
+          <Button className="w-full min-w-0 md:w-auto" variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
+            <Printer className="w-4 h-4 mr-2" />
+            <span className="md:hidden">{t("thermal_ticket_short")}</span>
+            <span className="hidden md:inline">{t("print_thermal_receipt")}</span>
           </Button>
           {canShowCustomerNotification && (
             <Button
-              className="w-full md:w-auto"
+              className="w-full min-w-0 md:w-auto"
               variant="outline"
               size="sm"
               onClick={handleNotifyCustomer}
@@ -422,15 +425,17 @@ export default function OrderDetail() {
               title={!canNotifyCustomer ? t("customer_phone_missing") : undefined}
               data-testid="button-notify-customer-whatsapp"
             >
-              <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer")}
+              <MessageCircle className="w-4 h-4 mr-2" />
+              <span className="md:hidden">{t("notify_short")}</span>
+              <span className="hidden md:inline">{t("notify_customer")}</span>
             </Button>
           )}
+          <div className="flex min-w-0 md:contents">
+            <OrderCorrectionActions order={order} isManager={isManager} compactMobile />
+          </div>
           <div className="col-span-2 flex flex-wrap items-center justify-center gap-2 md:col-auto md:justify-end">
             <StatusBadge status={order.status} />
             <StatusBadge status={order.paymentStatus} />
-          </div>
-          <div className="col-span-2 md:col-auto">
-            <OrderCorrectionActions order={order} isManager={isManager} />
           </div>
         </div>
       </div>

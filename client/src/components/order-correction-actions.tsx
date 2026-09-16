@@ -17,7 +17,7 @@ async function readJson(response: Response) {
   return body;
 }
 
-export function OrderCorrectionActions({ order, isManager }: { order: any; isManager: boolean }) {
+export function OrderCorrectionActions({ order, isManager, compactMobile = false }: { order: any; isManager: boolean; compactMobile?: boolean }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const { isOwner } = useAuth();
@@ -66,7 +66,7 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2" data-testid="order-correction-actions">
+      <div className={compactMobile ? "flex w-full min-w-0 items-center md:w-auto" : "flex flex-wrap items-center gap-2"} data-testid="order-correction-actions">
         {eligibilityIsLoading && (
           <p className="flex items-center text-xs text-muted-foreground" role="status" data-testid="order-correction-loading">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -84,9 +84,10 @@ export function OrderCorrectionActions({ order, isManager }: { order: any; isMan
           </div>
         )}
         {eligibility?.canEdit && (
-          <Button type="button" variant="outline" size="sm" onClick={() => navigate(`/orders?correct=${order.id}`)} data-testid="button-correct-order">
+          <Button type="button" variant="outline" size="sm" className={compactMobile ? "w-full min-w-0 md:w-auto" : undefined} onClick={() => navigate(`/orders?correct=${order.id}`)} data-testid="button-correct-order">
             <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
-            {t("correct_order")}
+            <span className={compactMobile ? "md:hidden" : "hidden"}>{t("correct_short")}</span>
+            <span className={compactMobile ? "hidden md:inline" : undefined}>{t("correct_order")}</span>
           </Button>
         )}
         {!eligibility?.canEdit && eligibility?.canCreateCorrectedCopy && (
