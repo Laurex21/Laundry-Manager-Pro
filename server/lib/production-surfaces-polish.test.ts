@@ -13,6 +13,8 @@ assert.match(services, /toLocaleString\(i18n\.language/, "service prices must be
 assert.doesNotMatch(services, /Number\(service\.price\)\.toFixed\(2\)/, "service prices must not expose raw fixed decimals");
 
 assert.match(employees, /hidden lg:grid/, "employees must use a compact desktop table from the lg breakpoint");
+assert.match(employees, /t\("actions", "Actions"\)/, "the employee action column must have a visible heading");
+assert.match(employees, /sticky right-0/, "employee actions must remain visible when horizontal space is constrained");
 assert.match(employees, /role_owner.*Propriétaire/s, "employee roles must be translated");
 assert.match(employees, /active: t\("active", "Actif"\)/, "employee statuses must be translated");
 assert.match(employees, /text-\[11px\] text-muted-foreground\/70/, "employee codes must remain visually secondary");

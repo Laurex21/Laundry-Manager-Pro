@@ -139,21 +139,21 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card shadow-sm divide-y divide-[#082D5B]/10">
-      <div className="hidden lg:grid grid-cols-[minmax(170px,1.4fr)_minmax(125px,.85fr)_minmax(195px,1.45fr)_88px_105px_120px_104px] gap-3 px-4 py-3 bg-[#082D5B] text-xs font-semibold uppercase tracking-wider text-white">
+      <div className="hidden lg:grid grid-cols-[minmax(145px,1.25fr)_minmax(105px,.8fr)_minmax(175px,1.35fr)_72px_88px_100px_96px] gap-2 px-3 py-3 bg-[#082D5B] text-xs font-semibold uppercase tracking-wider text-white">
         <span>{t("employee_name")}</span>
         <span>{t("employee_position", "Position")}</span>
         <span>{t("phone")} / {t("email")}</span>
         <span>{t("kg_processed")}</span>
         <span>{t("orders_handled")}</span>
         <span>{t("monthly_salary")}</span>
-        <span></span>
+        <span className="text-right">{t("actions", "Actions")}</span>
       </div>
       {employees.map((emp) => {
         const initial = emp.name.charAt(0).toUpperCase();
         const bgColor = AVATAR_COLORS[emp.id % AVATAR_COLORS.length];
 
         return (
-          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-primary/[0.035] transition-colors lg:grid-cols-[minmax(170px,1.4fr)_minmax(125px,.85fr)_minmax(195px,1.45fr)_88px_105px_120px_104px] lg:gap-x-3 lg:gap-y-1 lg:items-center lg:py-3" data-testid={`card-employee-${emp.id}`}>
+          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-primary/[0.035] transition-colors lg:grid-cols-[minmax(145px,1.25fr)_minmax(105px,.8fr)_minmax(175px,1.35fr)_72px_88px_100px_96px] lg:gap-x-2 lg:gap-y-1 lg:items-center lg:px-3 lg:py-3" data-testid={`card-employee-${emp.id}`}>
             <div className="flex items-center gap-3 min-w-0">
               <div className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0`}>
                 {initial}
@@ -208,7 +208,7 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
                 </span>
               </div>
             </div>
-            <div className="flex gap-1 justify-end border-t pt-3 lg:border-t-0 lg:pt-0">
+            <div className="sticky right-0 z-[1] flex gap-1 justify-end border-t bg-card pt-3 lg:static lg:border-t-0 lg:bg-transparent lg:pt-0">
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-7 lg:w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} aria-label={`${t("attendance", "Pointage")} - ${emp.name}`} data-testid={`button-attendance-employee-${emp.id}`}>
                 <Clock className="w-3.5 h-3.5" />
               </Button>
