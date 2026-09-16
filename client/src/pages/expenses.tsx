@@ -37,6 +37,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const PAGE_SIZE = 20;
 
+function ExpenseKpi({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return <div className="rounded-xl border border-[#082D5B]/10 bg-card p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p><div className="mt-2 flex items-end justify-between gap-2"><p className="min-w-0 truncate text-xl font-bold tabular-nums text-[#082D5B]">{value}</p>{detail && <span className="shrink-0 text-xs font-semibold text-primary">{detail}</span>}</div></div>;
+}
+
 function getCurrentPeriod() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -112,6 +116,8 @@ export default function Expenses() {
   }).filter((item) => item.total > 0).sort((a, b) => b.total - a.total), [filteredExpenses, periodTotal]);
   const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
   const visibleExpenses = filteredExpenses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const topCategory = breakdown[0];
+  const averageExpense = filteredExpenses.length ? periodTotal / filteredExpenses.length : 0;
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/expenditures/${id}`),
@@ -150,9 +156,10 @@ export default function Expenses() {
 
   return (
     <main className="page-fade-in space-y-5" aria-labelledby="expenses-heading">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 rounded-2xl border border-[#082D5B]/10 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div>
-          <h1 id="expenses-heading" className="text-2xl font-display font-bold sm:text-3xl" data-testid="text-expenses-title">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">{t("management", "Gestion")}</p>
+          <h1 id="expenses-heading" className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl" data-testid="text-expenses-title">
             {t("expenses")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("expenses_subtitle")}</p>
@@ -171,6 +178,13 @@ export default function Expenses() {
           </DialogContent>
         </Dialog>
       </header>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("expense_kpis", "Indicateurs des dépenses")} data-testid="expense-kpi-strip">
+        <ExpenseKpi label={t("period_spending")} value={`${formatAmount(periodTotal)} ${symbol}`} />
+        <ExpenseKpi label={t("entries")} value={filteredExpenses.length.toLocaleString(i18n.language)} />
+        <ExpenseKpi label={t("average_expense", "Dépense moyenne")} value={`${formatAmount(averageExpense)} ${symbol}`} />
+        <ExpenseKpi label={t("top_category", "Première catégorie")} value={topCategory ? categoryLabel(topCategory.value) : "—"} detail={topCategory ? `${topCategory.percentage}%` : undefined} />
+      </section>
 
       <section className="rounded-xl border bg-card p-3 sm:p-4" aria-label={t("filters")}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -221,7 +235,7 @@ export default function Expenses() {
         <aside className="space-y-4 xl:border-l xl:pl-5" aria-label={t("spending_breakdown")}>
           <div className="rounded-xl border bg-card p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("period_spending")}</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-destructive">{formatAmount(periodTotal)} {symbol}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-[#082D5B]">{formatAmount(periodTotal)} {symbol}</p>
             {delta !== null && (
               <div className={cn("mt-2 flex items-center gap-1.5 text-xs font-medium", delta > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400")}>
                 {delta > 0 ? <TrendingUp className="h-4 w-4" aria-hidden="true" /> : <TrendingDown className="h-4 w-4" aria-hidden="true" />}

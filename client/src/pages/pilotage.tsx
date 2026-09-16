@@ -29,7 +29,7 @@ function Overview({ onSelect }: { onSelect: (view: PilotageView) => void }) {
   ];
 
   return <div className="space-y-4">
-    <section aria-labelledby="pilotage-attention-title" className="rounded-xl border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5">
+    <section aria-labelledby="pilotage-attention-title" className="rounded-xl border border-[#082D5B]/10 bg-card p-5 shadow-sm">
       <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ClipboardList className="h-5 w-5" aria-hidden="true" /></div><div><h2 id="pilotage-attention-title" className="text-sm font-semibold">{t("pilotage_attention")}</h2><p className="text-2xl font-bold tabular-nums">{attention}</p></div></div>
       <p className="mt-3 text-sm text-muted-foreground">{attention === 0 ? t("pilotage_no_attention") : t("pilotage_attention_detail", { count: attention })}</p>
     </section>
@@ -58,7 +58,7 @@ export default function Pilotage() {
     select(tabs[next].value); requestAnimationFrame(() => document.getElementById(`pilotage-tab-${tabs[next].value}`)?.focus());
   };
 
-  return <div className="space-y-5 page-fade-in" data-testid="pilotage-page-redesign"><header className="rounded-2xl border border-primary/10 bg-card p-5 shadow-sm"><div className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-primary" aria-hidden="true"/><h1 className="text-xl font-semibold text-[#082D5B]">{t("pilotage")}</h1></div><p className="mt-1 text-sm text-muted-foreground">{t("pilotage_subtitle")}</p></header>
+  return <div className="space-y-5 page-fade-in" data-testid="pilotage-page-redesign"><header className="rounded-2xl border border-[#082D5B]/10 bg-card p-4 shadow-sm sm:p-6"><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary"><CheckCircle2 className="h-4 w-4" aria-hidden="true"/>{t("management", "Gestion")}</div><h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl">{t("pilotage")}</h1><p className="mt-1 text-sm text-muted-foreground">{t("pilotage_subtitle")}</p></header>
     <div role="tablist" aria-label={t("pilotage_sections")} className="flex gap-1 overflow-x-auto rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm">
       {tabs.map(({ value, label, icon: Icon }, index) => <button id={`pilotage-tab-${value}`} key={value} type="button" role="tab" aria-selected={active === value} aria-controls="pilotage-panel" tabIndex={active === value ? 0 : -1} onClick={() => select(value)} onKeyDown={(event) => onTabKeyDown(event, index)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active === value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/5 hover:text-foreground"}`}><Icon className="h-4 w-4" aria-hidden="true"/>{label}</button>)}
     </div>

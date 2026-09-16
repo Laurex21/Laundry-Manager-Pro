@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert, LayoutDashboard, UserRoundSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ export default function Analytics() {
 function AnalyticsContent() {
   const { t } = useTranslation();
   const [period, setPeriod] = useState("month");
+  const [view, setView] = useState<"executive" | "customers" | "operations" | "advanced">("executive");
 
   const periods = [
     { key: "day", label: t("period_day") },
@@ -38,7 +39,7 @@ function AnalyticsContent() {
   ];
 
   return (
-    <div className="space-y-8 page-fade-in" data-testid="analytics-page-redesign">
+    <div className="space-y-5 page-fade-in" data-testid="analytics-page-redesign">
       <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-primary/10 bg-card p-5 shadow-sm sm:flex-row sm:items-center">
         <h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl" data-testid="text-analytics-title">{t("analytics_kpis")}</h1>
         <div className="flex gap-1 rounded-xl border border-primary/10 bg-muted/30 p-1">
@@ -51,13 +52,23 @@ function AnalyticsContent() {
         </div>
       </div>
 
-      <ExecutiveDecisionCockpit period={period} />
+      <div role="tablist" aria-label={t("analytics_sections", "Sections analytiques")} className="flex gap-1 overflow-x-auto rounded-xl border border-[#082D5B]/10 bg-card p-1.5 shadow-sm" data-testid="analytics-view-tabs">
+        {[
+          { key: "executive", label: t("executive_view", "Vue exécutive"), icon: LayoutDashboard },
+          { key: "customers", label: t("customers"), icon: UserRoundSearch },
+          { key: "operations", label: t("operations", "Opérations"), icon: Activity },
+          { key: "advanced", label: t("advanced_analytics", "Analyse avancée"), icon: Radar },
+        ].map(({ key, label, icon: Icon }) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key as typeof view)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-medium ${view === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/5 hover:text-[#082D5B]"}`} data-testid={`analytics-view-${key}`}>
+            <Icon className="h-4 w-4" aria-hidden="true" />{label}
+          </button>
+        ))}
+      </div>
 
-      <CustomerCreditAnalyticsSection />
-      <WasteSection />
-      <CustomerBehaviorSection period={period} />
-      <ProductionDelaysSection />
-      <AdvancedAnalyticsSection period={period} />
+      {view === "executive" && <ExecutiveDecisionCockpit period={period} />}
+      {view === "customers" && <div className="space-y-6"><CustomerCreditAnalyticsSection /><CustomerBehaviorSection period={period} /></div>}
+      {view === "operations" && <div className="space-y-6"><ProductionDelaysSection /><WasteSection /></div>}
+      {view === "advanced" && <AdvancedAnalyticsSection period={period} />}
     </div>
   );
 }
