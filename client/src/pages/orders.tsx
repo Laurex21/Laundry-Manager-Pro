@@ -1273,7 +1273,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
           {wizardSteps.map((step) => <li key={step.id}><button type="button" onClick={() => step.id <= wizardStep && setWizardStep(step.id)} className={cn("flex min-h-11 w-full flex-col items-center justify-center rounded-lg px-1 text-center text-[10px] font-medium sm:text-xs", step.id === wizardStep ? "bg-[#6B5CFF] text-white" : step.id < wizardStep ? "bg-violet-100 text-violet-800" : "bg-white text-muted-foreground dark:bg-card")} aria-current={step.id === wizardStep ? "step" : undefined}><span className="mb-0.5 font-bold">{step.id}</span><span className="hidden sm:block">{step.label}</span></button></li>)}
         </ol>
       </div>
-      <div className="flex min-w-0 items-center justify-between gap-2 border-b pb-3 sm:pb-4">
+      {wizardStep === 1 && <div className="flex min-w-0 items-center justify-between gap-2 border-b pb-3 sm:pb-4" data-testid="order-wizard-customer-header">
         <h3 className="min-w-0 text-base font-semibold sm:text-lg">{t("order_details")}</h3>
         <Button
           type="button"
@@ -1285,7 +1285,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
           <span className="hidden sm:inline">{showAddCustomer ? t("select_existing") : t("register_new_customer")}</span>
           <span className="sm:hidden">{showAddCustomer ? t("customers") : t("add_customer")}</span>
         </Button>
-      </div>
+      </div>}
 
       {showAddCustomer ? (
         <Form {...customerForm}>
