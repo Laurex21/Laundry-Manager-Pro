@@ -233,9 +233,9 @@ export default function Expenses() {
         </section>
 
         <aside className="space-y-4 xl:border-l xl:pl-5" aria-label={t("spending_breakdown")}>
-          <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("period_spending")}</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-[#082D5B]">{formatAmount(periodTotal)} {symbol}</p>
+          <div className="rounded-xl border bg-card p-4" data-testid="expense-period-comparison">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("vs_previous_month")}</p>
+            <p className="mt-2 text-sm font-medium text-[#082D5B]">{t("period_spending")}: {formatAmount(periodTotal)} {symbol}</p>
             {delta !== null && (
               <div className={cn("mt-2 flex items-center gap-1.5 text-xs font-medium", delta > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400")}>
                 {delta > 0 ? <TrendingUp className="h-4 w-4" aria-hidden="true" /> : <TrendingDown className="h-4 w-4" aria-hidden="true" />}
@@ -335,7 +335,7 @@ function ExpenseTable({ expenses, loading, symbol, language, categoryLabel, onEd
             <div className="md:text-center"><span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-medium", config.badge)}>{categoryLabel(expense.category)}</span></div>
             <time className="text-xs text-muted-foreground md:text-right" dateTime={expense.date ? new Date(expense.date).toISOString() : undefined}>{new Date(expense.date || 0).toLocaleDateString(language, { day: "numeric", month: "short" })}</time>
             <div className="flex items-center justify-between gap-2 md:justify-end">
-              <span className="text-sm font-semibold tabular-nums text-destructive">−{Number(expense.amount).toLocaleString(language, { maximumFractionDigits: 2 })} {symbol}</span>
+              <span className="text-sm font-semibold tabular-nums text-[#082D5B] dark:text-slate-100">−{Number(expense.amount).toLocaleString(language, { maximumFractionDigits: 2 })} {symbol}</span>
               <div className="flex items-center">
                 <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onEdit(expense)} aria-label={t("edit")} data-testid={`button-edit-expense-${expense.id}`}><Pencil className="h-4 w-4" aria-hidden="true" /></Button>
                 <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={() => onDelete(expense)} aria-label={t("delete")} data-testid={`button-delete-expense-${expense.id}`}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>

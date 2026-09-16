@@ -74,7 +74,7 @@ function AnalyticsContent() {
 }
 
 function ExecutiveDecisionCockpit({ period }: { period: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data, isLoading, isError } = useQuery<any>({
@@ -90,7 +90,7 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
   if (isError || !data?.metrics) return <Card><CardContent className="p-6 text-destructive" role="alert">{t("decision_cockpit_error")}</CardContent></Card>;
 
   const m = data.metrics;
-  const money = (value: unknown) => `${symbol}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
   const pct = (value: unknown) => value == null ? t("insufficient_data") : `${Number(value).toFixed(1)}%`;
   const delta = (value: unknown) => value == null ? undefined : Number(value);
   const actions = [
@@ -259,7 +259,7 @@ function PredictiveIntelligence({
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const alerts = intelligence?.alerts || [];
-  const formatMoney = (value: number) => `${symbol}${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const formatMoney = (value: number) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
   const formatEvidence = (alert: PredictiveAlert) => {
     switch (alert.code) {
       case "delivery_risk":
@@ -515,7 +515,7 @@ function SiteBenchmarking({ sites }: { sites: SiteBenchmark[] }) {
 }
 
 function WhatIfSimulator({ metrics }: { metrics: ScenarioMetrics }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const [priceChange, setPriceChange] = useState(0);
@@ -529,7 +529,7 @@ function WhatIfSimulator({ metrics }: { metrics: ScenarioMetrics }) {
   const currentProfit = metrics.revenue - metrics.expenses;
   const profitDelta = projectedProfit - currentProfit;
   const projectedOrders = Math.max(0, Math.round(metrics.orders * (1 + volumeChange / 100)));
-  const money = (value: number) => `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const money = (value: number) => `${value.toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
 
   return (
     <Card className="shadow-sm" data-testid="card-what-if-simulator">
@@ -646,7 +646,7 @@ function DecisionModule({ title, icon, items }: { title: string; icon: React.Rea
 }
 
 function CustomerCreditAnalyticsSection() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data, isLoading, isError } = useQuery<any>({
@@ -665,7 +665,7 @@ function CustomerCreditAnalyticsSection() {
   const used = Number(data?.totalEverUsed ?? 0);
   const clients = Number(data?.clientsWithCredit ?? 0);
   const utilization = credited > 0 ? Math.min(100, (used / credited) * 100) : 0;
-  const formatMoney = (value: number) => `${symbol}${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const formatMoney = (value: number) => `${value.toLocaleString(i18n.language, { maximumFractionDigits: 2 })} ${symbol}`;
 
   return (
     <section aria-labelledby="customer-credit-analytics-title" data-testid="section-customer-credit-analytics">
@@ -754,7 +754,7 @@ function riskLabel(score: number | null | undefined, t: ReturnType<typeof useTra
 }
 
 function CustomerBehaviorSection({ period }: { period: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const churnRiskRef = useRef<HTMLDivElement>(null);
@@ -776,7 +776,13 @@ function CustomerBehaviorSection({ period }: { period: string }) {
 
   const depositData = (data.depositActivityByHour || []).map((row: any) => ({ ...row, label: `${row.hour}h` }));
   const pickupData = (data.pickupActivityByHour || []).map((row: any) => ({ ...row, label: `${row.hour}h` }));
-  const dayData = data.activityByDayOfWeek || [];
+  const localizedWeekdays = Array.from({ length: 7 }, (_, index) =>
+    new Intl.DateTimeFormat(i18n.language, { weekday: "short" }).format(new Date(2024, 0, index + 1)),
+  );
+  const dayData = (data.activityByDayOfWeek || []).map((row: any, index: number) => ({
+    ...row,
+    localizedDay: localizedWeekdays[index] || row.day,
+  }));
   const churn = data.churn || {};
   const metrics = data.metrics || {};
 
@@ -818,7 +824,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dayData}>
-                <XAxis dataKey="day" tick={{ fontSize: 10 }} interval={0} />
+                <XAxis dataKey="localizedDay" tick={{ fontSize: 10 }} interval={0} minTickGap={8} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
