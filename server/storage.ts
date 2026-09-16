@@ -66,7 +66,7 @@ export interface IStorage {
 
   getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null }[]): Promise<Order>;
+  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
@@ -329,7 +329,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null }[]): Promise<Order> {
+  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order> {
     await ensureOrderItemQuantitySupportsDecimals();
     const created = await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
@@ -780,7 +780,14 @@ export class DatabaseStorage implements IStorage {
       : await db.select().from(orders).orderBy(desc(orders.createdAt)));
     const allCustomers = await this.customersForScopedOrders(allOrders);
     const customerMap = new Map(allCustomers.map(c => [c.id, c]));
-    const allGarments = await db.select().from(garmentItems);
+    // The order list only needs return-state fields. Keep this projection narrow
+    // so adding optional garment details cannot make the entire list unavailable
+    // while a production schema migration is still pending.
+    const allGarments = await db.select({
+      orderId: garmentItems.orderId,
+      returnedForTreatment: garmentItems.returnedForTreatment,
+      resolvedAt: garmentItems.resolvedAt,
+    }).from(garmentItems);
     const garmentsByOrder = new Map<number, typeof allGarments>();
     for (const g of allGarments) {
       const list = garmentsByOrder.get(g.orderId) || [];
