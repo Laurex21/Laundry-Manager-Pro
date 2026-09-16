@@ -107,11 +107,21 @@ export default function Payments() {
   } | null>(null);
   const searchParams = new URLSearchParams(useSearch());
   const requestedView = searchParams.get("view");
+  const requestedCustomerId = Number(searchParams.get("customerId"));
   const [view, setView] = useState<"register" | "history">(requestedView === "history" ? "history" : "register");
 
   useEffect(() => {
     setView(requestedView === "history" ? "history" : "register");
   }, [requestedView]);
+
+  useEffect(() => {
+    if (!Number.isInteger(requestedCustomerId) || requestedCustomerId <= 0 || !allOrders) return;
+    const customerOrder = allOrders.find((order: any) => Number(order.customerId ?? order.customer?.id) === requestedCustomerId && order.paymentStatus !== "paid" && !NON_PAYABLE_ORDER_STATUSES.has(order.status));
+    if (customerOrder) {
+      setOrderSearch(customerOrder.customer?.name || customerOrder.customer?.phone || "");
+      setSelectedOrderId(customerOrder.id);
+    }
+  }, [allOrders, requestedCustomerId]);
 
   const { data: orderPayments } = usePaymentsByOrder(selectedOrderId || 0);
   const { mutate: createPayment, isPending } = useCreatePayment();
