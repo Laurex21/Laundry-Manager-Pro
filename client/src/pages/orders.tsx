@@ -318,6 +318,7 @@ function buildOrderConfirmationWhatsAppMessage({
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
   const [search, setSearch] = useState("");
+  const [savedDraft, setSavedDraft] = useState<any | null>(null);
   const initialDashboardFilters = useMemo(dashboardOrderFilters, []);
   const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(initialDashboardFilters.status);
   const [periodFilter, setPeriodFilter] = useState<OrderPeriodFilter>(initialDashboardFilters.period);
