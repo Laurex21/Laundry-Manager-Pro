@@ -389,8 +389,8 @@ export default function OrderDetail() {
   }
 
   return (
-    <div className="space-y-6 page-fade-in">
-      <div className="flex flex-wrap items-center gap-4">
+    <div className="space-y-4 md:space-y-6 page-fade-in">
+      <div className="flex flex-wrap items-start gap-3 md:items-center md:gap-4">
         <Link href="/orders">
           <Button variant="ghost" size="icon" data-testid="button-back-orders">
             <ArrowLeft className="w-5 h-5" />
@@ -402,18 +402,19 @@ export default function OrderDetail() {
             {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
+        <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap md:items-center md:justify-end" data-testid="order-mobile-actions-grid">
+          <Button className="w-full md:w-auto" variant="outline" size="sm" onClick={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
             {isDownloadingReceipt
               ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               : <Download className="w-4 h-4 mr-2" />}
             {isDownloadingReceipt ? t("generating", "Generating…") : t("download_receipt")}
           </Button>
-          <Button variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
+          <Button className="w-full md:w-auto" variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
             <Printer className="w-4 h-4 mr-2" /> {t("print_thermal_receipt")}
           </Button>
           {canShowCustomerNotification && (
             <Button
+              className="w-full md:w-auto"
               variant="outline"
               size="sm"
               onClick={handleNotifyCustomer}
@@ -424,9 +425,13 @@ export default function OrderDetail() {
               <MessageCircle className="w-4 h-4 mr-2" /> {t("notify_customer")}
             </Button>
           )}
-          <StatusBadge status={order.status} />
-          <StatusBadge status={order.paymentStatus} />
-          <OrderCorrectionActions order={order} isManager={isManager} />
+          <div className="col-span-2 flex flex-wrap items-center justify-center gap-2 md:col-auto md:justify-end">
+            <StatusBadge status={order.status} />
+            <StatusBadge status={order.paymentStatus} />
+          </div>
+          <div className="col-span-2 md:col-auto">
+            <OrderCorrectionActions order={order} isManager={isManager} />
+          </div>
         </div>
       </div>
 
@@ -615,7 +620,7 @@ export default function OrderDetail() {
                     <SheetTitle>{t("order_pipeline")}</SheetTitle>
                     <SheetDescription>{t("choose_stage_carefully", "Consultez la progression ou choisissez une étape autorisée.")}</SheetDescription>
                   </SheetHeader>
-                  <div className="mt-5 space-y-3">
+                  <div className="mt-5 space-y-2">
                     {PIPELINE_STAGES.map((stage, index) => {
                       const StageIcon = stage.icon;
                       const isPast = index < currentStageIndex;
@@ -625,8 +630,10 @@ export default function OrderDetail() {
                           key={stage.key}
                           type="button"
                           className={cn(
-                            "flex min-h-12 w-full items-center gap-3 rounded-xl border p-3 text-left",
-                            isCurrent ? "border-primary bg-primary/5" : "border-border bg-background"
+                            "flex w-full items-center gap-3 rounded-xl border px-3 text-left",
+                            isCurrent ? "min-h-16 border-primary bg-primary/5 py-3" :
+                            isPast ? "min-h-14 border-green-200 bg-green-50/40 py-2" :
+                            "min-h-14 border-border bg-muted/30 py-2 opacity-70"
                           )}
                           onClick={() => {
                             if (isPast) handleSetStatus(stage.key);
@@ -652,6 +659,9 @@ export default function OrderDetail() {
                     })}
                   </div>
                   <div className="mt-6 border-t pt-4">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-red-700">
+                      {t("sensitive_actions", "Actions sensibles")}
+                    </p>
                     <Button
                       type="button"
                       variant="outline"

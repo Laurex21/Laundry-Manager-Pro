@@ -341,7 +341,11 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     (item) => BOTTOM_NAV_HREFS.includes(item.href) && canAccess(item.page)
   );
 
-  const pageTitleKey = PAGE_TITLES[location] || "dashboard";
+  const currentPath = location.split(/[?#]/)[0];
+  const pageTitleKey = PAGE_TITLES[currentPath]
+    || (currentPath.startsWith("/orders/") ? "orders" : undefined)
+    || (currentPath.startsWith("/customers/") ? "customers" : undefined)
+    || "dashboard";
   const planColor = PLAN_COLORS[planSlug] || PLAN_COLORS.free;
 
   const NavContent = () => (
