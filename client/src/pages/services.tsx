@@ -96,10 +96,15 @@ export default function Services() {
   }
 
   return (
-    <div className="space-y-6 page-fade-in">
+    <div className="space-y-6 page-fade-in" data-testid="services-page-redesign">
+      <section className="rounded-2xl border border-[#082D5B]/10 bg-card p-4 shadow-sm sm:p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold">{t("services")}</h1>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            <Tag className="h-4 w-4" />
+            {t("production", "Production")}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-[#082D5B]">{t("services")}</h1>
           <p className="text-muted-foreground mt-1">{t("manage_services_subtitle")}</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -116,6 +121,7 @@ export default function Services() {
           </DialogContent>
         </Dialog>
       </div>
+      </section>
 
       {isLoading ? (
         <div className="space-y-6">
@@ -127,23 +133,26 @@ export default function Services() {
           ))}
         </div>
       ) : !services?.length ? (
-        <div className="text-center py-16 text-muted-foreground border border-dashed rounded-xl">
-          <Tag className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">{t("add_service")}</p>
+        <div className="rounded-2xl border border-dashed border-[#082D5B]/20 bg-card px-6 py-16 text-center text-muted-foreground">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Tag className="h-7 w-7" />
+          </div>
+          <p className="font-semibold text-[#082D5B]">{t("no_services_yet", "Aucun service configuré")}</p>
+          <p className="mt-1 text-sm">{t("add_service")}</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid gap-5 lg:grid-cols-2">
           {Object.entries(grouped).map(([category, items]) => (
-            <div key={category}>
-              <div className="flex items-center gap-2 mb-1 pb-1 border-b">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{labelForCategory(category, t)}</span>
-                <span className="text-xs text-muted-foreground">({items.length})</span>
+            <section key={category} className="overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#082D5B]/10 bg-[#082D5B] px-4 py-3 text-white">
+                <span className="text-xs font-semibold uppercase tracking-wider">{labelForCategory(category, t)}</span>
+                <Badge className="border-white/20 bg-white/10 text-white hover:bg-white/10">{items.length}</Badge>
               </div>
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-[#082D5B]/10">
                 {items.map((service) => (
                   <div
                     key={service.id}
-                    className="flex items-center gap-3 py-2.5 group"
+                    className="group grid gap-3 p-4 transition-colors hover:bg-primary/[0.035] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                     data-testid={`card-service-${service.id}`}
                   >
                     <div className="flex-1 min-w-0">
@@ -164,7 +173,7 @@ export default function Services() {
                         </p>
                       )}
                     </div>
-                    <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground sm:col-start-1">
                       {service.estimatedDuration && (
                         <span className="flex items-center gap-1" data-testid={`text-duration-${service.id}`}>
                           <Clock className="w-3 h-3" />
@@ -177,15 +186,16 @@ export default function Services() {
                         </span>
                       )}
                     </div>
+                    <div className="flex items-center justify-between gap-3 sm:col-start-2 sm:row-span-2 sm:flex-col sm:items-end sm:justify-center">
                     <div className="text-right shrink-0">
-                      <span className="font-mono font-bold text-sm text-primary" data-testid={`text-service-price-${service.id}`}>
+                      <span className="font-mono font-bold text-base text-primary" data-testid={`text-service-price-${service.id}`}>
                         {symbol}{Number(service.price).toFixed(2)}
                       </span>
                       <span className="text-xs text-muted-foreground ml-1" data-testid={`text-service-category-${service.id}`}>
                         / {service.unit}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-60 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -205,10 +215,11 @@ export default function Services() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       )}

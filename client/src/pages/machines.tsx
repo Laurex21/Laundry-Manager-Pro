@@ -40,15 +40,22 @@ export default function Machines() {
   }
 
   return (
-    <div className="space-y-6 page-fade-in">
+    <div className="space-y-6 page-fade-in" data-testid="machines-page-redesign">
+      <section className="rounded-2xl border border-[#082D5B]/10 bg-card p-4 shadow-sm sm:p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-machines-title">{t("machines")}</h1>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            <Cog className="h-4 w-4" />
+            {t("production", "Production")}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-[#082D5B]" data-testid="text-machines-title">{t("machines")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("machines_page_subtitle", "Suivez la disponibilité, l'utilisation et la maintenance de votre parc.")}</p>
         </div>
         <Button onClick={() => { setEditing(null); setOpen(true); }} className="shadow-lg shadow-primary/25" data-testid="button-add-machine">
           <Plus className="w-4 h-4 mr-2" /> {t("add_machine")}
         </Button>
       </div>
+      </section>
 
       <MachineList
         onEdit={(m) => { setEditing(m); setOpen(true); }}
@@ -122,16 +129,19 @@ function MachineList({ onEdit, onDelete, onUsage }: { onEdit: (m: Machine) => vo
 
   if (!machines || machines.length === 0) {
     return (
-      <div className="text-center py-16 text-muted-foreground border border-dashed rounded-xl">
-        <Cog className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm" data-testid="text-no-machines">{t("no_machines_yet")}</p>
+      <div className="rounded-2xl border border-dashed border-[#082D5B]/20 bg-card px-6 py-16 text-center text-muted-foreground">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Cog className="h-7 w-7" />
+        </div>
+        <p className="font-semibold text-[#082D5B]" data-testid="text-no-machines">{t("no_machines_yet")}</p>
+        <p className="mx-auto mt-1 max-w-md text-sm">{t("machines_empty_hint", "Ajoutez votre première machine pour suivre les cycles, la capacité et les maintenances.")}</p>
       </div>
     );
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden divide-y divide-border">
-      <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card shadow-sm divide-y divide-[#082D5B]/10">
+      <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-4 px-4 py-3 bg-[#082D5B] text-xs font-semibold uppercase tracking-wider text-white">
         <span>{t("machine_name")}</span>
         <span>{t("machine_type")}</span>
         <span>{t("machine_status")}</span>
@@ -145,29 +155,35 @@ function MachineList({ onEdit, onDelete, onUsage }: { onEdit: (m: Machine) => vo
         const typeLabel = t(`machine_type_${machine.type}`, machine.type.charAt(0).toUpperCase() + machine.type.slice(1));
 
         return (
-          <div key={machine.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-x-4 gap-y-1 px-4 py-3 items-center hover:bg-muted/20 transition-colors" data-testid={`card-machine-${machine.id}`}>
+          <div key={machine.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_3fr_1fr_auto] gap-x-4 gap-y-3 px-4 py-4 items-center hover:bg-primary/[0.035] transition-colors sm:gap-y-1 sm:py-3" data-testid={`card-machine-${machine.id}`}>
             <div className="min-w-0">
               <span className="font-medium text-sm block truncate">{machine.name}</span>
               {(machine.brand || machine.model) && <span className="text-xs text-muted-foreground truncate block">{[machine.brand, machine.model].filter(Boolean).join(" ")}</span>}
             </div>
-            <span className="text-sm text-muted-foreground">{typeLabel}</span>
+            <div>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">{t("machine_type")}</span>
+              <span className="text-sm text-muted-foreground">{typeLabel}</span>
+            </div>
             <span>
               <Badge variant={statusVariant(machine.status) as any} className="text-xs" data-testid={`badge-status-${machine.id}`}>
                 {t(`machine_status_${machine.status}`, machine.status)}
               </Badge>
             </span>
+            <div className="rounded-lg bg-muted/35 p-3 sm:bg-transparent sm:p-0">
+            <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">{t("utilization")}</span>
             <div className="flex items-center gap-2 min-w-0">
               <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div className={`h-full ${utilColor} rounded-full transition-all`} style={{ width: `${Math.min(100, utilization)}%` }} />
               </div>
               <span className="text-xs text-muted-foreground w-8 shrink-0">{utilization}%</span>
             </div>
+            </div>
             <div className="text-xs text-muted-foreground">
               <span>{machine.cycleCount}</span>
               <span className="text-muted-foreground/50 mx-1">/</span>
               <span>{machine.totalKgProcessed} kg</span>
             </div>
-            <div className="flex gap-1 justify-end">
+            <div className="flex gap-1 justify-end border-t pt-3 sm:border-0 sm:pt-0">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onUsage(machine)} title={t("machine_usage", "Utilisation")} data-testid={`button-machine-usage-${machine.id}`}>
                 <Activity className="w-3.5 h-3.5" />
               </Button>

@@ -40,15 +40,22 @@ export default function Employees() {
   }
 
   return (
-    <div className="space-y-6 page-fade-in">
+    <div className="space-y-6 page-fade-in" data-testid="employees-page-redesign">
+      <section className="rounded-2xl border border-[#082D5B]/10 bg-card p-4 shadow-sm sm:p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold" data-testid="text-employees-title">{t("employees")}</h1>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            <UserCheck className="h-4 w-4" />
+            {t("management", "Gestion")}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-[#082D5B]" data-testid="text-employees-title">{t("employees")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("employees_page_subtitle", "Suivez les rôles, la présence, la charge et la productivité de l'équipe.")}</p>
         </div>
         <Button onClick={() => { setEditing(null); setOpen(true); }} className="shadow-lg shadow-primary/25" data-testid="button-add-employee">
           <Plus className="w-4 h-4 mr-2" /> {t("add_employee")}
         </Button>
       </div>
+      </section>
 
       <EmployeeList onEdit={(e) => { setEditing(e); setOpen(true); }} onDelete={setDeleteTarget} onAttendance={setAttendanceTarget} />
 
@@ -110,16 +117,19 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
 
   if (!employees || employees.length === 0) {
     return (
-      <div className="text-center py-16 text-muted-foreground border border-dashed rounded-xl">
-        <UserCheck className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm" data-testid="text-no-employees">{t("no_employees_yet")}</p>
+      <div className="rounded-2xl border border-dashed border-[#082D5B]/20 bg-card px-6 py-16 text-center text-muted-foreground">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <UserCheck className="h-7 w-7" />
+        </div>
+        <p className="font-semibold text-[#082D5B]" data-testid="text-no-employees">{t("no_employees_yet")}</p>
+        <p className="mx-auto mt-1 max-w-md text-sm">{t("employees_empty_hint", "Ajoutez un collaborateur pour suivre son rôle, son pointage et son activité.")}</p>
       </div>
     );
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden divide-y divide-border bg-card">
-      <div className="hidden xl:grid grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] gap-4 px-4 py-2 bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="overflow-hidden rounded-2xl border border-[#082D5B]/10 bg-card shadow-sm divide-y divide-[#082D5B]/10">
+      <div className="hidden xl:grid grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] gap-4 px-4 py-3 bg-[#082D5B] text-xs font-semibold uppercase tracking-wider text-white">
         <span>{t("employee_name")}</span>
         <span>{t("employee_position", "Position")}</span>
         <span>{t("phone")} / {t("email")}</span>
@@ -133,7 +143,7 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
         const bgColor = AVATAR_COLORS[emp.id % AVATAR_COLORS.length];
 
         return (
-          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-muted/20 transition-colors xl:grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] xl:gap-x-4 xl:gap-y-1 xl:items-center xl:py-3" data-testid={`card-employee-${emp.id}`}>
+          <div key={emp.id} className="grid grid-cols-1 gap-4 px-4 py-4 hover:bg-primary/[0.035] transition-colors xl:grid-cols-[minmax(190px,1.6fr)_minmax(130px,1fr)_minmax(220px,1.6fr)_minmax(96px,.7fr)_minmax(120px,.8fr)_minmax(130px,.8fr)_104px] xl:gap-x-4 xl:gap-y-1 xl:items-center xl:py-3" data-testid={`card-employee-${emp.id}`}>
             <div className="flex items-center gap-3 min-w-0">
               <div className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0`}>
                 {initial}
@@ -172,7 +182,7 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-3 rounded-md bg-muted/35 p-3 xl:contents">
+            <div className="grid grid-cols-3 gap-3 rounded-xl border border-[#082D5B]/5 bg-muted/35 p-3 xl:contents">
               <div className="min-w-0">
                 <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:hidden">{t("kg_processed")}</span>
                 <span className="text-sm font-mono">{emp.kgProcessed}</span>
