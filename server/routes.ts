@@ -12,6 +12,7 @@ import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSc
 import { reportingDateRange, reportingDateString, validReportingTimeZone } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
+import { addDecimals, compareDecimals, isIntegerDecimal, multiplyDecimal, normalizeDecimalInput } from "@shared/exact-decimal";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
 import { recordSecurityAudit } from "./lib/security-audit";
@@ -471,38 +472,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!(await canAccessCustomer(req, customer.id))) {
         return res.status(403).json({ message: "Customer does not belong to this organisation" });
       }
-      let subtotal = 0;
+      let subtotal = "0";
       for (const item of items) {
         const service = await storage.getService(item.serviceId);
         if (!service) return res.status(400).json({ message: `Service ${item.serviceId} not found` });
         if (!(await canAccessService(req, service.id))) {
           return res.status(403).json({ message: `Service ${item.serviceId} does not belong to this organisation` });
         }
-        subtotal += Number(service.price) * item.quantity;
+        if (service.siteId !== siteId) return res.status(400).json({ message: "Le service sélectionné n'est pas disponible sur le site actif" });
+        const quantity = normalizeDecimalInput(item.quantity);
+        if (service.unit !== "kg" && !isIntegerDecimal(quantity)) {
+          return res.status(400).json({ message: "La quantité doit être entière pour un service facturé à la pièce" });
+        }
+        item.quantity = quantity as any;
+        subtotal = addDecimals(subtotal, multiplyDecimal(service.price, quantity));
       }
       const discountPct = Number(orderData.discountPct || 0);
-      const requestedDiscountAmount = Number(orderData.discount || 0);
+      const requestedDiscountAmount = normalizeDecimalInput(orderData.discount || "0");
       const discountAmount = discountPct > 0
-        ? subtotal * (discountPct / 100)
+        ? multiplyDecimal(subtotal, String(discountPct / 100))
         : requestedDiscountAmount;
-      if (!Number.isFinite(discountAmount) || discountAmount < 0 || discountAmount > subtotal) {
+      if (compareDecimals(discountAmount, "0") < 0 || compareDecimals(discountAmount, subtotal) > 0) {
         return res.status(400).json({ message: "Discount must be between zero and the order subtotal" });
       }
-      const pickupCostAmount = Number(orderData.pickupCost || 0);
-      const advanceAmount = Number(orderData.advancePayment || 0);
-      const totalAmount = Math.max(0, subtotal - discountAmount + pickupCostAmount);
-      const initialPaymentStatus = advanceAmount >= totalAmount ? "paid" : advanceAmount > 0 ? "partial" : "unpaid";
+      const pickupCostAmount = normalizeDecimalInput(orderData.pickupCost || "0");
+      const advanceAmount = normalizeDecimalInput(orderData.advancePayment || "0");
+      const calculatedTotal = addDecimals(subtotal, multiplyDecimal(discountAmount, "-1"), pickupCostAmount);
+      const totalAmount = compareDecimals(calculatedTotal, "0") < 0 ? "0" : calculatedTotal;
+      const initialPaymentStatus = compareDecimals(advanceAmount, totalAmount) >= 0 ? "paid" : compareDecimals(advanceAmount, "0") > 0 ? "partial" : "unpaid";
       const employee = await actorEmployee(req, siteId);
       const order = await storage.createOrder({
         ...orderData,
         createdByEmployeeId: employee?.id ?? null,
         status: "received",
-        totalAmount: totalAmount.toString(),
-        originalPrice: subtotal.toString(),
+        totalAmount,
+        originalPrice: subtotal,
         discountPct: discountPct.toString(),
-        discountAmount: discountAmount.toString(),
-        discount: discountAmount.toString(),
-        pickupCost: pickupCostAmount.toString(),
+        discountAmount,
+        discount: discountAmount,
+        pickupCost: pickupCostAmount,
         paymentStatus: initialPaymentStatus,
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
@@ -513,10 +521,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         actionType: "order_created",
         orderId: order.id,
         amount: totalAmount,
-        weightKg: items.reduce((sum, item) => sum + item.quantity, 0),
+        weightKg: items.reduce((sum, item) => addDecimals(sum, item.quantity), "0"),
         metadata: { itemCount: items.length, garmentCount: garments?.length ?? 0 },
       });
-      if (discountAmount > 0) {
+      if (compareDecimals(discountAmount, "0") > 0) {
         await trackEmployeeActivity(req, {
           siteId,
           actionType: "discount_applied",
@@ -536,7 +544,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           cycleDurationMinutes: usage.cycleDurationMinutes || 0,
         } as any);
       }
-      if (advanceAmount > 0) {
+      if (compareDecimals(advanceAmount, "0") > 0) {
         await storage.createPayment({
           orderId: order.id,
           collectedByEmployeeId: employee?.id ?? null,

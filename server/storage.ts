@@ -66,7 +66,7 @@ export interface IStorage {
 
   getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order>;
+  createOrder(order: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
@@ -329,7 +329,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order> {
+  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order> {
     await ensureOrderItemQuantitySupportsDecimals();
     const created = await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values(insertOrder).returning();
@@ -353,7 +353,7 @@ export class DatabaseStorage implements IStorage {
         const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));
         if (!service) throw new Error(`Service ${item.serviceId} not found`);
         await tx.insert(orderItems).values({
-          orderId: order.id, serviceId: item.serviceId, quantity: item.quantity, priceAtOrder: service.price,
+          orderId: order.id, serviceId: item.serviceId, quantity: String(item.quantity), priceAtOrder: service.price,
         });
       }
 

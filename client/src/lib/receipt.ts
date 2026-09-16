@@ -3,6 +3,7 @@ import { enUS, fr, pt } from "date-fns/locale";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 import { garmentColorSwatch } from "./garment-colors";
 import { orderDisplayId } from "./order-display";
+import { formatExactMoney } from "@shared/exact-decimal";
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
   received: { en: "Received", fr: "Reçu" },
@@ -314,11 +315,7 @@ export function downloadReceiptHtml(html: string, filename: string): void {
 }
 
 function thermalMoney(amount: number, symbol: string): string {
-  const currency = symbol.trim();
-  const rounded = Math.round(amount).toLocaleString("fr-FR");
-  return /^[A-Z]{2,5}$/.test(currency) || currency === "UM"
-    ? `${rounded} ${currency}`
-    : `${currency}${amount.toFixed(2)}`;
+  return formatExactMoney(String(amount), symbol.trim(), "fr-FR");
 }
 
 function thermalLine(labelText: string, value: string, strong = false): string {

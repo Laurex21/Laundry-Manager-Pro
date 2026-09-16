@@ -1,5 +1,12 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
+import {
+  addDecimals,
+  compareDecimals,
+  isIntegerDecimal,
+  multiplyDecimal,
+  normalizeDecimalInput,
+} from "@shared/exact-decimal";
 
 export class OrderCorrectionError extends Error {
   constructor(message: string, public readonly statusCode = 400) {
@@ -13,7 +20,7 @@ export type ControlledOrderEditInput = {
   pickupDate: Date | null;
   discountPct: number;
   reason: string;
-  items: Array<{ serviceId: number; quantity: number }>;
+  items: Array<{ serviceId: number; quantity: string | number }>;
   garments: Array<{ itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }>;
 };
 
@@ -157,33 +164,51 @@ export async function editOrderControlled(
 
     const serviceIds = [...new Set(input.items.map((item) => item.serviceId))];
     const servicesResult = await client.query(
-      `SELECT sv.id, sv.price
+      `SELECT sv.id, sv.price, sv.unit, sv.site_id
        FROM services sv JOIN sites s ON s.id = sv.site_id
-       WHERE sv.id = ANY($1::int[]) AND s.organisation_id = $2 AND sv.active = true`,
-      [serviceIds, order.organisation_id],
+       WHERE sv.id = ANY($1::int[])
+         AND s.organisation_id = $2
+         AND sv.site_id = $3
+         AND sv.active = true`,
+      [serviceIds, order.organisation_id, siteId],
     );
     if (servicesResult.rowCount !== serviceIds.length) {
-      throw new OrderCorrectionError("One or more services are unavailable for this organisation");
+      throw new OrderCorrectionError("One or more services are unavailable for this site");
     }
     const existingPricesResult = await client.query(
       `SELECT service_id, price_at_order FROM order_items WHERE order_id = $1 ORDER BY id`,
       [orderId],
     );
-    const existingPrices = new Map<number, number>();
+    const existingPrices = new Map<number, string>();
     for (const item of existingPricesResult.rows) {
       if (!existingPrices.has(Number(item.service_id))) {
-        existingPrices.set(Number(item.service_id), Number(item.price_at_order));
+        existingPrices.set(Number(item.service_id), normalizeDecimalInput(item.price_at_order));
       }
     }
     const prices = new Map(servicesResult.rows.map((service) => [
       Number(service.id),
-      existingPrices.get(Number(service.id)) ?? Number(service.price),
+      existingPrices.get(Number(service.id)) ?? normalizeDecimalInput(service.price),
     ]));
-    const subtotal = input.items.reduce((sum, item) => sum + (prices.get(item.serviceId) ?? 0) * item.quantity, 0);
+    const units = new Map(servicesResult.rows.map((service) => [Number(service.id), String(service.unit || "piece").toLowerCase()]));
+    const normalizedItems = input.items.map((item) => {
+      const quantity = normalizeDecimalInput(item.quantity);
+      if (units.get(item.serviceId) !== "kg" && !isIntegerDecimal(quantity)) {
+        throw new OrderCorrectionError("Quantities for piece-based services must be whole numbers");
+      }
+      return { ...item, quantity };
+    });
+    const subtotal = normalizedItems.reduce(
+      (sum, item) => addDecimals(sum, multiplyDecimal(prices.get(item.serviceId) ?? "0", item.quantity)),
+      "0",
+    );
     const discountPct = input.discountPct;
-    const discountAmount = Math.min(subtotal, subtotal * (discountPct / 100));
-    const pickupCost = Number(order.pickup_cost || 0);
-    const totalAmount = Math.max(0, subtotal - discountAmount + pickupCost);
+    const requestedDiscount = multiplyDecimal(multiplyDecimal(subtotal, normalizeDecimalInput(discountPct)), "0.01");
+    const discountAmount = compareDecimals(requestedDiscount, subtotal) > 0 ? subtotal : requestedDiscount;
+    const pickupCost = normalizeDecimalInput(order.pickup_cost || 0);
+    const afterDiscount = addDecimals(subtotal, `-${discountAmount}`);
+    const totalAmount = compareDecimals(afterDiscount, "0") < 0
+      ? pickupCost
+      : addDecimals(afterDiscount, pickupCost);
     const before = await snapshot(client, orderId);
 
     await client.query(
@@ -194,7 +219,7 @@ export async function editOrderControlled(
       [orderId, input.customerId, input.entryDate, input.pickupDate, subtotal, discountPct, discountAmount, totalAmount, input.reason],
     );
     await client.query(`DELETE FROM order_items WHERE order_id = $1`, [orderId]);
-    for (const item of input.items) {
+    for (const item of normalizedItems) {
       await client.query(
         `INSERT INTO order_items (order_id, service_id, quantity, price_at_order) VALUES ($1, $2, $3, $4)`,
         [orderId, item.serviceId, item.quantity, prices.get(item.serviceId)],
@@ -219,7 +244,7 @@ export async function editOrderControlled(
       [orderId, order.status, actorUserId, `Order corrected: ${input.reason}`],
     );
     await client.query("COMMIT");
-    return { orderId, totalAmount: totalAmount.toFixed(2) };
+    return { orderId, totalAmount };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

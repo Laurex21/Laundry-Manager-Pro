@@ -94,6 +94,15 @@ import { useToast } from "@/hooks/use-toast";
 import { GarmentColorPicker } from "@/components/garment-color-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { queryClient } from "@/lib/queryClient";
+import {
+  addDecimals,
+  compareDecimals,
+  formatExactDecimal,
+  formatExactMoney,
+  isIntegerDecimal,
+  multiplyDecimal,
+  normalizeDecimalInput,
+} from "@shared/exact-decimal";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
 
@@ -158,6 +167,7 @@ function ServiceCombobox({
   symbol: string;
 }) {
   const { t } = useTranslation();
+  const { i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [savedDraft, setSavedDraft] = useState<any | null>(null);
   const selectedService = services.find((service) => service.id === value);
@@ -190,7 +200,7 @@ function ServiceCombobox({
           >
             <span className="truncate text-left">
               {selectedService
-                ? `${selectedService.name} (${symbol}${Number(selectedService.price).toFixed(2)}/${selectedService.unit})`
+                ? `${selectedService.name} (${formatExactMoney(selectedService.price, symbol, i18n.language)}/${selectedService.unit})`
                 : t("select_service")}
             </span>
             <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
@@ -239,7 +249,7 @@ function ServiceCombobox({
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium text-sm leading-tight">{service.name}</div>
                       <div className="text-xs text-muted-foreground leading-tight mt-0.5">
-                        {symbol}{Number(service.price).toFixed(2)}/{service.unit}
+                        {formatExactMoney(service.price, symbol, i18n.language)}/{service.unit}
                       </div>
                     </div>
                   </CommandItem>
@@ -887,7 +897,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
       pickupCost: "0",
       advancePayment: "0",
       advancePaymentMethod: "Cash",
-      items: [{ serviceId: 0, quantity: 1 }],
+      items: [{ serviceId: 0, quantity: "1" }],
       garmentItems: [],
       machineUsages: [],
     }
@@ -924,7 +934,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
       pickupCost: String(correctionOrder.pickupCost || 0),
       advancePayment: "0",
       advancePaymentMethod: "Cash",
-      items: (correctionOrder.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: Number(item.quantity) })),
+      items: (correctionOrder.items || []).map((item: any) => ({ serviceId: Number(item.serviceId), quantity: normalizeDecimalInput(item.quantity) })),
       garmentItems: (correctionOrder.garmentItems || []).map((garment: any) => ({ itemName: garment.itemName, quantity: Number(garment.quantity), color: garment.color || "", textileReserve: garment.textileReserve || "" })),
       machineUsages: [],
     });
@@ -965,6 +975,23 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     name: "customerId"
   });
   const watchedForm = useWatch({ control: form.control });
+
+  useEffect(() => {
+    if (!services?.length || !watchedItems?.length) return;
+    const validServiceIds = new Set(activeServices.map((service) => service.id));
+    let clearedInvalidService = false;
+    watchedItems.forEach((item, index) => {
+      if (Number(item?.serviceId) > 0 && !validServiceIds.has(Number(item.serviceId))) {
+        form.setValue(`items.${index}.serviceId`, 0, { shouldDirty: true, shouldValidate: true });
+        clearedInvalidService = true;
+      }
+    });
+    if (clearedInvalidService) toast({
+      title: t("service_unavailable_for_site", "Service indisponible pour ce site"),
+      description: t("select_service_for_active_site", "Sélectionnez un service disponible pour le site actif."),
+      variant: "destructive",
+    });
+  }, [activeServices, form, services, t, toast, watchedItems]);
 
   useEffect(() => {
     if (correctionOrder) return;
@@ -1061,8 +1088,12 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     return (watchedItems || []).reduce((acc, item) => {
       const service = services?.find(s => s.id === item.serviceId);
       if (!service) return acc;
-      return acc + (Number(service.price) * (item.quantity || 0));
-    }, 0);
+      try {
+        return addDecimals(acc, multiplyDecimal(service.price, normalizeDecimalInput(item.quantity || "0")));
+      } catch {
+        return acc;
+      }
+    }, "0");
   }, [watchedItems, services]);
 
   useEffect(() => {
@@ -1070,10 +1101,10 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     const customer = customers.find((c: any) => c.id === Number(watchedCustomerId));
     if (!customer || !Number(customer.defaultDiscountPct)) return;
     const pct = Number(customer.defaultDiscountPct);
-    if (subtotal > 0 && pct > 0) {
+    if (compareDecimals(subtotal, "0") > 0 && pct > 0) {
       setDiscountMode("percentage");
       form.setValue("discountPct", pct);
-      form.setValue("discount", ((subtotal * pct) / 100).toFixed(2));
+      form.setValue("discount", multiplyDecimal(multiplyDecimal(subtotal, String(pct)), "0.01"));
     }
   }, [watchedCustomerId, customers, subtotal]);
 
@@ -1081,15 +1112,21 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     if (discountMode === "percentage") {
       const raw = Number(watchedDiscountPct);
       const pct = Math.min(100, Math.max(0, isNaN(raw) ? 0 : raw));
-      return Math.min(subtotal, subtotal * pct / 100);
+      const calculated = multiplyDecimal(multiplyDecimal(subtotal, String(pct)), "0.01");
+      return compareDecimals(calculated, subtotal) > 0 ? subtotal : calculated;
     }
-    const raw = Number(watchedDiscount);
-    return Math.min(subtotal, Math.max(0, isNaN(raw) ? 0 : raw));
+    try {
+      const raw = normalizeDecimalInput(watchedDiscount || "0");
+      if (compareDecimals(raw, "0") < 0) return "0";
+      return compareDecimals(raw, subtotal) > 0 ? subtotal : raw;
+    } catch { return "0"; }
   }, [discountMode, subtotal, watchedDiscount, watchedDiscountPct]);
 
   const total = useMemo(() => {
-    const pickupVal = Number(watchedPickupCost) || 0;
-    return Math.max(0, subtotal - discountAmount + pickupVal);
+    let pickupVal = "0";
+    try { pickupVal = normalizeDecimalInput(watchedPickupCost || "0"); } catch { pickupVal = "0"; }
+    const value = addDecimals(subtotal, `-${discountAmount}`, pickupVal);
+    return compareDecimals(value, "0") < 0 ? "0" : value;
   }, [subtotal, discountAmount, watchedPickupCost]);
 
   const totalRegisteredGarments = useMemo(() => {
@@ -1112,12 +1149,12 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   async function onSubmit(data: CreateOrderFormValues) {
     const formattedData = {
       ...data,
-      discount: discountAmount.toFixed(2),
+      discount: discountAmount,
       discountPct: discountMode === "percentage" ? Number(data.discountPct || 0) : 0,
       customerId: Number(data.customerId),
       items: data.items.map(item => ({
         serviceId: Number(item.serviceId),
-        quantity: Number(item.quantity)
+        quantity: normalizeDecimalInput(item.quantity)
       })),
       garmentItems: (data.garmentItems || []).filter(g => g.itemName.trim() !== "").map(g => ({
         itemName: g.itemName.trim(),
@@ -1144,7 +1181,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
             customerId: formattedData.customerId,
             entryDate: new Date(`${formattedData.entryDate}T00:00:00`).toISOString(),
             pickupDate: formattedData.pickupDate ? new Date(`${formattedData.pickupDate}T00:00:00`).toISOString() : null,
-            discountPct: discountMode === "percentage" ? Number(formattedData.discountPct || 0) : subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(4)) : 0,
+            discountPct: discountMode === "percentage" ? Number(formattedData.discountPct || 0) : 0,
             reason: correctionReason.trim(),
             items: formattedData.items,
             garments: formattedData.garmentItems,
@@ -1407,14 +1444,16 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 <div className="space-y-3 lg:space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-muted-foreground">{t('order_services', 'Order Services')}</h3>
-                    <Button type="button" variant="outline" size="sm" onClick={() => append({ serviceId: 0, quantity: 1 })}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => append({ serviceId: 0, quantity: "1" })}>
                       <Plus className="w-3 h-3 mr-1" /> {t('add_service', 'Add Service')}
                     </Button>
                   </div>
 
               {fields.map((field, index) => {
                 const selectedService = services?.find(s => s.id === watchedItems[index]?.serviceId);
-                const itemPrice = selectedService ? Number(selectedService.price) * (watchedItems[index]?.quantity || 0) : 0;
+                let itemPrice = "0";
+                try { itemPrice = selectedService ? multiplyDecimal(selectedService.price, normalizeDecimalInput(watchedItems[index]?.quantity || "0")) : "0"; } catch { itemPrice = "0"; }
+                const isWeightService = String(selectedService?.unit || "").toLowerCase() === "kg";
 
                 return (
                   <div key={field.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem_2.25rem] items-end gap-2 rounded-lg border border-border/50 bg-muted/20 p-2 sm:grid-cols-[minmax(0,1fr)_5rem_6rem_2.25rem] sm:gap-3 sm:p-3 lg:p-2">
@@ -1443,12 +1482,29 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                           <FormLabel className="text-xs">{t("qty")}</FormLabel>
                           <FormControl>
                             <Input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
+                              type="text"
+                              inputMode={isWeightService ? "decimal" : "numeric"}
                               className="h-9"
                               {...field}
-                              onChange={e => field.onChange(Number(e.target.value))}
+                              value={String(field.value ?? "")}
+                              onChange={(event) => {
+                                const value = event.target.value.replace(",", ".");
+                                if (value === "" || /^\d*(?:\.\d{0,6})?$/.test(value)) field.onChange(value);
+                              }}
+                              onBlur={(event) => {
+                                field.onBlur();
+                                try {
+                                  const normalized = normalizeDecimalInput(event.target.value || "0");
+                                  if (!isWeightService && !isIntegerDecimal(normalized)) {
+                                    form.setError(`items.${index}.quantity`, { message: t("whole_quantity_required", "Une quantité entière est requise pour un service à la pièce.") });
+                                    return;
+                                  }
+                                  form.clearErrors(`items.${index}.quantity`);
+                                  field.onChange(normalized);
+                                } catch {
+                                  form.setError(`items.${index}.quantity`, { message: t("invalid_quantity", "Quantité invalide") });
+                                }
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -1457,7 +1513,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                     />
                     <div className="col-span-2 row-start-2 flex min-w-0 items-center justify-between px-1 pb-1 text-right sm:col-span-1 sm:row-start-auto sm:block sm:px-0 sm:pb-2">
                       <span className="text-xs text-muted-foreground block">{t("price")}</span>
-                      <span className="font-mono text-sm font-medium">{symbol}{itemPrice.toFixed(2)}</span>
+                      <span className="font-mono text-sm font-medium">{formatExactMoney(itemPrice, symbol, i18n.language)}</span>
                     </div>
                     <Button
                       type="button"
@@ -1567,15 +1623,19 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <span>{t("customers")}</span><strong className="text-right">{customers?.find((customer) => customer.id === watchedCustomerId)?.name || "—"}</strong>
                   <span>{t("garment_inventory")}</span><strong className="text-right">{totalRegisteredGarments}</strong>
-                  <span>{t("pickup_date")}</span><strong className="text-right">{watchedForm.pickupDate || "—"}</strong>
+                  <span>{t("pickup_date")}</span><strong className="text-right">{watchedForm.pickupDate ? new Intl.DateTimeFormat(i18n.language).format(new Date(`${watchedForm.pickupDate}T12:00:00`)) : "—"}</strong>
                 </div>
-                {(watchedGarmentItems || []).some((garment: any) => garment.textileReserve?.trim()) && <div className="space-y-1 pt-2"><p className="text-xs font-semibold">{t("textile_reserves", "Réserves textiles")}</p>{(watchedGarmentItems || []).filter((garment: any) => garment.textileReserve?.trim()).map((garment: any, index: number) => <p key={index} className="text-xs text-muted-foreground">{garment.itemName || t("item_name")}: {garment.textileReserve}</p>)}</div>}
+                <div className="space-y-1 border-t border-violet-200 pt-2">
+                  <div className="flex items-center justify-between"><p className="text-xs font-semibold">{t("order_services")}</p><Button type="button" variant="ghost" size="sm" className="h-auto p-0 text-xs text-primary" onClick={() => setWizardStep(2)}>{t("edit", "Modifier")}</Button></div>
+                  {(watchedItems || []).map((item, index) => { const service = activeServices.find((candidate) => candidate.id === Number(item.serviceId)); return service ? <p key={`${item.serviceId}-${index}`} className="flex justify-between gap-3 text-xs text-muted-foreground"><span>{service.name} · {formatExactDecimal(item.quantity || "0", i18n.language)} {service.unit}</span><strong>{formatExactMoney(multiplyDecimal(service.price, normalizeDecimalInput(item.quantity || "0")), symbol, i18n.language)}</strong></p> : null; })}
+                </div>
+                {(watchedGarmentItems || []).filter((garment: any) => garment.itemName?.trim()).length > 0 && <div className="space-y-1 border-t border-violet-200 pt-2"><p className="text-xs font-semibold">{t("garment_inventory")}</p>{(watchedGarmentItems || []).filter((garment: any) => garment.itemName?.trim()).map((garment: any, index: number) => <p key={index} className="text-xs text-muted-foreground">{garment.quantity} × {garment.itemName}{garment.color ? ` · ${garment.color}` : ""}{garment.textileReserve ? ` · ${garment.textileReserve}` : ""}</p>)}</div>}
               </div>}
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{t("subtotal")}:</span>
-                <span className="font-mono font-semibold">{symbol}{subtotal.toFixed(2)}</span>
+                <span className="font-mono font-semibold">{formatExactMoney(subtotal, symbol, i18n.language)}</span>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
+              {wizardStep === 4 && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
                 <div className="space-y-2">
                   <fieldset className="space-y-1.5">
                     <legend className="text-xs font-medium text-muted-foreground">{t("discount_type")}</legend>
@@ -1591,7 +1651,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                         }`}
                         aria-pressed={discountMode === "fixed"}
                         onClick={() => {
-                          form.setValue("discount", discountAmount.toFixed(2));
+                          form.setValue("discount", discountAmount);
                           form.setValue("discountPct", 0);
                           setDiscountMode("fixed");
                         }}
@@ -1610,7 +1670,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                         }`}
                         aria-pressed={discountMode === "percentage"}
                         onClick={() => {
-                          form.setValue("discountPct", subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0);
+                          form.setValue("discountPct", 0);
                           setDiscountMode("percentage");
                         }}
                         data-testid="button-discount-percentage"
@@ -1627,7 +1687,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                         <FormItem>
                           <FormLabel className="text-xs text-muted-foreground">{t("discount")} ({symbol})</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" min="0" max={subtotal} className="h-8 text-right font-mono" {...field} data-testid="input-discount" />
+                            <Input type="text" inputMode="decimal" className="h-8 text-right font-mono" {...field} value={String(field.value ?? "")} onChange={(event) => field.onChange(event.target.value.replace(",", "."))} data-testid="input-discount" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -1668,44 +1728,29 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                     <p className="text-xs text-primary">{t("customer_default_discount", { percentage: customerDiscountPct })}</p>
                   )}
                 </div>
-                {wizardStep === 3 && <FormField
-                  control={form.control}
-                  name="pickupCost"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-xs text-muted-foreground">
-                        {t("pickup_cost")} ({symbol})
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" min="0" placeholder="0.00" className="h-8 text-right font-mono" {...field} data-testid="input-pickup-cost" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />}
-              </div>
-              {(Number(watchedPickupCost) > 0 || discountAmount > 0) && (
+              </div>}
+              {(compareDecimals(watchedPickupCost || "0", "0") > 0 || compareDecimals(discountAmount, "0") > 0) && (
                 <div className="text-xs text-muted-foreground space-y-1 px-1">
-                  {discountAmount > 0 && (
+                  {compareDecimals(discountAmount, "0") > 0 && (
                     <div className="flex justify-between">
                       <span>- {t("discount")}:</span>
-                      <span className="font-mono text-destructive">-{symbol}{discountAmount.toFixed(2)}</span>
+                      <span className="font-mono text-destructive">-{formatExactMoney(discountAmount, symbol, i18n.language)}</span>
                     </div>
                   )}
-                  {Number(watchedPickupCost) > 0 && (
+                  {compareDecimals(watchedPickupCost || "0", "0") > 0 && (
                     <div className="flex justify-between">
                       <span>+ {t("pickup_cost")}:</span>
-                      <span className="font-mono text-primary">+{symbol}{Number(watchedPickupCost).toFixed(2)}</span>
+                      <span className="font-mono text-primary">+{formatExactMoney(watchedPickupCost || "0", symbol, i18n.language)}</span>
                     </div>
                   )}
                 </div>
               )}
               <div className="flex justify-between items-center text-lg font-bold bg-primary/5 p-3 rounded-lg">
                 <span>{t("total")}:</span>
-                <span className="font-mono text-primary">{symbol}{total.toFixed(2)}</span>
+                <span className="font-mono text-primary">{formatExactMoney(total, symbol, i18n.language)}</span>
               </div>
 
-              {!correctionOrder && <div className="border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 rounded-lg p-4 lg:p-3 space-y-2">
+              {!correctionOrder && wizardStep === 4 && <div className="border border-dashed border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 rounded-lg p-4 lg:p-3 space-y-2">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">{t("advance_payment")} — {t("enter_advance")}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <FormField
@@ -1746,16 +1791,20 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                     )}
                   />
                 </div>
-                {Number(watchedAdvancePayment) > 0 && (
+                {compareDecimals(watchedAdvancePayment || "0", "0") > 0 && (() => {
+                  const remaining = addDecimals(total, `-${normalizeDecimalInput(watchedAdvancePayment || "0")}`);
+                  const isPaid = compareDecimals(remaining, "0") <= 0;
+                  return (
                   <div className="flex justify-between items-center pt-2 border-t border-amber-200 dark:border-amber-700">
                     <span className="text-sm font-semibold text-muted-foreground">{t("remaining_balance")}:</span>
-                    <span className={`font-mono font-bold text-base ${Math.max(0, total - Number(watchedAdvancePayment)) === 0 ? "text-green-600" : "text-destructive"}`}>
-                      {Math.max(0, total - Number(watchedAdvancePayment)) === 0
+                    <span className={`font-mono font-bold text-base ${isPaid ? "text-green-600" : "text-destructive"}`}>
+                      {isPaid
                         ? `✓ ${t("fully_paid_label")}`
-                        : `${symbol}${Math.max(0, total - Number(watchedAdvancePayment)).toFixed(2)}`}
+                        : formatExactMoney(remaining, symbol, i18n.language)}
                     </span>
                   </div>
-                )}
+                  );
+                })()}
               </div>}
               {correctionOrder && wizardStep === 5 && <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="correction-reason-section">
                 <FormLabel htmlFor="order-correction-reason">{t("correction_reason")}</FormLabel>
@@ -1765,8 +1814,8 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-20 -mx-1 flex gap-2 bg-background/95 px-1 pb-[env(safe-area-inset-bottom)] pt-3 backdrop-blur-sm lg:pt-1">
-              {wizardStep > 1 && <Button type="button" variant="outline" size="lg" onClick={() => setWizardStep((step) => Math.max(1, step - 1))}><ChevronLeft className="mr-2 h-4 w-4" />{t("back")}</Button>}
+            <div className="flex gap-2 border-t bg-background px-1 pb-[env(safe-area-inset-bottom)] pt-3">
+              {wizardStep > 1 && <Button type="button" variant="outline" size="lg" onClick={() => setWizardStep((step) => Math.max(1, step - 1))}><ChevronLeft className="mr-2 h-4 w-4" />{t("back", "Retour")}</Button>}
               {wizardStep < 5 ? <Button type="button" className="flex-1" size="lg" onClick={goToNextStep}>{t("next", "Suivant")}</Button> : <Button type="submit" className="flex-1" size="lg" disabled={isOrderPending || isCorrecting || (!!correctionOrder && correctionReason.trim().length < 5)}>{isOrderPending || isCorrecting ? t("saving") : correctionOrder ? t("save_correction") : t("create_new_order")}</Button>}
             </div>
           </form>
