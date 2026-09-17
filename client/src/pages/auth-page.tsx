@@ -40,7 +40,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
     if (tab === "register" && password.length < 10) {
       toast({
         title: t("error"),
-        description: t("registration_password_rule", "Utilisez au moins 10 caractères et évitez les mots de passe courants."),
+        description: t("registration_password_rule"),
         variant: "destructive",
       });
       return;
@@ -48,7 +48,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
     if (tab === "register" && password !== confirmPassword) {
       toast({
         title: t("error"),
-        description: t("passwords_do_not_match", "Les mots de passe ne correspondent pas."),
+        description: t("passwords_do_not_match"),
         variant: "destructive",
       });
       return;
@@ -209,7 +209,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           </div>
           {tab === "register" && (
             <p className="text-xs leading-relaxed text-muted-foreground" data-testid="registration-password-rule">
-              {t("registration_password_rule", "Au moins 10 caractères, sans mot de passe courant comme “password” ou “123456”.")}
+              {t("registration_password_rule")}
             </p>
           )}
         </div>
@@ -434,7 +434,7 @@ export default function AuthPage() {
         <div className="shrink-0 px-8 pt-4 pb-6 border-t border-border">
           <a href="/" className="mb-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-primary hover:underline">
             <ArrowLeft className="h-4 w-4" />
-            {t("back_to_public_site", "Retour au site XpressPro")}
+            {t("back_to_public_site")}
           </a>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2.5">
             {t("auth_tools_heading")}

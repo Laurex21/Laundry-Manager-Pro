@@ -11,7 +11,7 @@ assert.match(auth, /password !== confirmPassword/, "registration must validate p
 assert.match(auth, /data-testid="input-confirm-password"/, "registration must expose a confirmation field");
 assert.match(auth, /registration_password_rule/, "registration must explain password rules before submission");
 assert.match(auth, /xpresspro-mark\.svg/, "authentication must use the approved XpressPro mark");
-assert.match(auth, /Retour au site XpressPro/, "authentication must provide a route back to the public site");
+assert.match(auth, /back_to_public_site/, "authentication must provide a localized route back to the public site");
 
 assert.doesNotMatch(landing, /href="#"/, "the public landing must not contain empty footer links");
 assert.doesNotMatch(landing, /testimonials_placeholder/, "the public landing must not expose internal testimonial placeholders");
