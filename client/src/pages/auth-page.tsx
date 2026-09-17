@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shirt, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -24,9 +24,11 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -35,6 +37,22 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (tab === "register" && password.length < 10) {
+      toast({
+        title: t("error"),
+        description: t("registration_password_rule", "Utilisez au moins 10 caractères et évitez les mots de passe courants."),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (tab === "register" && password !== confirmPassword) {
+      toast({
+        title: t("error"),
+        description: t("passwords_do_not_match", "Les mots de passe ne correspondent pas."),
+        variant: "destructive",
+      });
+      return;
+    }
     if (tab === "register" && !acceptedLegal) {
       toast({
         title: t("error"),
@@ -175,7 +193,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={tab === "register" ? 10 : undefined}
               className="h-10 text-sm pr-10"
               autoComplete={tab === "login" ? "current-password" : "new-password"}
               data-testid="input-password"
@@ -189,7 +207,41 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+          {tab === "register" && (
+            <p className="text-xs leading-relaxed text-muted-foreground" data-testid="registration-password-rule">
+              {t("registration_password_rule", "Au moins 10 caractères, sans mot de passe courant comme “password” ou “123456”.")}
+            </p>
+          )}
         </div>
+
+        {tab === "register" && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+              {t("confirm_password")}
+            </label>
+            <div className="relative">
+              <Input
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="••••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={10}
+                className="h-10 text-sm pr-10"
+                autoComplete="new-password"
+                data-testid="input-confirm-password"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? t("hide_password") : t("show_password")}
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        )}
 
         {tab === "login" && (
           <div className="text-right -mt-2">
@@ -308,6 +360,11 @@ export default function AuthPage() {
     if (!isLoading && user) setLocation("/");
   }, [user, isLoading, setLocation]);
 
+  const changeTab = (nextTab: "login" | "register") => {
+    setTab(nextTab);
+    setLocation(nextTab === "register" ? "/auth?tab=register" : "/auth");
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="flex flex-col w-full max-w-[460px] min-h-screen bg-background overflow-hidden">
@@ -315,9 +372,7 @@ export default function AuthPage() {
         {/* Zone 1: Brand + Language */}
         <div className="flex items-center justify-between px-8 pt-7 pb-5 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Shirt className="w-4.5 h-4.5 text-primary-foreground" strokeWidth={2} />
-            </div>
+            <img src="/xpresspro-mark.svg" alt="" className="h-8 w-8" />
             <span className="font-display font-bold text-lg tracking-tight text-foreground">XpressPro</span>
           </div>
           <div
@@ -369,7 +424,7 @@ export default function AuthPage() {
                   {tab === "login" ? t("auth_dashboard_subtitle") : t("auth_setup_subtitle")}
                 </p>
               </div>
-              <AuthForm tab={tab} setTab={setTab} />
+              <AuthForm tab={tab} setTab={changeTab} />
             </div>
 
           </div>
@@ -377,6 +432,10 @@ export default function AuthPage() {
 
         {/* Zone 3: Utility tools + copyright */}
         <div className="shrink-0 px-8 pt-4 pb-6 border-t border-border">
+          <a href="/" className="mb-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-primary hover:underline">
+            <ArrowLeft className="h-4 w-4" />
+            {t("back_to_public_site", "Retour au site XpressPro")}
+          </a>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2.5">
             {t("auth_tools_heading")}
           </p>

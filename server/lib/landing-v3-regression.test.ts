@@ -13,7 +13,10 @@ assert.match(source, /href="\/diagnostic"/, "professional diagnostic must use th
 assert.doesNotMatch(source, /health_score|Score de Santé|Health Score/, "health score must not appear on the landing page");
 assert.doesNotMatch(source, /audit_desc|Audit Professionnel|Professional Audit/, "professional audit must not appear on the landing page");
 assert.match(source, /VITE_DEMO_VIDEO_URL_FR/, "landing must read the configured demo video URL");
-assert.match(source, /testimonials_placeholder/, "landing must show an honest testimonial placeholder until real proof exists");
+assert.match(source, /demoUrl && <section/, "landing must hide the demo section until a real video is configured");
+assert.doesNotMatch(source, /testimonials_placeholder|REMPLACER PAR DE VRAIS|REPLACE WITH REAL/, "landing must not publish testimonial placeholders");
+assert.doesNotMatch(source, /General Advance Services/, "landing must use the approved XpressGroup brand architecture");
+assert.match(source, /xpresspro-mark-white\.svg/, "landing must use the approved XpressPro mark");
 assert.doesNotMatch(source, /AfricaMap|map_eyebrow|map-stats/, "Africa presence section and map must not appear on the landing page");
 assert.match(source, /prefers-reduced-motion/, "landing motion must respect reduced-motion preferences");
 assert.match(source, /id="features"[\s\S]*id="tools"|id="tools"[\s\S]*id="features"/, "features and tools anchors must exist");
