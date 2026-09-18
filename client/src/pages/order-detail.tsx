@@ -753,10 +753,10 @@ export default function OrderDetail() {
                   <span className="font-mono font-semibold">{symbol}{(Number(item.priceAtOrder) * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
-              {Number(order.discount) > 0 && (
+              {Number(order.discountAmount ?? order.discount ?? 0) > 0 && (
                 <div className="flex justify-between items-center p-2 text-sm text-red-600">
                   <span>{t("discount")}</span>
-                  <span className="font-mono">-{symbol}{Number(order.discount).toFixed(2)}</span>
+                  <span className="font-mono">-{symbol}{Number(order.discountAmount ?? order.discount ?? 0).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center p-3 bg-primary/5 rounded-lg font-bold">
@@ -899,7 +899,7 @@ export default function OrderDetail() {
 
       {(() => {
         const pickupCost = Number(order.pickupCost || 0);
-        const discount = Number(order.discount || 0);
+        const discount = Number(order.discountAmount ?? order.discount ?? 0);
         const originalSubtotal = Number(order.originalPrice || 0) || (Number(order.totalAmount) + discount - pickupCost);
         return (
           <Card className="border-primary/20 bg-primary/2">

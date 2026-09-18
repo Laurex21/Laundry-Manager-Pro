@@ -18,6 +18,7 @@ export type ControlledOrderEditInput = {
   customerId: number;
   entryDate: Date;
   pickupDate: Date | null;
+  discount: string | number;
   discountPct: number;
   reason: string;
   items: Array<{ serviceId: number; quantity: string | number }>;
@@ -201,8 +202,12 @@ export async function editOrderControlled(
       "0",
     );
     const discountPct = input.discountPct;
-    const requestedDiscount = multiplyDecimal(multiplyDecimal(subtotal, normalizeDecimalInput(discountPct)), "0.01");
-    const discountAmount = compareDecimals(requestedDiscount, subtotal) > 0 ? subtotal : requestedDiscount;
+    const discountAmount = discountPct > 0
+      ? multiplyDecimal(multiplyDecimal(subtotal, normalizeDecimalInput(discountPct)), "0.01")
+      : normalizeDecimalInput(input.discount);
+    if (compareDecimals(discountAmount, "0") < 0 || compareDecimals(discountAmount, subtotal) > 0) {
+      throw new OrderCorrectionError("Discount must be between zero and the order subtotal");
+    }
     const pickupCost = normalizeDecimalInput(order.pickup_cost || 0);
     const afterDiscount = addDecimals(subtotal, `-${discountAmount}`);
     const totalAmount = compareDecimals(afterDiscount, "0") < 0

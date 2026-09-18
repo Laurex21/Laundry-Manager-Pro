@@ -1184,6 +1184,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
             customerId: formattedData.customerId,
             entryDate: new Date(`${formattedData.entryDate}T00:00:00`).toISOString(),
             pickupDate: formattedData.pickupDate ? new Date(`${formattedData.pickupDate}T00:00:00`).toISOString() : null,
+            discount: formattedData.discount,
             discountPct: discountMode === "percentage" ? Number(formattedData.discountPct || 0) : 0,
             reason: correctionReason.trim(),
             items: formattedData.items,

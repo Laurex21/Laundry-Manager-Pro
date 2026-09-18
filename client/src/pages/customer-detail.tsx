@@ -482,7 +482,14 @@ export default function CustomerDetail() {
                           <td className="p-3 text-muted-foreground">
                             {order.createdAt ? format(new Date(order.createdAt), "MMM dd, yyyy", { locale: dateLocaleFor(i18n.language) }) : "-"}
                           </td>
-                          <td className="p-3 text-right font-medium">{symbol}{Number(order.totalAmount).toFixed(2)}</td>
+                          <td className="p-3 text-right font-medium">
+                            <div>{symbol}{Number(order.totalAmount).toFixed(2)}</div>
+                            {Number(order.discountAmount ?? order.discount ?? 0) > 0 && (
+                              <div className="mt-0.5 text-xs font-normal text-red-600" data-testid={`text-order-discount-${order.id}`}>
+                                -{symbol}{Number(order.discountAmount ?? order.discount ?? 0).toFixed(2)} {t("discount")}
+                              </div>
+                            )}
+                          </td>
                           <td className="p-3 text-center">
                             <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${orderStatusColors[order.status] || ""}`}>
                               {order.status}

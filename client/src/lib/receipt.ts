@@ -537,7 +537,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   const entryDate = formatReceiptDateTime(order.createdAt || order.entryDate || new Date(), lang);
   const pickupDate = formatReceiptDateOnly(order.pickupDate, lang);
   const registeredBy = agentFirstName(order.createdByEmployee);
-  const discount = Number(order.discount || 0);
+  const discount = Number(order.discountAmount ?? order.discount ?? 0);
   const subtotal = orderSubtotal(items);
   const pickupCost = Number(order.pickupCost || 0);
   const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
@@ -736,7 +736,7 @@ export function generateThermalDepositReceipt(order: any, symbol: string, settin
   const garments = order.garmentItems || [];
   const entryDate = formatReceiptDateTime(order.createdAt || order.entryDate || new Date(), lang);
   const subtotal = orderSubtotal(items);
-  const discount = Number(order.discount || 0);
+  const discount = Number(order.discountAmount ?? order.discount ?? 0);
   const pickupCost = Number(order.pickupCost || 0);
   const orderTotal = orderTotalFromParts(subtotal, discount, pickupCost);
   const totalPaid = (order.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
