@@ -401,14 +401,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.services.list.path, isAuthenticated, async (req: any, res) => {
-    let svcList = await storage.getServicesBySite(orgScopedSites(req));
+    // Order creation is always scoped to the active site. Returning services
+    // from every site in the organisation lets the form submit a service that
+    // cannot legally be attached to the selected site.
+    let svcList = await storage.getServicesBySite(scopedSites(req));
     const writeSiteId = resolveWriteSiteId(req);
     // Auto-seed default services for a brand-new writable site.
     if (svcList.length === 0 && writeSiteId != null) {
       await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: writeSiteId } as any);
       await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: writeSiteId } as any);
       await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: writeSiteId } as any);
-      svcList = await storage.getServicesBySite(orgScopedSites(req));
+      svcList = await storage.getServicesBySite(scopedSites(req));
     }
     res.json(svcList);
   });
@@ -476,7 +479,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const item of items) {
         const service = await storage.getService(item.serviceId);
         if (!service) return res.status(400).json({ message: `Service ${item.serviceId} not found` });
-        if (!(await canAccessService(req, service.id))) {
+        if (service.siteId == null || !(await canAccessSite(req, service.siteId))) {
           return res.status(403).json({ message: `Service ${item.serviceId} does not belong to this organisation` });
         }
         if (service.siteId !== siteId) return res.status(400).json({ message: "Le service sélectionné n'est pas disponible sur le site actif" });

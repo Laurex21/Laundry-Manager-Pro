@@ -34,7 +34,6 @@ assert.match(routes, /function pickSiteUpdate/);
 assert.match(routes, /resolveWriteSiteId/);
 assert.match(routes, /storage\.getOrdersBySite\(scopedSites\(req\)\)/);
 assert.match(routes, /storage\.getCustomersBySite\(orgScopedSites\(req\)\)/);
-assert.match(routes, /storage\.getServicesBySite\(orgScopedSites\(req\)\)/);
 assert.match(routes, /storage\.getReportData\(startDate, endDate, scopedSites\(req\), timeZone\)/);
 assert.match(routes, /storage\.getDashboardData\(allSites \? scopedSites\(req\)/);
 assert.match(routes, /resolvedSiteId !== null && !\(await canAccessSite\(req, resolvedSiteId\)\)/);
@@ -45,6 +44,8 @@ assert.match(routes, /Only organisation owners can create sites/);
 assert.match(routes, /Site name is required/);
 assert.match(routes, /Customer does not belong to this organisation/);
 assert.match(routes, /Service \$\{item\.serviceId\} does not belong to this organisation/);
+assert.match(routes, /storage\.getServicesBySite\(scopedSites\(req\)\)/);
+assert.doesNotMatch(routes, /storage\.getServicesBySite\(orgScopedSites\(req\)\)/);
 assert.match(routes, /NON_PAYABLE_ORDER_STATUSES\.has\(order\.status\)/);
 assert.match(routes, /Payments cannot be registered for cancelled orders/);
 
