@@ -23,7 +23,7 @@ assert.match(authRoutes, /eq\(sites\.organisationId, user\.organisationId\)/);
 assert.match(authRoutes, /candidateSite\.organisationId === user\.organisationId/);
 assert.match(index, /await repairKnownAccountOrganisationLinks\(\)/);
 assert.match(routes, /canAccessCustomer[\s\S]{0,220}scopedSites\(req\)\.includes\(customer\.siteId\)/);
-assert.match(routes, /canAccessService[\s\S]{0,220}scopedSites\(req\)\.includes\(service\.siteId\)/);
+assert.match(routes, /canAccessService[\s\S]{0,400}serviceSite\.organisationId === Number\(req\.organisationId\)/);
 assert.match(routes, /UPDATE orders SET status = \$2[\s\S]{0,180}WHERE site_id = \$3/);
 assert.match(routes, /INNER JOIN orders o ON o\.id = pco\.order_id AND o\.site_id = \$4/);
 assert.match(routes, /CROSS_ORGANISATION_INVITATION/);

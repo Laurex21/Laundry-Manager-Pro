@@ -44,8 +44,8 @@ assert.match(routes, /Only organisation owners can create sites/);
 assert.match(routes, /Site name is required/);
 assert.match(routes, /Customer does not belong to this organisation/);
 assert.match(routes, /Service \$\{item\.serviceId\} does not belong to this organisation/);
-assert.match(routes, /storage\.getServicesBySite\(scopedSites\(req\)\)/);
-assert.doesNotMatch(routes, /storage\.getServicesBySite\(orgScopedSites\(req\)\)/);
+assert.match(routes, /storage\.getServicesByOrganisation\(organisationId\)/);
+assert.match(storage, /getServicesByOrganisation[\s\S]{0,500}eq\(sites\.organisationId, organisationId\)/);
 assert.match(routes, /NON_PAYABLE_ORDER_STATUSES\.has\(order\.status\)/);
 assert.match(routes, /Payments cannot be registered for cancelled orders/);
 

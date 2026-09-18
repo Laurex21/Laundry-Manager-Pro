@@ -135,7 +135,9 @@ async function canAccessCustomer(req: any, customerId: number): Promise<boolean>
 
 async function canAccessService(req: any, serviceId: number): Promise<boolean> {
   const service = await storage.getService(serviceId);
-  return !!service && service.siteId != null && scopedSites(req).includes(service.siteId);
+  if (!service || service.siteId == null || !Number.isInteger(Number(req.organisationId))) return false;
+  const serviceSite = await storage.getSite(service.siteId);
+  return !!serviceSite && serviceSite.organisationId === Number(req.organisationId);
 }
 
 async function canAccessOrder(req: any, orderId: number): Promise<boolean> {
@@ -401,17 +403,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.services.list.path, isAuthenticated, async (req: any, res) => {
-    // Order creation is always scoped to the active site. Returning services
-    // from every site in the organisation lets the form submit a service that
-    // cannot legally be attached to the selected site.
-    let svcList = await storage.getServicesBySite(scopedSites(req));
+    const organisationId = Number(req.organisationId);
+    if (!Number.isInteger(organisationId)) {
+      return res.status(400).json({ message: "Invalid organisation" });
+    }
+    // Services form one shared catalogue across every site in an organisation.
+    let svcList = await storage.getServicesByOrganisation(organisationId);
     const writeSiteId = resolveWriteSiteId(req);
-    // Auto-seed default services for a brand-new writable site.
+    // Auto-seed defaults once for a brand-new organisation.
     if (svcList.length === 0 && writeSiteId != null) {
       await storage.createService({ name: "Lavage & Repassage", unit: "kg", price: "15.00", category: "washing", description: "Service de lavage et repassage standard", imageUrl: "", active: true, siteId: writeSiteId } as any);
       await storage.createService({ name: "Nettoyage à sec (Costume)", unit: "piece", price: "150.00", category: "dry_cleaning", description: "Nettoyage à sec professionnel pour costumes", imageUrl: "", active: true, siteId: writeSiteId } as any);
       await storage.createService({ name: "Repassage (Chemise)", unit: "piece", price: "25.00", category: "ironing", description: "Repassage à la vapeur", imageUrl: "", active: true, siteId: writeSiteId } as any);
-      svcList = await storage.getServicesBySite(scopedSites(req));
+      svcList = await storage.getServicesByOrganisation(organisationId);
     }
     res.json(svcList);
   });
@@ -479,10 +483,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const item of items) {
         const service = await storage.getService(item.serviceId);
         if (!service) return res.status(400).json({ message: `Service ${item.serviceId} not found` });
-        if (service.siteId == null || !(await canAccessSite(req, service.siteId))) {
+        if (!(await canAccessService(req, service.id))) {
           return res.status(403).json({ message: `Service ${item.serviceId} does not belong to this organisation` });
         }
-        if (service.siteId !== siteId) return res.status(400).json({ message: "Le service sélectionné n'est pas disponible sur le site actif" });
         const quantity = normalizeDecimalInput(item.quantity);
         if (service.unit !== "kg" && !isIntegerDecimal(quantity)) {
           return res.status(400).json({ message: "La quantité doit être entière pour un service facturé à la pièce" });

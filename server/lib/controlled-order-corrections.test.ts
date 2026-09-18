@@ -32,7 +32,8 @@ assert.match(service, /available\.production_cycle_orders && available\.producti
 assert.match(service, /enabled \? `EXISTS\(\$\{sql\}\)` : "false"/);
 assert.match(service, /before_snapshot, after_snapshot/);
 assert.match(service, /existingPrices\.get\(Number\(service\.id\)\) \?\? normalizeDecimalInput\(service\.price\)/);
-assert.match(service, /sv\.site_id = \$3/);
+assert.match(service, /s\.organisation_id = \$2/);
+assert.doesNotMatch(service, /sv\.site_id = \$3/);
 assert.match(service, /const discountPct = input\.discountPct/);
 assert.match(service, /multiplyDecimal\(multiplyDecimal\(subtotal, normalizeDecimalInput\(discountPct\)\), "0\.01"\)/);
 assert.doesNotMatch(service, /discountPct > 0 \? subtotal/);

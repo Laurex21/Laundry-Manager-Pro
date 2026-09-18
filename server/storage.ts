@@ -59,6 +59,7 @@ export interface IStorage {
 
   getServices(): Promise<Service[]>;
   getServicesBySite(siteId: number | number[] | null): Promise<Service[]>;
+  getServicesByOrganisation(organisationId: number): Promise<Service[]>;
   getService(id: number): Promise<Service | undefined>;
   createService(service: InsertService): Promise<Service>;
   updateService(id: number, service: Partial<InsertService>): Promise<Service | undefined>;
@@ -237,6 +238,17 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(services)
       .where(and(eq(services.active, true), siteWhere))
       .orderBy(services.name);
+  }
+
+  async getServicesByOrganisation(organisationId: number): Promise<Service[]> {
+    const rows = await db.select({ service: services }).from(services)
+      .innerJoin(sites, and(
+        eq(services.siteId, sites.id),
+        eq(sites.organisationId, organisationId),
+      ))
+      .where(eq(services.active, true))
+      .orderBy(services.name);
+    return rows.map((row) => row.service);
   }
 
   async getService(id: number): Promise<Service | undefined> {

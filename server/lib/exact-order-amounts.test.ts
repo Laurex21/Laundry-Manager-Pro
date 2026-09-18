@@ -14,9 +14,10 @@ const corrections = readFileSync(new URL("./order-corrections.ts", import.meta.u
 const ordersPage = readFileSync(new URL("../../client/src/pages/orders.tsx", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../../migrations/20260916_exact_order_amounts.sql", import.meta.url), "utf8");
 
-assert.match(server, /service\.siteId !== siteId/);
+assert.match(server, /await canAccessService\(req, service\.id\)/);
 assert.match(server, /La quantité doit être entière pour un service facturé à la pièce/);
-assert.match(corrections, /sv\.site_id = \$3/);
+assert.match(corrections, /s\.organisation_id = \$2/);
+assert.doesNotMatch(corrections, /sv\.site_id = \$3/);
 assert.match(corrections, /multiplyDecimal/);
 assert.match(ordersPage, /inputMode=\{isWeightService \? "decimal" : "numeric"\}/);
 assert.match(ordersPage, /formatExactMoney\(total/);

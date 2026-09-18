@@ -168,12 +168,11 @@ export async function editOrderControlled(
        FROM services sv JOIN sites s ON s.id = sv.site_id
        WHERE sv.id = ANY($1::int[])
          AND s.organisation_id = $2
-         AND sv.site_id = $3
          AND sv.active = true`,
-      [serviceIds, order.organisation_id, siteId],
+      [serviceIds, order.organisation_id],
     );
     if (servicesResult.rowCount !== serviceIds.length) {
-      throw new OrderCorrectionError("One or more services are unavailable for this site");
+      throw new OrderCorrectionError("One or more services are unavailable for this organisation");
     }
     const existingPricesResult = await client.query(
       `SELECT service_id, price_at_order FROM order_items WHERE order_id = $1 ORDER BY id`,
