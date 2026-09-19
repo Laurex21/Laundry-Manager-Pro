@@ -11,6 +11,8 @@ assert.match(customers, /queryKey: \["\/api\/loyalty-program"\]/, "the directory
 assert.match(customers, /customer\.loyaltyPoints/, "the visible balance must use the persisted available customer balance");
 assert.match(customers, /filter === "points" && points > 0/, "customers with points should be filterable");
 assert.match(customers, /filter === "reward" && points >= rewardThreshold/, "reward-ready customers should be filterable");
+assert.doesNotMatch(customers, /\["expired", t\("expired_subscription"\)\]/, "expired subscription should not appear as a directory filter");
+assert.doesNotMatch(customers, /\["none", t\("no_subscription"\)\]/, "no subscription should not appear as a directory filter");
 assert.match(customers, /loyalty_sort_nearest_reward/, "the directory should support nearest-reward sorting");
 assert.match(customers, /lg:hidden/, "mobile should use compact loyalty badges");
 assert.match(customers, /hidden min-w-\[190px\] lg:block/, "desktop should use a dedicated loyalty area");

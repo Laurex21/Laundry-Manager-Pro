@@ -83,10 +83,8 @@ export default function Customers() {
   const customerFilters = [
     ["all", t("all")],
     ["active", t("active_subscription")],
-    ["expired", t("expired_subscription")],
     ["vip", "VIP"],
     ["credit", t("customer_credit")],
-    ["none", t("no_subscription")],
     ["points", t("customers_with_points")],
     ["reward", t("loyalty_reward_available")],
   ] as const;
