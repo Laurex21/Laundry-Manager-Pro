@@ -5,12 +5,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert, LayoutDashboard, UserRoundSearch } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert, LayoutDashboard, UserRoundSearch, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -93,6 +94,11 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
   const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
   const pct = (value: unknown) => value == null ? t("insufficient_data") : `${Number(value).toFixed(1)}%`;
   const delta = (value: unknown) => value == null ? undefined : Number(value);
+  const coverageLabel = (value: number | boolean | null | undefined) => {
+    if (typeof value === "boolean") return value ? t("coverage_complete") : t("coverage_missing");
+    if (value == null) return t("coverage_missing");
+    return t("coverage_percent", { value: Math.round(Number(value)) });
+  };
   const actions = [
     Number(m.delayedOrders) > 0 ? { severity: "high", text: t("action_delayed_orders", { count: m.delayedOrders }), href: "/orders?status=active" } : null,
     Number(m.outstandingPayments) > 0 ? { severity: "medium", text: t("action_collect_outstanding", { amount: money(m.outstandingPayments) }), href: "/payments" } : null,
@@ -154,14 +160,14 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
       <section aria-labelledby="management-metrics-title">
         <h2 id="management-metrics-title" className="sr-only">{t("management_metrics")}</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <DecisionMetric icon={<Banknote />} label={t("revenue_collected")} value={money(m.revenue)} delta={delta(m.revenueDeltaPct)} />
-          <DecisionMetric icon={<Wallet />} label={t("collection_rate")} value={pct(m.collectionRate)} tone={m.collectionRate != null && Number(m.collectionRate) < 90 ? "warning" : "good"} />
-          <DecisionMetric icon={<Activity />} label={t("orders_received")} value={Number(m.orders || 0).toLocaleString()} delta={delta(m.orderDeltaPct)} />
-          <DecisionMetric icon={<Clock3 />} label={t("on_time_delivery_rate")} value={pct(m.onTimeDeliveryRate)} tone={m.onTimeDeliveryRate != null && Number(m.onTimeDeliveryRate) < 90 ? "warning" : "good"} />
-          <DecisionMetric icon={<ShieldCheck />} label={t("first_time_success_rate")} value={pct(m.firstTimeSuccessRate)} tone={m.firstTimeSuccessRate != null && Number(m.firstTimeSuccessRate) < 95 ? "warning" : "good"} />
-          <DecisionMetric icon={<AlertTriangle />} label={t("complaint_rate")} value={pct(m.complaintRate)} tone={m.complaintRate != null && Number(m.complaintRate) > 5 ? "danger" : "good"} />
-          <DecisionMetric icon={<Gauge />} label={t("productivity_rate")} value={m.productivityPerHour == null ? t("insufficient_data") : Number(m.productivityPerHour).toFixed(2)} tone={m.productivityPerHour == null ? "warning" : "good"} />
-          <DecisionMetric icon={<Users />} label={t("retention_rate")} value={pct(m.retentionRate)} tone={m.retentionRate != null && Number(m.retentionRate) < 50 ? "warning" : "good"} />
+          <DecisionMetric icon={<Banknote />} label={t("revenue_collected")} value={money(m.revenue)} delta={delta(m.revenueDeltaPct)} help={t("kpi_help_revenue")} coverage={coverageLabel(m.revenueCoverage)} />
+          <DecisionMetric icon={<Wallet />} label={t("collection_rate")} value={pct(m.collectionRate)} tone={m.collectionRate != null && Number(m.collectionRate) < 90 ? "warning" : "good"} help={t("kpi_help_collection")} coverage={coverageLabel(m.collectionCoverage)} />
+          <DecisionMetric icon={<Activity />} label={t("orders_received")} value={Number(m.orders || 0).toLocaleString()} delta={delta(m.orderDeltaPct)} help={t("kpi_help_orders")} coverage={coverageLabel(m.orderCoverage)} />
+          <DecisionMetric icon={<Clock3 />} label={t("on_time_delivery_rate")} value={pct(m.onTimeDeliveryRate)} tone={m.onTimeDeliveryRate != null && Number(m.onTimeDeliveryRate) < 90 ? "warning" : "good"} help={t("kpi_help_on_time")} coverage={coverageLabel(m.onTimeCoverage)} />
+          <DecisionMetric icon={<ShieldCheck />} label={t("first_time_success_rate")} value={pct(m.firstTimeSuccessRate)} tone={m.firstTimeSuccessRate != null && Number(m.firstTimeSuccessRate) < 95 ? "warning" : "good"} help={t("kpi_help_first_time")} coverage={coverageLabel(m.qualityCoverage)} />
+          <DecisionMetric icon={<AlertTriangle />} label={t("complaint_rate")} value={pct(m.complaintRate)} tone={m.complaintRate != null && Number(m.complaintRate) > 5 ? "danger" : "good"} help={t("kpi_help_complaints")} coverage={coverageLabel(m.qualityCoverage)} />
+          <DecisionMetric icon={<Gauge />} label={t("productivity_rate")} value={m.productivityPerHour == null ? t("insufficient_data") : Number(m.productivityPerHour).toFixed(2)} tone={m.productivityPerHour == null ? "warning" : "good"} help={t("kpi_help_productivity")} coverage={coverageLabel(m.productivityCoverage)} />
+          <DecisionMetric icon={<Users />} label={t("retention_rate")} value={pct(m.retentionRate)} tone={m.retentionRate != null && Number(m.retentionRate) < 50 ? "warning" : "good"} help={t("kpi_help_retention")} coverage={coverageLabel(m.retentionCoverage)} />
         </div>
         <p className="mt-3 text-xs text-muted-foreground">{t("executive_kpi_methodology_note")}</p>
       </section>
@@ -594,14 +600,15 @@ function ScenarioSlider({ id, label, value, min, max, onChange }: { id: string; 
   );
 }
 
-function DecisionMetric({ icon, label, value, delta, tone }: { icon: React.ReactNode; label: string; value: string; delta?: number; tone?: "danger" | "warning" | "good" }) {
+function DecisionMetric({ icon, label, value, delta, tone, help, coverage }: { icon: React.ReactNode; label: string; value: string; delta?: number; tone?: "danger" | "warning" | "good"; help: string; coverage: string }) {
   const toneClass = tone === "danger" ? "text-red-600" : tone === "warning" ? "text-amber-700 dark:text-amber-400" : tone === "good" ? "text-emerald-600" : "";
   return (
     <Card className="shadow-sm">
       <CardContent className="p-4">
-        <div className="flex items-center justify-between text-muted-foreground"><span className="[&_svg]:h-4 [&_svg]:w-4">{icon}</span>{delta != null && <span className={`text-xs font-medium ${delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>{delta >= 0 ? "+" : ""}{delta.toFixed(1)}%</span>}</div>
+        <div className="flex items-center justify-between text-muted-foreground"><span className="[&_svg]:h-4 [&_svg]:w-4">{icon}</span><span className="flex items-center gap-2">{delta != null && <span className={`text-xs font-medium ${delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>{delta >= 0 ? "+" : ""}{delta.toFixed(1)}%</span>}<TooltipProvider><UiTooltip><TooltipTrigger asChild><button type="button" className="rounded p-1 hover:bg-muted" aria-label={`${label}: ${help}`}><Info className="h-3.5 w-3.5" /></button></TooltipTrigger><TooltipContent className="max-w-72"><p>{help}</p></TooltipContent></UiTooltip></TooltipProvider></span></div>
         <p className="mt-3 text-xs font-medium text-muted-foreground">{label}</p>
         <p className={`mt-1 text-xl font-bold font-display ${toneClass}`}>{value}</p>
+        <p className="mt-2 text-[11px] text-muted-foreground">{coverage}</p>
       </CardContent>
     </Card>
   );

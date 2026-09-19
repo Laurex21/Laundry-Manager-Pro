@@ -1996,6 +1996,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         retentionRate,
         retentionCustomers: number(retention.retained_customers),
         retentionBaseCustomers: number(retention.previous_customers),
+        revenueCoverage: 100,
+        collectionCoverage: totalOrders > 0 ? 100 : 0,
+        orderCoverage: 100,
+        onTimeCoverage: number(current.delivered_orders) > 0 ? (number(current.delivered_with_promise) / number(current.delivered_orders)) * 100 : 0,
+        qualityCoverage: number(current.delivered_orders) > 0 ? 100 : 0,
+        productivityCoverage: number(team.paid_hours) > 0,
+        retentionCoverage: number(retention.previous_customers) > 0,
       },
       stages: [
         { key: "received", count: number(current.received) },
