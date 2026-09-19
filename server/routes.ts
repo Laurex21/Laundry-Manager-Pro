@@ -1640,6 +1640,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
              WHERE live.site_id = ANY($1::int[]) AND live.status NOT IN ('cancelled','delivered')
                AND live.pickup_date IS NOT NULL AND live.pickup_date < $3)::int AS delayed_orders,
            COALESCE(SUM(total_amount) FILTER (WHERE status <> 'cancelled'), 0)::text AS order_value,
+           COALESCE(SUM(LEAST(paid, total_amount)) FILTER (WHERE status <> 'cancelled'), 0)::text AS collected_order_value,
+           COALESCE(SUM(GREATEST(total_amount - paid, 0)) FILTER (WHERE status <> 'cancelled'), 0)::text AS period_outstanding,
            COALESCE((SELECT SUM(GREATEST(live.total_amount - COALESCE((
              SELECT SUM(lp.amount) FROM payments lp WHERE lp.order_id = live.id
            ), 0), 0)) FROM orders live
@@ -1763,9 +1765,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const totalOrders = number(current.total_orders);
     const loadEfficiency = number(machine.cycle_capacity) > 0 ? (number(machine.weight) / number(machine.cycle_capacity)) * 100 : null;
     const productivityPerHour = number(team.paid_hours) > 0 ? number(current.delivered_orders) / number(team.paid_hours) : null;
-    const qualityIncidents = number(quality.returned_items) + number(current.cancelled);
-    const qualityRate = totalOrders > 0 ? Math.max(0, 100 - (qualityIncidents / totalOrders) * 100) : null;
-    const collectionRate = number(current.order_value) > 0 ? Math.min(100, (revenue / number(current.order_value)) * 100) : null;
+    const qualityIncidents = number(quality.accepted_rework_orders);
+    const qualityRate = number(current.delivered_orders) > 0
+      ? Math.max(0, 100 - (qualityIncidents / number(current.delivered_orders)) * 100)
+      : null;
+    const collectionRate = number(current.order_value) > 0
+      ? (number(current.collected_order_value) / number(current.order_value)) * 100
+      : null;
     const onTimeDeliveryRate = number(current.delivered_with_promise) > 0
       ? (number(current.delivered_on_time) / number(current.delivered_with_promise)) * 100
       : null;
@@ -1864,7 +1870,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .filter((day) => day.orders != null && historicalDailyAverage > 0 && number(day.orders) >= historicalDailyAverage * 1.25)
       .map((day) => day.date);
     const outstandingRatio = number(current.order_value) > 0
-      ? (number(current.outstanding) / number(current.order_value)) * 100
+      ? (number(current.period_outstanding) / number(current.order_value)) * 100
       : null;
     const discountRatio = number(current.order_value) > 0
       ? (number(current.discounts) / number(current.order_value)) * 100
@@ -1904,7 +1910,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       predictiveAlerts.push({
         code: "collection_pressure",
         severity: outstandingRatio >= 50 ? "high" : "medium",
-        value: number(current.outstanding),
+        value: number(current.period_outstanding),
         evidence: { outstandingRatio: Math.round(outstandingRatio * 10) / 10 },
         href: "/payments?view=history",
       });
@@ -1962,6 +1968,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         deliveredOrders: number(current.delivered_orders),
         delayedOrders: number(current.delayed_orders),
         outstandingPayments: number(current.outstanding),
+        periodOutstandingPayments: number(current.period_outstanding),
         orderValue: number(current.order_value),
         discounts: number(current.discounts),
         revenueDeltaPct: delta(revenue, number(previous.revenue)),
