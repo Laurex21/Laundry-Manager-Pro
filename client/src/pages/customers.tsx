@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useForm } from "react-hook-form";
@@ -16,6 +16,9 @@ import {
   Users,
   UserX,
   Wallet,
+  Gift,
+  Star,
+  ArrowDownUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,22 +47,37 @@ export default function Customers() {
   const { data: customers, isLoading } = useCustomers();
   const searchParams = new URLSearchParams(useSearch());
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "expired" | "vip" | "credit" | "none">(
+  const [filter, setFilter] = useState<"all" | "active" | "expired" | "vip" | "credit" | "none" | "points" | "reward">(
     searchParams.get("filter") === "credit" ? "credit" : "all",
   );
   const [showMembershipColumns, setShowMembershipColumns] = useState(false);
   const { data: subscriptionSummaries = {} } = useQuery<Record<string, any>>({ queryKey: ["/api/customer-subscription-summaries"] });
+  const { data: loyaltyProgram } = useQuery<{ rewardPointsRequired?: number; isActive?: boolean }>({ queryKey: ["/api/loyalty-program"] });
+  const [loyaltySort, setLoyaltySort] = useState<"default" | "points_desc" | "points_asc" | "nearest_reward">("default");
   const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const symbol = useCurrency((state) => state.getSymbol());
   const [, navigate] = useLocation();
 
-  const filteredCustomers = customers?.filter((c) => {
+  const rewardThreshold = Math.max(1, Number(loyaltyProgram?.rewardPointsRequired ?? 100));
+  const filteredCustomers = useMemo(() => customers?.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
     const sub = subscriptionSummaries[String(c.id)];
-    const matchesFilter = filter === "all" || (filter === "active" && sub?.status === "active") || (filter === "expired" && (sub?.status === "expired" || (sub?.expiryDate && new Date(sub.expiryDate) < new Date()))) || (filter === "vip" && c.segment === "vip") || (filter === "credit" && Number((c as any).creditBalance ?? 0) > 0) || (filter === "none" && !sub);
+    const points = Number(c.loyaltyPoints ?? 0);
+    const matchesFilter = filter === "all" || (filter === "active" && sub?.status === "active") || (filter === "expired" && (sub?.status === "expired" || (sub?.expiryDate && new Date(sub.expiryDate) < new Date()))) || (filter === "vip" && c.segment === "vip") || (filter === "credit" && Number((c as any).creditBalance ?? 0) > 0) || (filter === "none" && !sub) || (filter === "points" && points > 0) || (filter === "reward" && points >= rewardThreshold);
     return matchesSearch && matchesFilter;
-  });
+  }).sort((a, b) => {
+    const aPoints = Number(a.loyaltyPoints ?? 0);
+    const bPoints = Number(b.loyaltyPoints ?? 0);
+    if (loyaltySort === "points_desc") return bPoints - aPoints;
+    if (loyaltySort === "points_asc") return aPoints - bPoints;
+    if (loyaltySort === "nearest_reward") {
+      const aDistance = aPoints >= rewardThreshold ? 0 : rewardThreshold - aPoints;
+      const bDistance = bPoints >= rewardThreshold ? 0 : rewardThreshold - bPoints;
+      return aDistance - bDistance || bPoints - aPoints;
+    }
+    return 0;
+  }), [customers, filter, loyaltySort, rewardThreshold, search, subscriptionSummaries]);
 
   const totalCount = customers?.length ?? 0;
   const customerFilters = [
@@ -69,6 +87,8 @@ export default function Customers() {
     ["vip", "VIP"],
     ["credit", t("customer_credit")],
     ["none", t("no_subscription")],
+    ["points", t("customers_with_points")],
+    ["reward", t("loyalty_reward_available")],
   ] as const;
 
   return (
@@ -130,6 +150,19 @@ export default function Customers() {
         >
           {showMembershipColumns ? t("hide_subscription_details") : t("show_subscription_details")}
         </Button>
+        <label className="sr-only" htmlFor="loyalty-sort">{t("loyalty_sort")}</label>
+        <Select value={loyaltySort} onValueChange={(value) => setLoyaltySort(value as typeof loyaltySort)}>
+          <SelectTrigger id="loyalty-sort" className="h-9 w-full sm:w-[190px]" aria-label={t("loyalty_sort")}>
+            <ArrowDownUp className="mr-2 h-3.5 w-3.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">{t("loyalty_sort_default")}</SelectItem>
+            <SelectItem value="points_desc">{t("loyalty_sort_highest")}</SelectItem>
+            <SelectItem value="points_asc">{t("loyalty_sort_lowest")}</SelectItem>
+            <SelectItem value="nearest_reward">{t("loyalty_sort_nearest_reward")}</SelectItem>
+          </SelectContent>
+        </Select>
         {!isLoading && (
           <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />
@@ -172,6 +205,9 @@ export default function Customers() {
           )}
           {filteredCustomers.map((customer) => {
             const subscription = subscriptionSummaries[String(customer.id)];
+            const points = Number(customer.loyaltyPoints ?? 0);
+            const canRedeemReward = Boolean(loyaltyProgram?.isActive !== false && points >= rewardThreshold);
+            const pointsRemaining = Math.max(0, rewardThreshold - points);
             return (
             <button
               key={customer.id}
@@ -206,28 +242,52 @@ export default function Customers() {
                 <Badge variant={subscription?.status === "active" ? "default" : "secondary"} className="mt-1 ml-1 h-5 px-1.5 text-[10px] sm:hidden">
                   {subscription?.status === "active" ? t("active_subscription") : subscription ? t("expired_subscription") : t("no_subscription")}
                 </Badge>
+                {points > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className={canRedeemReward ? "mt-1 ml-1 h-5 bg-emerald-100 px-1.5 text-[10px] text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 lg:hidden" : "mt-1 ml-1 h-5 bg-violet-50 px-1.5 text-[10px] text-violet-700 hover:bg-violet-50 dark:bg-violet-950/40 dark:text-violet-300 lg:hidden"}
+                  >
+                    {canRedeemReward ? <Gift className="mr-1 h-3 w-3" /> : <Star className="mr-1 h-3 w-3" />}
+                    {canRedeemReward ? t("loyalty_reward_available") : t("loyalty_points_short", { points })}
+                  </Badge>
+                )}
               </div>
               {showMembershipColumns && (() => { const sub = subscriptionSummaries[String(customer.id)]; return <div className="hidden xl:grid min-w-[430px] grid-cols-4 gap-3 text-xs"><span><Badge variant={sub?.status === "active" ? "default" : "secondary"}>{sub?.status === "active" ? t("active_subscription") : sub ? t("expired_subscription") : t("no_subscription")}</Badge></span><span className="truncate">{sub?.planName || "—"}</span><span>{sub?.renewalDate || sub?.expiryDate || "—"}</span><span>{sub?.remainingKg != null ? `${sub.remainingKg} kg` : sub?.remainingPieces != null ? `${sub.remainingPieces} pcs` : sub?.remainingOrders != null ? `${sub.remainingOrders} cmd` : "—"}</span></div>; })()}
 
+              <div className="hidden min-w-[190px] lg:block">
+                {points <= 0 ? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ) : canRedeemReward ? (
+                  <Badge className="h-7 bg-emerald-100 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400">
+                    <Gift className="mr-1.5 h-3.5 w-3.5" />{t("loyalty_reward_available")}
+                  </Badge>
+                ) : (
+                  <div>
+                    <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">{t("loyalty_points_short", { points })}</p>
+                    <p className="text-[11px] text-muted-foreground">{t("loyalty_points_remaining", { points: pointsRemaining })}</p>
+                  </div>
+                )}
+              </div>
+
               {/* Email - hidden on small screens */}
-              {customer.email ? (
+              {!showMembershipColumns && customer.email ? (
                 <p className="hidden md:flex items-center gap-1 text-xs text-muted-foreground min-w-0 max-w-[180px]">
                   <Mail className="w-3 h-3 shrink-0" />
                   <span className="truncate">{customer.email}</span>
                 </p>
-              ) : (
+              ) : !showMembershipColumns ? (
                 <span className="hidden md:block w-[180px]" />
-              )}
+              ) : null}
 
               {/* Address - hidden on small screens */}
-              {customer.address ? (
+              {!showMembershipColumns && customer.address ? (
                 <p className="hidden lg:flex items-center gap-1 text-xs text-muted-foreground min-w-0 max-w-[200px]">
                   <MapPin className="w-3 h-3 shrink-0" />
                   <span className="truncate">{customer.address}</span>
                 </p>
-              ) : (
+              ) : !showMembershipColumns ? (
                 <span className="hidden lg:block w-[200px]" />
-              )}
+              ) : null}
 
               <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0 group-hover:text-muted-foreground transition-colors" />
             </button>
