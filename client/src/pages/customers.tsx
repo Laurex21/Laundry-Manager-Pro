@@ -115,8 +115,9 @@ export default function Customers() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-primary/10 bg-card p-3 shadow-sm sm:flex sm:items-center">
-        <div className="relative min-w-0 sm:flex-1 sm:max-w-sm">
+      <div className="space-y-3 rounded-2xl border border-primary/10 bg-card p-3 shadow-sm">
+        <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(260px,1fr)_190px_auto]">
+        <div className="relative min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder={t("search_customer_short", { defaultValue: "Rechercher un client" })}
@@ -128,29 +129,9 @@ export default function Customers() {
             aria-label={t("search_customers")}
           />
         </div>
-        <label className="sr-only" htmlFor="customer-category-filter">Catégorie client</label>
-        <select
-          id="customer-category-filter"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value as typeof filter)}
-          className="h-11 w-full rounded-xl border border-primary/15 bg-background px-3 text-sm text-foreground sm:hidden"
-          aria-label="Catégorie client"
-        >
-          {customerFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-        <div className="hidden flex-wrap rounded-xl border border-primary/10 bg-background p-1 sm:flex">{customerFilters.map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 rounded-lg px-3 text-xs" onClick={() => setFilter(value)}>{label}</Button>)}</div>
-        <Button
-          className="hidden xl:inline-flex"
-          variant={showMembershipColumns ? "secondary" : "outline"}
-          size="sm"
-          aria-pressed={showMembershipColumns}
-          onClick={() => setShowMembershipColumns((visible) => !visible)}
-        >
-          {showMembershipColumns ? t("hide_subscription_details") : t("show_subscription_details")}
-        </Button>
         <label className="sr-only" htmlFor="loyalty-sort">{t("loyalty_sort")}</label>
         <Select value={loyaltySort} onValueChange={(value) => setLoyaltySort(value as typeof loyaltySort)}>
-          <SelectTrigger id="loyalty-sort" className="h-9 w-full sm:w-[190px]" aria-label={t("loyalty_sort")}>
+          <SelectTrigger id="loyalty-sort" className="h-10 w-full rounded-xl" aria-label={t("loyalty_sort")}>
             <ArrowDownUp className="mr-2 h-3.5 w-3.5" />
             <SelectValue />
           </SelectTrigger>
@@ -162,11 +143,34 @@ export default function Customers() {
           </SelectContent>
         </Select>
         {!isLoading && (
-          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5" />
+          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground sm:justify-self-end">
+            <Users className="h-3.5 w-3.5" />
             {t("n_customers", { count: filteredCustomers?.length ?? totalCount })}
           </span>
         )}
+        </div>
+        <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <label className="sr-only" htmlFor="customer-category-filter">Catégorie client</label>
+        <select
+          id="customer-category-filter"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value as typeof filter)}
+          className="h-11 w-full rounded-xl border border-primary/15 bg-background px-3 text-sm text-foreground sm:hidden"
+          aria-label="Catégorie client"
+        >
+          {customerFilters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        <div className="hidden min-w-0 flex-wrap gap-1 rounded-xl border border-primary/10 bg-background p-1 sm:flex">{customerFilters.map(([value,label])=><Button key={value} type="button" variant={filter === value ? "secondary" : "ghost"} size="sm" className="h-8 rounded-lg px-3 text-xs" onClick={() => setFilter(value)}>{label}</Button>)}</div>
+        <Button
+          className="hidden xl:inline-flex"
+          variant={showMembershipColumns ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={showMembershipColumns}
+          onClick={() => setShowMembershipColumns((visible) => !visible)}
+        >
+          {showMembershipColumns ? t("hide_subscription_details") : t("show_subscription_details")}
+        </Button>
+        </div>
       </div>
 
       {isLoading ? (

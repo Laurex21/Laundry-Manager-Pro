@@ -17,6 +17,8 @@ assert.match(customers, /loyalty_sort_nearest_reward/, "the directory should sup
 assert.match(customers, /lg:hidden/, "mobile should use compact loyalty badges");
 assert.match(customers, /hidden min-w-\[190px\] lg:block/, "desktop should use a dedicated loyalty area");
 assert.match(customers, /!showMembershipColumns && customer\.email/, "membership detail mode should hide secondary columns instead of overflowing");
+assert.match(customers, /sm:grid-cols-\[minmax\(260px,1fr\)_190px_auto\]/, "desktop toolbar should keep search, sort and count aligned on a stable row");
+assert.match(customers, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/, "desktop filters should use a separate row");
 
 for (const label of ["customers_with_points", "loyalty_points_remaining", "loyalty_sort_highest", "loyalty_sort_nearest_reward"]) {
   assert.equal((i18n.match(new RegExp(`"${label}"`, "g")) ?? []).length, 3, `${label} should be translated in EN, FR and PT`);
