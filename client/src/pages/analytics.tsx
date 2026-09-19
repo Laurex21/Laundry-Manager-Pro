@@ -153,13 +153,17 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
 
       <section aria-labelledby="management-metrics-title">
         <h2 id="management-metrics-title" className="sr-only">{t("management_metrics")}</h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <DecisionMetric icon={<Banknote />} label={t("revenue_collected")} value={money(m.revenue)} delta={delta(m.revenueDeltaPct)} />
+          <DecisionMetric icon={<Wallet />} label={t("collection_rate")} value={pct(m.collectionRate)} tone={m.collectionRate != null && Number(m.collectionRate) < 90 ? "warning" : "good"} />
           <DecisionMetric icon={<Activity />} label={t("orders_received")} value={Number(m.orders || 0).toLocaleString()} delta={delta(m.orderDeltaPct)} />
-          <DecisionMetric icon={<Clock3 />} label={t("orders_at_delay_risk")} value={Number(m.delayedOrders || 0).toLocaleString()} tone={Number(m.delayedOrders) > 0 ? "danger" : "good"} />
-          <DecisionMetric icon={<Wallet />} label={t("outstanding_payments")} value={money(m.outstandingPayments)} tone={Number(m.outstandingPayments) > 0 ? "warning" : "good"} />
-          <DecisionMetric icon={<ShieldCheck />} label={t("quality_rate")} value={pct(m.qualityRate)} tone={Number(m.qualityRate ?? 100) < 95 ? "warning" : "good"} />
+          <DecisionMetric icon={<Clock3 />} label={t("on_time_delivery_rate")} value={pct(m.onTimeDeliveryRate)} tone={m.onTimeDeliveryRate != null && Number(m.onTimeDeliveryRate) < 90 ? "warning" : "good"} />
+          <DecisionMetric icon={<ShieldCheck />} label={t("first_time_success_rate")} value={pct(m.firstTimeSuccessRate)} tone={m.firstTimeSuccessRate != null && Number(m.firstTimeSuccessRate) < 95 ? "warning" : "good"} />
+          <DecisionMetric icon={<AlertTriangle />} label={t("complaint_rate")} value={pct(m.complaintRate)} tone={m.complaintRate != null && Number(m.complaintRate) > 5 ? "danger" : "good"} />
+          <DecisionMetric icon={<Gauge />} label={t("productivity_rate")} value={m.productivityPerHour == null ? t("insufficient_data") : Number(m.productivityPerHour).toFixed(2)} tone={m.productivityPerHour == null ? "warning" : "good"} />
+          <DecisionMetric icon={<Users />} label={t("retention_rate")} value={pct(m.retentionRate)} tone={m.retentionRate != null && Number(m.retentionRate) < 50 ? "warning" : "good"} />
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">{t("executive_kpi_methodology_note")}</p>
       </section>
 
       <LaundryOperationsFlow stages={data.stages || []} />

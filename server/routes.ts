@@ -1631,7 +1631,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
          )
          SELECT
            COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS total_orders,
-           COUNT(*) FILTER (WHERE status = 'delivered')::int AS delivered_orders,
+           COUNT(*) FILTER (WHERE status = 'delivered' AND delivered_at >= $2 AND delivered_at <= $3)::int AS delivered_orders,
+           COUNT(*) FILTER (WHERE status = 'delivered' AND delivered_at >= $2 AND delivered_at <= $3
+             AND pickup_date IS NOT NULL)::int AS delivered_with_promise,
+           COUNT(*) FILTER (WHERE status = 'delivered' AND delivered_at >= $2 AND delivered_at <= $3
+             AND pickup_date IS NOT NULL AND delivered_at <= pickup_date)::int AS delivered_on_time,
            (SELECT COUNT(*) FROM orders live
              WHERE live.site_id = ANY($1::int[]) AND live.status NOT IN ('cancelled','delivered')
                AND live.pickup_date IS NOT NULL AND live.pickup_date < $3)::int AS delayed_orders,
@@ -1695,10 +1699,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         [siteIds, start, now],
       ),
       pool.query(
-        `SELECT COUNT(gi.id)::int AS returned_items
-         FROM garment_items gi
-         JOIN orders o ON o.id = gi.order_id
-         WHERE o.site_id = ANY($1::int[]) AND gi.returned_at >= $2 AND gi.returned_at <= $3`,
+        `SELECT
+           COUNT(DISTINCT grc.garment_item_id)::int AS returned_items,
+           COUNT(DISTINCT grc.order_id)::int AS complaint_orders,
+           COUNT(DISTINCT grc.order_id) FILTER (WHERE grc.status <> 'rejected')::int AS accepted_rework_orders
+         FROM garment_return_cases grc
+         WHERE grc.site_id = ANY($1::int[]) AND grc.returned_at >= $2 AND grc.returned_at <= $3`,
         [siteIds, start, now],
       ),
       pool.query(
@@ -1756,9 +1762,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const breakEvenRevenue = fixedCosts > 0 && contributionMarginRatio > 0 ? fixedCosts / contributionMarginRatio : null;
     const totalOrders = number(current.total_orders);
     const loadEfficiency = number(machine.cycle_capacity) > 0 ? (number(machine.weight) / number(machine.cycle_capacity)) * 100 : null;
-    const productivityPerHour = number(team.paid_hours) > 0 ? number(team.completed_actions) / number(team.paid_hours) : null;
+    const productivityPerHour = number(team.paid_hours) > 0 ? number(current.delivered_orders) / number(team.paid_hours) : null;
     const qualityIncidents = number(quality.returned_items) + number(current.cancelled);
     const qualityRate = totalOrders > 0 ? Math.max(0, 100 - (qualityIncidents / totalOrders) * 100) : null;
+    const collectionRate = number(current.order_value) > 0 ? Math.min(100, (revenue / number(current.order_value)) * 100) : null;
+    const onTimeDeliveryRate = number(current.delivered_with_promise) > 0
+      ? (number(current.delivered_on_time) / number(current.delivered_with_promise)) * 100
+      : null;
+    const firstTimeSuccessRate = number(current.delivered_orders) > 0
+      ? Math.max(0, 100 - (number(quality.accepted_rework_orders) / number(current.delivered_orders)) * 100)
+      : null;
+    const complaintRate = number(current.delivered_orders) > 0
+      ? (number(quality.complaint_orders) / number(current.delivered_orders)) * 100
+      : null;
+
+    const retentionResult = await pool.query(
+      `WITH previous_customers AS (
+         SELECT DISTINCT customer_id
+         FROM orders
+         WHERE site_id = ANY($1::int[]) AND entry_date >= $2 AND entry_date < $3 AND status <> 'cancelled'
+       ), retained_customers AS (
+         SELECT DISTINCT o.customer_id
+         FROM orders o
+         JOIN previous_customers pc ON pc.customer_id = o.customer_id
+         WHERE o.site_id = ANY($1::int[]) AND o.entry_date >= $3 AND o.entry_date <= $4 AND o.status <> 'cancelled'
+       )
+       SELECT
+         (SELECT COUNT(*) FROM previous_customers)::int AS previous_customers,
+         (SELECT COUNT(*) FROM retained_customers)::int AS retained_customers`,
+      [siteIds, previousStart, start, now],
+    );
+    const retention = retentionResult.rows[0] || {};
+    const retentionRate = number(retention.previous_customers) > 0
+      ? (number(retention.retained_customers) / number(retention.previous_customers)) * 100
+      : null;
 
     const coverageSignals = [
       totalOrders > 0,
@@ -1945,6 +1982,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         productivityPerHour,
         returnedItems: number(quality.returned_items),
         qualityRate,
+        collectionRate,
+        onTimeDeliveryRate,
+        firstTimeSuccessRate,
+        complaintRate,
+        retentionRate,
+        retentionCustomers: number(retention.retained_customers),
+        retentionBaseCustomers: number(retention.previous_customers),
       },
       stages: [
         { key: "received", count: number(current.received) },
