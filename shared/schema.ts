@@ -244,8 +244,14 @@ export const employeeAttendance = pgTable("employee_attendance", {
   checkInAt: timestamp("check_in_at"),
   checkOutAt: timestamp("check_out_at"),
   status: varchar("status", { length: 30 }).notNull().default("present"),
+  correctedBy: varchar("corrected_by"),
+  correctionReason: text("correction_reason"),
+  updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  employeeWorkDateUnique: uniqueIndex("employee_attendance_employee_work_date_unique").on(table.employeeId, table.workDate),
+  siteWorkDateIdx: index("employee_attendance_site_work_date_idx").on(table.siteId, table.workDate),
+}));
 
 export const machineUsage = pgTable("machine_usage", {
   id: serial("id").primaryKey(),

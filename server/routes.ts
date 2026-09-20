@@ -1495,6 +1495,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     checkOutAt: z.coerce.date().nullish(),
     status: z.enum(["present", "late", "absent"]).default("present"),
   }).strict();
+  const attendanceCorrectionSchema = attendanceSchema.extend({
+    correctionReason: z.string().trim().min(8).max(500),
+  });
+  const attendanceDay = (value = new Date()) => new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  const validateAttendanceWindow = (checkInAt?: Date | null, checkOutAt?: Date | null) => {
+    if (!checkInAt || !checkOutAt) return null;
+    const durationHours = (checkOutAt.getTime() - checkInAt.getTime()) / 3_600_000;
+    if (durationHours < 0) return "Check-out cannot be before check-in";
+    if (durationHours > 16) return "Attendance duration cannot exceed 16 hours";
+    return null;
+  };
 
   app.post("/api/employees", isAuthenticated, async (req: any, res) => {
     try {
@@ -1537,21 +1548,85 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/employees/:id/attendance", isAuthenticated, async (req, res) => {
     const employeeId = Number(req.params.id);
-    if (!(await canAccessEmployee(req, employeeId))) return res.status(403).json({ message: "Forbidden" });
     const employee = await storage.getEmployee(employeeId);
     if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    if (!(await requireSiteRole(req, res, employee.siteId, ["owner", "manager"]))) return;
     const parsed = attendanceSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid attendance data" });
     const body = parsed.data;
+    const workDate = attendanceDay(body.workDate ?? new Date());
+    const existing = await storage.getEmployeeAttendanceForDay(employeeId, workDate);
+    if (existing) return res.status(409).json({ message: "Attendance already exists for this employee and date" });
+    const windowError = validateAttendanceWindow(body.checkInAt, body.checkOutAt);
+    if (windowError) return res.status(400).json({ message: windowError });
     const attendance = await storage.createEmployeeAttendance({
       employeeId,
       siteId: employee.siteId,
-      workDate: body.workDate ?? new Date(),
+      workDate,
       checkInAt: body.checkInAt ?? null,
       checkOutAt: body.checkOutAt ?? null,
       status: body.status,
     } as any);
     res.status(201).json(attendance);
+  });
+
+  app.get("/api/attendance/today", isAuthenticated, async (req: any, res) => {
+    const siteId = requireWriteSite(req, res);
+    if (siteId === null) return;
+    const rows = await storage.getSiteAttendanceForDay(siteId, attendanceDay());
+    res.json(rows);
+  });
+
+  app.post("/api/employees/:id/attendance/check-in", isAuthenticated, async (req, res) => {
+    const employeeId = Number(req.params.id);
+    const employee = await storage.getEmployee(employeeId);
+    if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    if (!(await requireSiteRole(req, res, employee.siteId, ["owner", "manager"]))) return;
+    const workDate = attendanceDay();
+    const existing = await storage.getEmployeeAttendanceForDay(employeeId, workDate);
+    if (existing?.checkInAt) return res.status(409).json({ message: "Employee is already checked in" });
+    if (existing) {
+      const updated = await storage.updateEmployeeAttendance(existing.id, employee.siteId, { checkInAt: new Date(), status: "present", updatedAt: new Date() });
+      return res.json(updated);
+    }
+    const created = await storage.createEmployeeAttendance({ employeeId, siteId: employee.siteId, workDate, checkInAt: new Date(), status: "present" } as any);
+    res.status(201).json(created);
+  });
+
+  app.post("/api/employees/:id/attendance/check-out", isAuthenticated, async (req, res) => {
+    const employeeId = Number(req.params.id);
+    const employee = await storage.getEmployee(employeeId);
+    if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    if (!(await requireSiteRole(req, res, employee.siteId, ["owner", "manager"]))) return;
+    const existing = await storage.getEmployeeAttendanceForDay(employeeId, attendanceDay());
+    if (!existing?.checkInAt) return res.status(409).json({ message: "Employee has not checked in" });
+    if (existing.checkOutAt) return res.status(409).json({ message: "Employee is already checked out" });
+    const now = new Date();
+    const windowError = validateAttendanceWindow(new Date(existing.checkInAt), now);
+    if (windowError) return res.status(400).json({ message: windowError });
+    const updated = await storage.updateEmployeeAttendance(existing.id, employee.siteId, { checkOutAt: now, updatedAt: now });
+    res.json(updated);
+  });
+
+  app.patch("/api/employees/:id/attendance/:attendanceId", isAuthenticated, async (req: any, res) => {
+    const employeeId = Number(req.params.id);
+    const employee = await storage.getEmployee(employeeId);
+    if (!employee?.siteId) return res.status(404).json({ message: "Employee not found" });
+    if (!(await requireSiteRole(req, res, employee.siteId, ["owner", "manager"]))) return;
+    const parsed = attendanceCorrectionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "A correction reason of at least 8 characters is required" });
+    const { correctionReason, ...body } = parsed.data;
+    const windowError = validateAttendanceWindow(body.checkInAt, body.checkOutAt);
+    if (windowError) return res.status(400).json({ message: windowError });
+    const updated = await storage.updateEmployeeAttendance(Number(req.params.attendanceId), employee.siteId, {
+      ...body,
+      workDate: body.workDate ? attendanceDay(body.workDate) : undefined,
+      correctedBy: (req.session as any).userId,
+      correctionReason,
+      updatedAt: new Date(),
+    });
+    if (!updated || updated.employeeId !== employeeId) return res.status(404).json({ message: "Attendance not found" });
+    res.json(updated);
   });
 
   app.get("/api/plans", async (req, res) => {

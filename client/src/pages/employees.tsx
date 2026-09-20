@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useForm } from "react-hook-form";
-import { UserCheck, Plus, Pencil, Trash2, Phone, Mail, IdCard, Clock } from "lucide-react";
+import { UserCheck, Plus, Pencil, Trash2, Phone, Mail, IdCard, Clock, LogIn, LogOut, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -106,10 +106,22 @@ function DeleteEmployeeAction({ employee, onDone }: { employee: Employee | null;
 const AVATAR_COLORS = ["bg-blue-500", "bg-green-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
 
 function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee) => void; onDelete: (e: Employee) => void; onAttendance: (e: Employee) => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data: employees, isLoading } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
+  const { data: todayAttendance = [] } = useQuery<any[]>({ queryKey: ["/api/attendance/today"] });
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const attendanceByEmployee = new Map(todayAttendance.map((row) => [row.employeeId, row]));
+  const attendanceAction = useMutation({
+    mutationFn: ({ employeeId, action }: { employeeId: number; action: "check-in" | "check-out" }) => apiRequest("POST", `/api/employees/${employeeId}/attendance/${action}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/advanced"] });
+    },
+    onError: (error: any) => toast({ title: t("attendance_error", "Pointage impossible"), description: error?.message, variant: "destructive" }),
+  });
   const roleLabels: Record<string, string> = {
     owner: t("role_owner", "Propriétaire"),
     manager: t("role_manager", "Gérant"),
@@ -118,6 +130,17 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
   const statusLabels: Record<string, string> = {
     active: t("active", "Actif"),
     inactive: t("inactive", "Inactif"),
+  };
+  const attendanceControl = (emp: Employee) => {
+    const attendance = attendanceByEmployee.get(emp.id);
+    const incomplete = attendance?.checkInAt && !attendance?.checkOutAt;
+    if (!attendance?.checkInAt) {
+      return <Button size="sm" variant="outline" onClick={() => attendanceAction.mutate({ employeeId: emp.id, action: "check-in" })} disabled={attendanceAction.isPending} data-testid={`button-check-in-${emp.id}`}><LogIn className="mr-1.5 h-4 w-4" />{t("check_in", "Arrivée")}</Button>;
+    }
+    if (incomplete) {
+      return <Button size="sm" className="bg-[#082D5B]" onClick={() => attendanceAction.mutate({ employeeId: emp.id, action: "check-out" })} disabled={attendanceAction.isPending} data-testid={`button-check-out-${emp.id}`}><LogOut className="mr-1.5 h-4 w-4" />{t("check_out", "Départ")}</Button>;
+    }
+    return <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">{t("attendance_complete", "Journée clôturée")}</Badge>;
   };
   const formatAmount = (value: string | number) => Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 0 });
 
@@ -209,6 +232,8 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
               </div>
             </div>
             <div className="sticky right-0 z-[1] flex gap-1 justify-end border-t bg-card pt-3 lg:static lg:border-t-0 lg:bg-transparent lg:pt-0">
+              <div className="mr-auto lg:hidden">{attendanceControl(emp)}</div>
+              <div className="hidden lg:block">{attendanceControl(emp)}</div>
               <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-7 lg:w-7" onClick={() => onAttendance(emp)} title={t("attendance", "Pointage")} aria-label={`${t("attendance", "Pointage")} - ${emp.name}`} data-testid={`button-attendance-employee-${emp.id}`}>
                 <Clock className="w-3.5 h-3.5" />
               </Button>

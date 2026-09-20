@@ -119,6 +119,9 @@ export interface IStorage {
   deleteEmployee(id: number): Promise<boolean>;
   createEmployeeActivity(activity: InsertEmployeeActivity): Promise<any>;
   createEmployeeAttendance(attendance: InsertEmployeeAttendance): Promise<any>;
+  getEmployeeAttendanceForDay(employeeId: number, workDate: Date): Promise<any>;
+  getSiteAttendanceForDay(siteId: number, workDate: Date): Promise<any[]>;
+  updateEmployeeAttendance(id: number, siteId: number, data: Record<string, any>): Promise<any>;
 
   getPlans(): Promise<Plan[]>;
   getPlan(id: number): Promise<Plan | undefined>;
@@ -1131,6 +1134,29 @@ export class DatabaseStorage implements IStorage {
   async createEmployeeAttendance(attendance: InsertEmployeeAttendance): Promise<any> {
     const [created] = await db.insert(employeeAttendance).values(attendance).returning();
     return created;
+  }
+
+  async getEmployeeAttendanceForDay(employeeId: number, workDate: Date): Promise<any> {
+    const [row] = await db.select().from(employeeAttendance).where(and(
+      eq(employeeAttendance.employeeId, employeeId),
+      eq(employeeAttendance.workDate, workDate),
+    ));
+    return row;
+  }
+
+  async getSiteAttendanceForDay(siteId: number, workDate: Date): Promise<any[]> {
+    return db.select().from(employeeAttendance).where(and(
+      eq(employeeAttendance.siteId, siteId),
+      eq(employeeAttendance.workDate, workDate),
+    ));
+  }
+
+  async updateEmployeeAttendance(id: number, siteId: number, data: Record<string, any>): Promise<any> {
+    const [updated] = await db.update(employeeAttendance).set(data).where(and(
+      eq(employeeAttendance.id, id),
+      eq(employeeAttendance.siteId, siteId),
+    )).returning();
+    return updated;
   }
 
   async getPlans(): Promise<Plan[]> {
