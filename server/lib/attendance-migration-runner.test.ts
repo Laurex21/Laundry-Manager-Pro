@@ -10,6 +10,6 @@ assert.match(
   "the reviewed migration runner must apply the attendance reliability migration",
 );
 assert.match(migration, /ADD COLUMN IF NOT EXISTS corrected_by/);
-assert.match(migration, /employee_attendance_employee_work_date_unique/);
+assert.doesNotMatch(migration, /employee_attendance_employee_work_date_unique/);
 
 console.log("Attendance migration runner regression test passed.");

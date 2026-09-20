@@ -249,7 +249,6 @@ export const employeeAttendance = pgTable("employee_attendance", {
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
-  employeeWorkDateUnique: uniqueIndex("employee_attendance_employee_work_date_unique").on(table.employeeId, table.workDate),
   siteWorkDateIdx: index("employee_attendance_site_work_date_idx").on(table.siteId, table.workDate),
 }));
 

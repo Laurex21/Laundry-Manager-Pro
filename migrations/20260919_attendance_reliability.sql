@@ -32,6 +32,3 @@ WHERE EXISTS (
     AND grouped.work_date = employee_attendance.work_date
     AND grouped.keeper_id <> employee_attendance.id
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS employee_attendance_employee_work_date_unique
-  ON employee_attendance(employee_id, work_date);

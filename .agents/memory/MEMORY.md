@@ -3,3 +3,4 @@
 - [Cross-organisation auth boundaries](auth-organisation-boundaries.md) — owner access and site memberships must remain within the same organisation; never move business records to repair identity links.
 - [Platform administrator boundary](platform-admin-boundary.md) — platform-wide access is separate from tenant roles and bootstrapped only through owner-controlled configuration.
 - [Order correction authority](order-correction-authority.md) — owners correct without entering a reason; managers must provide one, while all corrections remain audited.
+- [Attendance uniqueness](attendance-uniqueness.md) — do not add a global employee/date unique index through Publish while production retains legitimate legacy duplicate rows.

@@ -5,7 +5,7 @@ const routes = readFileSync(new URL("../routes.ts", import.meta.url), "utf8");
 const schema = readFileSync(new URL("../../shared/schema.ts", import.meta.url), "utf8");
 const ui = readFileSync(new URL("../../client/src/pages/employees.tsx", import.meta.url), "utf8");
 
-assert.match(schema, /employee_attendance_employee_work_date_unique/);
+assert.doesNotMatch(schema, /employee_attendance_employee_work_date_unique/);
 assert.match(schema, /correctedBy/);
 assert.match(schema, /correctionReason/);
 assert.match(routes, /attendance\/check-in/);
