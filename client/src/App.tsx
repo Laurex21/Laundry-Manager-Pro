@@ -7,14 +7,31 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
 import { Loader2, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, lazy, Suspense, type ComponentType } from "react";
 import LayoutShell from "@/components/layout-shell";
 import { WhatsAppLauncherProvider } from "@/components/whatsapp-launcher";
+
+function lazyRoute<T extends ComponentType<any>>(load: () => Promise<{ default: T }>) {
+  return lazy(async () => {
+    try {
+      const module = await load();
+      sessionStorage.removeItem("xpresspro:dashboard-chunk-reload");
+      return module;
+    } catch (error) {
+      const reloadKey = "xpresspro:dashboard-chunk-reload";
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, "1");
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+}
 
 // ─── Lazy-loaded routes (code-split into separate chunks) ─────────────────────
 const NotFound          = lazy(() => import("@/pages/not-found"));
 const LandingPage       = lazy(() => import("@/pages/landing"));
-const Dashboard         = lazy(() => import("@/pages/dashboard"));
+const Dashboard         = lazyRoute(() => import("@/pages/dashboard"));
 const AuthPage          = lazy(() => import("@/pages/auth-page"));
 const StaffLogin        = lazy(() => import("@/pages/staff-login"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
