@@ -362,7 +362,10 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
   const { toast } = useToast();
   const mutation = useMutation({
     mutationFn: (data: any) => {
-      if (isEdit) return apiRequest("PATCH", `/api/employees/${employee!.id}`, data);
+      if (isEdit) {
+        const { kgProcessed: _kgProcessed, ordersHandled: _ordersHandled, ...editableData } = data;
+        return apiRequest("PATCH", `/api/employees/${employee!.id}`, editableData);
+      }
       return apiRequest("POST", "/api/employees", data);
     },
     onSuccess: () => {

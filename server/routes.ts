@@ -1532,7 +1532,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let body = sanitizeNumeric(req.body, EMPLOYEE_NUMERIC);
     body = sanitizeInteger(body, EMPLOYEE_INTEGER);
     body = sanitizeDates(body, EMPLOYEE_DATES);
-    const parsed = employeePatchSchema.safeParse(body);
+    // These metrics are displayed in the edit form but are read-only. Ignore
+    // them when older clients include them instead of rejecting the whole edit.
+    const { kgProcessed: _kgProcessed, ordersHandled: _ordersHandled, ...editableBody } = body;
+    const parsed = employeePatchSchema.safeParse(editableBody);
     if (!parsed.success) return res.status(400).json({ message: "Invalid employee data" });
     const updated = await storage.updateEmployee(Number(req.params.id), employee.siteId, parsed.data);
     if (!updated) return res.status(404).json({ message: "Employee not found" });
