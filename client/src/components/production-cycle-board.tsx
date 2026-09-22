@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Activity, ArrowRight, Play, Plus, Square, Trash2, WashingMachine } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Clock3, Play, Plus, Square, Trash2, WashingMachine } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrders } from "@/hooks/use-orders";
 import { useToast } from "@/hooks/use-toast";
@@ -155,6 +155,8 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
   const capacity = Number(cycle.capacityKg);
   const total = Number(cycle.totalWeightKg);
   const percentage = capacity > 0 ? Math.min(100, (total / capacity) * 100) : 0;
+  const elapsedMinutes = cycle.startedAt ? Math.max(0, Math.floor((Date.now() - new Date(cycle.startedAt).getTime()) / 60000)) : 0;
+  const durationVariance = cycle.status === "running" ? elapsedMinutes - cycle.plannedDurationMinutes : 0;
   const candidateStatuses = cycle.stage === "washing" ? ["received", "stain_treatment"] : ["washing"];
   const includedIds = new Set(cycle.orders.map((order) => order.orderId));
   const candidates = orders.filter((order) => candidateStatuses.includes(order.status) && !includedIds.has(order.id));
@@ -198,6 +200,23 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
             {percentage < 50 ? t("cycle_load_low") : percentage <= 85 ? t("cycle_load_good") : t("cycle_load_optimal")}
           </p>
         </div>
+
+        <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-3 text-sm" data-testid={`cycle-metrics-${cycle.id}`}>
+          <div>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{t("planned_duration_minutes")}</span>
+            <strong>{cycle.plannedDurationMinutes} min</strong>
+          </div>
+          <div>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{t("elapsed_time", "Temps écoulé")}</span>
+            <strong className={durationVariance > 15 ? "text-amber-700" : ""}>{cycle.status === "running" ? `${elapsedMinutes} min` : "—"}</strong>
+          </div>
+        </div>
+        {cycle.status === "running" && durationVariance > 15 && (
+          <p className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert" data-testid={`cycle-duration-alert-${cycle.id}`}>
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {t("cycle_duration_overrun", "Cycle en retard par rapport à la durée planifiée")}: +{durationVariance} min
+          </p>
+        )}
 
         <ul className="divide-y rounded-lg border">
           {cycle.orders.map((order) => (

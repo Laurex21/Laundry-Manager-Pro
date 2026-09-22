@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useForm } from "react-hook-form";
-import { Activity, Cog, Plus, Pencil, Trash2 } from "lucide-react";
+import { Cog, Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,6 @@ export default function Machines() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Machine | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
-  const [usageTarget, setUsageTarget] = useState<Machine | null>(null);
 
   if (!hasFeature("machines")) {
     return <UpgradePrompt title={t("machines")} description="Track your machine fleet, utilization rates and maintenance." requiredPlan="Pro" />;
@@ -60,17 +59,11 @@ export default function Machines() {
       <MachineList
         onEdit={(m) => { setEditing(m); setOpen(true); }}
         onDelete={setDeleteTarget}
-        onUsage={setUsageTarget}
       />
 
       <ProductionCycleBoard />
 
       <MachineDialog open={open} onOpenChange={setOpen} machine={editing} />
-      <MachineUsageDialog
-        open={!!usageTarget}
-        onOpenChange={(v) => { if (!v) setUsageTarget(null); }}
-        machine={usageTarget}
-      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
@@ -115,7 +108,7 @@ function statusVariant(status: string) {
   return "outline";
 }
 
-function MachineList({ onEdit, onDelete, onUsage }: { onEdit: (m: Machine) => void; onDelete: (m: Machine) => void; onUsage: (m: Machine) => void }) {
+function MachineList({ onEdit, onDelete }: { onEdit: (m: Machine) => void; onDelete: (m: Machine) => void }) {
   const { t } = useTranslation();
   const { data: machines, isLoading } = useQuery<Machine[]>({ queryKey: ["/api/machines"] });
 
@@ -184,9 +177,6 @@ function MachineList({ onEdit, onDelete, onUsage }: { onEdit: (m: Machine) => vo
               <span>{machine.totalKgProcessed} kg</span>
             </div>
             <div className="flex gap-1 justify-end border-t pt-3 sm:border-0 sm:pt-0">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onUsage(machine)} title={t("machine_usage", "Utilisation")} data-testid={`button-machine-usage-${machine.id}`}>
-                <Activity className="w-3.5 h-3.5" />
-              </Button>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(machine)} data-testid={`button-edit-machine-${machine.id}`}>
                 <Pencil className="w-3.5 h-3.5" />
               </Button>

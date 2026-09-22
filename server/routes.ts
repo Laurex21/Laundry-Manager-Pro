@@ -1431,6 +1431,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await client.query("ROLLBACK");
         return res.status(409).json({ message: "Only a running cycle can be completed" });
       }
+      if (!cycle.started_at) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Cycle has no recorded start time" });
+      }
       const nextStatus = cycle.stage === "washing" ? "drying" : "ironing";
       const actualDuration = Math.max(1, Math.round((Date.now() - new Date(cycle.started_at).getTime()) / 60000));
       await client.query(
