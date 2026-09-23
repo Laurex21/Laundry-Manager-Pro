@@ -1345,24 +1345,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/production-cycles/:id/orders/:orderId", isAuthenticated, async (req: any, res) => {
     const cycleId = Number(req.params.id);
     const orderId = Number(req.params.orderId);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cycle = await client.query(
+        `SELECT id FROM production_cycles
+         WHERE id = $1 AND site_id = ANY($2::int[]) AND status = 'preparing'
+         FOR UPDATE`,
+        [cycleId, scopedSites(req)],
+      );
+      if (!cycle.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Cycle not found or already started" });
+      }
+      const removed = await client.query(
+        `DELETE FROM production_cycle_orders WHERE cycle_id = $1 AND order_id = $2 RETURNING id`,
+        [cycleId, orderId],
+      );
+      if (!removed.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Cycle order not found" });
+      }
+      const updated = await client.query(
+        `UPDATE production_cycles
+         SET total_weight_kg = COALESCE((SELECT SUM(weight_kg) FROM production_cycle_orders WHERE cycle_id = $1), 0)
+         WHERE id = $1
+         RETURNING total_weight_kg AS "totalWeightKg"`,
+        [cycleId],
+      );
+      await client.query("COMMIT");
+      res.json({ success: true, totalWeightKg: updated.rows[0].totalWeightKg });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete("/api/production-cycles/:id", isAuthenticated, async (req: any, res) => {
+    const cycleId = Number(req.params.id);
     const result = await pool.query(
-      `WITH accessible AS (
-         SELECT id FROM production_cycles
-         WHERE id = $1 AND site_id = ANY($3::int[]) AND status = 'preparing'
-       ), removed AS (
-         DELETE FROM production_cycle_orders
-         WHERE cycle_id IN (SELECT id FROM accessible) AND order_id = $2
-         RETURNING cycle_id
-       )
-       UPDATE production_cycles pc
-       SET total_weight_kg = (
-         SELECT COALESCE(SUM(weight_kg), 0) FROM production_cycle_orders WHERE cycle_id = pc.id
-       )
-       WHERE pc.id IN (SELECT cycle_id FROM removed)
-       RETURNING pc.id`,
-      [cycleId, orderId, scopedSites(req)],
+      `DELETE FROM production_cycles
+       WHERE id = $1 AND site_id = ANY($2::int[]) AND status = 'preparing'
+       RETURNING id`,
+      [cycleId, scopedSites(req)],
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Cycle order not found" });
+    if (!result.rowCount) return res.status(409).json({ message: "Only a cycle in preparation can be cancelled" });
     res.json({ success: true });
   });
 

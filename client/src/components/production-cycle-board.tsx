@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Activity, AlertTriangle, ArrowRight, Clock3, Play, Plus, Square, Trash2, WashingMachine } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Clock3, Play, Plus, Square, Trash2, WashingMachine, XCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useOrders } from "@/hooks/use-orders";
 import { useToast } from "@/hooks/use-toast";
@@ -162,9 +162,10 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
   const candidates = orders.filter((order) => candidateStatuses.includes(order.status) && !includedIds.has(order.id));
 
   const mutation = useMutation({
-    mutationFn: async ({ action, targetOrderId }: { action: "add" | "remove" | "start" | "complete"; targetOrderId?: number }) => {
+    mutationFn: async ({ action, targetOrderId }: { action: "add" | "remove" | "start" | "complete" | "cancel"; targetOrderId?: number }) => {
       if (action === "add") return apiRequest("POST", `/api/production-cycles/${cycle.id}/orders`, { orderId: Number(orderId), weightKg: Number(weight) });
       if (action === "remove") return apiRequest("DELETE", `/api/production-cycles/${cycle.id}/orders/${targetOrderId}`);
+      if (action === "cancel") return apiRequest("DELETE", `/api/production-cycles/${cycle.id}`);
       return apiRequest("POST", `/api/production-cycles/${cycle.id}/${action}`);
     },
     onSuccess: (_, variables) => {
@@ -258,9 +259,17 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
                 <span className="sr-only">{t("add_order_to_cycle")}</span>
               </Button>
             </form>
-            <Button className="min-h-11 w-full" disabled={!cycle.orders.length || mutation.isPending} onClick={() => mutation.mutate({ action: "start" })}>
-              <Play className="mr-2 h-4 w-4" aria-hidden="true" /> {t("start_cycle")}
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <Button className="min-h-11" disabled={!cycle.orders.length || mutation.isPending} onClick={() => mutation.mutate({ action: "start" })}>
+                <Play className="mr-2 h-4 w-4" aria-hidden="true" /> {t("start_cycle")}
+              </Button>
+              <Button type="button" variant="outline" className="min-h-11 text-destructive" disabled={mutation.isPending} onClick={() => {
+                if (window.confirm(t("cancel_cycle_confirm", "Annuler cette préparation de cycle ?"))) mutation.mutate({ action: "cancel" });
+              }} data-testid={`button-cancel-cycle-${cycle.id}`}>
+                <XCircle className="mr-2 h-4 w-4" aria-hidden="true" />
+                {t("cancel_cycle", "Annuler la préparation")}
+              </Button>
+            </div>
           </>
         ) : (
           <Button className="min-h-11 w-full" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate({ action: "complete" })}>
