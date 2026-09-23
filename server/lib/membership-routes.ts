@@ -17,6 +17,7 @@ import { rateLimit } from "./rate-limit";
 import { currentSubscriptionPaymentCycle } from "./subscription-payment-cycle";
 import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 import { currentCycleFinancials, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
+import { addDecimals } from "@shared/exact-decimal";
 
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
@@ -129,6 +130,64 @@ function addDays(value: string | Date, days: number) {
   const date = new Date(typeof value === "string" ? `${value}T00:00:00Z` : value);
   date.setUTCDate(date.getUTCDate() + days);
   return dateOnly(date);
+}
+
+export async function restoreSubscriptionUsageForCancelledOrder(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  organisationId: number,
+  orderId: number,
+) {
+  const [usage] = await tx
+    .select({ transaction: subscriptionTransactions, subscription: customerSubscriptions })
+    .from(subscriptionTransactions)
+    .innerJoin(
+      customerSubscriptions,
+      and(
+        eq(subscriptionTransactions.customerSubscriptionId, customerSubscriptions.id),
+        eq(customerSubscriptions.organisationId, organisationId),
+      ),
+    )
+    .where(eq(subscriptionTransactions.orderId, orderId))
+    .limit(1);
+
+  if (!usage) return null;
+
+  const kgConsumed = Number(usage.transaction.kgConsumed ?? 0);
+  const piecesConsumed = Number(usage.transaction.piecesConsumed ?? 0);
+  const ordersConsumed = usage.subscription.remainingOrders == null ? 0 : 1;
+
+  const [subscription] = await tx
+    .update(customerSubscriptions)
+    .set({
+      remainingKg: usage.subscription.remainingKg == null
+        ? null
+        : addDecimals(usage.subscription.remainingKg, usage.transaction.kgConsumed ?? 0),
+      remainingPieces: usage.subscription.remainingPieces == null
+        ? null
+        : Number(usage.subscription.remainingPieces) + piecesConsumed,
+      remainingOrders: usage.subscription.remainingOrders == null
+        ? null
+        : Number(usage.subscription.remainingOrders) + ordersConsumed,
+      totalConsumedKg: String(Math.max(0, Number(addDecimals(usage.subscription.totalConsumedKg ?? 0, `-${usage.transaction.kgConsumed ?? 0}`)))),
+      totalConsumedPieces: Math.max(0, Number(usage.subscription.totalConsumedPieces ?? 0) - piecesConsumed),
+      totalOrdersUsed: Math.max(0, Number(usage.subscription.totalOrdersUsed ?? 0) - ordersConsumed),
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(customerSubscriptions.id, usage.subscription.id),
+      eq(customerSubscriptions.organisationId, organisationId),
+    ))
+    .returning();
+
+  await tx
+    .update(subscriptionTransactions)
+    .set({ orderId: null })
+    .where(and(
+      eq(subscriptionTransactions.id, usage.transaction.id),
+      eq(subscriptionTransactions.orderId, orderId),
+    ));
+
+  return { subscription, transaction: usage.transaction };
 }
 
 type CoverageItem = { serviceId: number; quantity: number | string; unitPrice: number | string; serviceName: string; unit: string | null };

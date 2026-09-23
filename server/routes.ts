@@ -8,10 +8,11 @@ import { registerCalculatorRoutes } from "./lib/calculator-routes";
 import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
-import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema, orderDrafts } from "@shared/schema";
+import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema, orderDrafts, orders, orderStatusHistory, sites } from "@shared/schema";
 import { reportingDateRange, reportingDateString, validReportingTimeZone } from "./lib/reporting-date";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
+import { restoreSubscriptionUsageForCancelledOrder } from "./lib/membership-routes";
 import { addDecimals, compareDecimals, isIntegerDecimal, multiplyDecimal, normalizeDecimalInput } from "@shared/exact-decimal";
 import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
@@ -35,6 +36,7 @@ import {
 } from "./lib/order-corrections";
 import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
 import { and, desc, eq } from "drizzle-orm";
+import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -783,8 +785,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const order = await storage.getOrder(Number(req.params.id));
     if (!order?.siteId || !(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
-    const updated = await storage.approveCancellation(Number(req.params.id), userId);
+    const orderId = Number(req.params.id);
+    const updated = await db.transaction(async tx => {
+      const [cancelled] = await tx.update(orders).set({
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancellationReviewedBy: userId,
+        cancellationReviewedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(and(eq(orders.id, orderId), eq(orders.status, "cancellation_requested"))).returning();
+      if (!cancelled) return undefined;
+      await tx.insert(orderStatusHistory).values({ orderId, status: "cancelled", changedBy: userId, notes: "Cancellation approved" });
+      const [site] = await tx.select({ organisationId: sites.organisationId }).from(sites).where(eq(sites.id, cancelled.siteId!)).limit(1);
+      if (!site) throw new Error("Order site organisation not found");
+      await restoreSubscriptionUsageForCancelledOrder(tx, site.organisationId, orderId);
+      return cancelled;
+    });
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    await refreshCustomerAnalyticsFromHistory(updated.customerId);
+    const organisationId = await organisationIdFor(req);
+    if (organisationId) invalidateSubscriptionDashboard(organisationId);
     if (updated.siteId != null) {
       await trackEmployeeActivity(req, {
         siteId: updated.siteId,
