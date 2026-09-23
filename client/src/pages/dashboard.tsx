@@ -113,56 +113,29 @@ export default function Dashboard() {
       </div>
 
       {/* Operations command strip */}
-      <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl border border-[#082D5B]/10 bg-card p-1.5 shadow-[0_1px_2px_rgba(8,45,91,0.04)] sm:flex sm:flex-row sm:items-center sm:gap-px">
-        <Link href="/orders?status=ready" className="contents sm:inline-flex">
-          <Button size="sm" className="h-7 text-xs px-3 rounded-md font-medium w-full sm:w-auto" data-testid="button-new-order">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 rounded-xl border border-[#082D5B]/10 bg-card p-1.5 shadow-[0_1px_2px_rgba(8,45,91,0.04)] sm:max-w-3xl sm:grid-cols-4">
+        <Link href="/orders?create=true" className="contents">
+          <Button size="sm" className="h-9 w-full rounded-md px-3 text-xs font-medium" data-testid="button-new-order">
             <Plus className="w-3.5 h-3.5 mr-1.5" />{t('new_order')}
           </Button>
         </Link>
-        <div className="hidden sm:block w-px h-4 bg-border/60 mx-1.5 shrink-0" />
-        <Link href="/payments" className="contents sm:inline-flex">
-          <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
+        <Link href="/payments" className="contents">
+          <Button variant="ghost" size="sm" className="h-9 w-full rounded-md px-3 text-xs">
             <CreditCard className="w-3.5 h-3.5 mr-1.5" />{t('register_payment')}
           </Button>
         </Link>
-        <Link href="/orders" className="contents sm:inline-flex">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${readyForPickup.length > 0 ? " text-emerald-700 dark:text-emerald-400" : ""}`}
-          >
-            <Package className="w-3.5 h-3.5 mr-1.5" />
-            {t('ready_for_pickup')}
-            {readyForPickup.length > 0 && (
-              <span className="ml-1.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm tabular-nums">
-                {readyForPickup.length}
-              </span>
-            )}
-          </Button>
-        </Link>
-        <Link href="/pilotage?view=quality" className="contents sm:inline-flex">
-          <Button variant="ghost" size="sm" className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${openReturnCount > 0 ? " text-orange-700 dark:text-orange-400" : ""}`}>
+        <Link href="/pilotage?view=quality" className="contents">
+          <Button variant="ghost" size="sm" className={`h-9 w-full rounded-md px-3 text-xs${openReturnCount > 0 ? " text-orange-700 dark:text-orange-400" : ""}`}>
             <RotateCcw className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             {t('quality_operations_open')}
             {openReturnCount > 0 && <span className="ml-1.5 rounded-sm bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-orange-700 dark:bg-orange-900/40 dark:text-orange-400">{openReturnCount}</span>}
           </Button>
         </Link>
-        <Link href="/pilotage?view=daily" className="contents sm:inline-flex">
-          <Button variant="ghost" size="sm" className={`h-7 text-xs px-3 rounded-md w-full sm:w-auto${unacknowledgedReportCount > 0 ? " text-blue-700 dark:text-blue-400" : ""}`}>
+        <Link href="/pilotage?view=daily" className="contents">
+          <Button variant="ghost" size="sm" className={`h-9 w-full rounded-md px-3 text-xs${unacknowledgedReportCount > 0 ? " text-blue-700 dark:text-blue-400" : ""}`}>
             <FileText className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             {t('daily_reports')}
             {unacknowledgedReportCount > 0 && <span className="ml-1.5 rounded-sm bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" aria-label={t("daily_report_unacknowledged", { count: unacknowledgedReportCount })}>{unacknowledgedReportCount}</span>}
-          </Button>
-        </Link>
-        <div className="hidden sm:block w-px h-4 bg-border/60 mx-1.5 shrink-0" />
-        <Link href="/customers" className="contents sm:inline-flex">
-          <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
-            <Users className="w-3.5 h-3.5 mr-1.5" />{t('customers')}
-          </Button>
-        </Link>
-        <Link href="/pilotage?view=reports" className="contents sm:inline-flex">
-          <Button variant="ghost" size="sm" className="h-7 text-xs px-3 rounded-md w-full sm:w-auto">
-            <TrendingUp className="w-3.5 h-3.5 mr-1.5" />{t('reports')}
           </Button>
         </Link>
       </div>

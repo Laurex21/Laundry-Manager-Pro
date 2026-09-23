@@ -138,6 +138,10 @@ function dashboardOrderFilters(): { status: OrderStatusFilter; period: OrderPeri
   return { status, period, discounted: params.get("discounted") === "true" };
 }
 
+function shouldOpenCreateOrderFromUrl(): boolean {
+  return new URLSearchParams(window.location.search).get("create") === "true";
+}
+
 function normalizeWhatsAppPhone(phone?: string | null): string {
   const digits = String(phone || "").replace(/\D/g, "");
   if (!digits) return "";
@@ -168,7 +172,7 @@ function ServiceCombobox({
 }) {
   const { t } = useTranslation();
   const { i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(shouldOpenCreateOrderFromUrl);
   const [savedDraft, setSavedDraft] = useState<any | null>(null);
   const selectedService = services.find((service) => service.id === value);
   const groupedServices = useMemo(() => {
