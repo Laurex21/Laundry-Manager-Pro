@@ -36,5 +36,15 @@ assert.match(
   /eq\(orders\.status, "cancellation_requested"\)/,
   "only pending cancellation requests may be approved once",
 );
+assert.match(
+  routes,
+  /return \{ order: cancelled, organisationId: site\.organisationId \}/,
+  "cancellation must carry the verified order organisation out of the transaction",
+);
+assert.doesNotMatch(
+  routes,
+  /approve-cancellation[\s\S]*organisationIdFor\(req\)/,
+  "cancellation approval must not call an unavailable organisation lookup helper",
+);
 
 console.log("Subscription cancellation usage regression checks passed");

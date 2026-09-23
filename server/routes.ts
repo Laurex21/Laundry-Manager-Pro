@@ -786,7 +786,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.getOrder(Number(req.params.id));
     if (!order?.siteId || !(await requireSiteRole(req, res, order.siteId, ["owner", "manager"]))) return;
     const orderId = Number(req.params.id);
-    const updated = await db.transaction(async tx => {
+    const cancellation = await db.transaction(async tx => {
       const [cancelled] = await tx.update(orders).set({
         status: "cancelled",
         cancelledAt: new Date(),
@@ -799,12 +799,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const [site] = await tx.select({ organisationId: sites.organisationId }).from(sites).where(eq(sites.id, cancelled.siteId!)).limit(1);
       if (!site) throw new Error("Order site organisation not found");
       await restoreSubscriptionUsageForCancelledOrder(tx, site.organisationId, orderId);
-      return cancelled;
+      return { order: cancelled, organisationId: site.organisationId };
     });
-    if (!updated) return res.status(404).json({ message: "Order not found" });
+    if (!cancellation) return res.status(404).json({ message: "Order not found" });
+    const { order: updated, organisationId } = cancellation;
     await refreshCustomerAnalyticsFromHistory(updated.customerId);
-    const organisationId = await organisationIdFor(req);
-    if (organisationId) invalidateSubscriptionDashboard(organisationId);
+    invalidateSubscriptionDashboard(organisationId);
     if (updated.siteId != null) {
       await trackEmployeeActivity(req, {
         siteId: updated.siteId,
