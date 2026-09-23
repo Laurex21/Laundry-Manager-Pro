@@ -187,9 +187,12 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
         ]} />
         <DecisionModule title={t("product_cost_efficiency", "Efficacité des produits")} icon={<FlaskConical />} items={[
           [t("product_consumption_cost", "Coût produits consommés"), money(m.productConsumptionCost)],
+          [t("completed_product_cost", "Coût des cycles clôturés"), money(m.completedProductConsumptionCost)],
+          [t("in_progress_product_cost", "Coût des cycles en cours"), money(m.inProgressProductConsumptionCost)],
           [t("product_cost_per_cycle", "Coût produit par cycle"), m.productCostPerCycle == null ? t("insufficient_data") : money(m.productCostPerCycle)],
           [t("product_cost_per_kg", "Coût produit par kilogramme"), m.productCostPerKg == null ? t("insufficient_data") : money(m.productCostPerKg)],
-          [t("costed_cycles", "Cycles avec consommation"), Number(m.costedCycles || 0).toLocaleString()],
+          [t("costed_cycles", "Cycles clôturés avec consommation"), Number(m.costedCycles || 0).toLocaleString()],
+          [t("in_progress_costed_cycles", "Cycles en cours avec consommation"), Number(m.inProgressCostedCycles || 0).toLocaleString()],
         ]} />
         <DecisionModule title={t("capacity_efficiency")} icon={<Gauge />} items={[
           [t("machine_load_efficiency"), pct(m.machineLoadEfficiency)],

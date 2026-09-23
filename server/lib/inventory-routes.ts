@@ -180,13 +180,17 @@ export function registerInventoryRoutes(app: Express) {
     const result = await pool.query(
       `SELECT im.product_id AS "productId", p.name AS "productName", p.unit,
          im.production_cycle_id AS "productionCycleId",
+         CASE WHEN im.production_cycle_id IS NULL THEN 'unassigned'
+              WHEN pc.status = 'completed' THEN 'completed'
+              ELSE 'in_progress' END AS "cycleCostStatus",
          COALESCE(SUM(ABS(im.quantity)),0)::text AS quantity,
          COALESCE(SUM(ABS(im.quantity) * im.unit_cost),0)::text AS cost
        FROM inventory_movements im
        JOIN inventory_products p ON p.id=im.product_id
+       LEFT JOIN production_cycles pc ON pc.id=im.production_cycle_id AND pc.site_id=im.site_id
        WHERE im.site_id=ANY($1::int[]) AND im.movement_type='consumption'
          AND im.created_at >= date_trunc('month', NOW())
-       GROUP BY im.product_id, p.name, p.unit, im.production_cycle_id
+       GROUP BY im.product_id, p.name, p.unit, im.production_cycle_id, pc.status
        ORDER BY SUM(ABS(im.quantity) * im.unit_cost) DESC`,
       [siteScope(req)],
     );

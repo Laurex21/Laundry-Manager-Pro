@@ -1860,8 +1860,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       pool.query(
         `SELECT
            COALESCE(SUM(ABS(im.quantity) * im.unit_cost),0)::text AS product_cost,
-           COUNT(DISTINCT im.production_cycle_id) FILTER (WHERE im.production_cycle_id IS NOT NULL)::int AS costed_cycles
+           COALESCE(SUM(ABS(im.quantity) * im.unit_cost) FILTER (WHERE pc.status = 'completed'),0)::text AS completed_product_cost,
+           COALESCE(SUM(ABS(im.quantity) * im.unit_cost) FILTER (WHERE pc.status IS NOT NULL AND pc.status <> 'completed'),0)::text AS in_progress_product_cost,
+           COALESCE(SUM(ABS(im.quantity) * im.unit_cost) FILTER (WHERE im.production_cycle_id IS NULL),0)::text AS unassigned_product_cost,
+           COUNT(DISTINCT im.production_cycle_id) FILTER (WHERE pc.status = 'completed')::int AS costed_cycles,
+           COUNT(DISTINCT im.production_cycle_id) FILTER (WHERE pc.status IS NOT NULL AND pc.status <> 'completed')::int AS in_progress_costed_cycles,
+           COALESCE((SELECT SUM(completed_cycles.total_weight_kg)
+             FROM (SELECT DISTINCT pc2.id, pc2.total_weight_kg
+               FROM inventory_movements im2
+               JOIN production_cycles pc2 ON pc2.id=im2.production_cycle_id AND pc2.site_id=im2.site_id
+               WHERE im2.site_id=ANY($1::int[]) AND im2.movement_type='consumption'
+                 AND im2.created_at >= $2 AND im2.created_at <= $3 AND pc2.status='completed') completed_cycles),0)::text AS completed_cycle_weight
          FROM inventory_movements im
+         LEFT JOIN production_cycles pc ON pc.id = im.production_cycle_id AND pc.site_id = im.site_id
          WHERE im.site_id = ANY($1::int[]) AND im.movement_type='consumption'
            AND im.created_at >= $2 AND im.created_at <= $3`,
         [siteIds, start, now],
@@ -1883,7 +1894,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const fixedCosts = number(current.fixed_costs);
     const variableCosts = number(current.variable_costs);
     const productConsumptionCost = number(inventoryCosts.product_cost);
+    const completedProductConsumptionCost = number(inventoryCosts.completed_product_cost);
+    const inProgressProductConsumptionCost = number(inventoryCosts.in_progress_product_cost);
+    const unassignedProductConsumptionCost = number(inventoryCosts.unassigned_product_cost);
     const costedCycles = number(inventoryCosts.costed_cycles);
+    const inProgressCostedCycles = number(inventoryCosts.in_progress_costed_cycles);
     const profitAfterProductCosts = revenue - expenses - productConsumptionCost;
     const marginAfterProductCostsPct = revenue > 0 ? (profitAfterProductCosts / revenue) * 100 : null;
     const contribution = revenue - variableCosts;
@@ -1891,8 +1906,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const breakEvenRevenue = fixedCosts > 0 && contributionMarginRatio > 0 ? fixedCosts / contributionMarginRatio : null;
     const totalOrders = number(current.total_orders);
     const loadEfficiency = number(machine.cycle_capacity) > 0 ? (number(machine.weight) / number(machine.cycle_capacity)) * 100 : null;
-    const productCostPerCycle = costedCycles > 0 ? productConsumptionCost / costedCycles : null;
-    const productCostPerKg = number(machine.weight) > 0 ? productConsumptionCost / number(machine.weight) : null;
+    const productCostPerCycle = costedCycles > 0 ? completedProductConsumptionCost / costedCycles : null;
+    const productCostPerKg = number(inventoryCosts.completed_cycle_weight) > 0
+      ? completedProductConsumptionCost / number(inventoryCosts.completed_cycle_weight)
+      : null;
     const productivityPerHour = number(team.paid_hours) > 0 ? number(current.delivered_orders) / number(team.paid_hours) : null;
     const qualityIncidents = number(quality.accepted_rework_orders);
     const qualityRate = number(current.delivered_orders) > 0
@@ -2094,11 +2111,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         profit: revenue - expenses,
         marginPct,
         productConsumptionCost,
+        completedProductConsumptionCost,
+        inProgressProductConsumptionCost,
+        unassignedProductConsumptionCost,
         profitAfterProductCosts,
         marginAfterProductCostsPct,
         productCostPerCycle,
         productCostPerKg,
         costedCycles,
+        inProgressCostedCycles,
         inventoryCostCoverage: costedCycles > 0,
         orders: totalOrders,
         deliveredOrders: number(current.delivered_orders),
