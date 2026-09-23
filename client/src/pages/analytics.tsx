@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert, LayoutDashboard, UserRoundSearch, Info } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert, LayoutDashboard, UserRoundSearch, Info, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -178,9 +178,18 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
         <DecisionModule title={t("profitability")} icon={<Banknote />} items={[
           [t("total_revenue"), money(m.revenue)],
           [t("total_expenses_label"), money(m.expenses)],
+          [t("product_consumption_cost", "Coût produits consommés"), money(m.productConsumptionCost)],
+          [t("profit_after_product_costs", "Résultat après coûts produits"), money(m.profitAfterProductCosts)],
+          [t("margin_after_product_costs", "Marge après coûts produits"), pct(m.marginAfterProductCostsPct)],
           [t("contribution_margin"), pct(m.contributionMarginRatio)],
           [t("break_even_revenue"), m.breakEvenRevenue == null ? t("insufficient_data") : money(m.breakEvenRevenue)],
           [t("discounts"), money(m.discounts)],
+        ]} />
+        <DecisionModule title={t("product_cost_efficiency", "Efficacité des produits")} icon={<FlaskConical />} items={[
+          [t("product_consumption_cost", "Coût produits consommés"), money(m.productConsumptionCost)],
+          [t("product_cost_per_cycle", "Coût produit par cycle"), m.productCostPerCycle == null ? t("insufficient_data") : money(m.productCostPerCycle)],
+          [t("product_cost_per_kg", "Coût produit par kilogramme"), m.productCostPerKg == null ? t("insufficient_data") : money(m.productCostPerKg)],
+          [t("costed_cycles", "Cycles avec consommation"), Number(m.costedCycles || 0).toLocaleString()],
         ]} />
         <DecisionModule title={t("capacity_efficiency")} icon={<Gauge />} items={[
           [t("machine_load_efficiency"), pct(m.machineLoadEfficiency)],

@@ -1730,7 +1730,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const previousStart = new Date(start.getTime() - durationMs);
 
     const organisationSiteIds = orgScopedSites(req);
-    const [ordersResult, previousResult, machineResult, teamResult, qualityResult, forecastResult, benchmarkResult] = await Promise.all([
+    const [ordersResult, previousResult, machineResult, teamResult, qualityResult, forecastResult, benchmarkResult, inventoryCostResult] = await Promise.all([
       pool.query(
         `WITH scoped_orders AS (
            SELECT o.*,
@@ -1857,6 +1857,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
          ORDER BY s.name`,
         [organisationSiteIds, start, now],
       ),
+      pool.query(
+        `SELECT
+           COALESCE(SUM(ABS(im.quantity) * im.unit_cost),0)::text AS product_cost,
+           COUNT(DISTINCT im.production_cycle_id) FILTER (WHERE im.production_cycle_id IS NOT NULL)::int AS costed_cycles
+         FROM inventory_movements im
+         WHERE im.site_id = ANY($1::int[]) AND im.movement_type='consumption'
+           AND im.created_at >= $2 AND im.created_at <= $3`,
+        [siteIds, start, now],
+      ),
     ]);
 
     const current = ordersResult.rows[0];
@@ -1864,6 +1873,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const machine = machineResult.rows[0];
     const team = teamResult.rows[0];
     const quality = qualityResult.rows[0];
+    const inventoryCosts = inventoryCostResult.rows[0] || {};
     const number = (value: unknown) => Number(value || 0);
     const delta = (currentValue: number, previousValue: number) =>
       previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : null;
@@ -1872,11 +1882,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const expenses = number(current.expenses);
     const fixedCosts = number(current.fixed_costs);
     const variableCosts = number(current.variable_costs);
+    const productConsumptionCost = number(inventoryCosts.product_cost);
+    const costedCycles = number(inventoryCosts.costed_cycles);
+    const profitAfterProductCosts = revenue - expenses - productConsumptionCost;
+    const marginAfterProductCostsPct = revenue > 0 ? (profitAfterProductCosts / revenue) * 100 : null;
     const contribution = revenue - variableCosts;
     const contributionMarginRatio = revenue > 0 ? contribution / revenue : 0;
     const breakEvenRevenue = fixedCosts > 0 && contributionMarginRatio > 0 ? fixedCosts / contributionMarginRatio : null;
     const totalOrders = number(current.total_orders);
     const loadEfficiency = number(machine.cycle_capacity) > 0 ? (number(machine.weight) / number(machine.cycle_capacity)) * 100 : null;
+    const productCostPerCycle = costedCycles > 0 ? productConsumptionCost / costedCycles : null;
+    const productCostPerKg = number(machine.weight) > 0 ? productConsumptionCost / number(machine.weight) : null;
     const productivityPerHour = number(team.paid_hours) > 0 ? number(current.delivered_orders) / number(team.paid_hours) : null;
     const qualityIncidents = number(quality.accepted_rework_orders);
     const qualityRate = number(current.delivered_orders) > 0
@@ -2077,6 +2093,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         expenses,
         profit: revenue - expenses,
         marginPct,
+        productConsumptionCost,
+        profitAfterProductCosts,
+        marginAfterProductCostsPct,
+        productCostPerCycle,
+        productCostPerKg,
+        costedCycles,
+        inventoryCostCoverage: costedCycles > 0,
         orders: totalOrders,
         deliveredOrders: number(current.delivered_orders),
         delayedOrders: number(current.delayed_orders),
