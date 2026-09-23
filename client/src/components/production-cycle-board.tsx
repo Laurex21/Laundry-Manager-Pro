@@ -11,6 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Machine } from "@shared/schema";
 
 type CycleOrder = {
@@ -152,6 +162,7 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
   const { toast } = useToast();
   const [orderId, setOrderId] = useState("");
   const [weight, setWeight] = useState("");
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const capacity = Number(cycle.capacityKg);
   const total = Number(cycle.totalWeightKg);
   const percentage = capacity > 0 ? Math.min(100, (total / capacity) * 100) : 0;
@@ -172,6 +183,7 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
       onChanged();
       setOrderId("");
       setWeight("");
+      if (variables.action === "cancel") setCancelConfirmOpen(false);
       toast({ title: t(`cycle_${variables.action}_success`) });
     },
     onError: (error: Error) => toast({ title: t("error"), description: error.message, variant: "destructive" }),
@@ -263,9 +275,7 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
               <Button className="min-h-11" disabled={!cycle.orders.length || mutation.isPending} onClick={() => mutation.mutate({ action: "start" })}>
                 <Play className="mr-2 h-4 w-4" aria-hidden="true" /> {t("start_cycle")}
               </Button>
-              <Button type="button" variant="outline" className="min-h-11 text-destructive" disabled={mutation.isPending} onClick={() => {
-                if (window.confirm(t("cancel_cycle_confirm", "Annuler cette préparation de cycle ?"))) mutation.mutate({ action: "cancel" });
-              }} data-testid={`button-cancel-cycle-${cycle.id}`}>
+              <Button type="button" variant="outline" className="min-h-11 text-destructive" disabled={mutation.isPending} onClick={() => setCancelConfirmOpen(true)} data-testid={`button-cancel-cycle-${cycle.id}`}>
                 <XCircle className="mr-2 h-4 w-4" aria-hidden="true" />
                 {t("cancel_cycle", "Annuler la préparation")}
               </Button>
@@ -278,6 +288,30 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
             <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
           </Button>
         )}
+        <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("cancel_cycle", "Annuler la préparation")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("cancel_cycle_confirm", "Annuler cette préparation de cycle ? Les commandes seront retirées de cette préparation.")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={mutation.isPending}>{t("cancel", "Retour")}</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={mutation.isPending}
+                onClick={(event) => {
+                  event.preventDefault();
+                  mutation.mutate({ action: "cancel" });
+                }}
+                data-testid={`button-confirm-cancel-cycle-${cycle.id}`}
+              >
+                {mutation.isPending ? t("deleting", "Annulation…") : t("confirm", "Confirmer")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

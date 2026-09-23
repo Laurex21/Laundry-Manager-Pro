@@ -11,7 +11,9 @@ assert.match(routes, /COALESCE\(\(SELECT SUM\(weight_kg\).*production_cycle_orde
 assert.match(routes, /app\.delete\("\/api\/production-cycles\/:id"/);
 assert.match(routes, /status = 'preparing'/);
 assert.match(board, /button-cancel-cycle-/);
+assert.match(board, /button-confirm-cancel-cycle-/);
 assert.match(board, /action: "cancel"/);
 assert.match(board, /cancel_cycle_confirm/);
+assert.doesNotMatch(board, /window\.confirm/);
 
 console.log("machine cycle cancellation regression test passed");
