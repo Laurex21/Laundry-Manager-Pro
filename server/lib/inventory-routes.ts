@@ -21,6 +21,13 @@ const movementSchema = z.object({
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
+const productUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  unit: z.enum(["ml", "l", "g", "kg", "piece"]),
+  reorderLevel: z.coerce.number().min(0).max(1_000_000_000),
+  unitCost: z.coerce.number().min(0).max(1_000_000_000),
+});
+
 function siteScope(req: any): number[] { return Array.isArray(req.siteScope) ? req.siteScope.filter(Number.isInteger) : []; }
 
 function writeSiteId(req: any): number | null {
@@ -50,10 +57,38 @@ export function registerInventoryRoutes(app: Express) {
     const result = await pool.query(
       `SELECT p.*, (p.current_quantity <= p.reorder_level) AS "lowStock",
          (p.current_quantity * p.unit_cost)::text AS "stockValue"
-       FROM inventory_products p WHERE p.site_id = ANY($1::int[]) AND p.is_active = true
-       ORDER BY (p.current_quantity <= p.reorder_level) DESC, p.name`, [sites],
+       FROM inventory_products p WHERE p.site_id = ANY($1::int[])
+       ORDER BY p.is_active DESC, (p.current_quantity <= p.reorder_level) DESC, p.name`, [sites],
     );
     res.json(result.rows);
+  });
+
+  app.patch("/api/inventory/products/:id", isAuthenticated, async (req: any, res) => {
+    const productId = Number(req.params.id);
+    const parsed = productUpdateSchema.safeParse(req.body);
+    if (!Number.isInteger(productId) || !parsed.success) return res.status(400).json({ message: "Invalid product" });
+    const productResult = await pool.query(`SELECT * FROM inventory_products WHERE id=$1 AND site_id=ANY($2::int[])`, [productId, siteScope(req)]);
+    const product = productResult.rows[0];
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!(await requireManager(req, res, product.site_id))) return;
+    const result = await pool.query(
+      `UPDATE inventory_products SET name=$2, unit=$3, reorder_level=$4, unit_cost=$5, updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [productId, parsed.data.name, parsed.data.unit, parsed.data.reorderLevel, parsed.data.unitCost],
+    );
+    res.json(result.rows[0]);
+  });
+
+  app.post("/api/inventory/products/:id/status", isAuthenticated, async (req: any, res) => {
+    const productId = Number(req.params.id);
+    const parsed = z.object({ isActive: z.boolean() }).safeParse(req.body);
+    if (!Number.isInteger(productId) || !parsed.success) return res.status(400).json({ message: "Invalid product status" });
+    const productResult = await pool.query(`SELECT * FROM inventory_products WHERE id=$1 AND site_id=ANY($2::int[])`, [productId, siteScope(req)]);
+    const product = productResult.rows[0];
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!(await requireManager(req, res, product.site_id))) return;
+    const result = await pool.query(`UPDATE inventory_products SET is_active=$2, updated_at=NOW() WHERE id=$1 RETURNING *`, [productId, parsed.data.isActive]);
+    res.json(result.rows[0]);
   });
 
   app.post("/api/inventory/products", isAuthenticated, async (req: any, res) => {
@@ -85,6 +120,10 @@ export function registerInventoryRoutes(app: Express) {
       const role = await siteRole(req, product.site_id);
       if (!role || (parsed.data.movementType !== "consumption" && role === "operator")) {
         await client.query("ROLLBACK"); return res.status(403).json({ message: "Insufficient permissions" });
+      }
+      if (!product.is_active) { await client.query("ROLLBACK"); return res.status(409).json({ message: "Product is inactive" }); }
+      if (parsed.data.movementType === "adjustment" && parsed.data.notes.trim().length < 8) {
+        await client.query("ROLLBACK"); return res.status(400).json({ message: "Adjustment reason must contain at least 8 characters" });
       }
       if (parsed.data.productionCycleId) {
         const cycle = await client.query(`SELECT id FROM production_cycles WHERE id=$1 AND site_id=$2`, [parsed.data.productionCycleId, product.site_id]);
@@ -133,6 +172,23 @@ export function registerInventoryRoutes(app: Express) {
        WHERE im.site_id=ANY($1::int[])
        ORDER BY im.created_at DESC LIMIT $2`,
       [siteScope(req), limit],
+    );
+    res.json(result.rows);
+  });
+
+  app.get("/api/inventory/consumption-breakdown", isAuthenticated, async (req: any, res) => {
+    const result = await pool.query(
+      `SELECT im.product_id AS "productId", p.name AS "productName", p.unit,
+         im.production_cycle_id AS "productionCycleId",
+         COALESCE(SUM(ABS(im.quantity)),0)::text AS quantity,
+         COALESCE(SUM(ABS(im.quantity) * im.unit_cost),0)::text AS cost
+       FROM inventory_movements im
+       JOIN inventory_products p ON p.id=im.product_id
+       WHERE im.site_id=ANY($1::int[]) AND im.movement_type='consumption'
+         AND im.created_at >= date_trunc('month', NOW())
+       GROUP BY im.product_id, p.name, p.unit, im.production_cycle_id
+       ORDER BY SUM(ABS(im.quantity) * im.unit_cost) DESC`,
+      [siteScope(req)],
     );
     res.json(result.rows);
   });

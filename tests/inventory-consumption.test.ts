@@ -14,6 +14,10 @@ assert.match(routes, /movementType !== "consumption" && role === "operator"/, "o
 assert.match(routes, /production_cycle_id/, "consumption must support production-cycle attribution");
 assert.match(routes, /consumptionCostThisMonth/, "summary must expose monthly consumption cost");
 assert.match(routes, /\/api\/inventory\/movements/, "movement history must be queryable");
+assert.match(routes, /app\.patch\("\/api\/inventory\/products\/:id"/, "catalog products must be editable");
+assert.match(routes, /\/api\/inventory\/products\/:id\/status/, "catalog products must be deactivatable without deletion");
+assert.match(routes, /Adjustment reason must contain at least 8 characters/, "adjustments must require a reason");
+assert.match(routes, /\/api\/inventory\/consumption-breakdown/, "consumption costs must be grouped by product and cycle");
 assert.match(page, /inventory_recent_movements/, "inventory page must show the audit trail");
 assert.match(page, /\/api\/production-cycles/, "cycle selection must use real production cycles");
 assert.match(shell, /href: "\/inventory"/, "inventory must be reachable from navigation");
