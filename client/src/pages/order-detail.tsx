@@ -117,6 +117,7 @@ export default function OrderDetail() {
   const [stageDurationMinutes, setStageDurationMinutes] = useState("");
   const [mobileStagesOpen, setMobileStagesOpen] = useState(false);
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
+  const [isReviewingCancellation, setIsReviewingCancellation] = useState(false);
   const formatLocalDate = (date: Date | string, pattern: string) =>
     format(new Date(date), pattern, { locale: dateLocaleFor(i18n.language) });
 
@@ -345,31 +346,54 @@ export default function OrderDetail() {
   }
 
   async function handleApproveCancellation() {
+    if (isReviewingCancellation) return;
+    setIsReviewingCancellation(true);
     try {
       const res = await fetch(`/api/orders/${orderId}/approve-cancellation`, {
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
       });
-      if (res.ok) {
-        toast({ title: t("approve_cancellation"), description: t("order_cancelled_desc") });
-        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
-        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      }
-    } catch { toast({ title: t("error"), variant: "destructive" }); }
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(payload?.message || t("error"));
+      queryClient.setQueryData(["/api/orders/:id", orderId], (current: any) => ({ ...(current || {}), ...payload }));
+      toast({ title: t("approve_cancellation"), description: t("order_cancelled_desc") });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/customer-subscription-summaries"] }),
+        queryClient.invalidateQueries({ queryKey: ["subscription-dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] }),
+      ]);
+    } catch (error: any) {
+      toast({ title: t("error"), description: error?.message, variant: "destructive" });
+    } finally {
+      setIsReviewingCancellation(false);
+    }
   }
 
   async function handleRejectCancellation() {
+    if (isReviewingCancellation) return;
+    setIsReviewingCancellation(true);
     try {
       const res = await fetch(`/api/orders/${orderId}/reject-cancellation`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ note: rejectionNote }), credentials: "include",
       });
-      if (res.ok) {
-        toast({ title: t("reject_cancellation"), description: t("cancellation_rejected_desc") });
-        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
-        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-        setRejectDialogOpen(false); setRejectionNote("");
-      }
-    } catch { toast({ title: t("error"), variant: "destructive" }); }
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(payload?.message || t("error"));
+      queryClient.setQueryData(["/api/orders/:id", orderId], (current: any) => ({ ...(current || {}), ...payload }));
+      toast({ title: t("reject_cancellation"), description: t("cancellation_rejected_desc") });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] }),
+      ]);
+      setRejectDialogOpen(false);
+      setRejectionNote("");
+    } catch (error: any) {
+      toast({ title: t("error"), description: error?.message, variant: "destructive" });
+    } finally {
+      setIsReviewingCancellation(false);
+    }
   }
 
   async function handleMarkDelivered() {
@@ -576,8 +600,8 @@ export default function OrderDetail() {
           <div className="flex flex-col gap-2 mt-4 pt-4 border-t md:flex-row md:flex-wrap">
             {order.status === "cancellation_requested" && isManager ? (
               <>
-                <Button size="sm" variant="destructive" onClick={handleApproveCancellation} disabled={isUpdating} data-testid="button-approve-cancellation">
-                  <XCircle className="w-4 h-4 mr-1" /> {t("approve_cancellation")}
+                <Button size="sm" variant="destructive" onClick={handleApproveCancellation} disabled={isUpdating || isReviewingCancellation} data-testid="button-approve-cancellation">
+                  {isReviewingCancellation ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <XCircle className="w-4 h-4 mr-1" />} {t("approve_cancellation")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setRejectDialogOpen(true)} data-testid="button-reject-cancellation">
                   {t("reject_cancellation")}
