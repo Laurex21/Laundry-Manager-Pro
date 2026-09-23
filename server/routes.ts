@@ -17,6 +17,7 @@ import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboar
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
 import { recordSecurityAudit } from "./lib/security-audit";
 import { registerGarmentReturnRoutes } from "./lib/garment-return-routes";
+import { registerInventoryRoutes } from "./lib/inventory-routes";
 import { registerDailySiteReportRoutes } from "./lib/daily-site-report-routes";
 import { awardOrderPoints, awardReferralPoints } from "./lib/loyalty";
 import {
@@ -282,6 +283,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerRentabiliteRoutes(app);
   registerMembershipRoutes(app);
   registerGarmentReturnRoutes(app);
+  registerInventoryRoutes(app);
   registerDailySiteReportRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);

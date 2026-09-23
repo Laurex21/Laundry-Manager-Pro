@@ -14,6 +14,7 @@ async function main() {
   await runReviewedMigration(new URL("../migrations/20260916_garment_textile_reserve.sql", import.meta.url));
   await runReviewedMigration(new URL("../migrations/20260919_attendance_reliability.sql", import.meta.url));
   await runReviewedMigration(new URL("../migrations/20260922_quality_management_register.sql", import.meta.url));
+  await runReviewedMigration(new URL("../migrations/20260922_inventory_consumption.sql", import.meta.url));
   console.log("Reviewed application migrations completed.");
 }
 

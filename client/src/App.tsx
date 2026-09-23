@@ -30,6 +30,7 @@ const OrderDetail       = lazy(() => import("@/pages/order-detail"));
 const Pilotage          = lazy(() => import("@/pages/pilotage"));
 const Services          = lazy(() => import("@/pages/services"));
 const Expenses          = lazy(() => import("@/pages/expenses"));
+const Inventory         = lazy(() => import("@/pages/inventory"));
 const Payments          = lazy(() => import("@/pages/payments"));
 const Machines          = lazy(() => import("@/pages/machines"));
 const Employees         = lazy(() => import("@/pages/employees"));
@@ -214,6 +215,9 @@ function Router() {
         </Route>
         <Route path="/expenses">
           <ProtectedRoute component={Expenses} page="expenses" />
+        </Route>
+        <Route path="/inventory">
+          <ProtectedRoute component={Inventory} page="inventory" />
         </Route>
         <Route path="/payments">
           <ProtectedRoute component={Payments} page="payments" />

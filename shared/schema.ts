@@ -293,6 +293,34 @@ export const productionCycleOrders = pgTable("production_cycle_orders", {
   index("idx_production_cycle_orders_order").on(table.orderId),
 ]);
 
+export const inventoryProducts = pgTable("inventory_products", {
+  id: serial("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  unit: varchar("unit", { length: 20 }).notNull().default("ml"),
+  currentQuantity: decimal("current_quantity", { precision: 14, scale: 6 }).notNull().default("0"),
+  reorderLevel: decimal("reorder_level", { precision: 14, scale: 6 }).notNull().default("0"),
+  unitCost: decimal("unit_cost", { precision: 14, scale: 6 }).notNull().default("0"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const inventoryMovements = pgTable("inventory_movements", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => inventoryProducts.id),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+  siteId: integer("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  productionCycleId: integer("production_cycle_id").references(() => productionCycles.id, { onDelete: "set null" }),
+  movementType: varchar("movement_type", { length: 20 }).notNull(),
+  quantity: decimal("quantity", { precision: 14, scale: 6 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 14, scale: 6 }).notNull().default("0"),
+  notes: text("notes"),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const plans = pgTable("plans", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),

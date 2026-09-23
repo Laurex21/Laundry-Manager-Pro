@@ -8,8 +8,9 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight, ArrowLeft,
-  ListChecks, CircleHelp, Download,
+  ListChecks, CircleHelp, Download, Boxes,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
 import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
@@ -28,7 +29,10 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-const NAV_GROUPS = [
+type NavItem = { icon: LucideIcon; labelKey: string; href: string; page: string };
+type NavGroup = { key: string; fallback: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
   {
     key: "operations",
     fallback: "Operations",
@@ -55,6 +59,7 @@ const NAV_GROUPS = [
       { icon: TrendingUp, labelKey: "analytics", href: "/analytics", page: "analytics" },
       { icon: UserCheck, labelKey: "employees", href: "/employees", page: "employees" },
       { icon: DollarSign, labelKey: "expenses", href: "/expenses", page: "expenses" },
+      { icon: Boxes, labelKey: "inventory", href: "/inventory", page: "inventory" },
     ],
   },
   {
@@ -66,7 +71,7 @@ const NAV_GROUPS = [
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
   },
-] as const;
+];
 
 const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
 
@@ -91,6 +96,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/customers": "customers",
   "/services": "services",
   "/expenses": "expenses",
+  "/inventory": "inventory",
   "/payments": "payments",
   "/machines": "machines",
   "/employees": "employees",
@@ -102,7 +108,7 @@ const PAGE_TITLES: Record<string, string> = {
 
 const ROOT_APP_ROUTES = new Set([
   "/", "/dashboard", "/orders", "/pilotage", "/customers", "/services",
-  "/expenses", "/payments", "/machines", "/employees", "/analytics",
+  "/expenses", "/inventory", "/payments", "/machines", "/employees", "/analytics",
   "/subscriptions", "/membership-plans", "/settings",
 ]);
 
