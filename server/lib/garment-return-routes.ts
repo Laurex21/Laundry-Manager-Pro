@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
@@ -34,6 +34,12 @@ const createSchema = z.object({
 const decisionSchema = z.object({
   decision: z.enum(RETURN_DECISIONS),
   notes: z.string().trim().max(2_000).optional().default(""),
+  severity: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  rootCause: z.enum(["process", "machine", "product", "human", "customer", "unknown"]).nullish(),
+  responsibility: z.enum(["company", "customer", "shared", "supplier", "undetermined"]).nullish(),
+  estimatedCost: z.coerce.number().min(0).max(1_000_000_000).default(0),
+  correctiveAction: z.string().trim().max(2_000).optional().default(""),
+  correctiveActionDueAt: z.coerce.date().nullish(),
 });
 
 const transitionSchema = z.object({
@@ -187,6 +193,31 @@ export function registerGarmentReturnRoutes(app: Express) {
     res.json(await detailedCases(and(...clauses)));
   });
 
+  app.get("/api/garment-returns/summary", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req);
+    let siteIds = allowedSites(req);
+    if (!organisationId || !siteIds.length) return res.json({ openCases: 0, averageResolutionHours: null, estimatedCost: 0, overdueActions: 0, topCauses: [] });
+    const siteId = Number(req.query.siteId);
+    if (Number.isInteger(siteId)) siteIds = siteIds.includes(siteId) ? [siteId] : [];
+    if (!siteIds.length) return res.status(403).json({ message: "Site not authorised" });
+    const rows = await db.select({
+      openCases: sql<number>`COUNT(*) FILTER (WHERE ${garmentReturnCases.status} NOT IN ('rejected', 'resolved'))::int`,
+      averageResolutionHours: sql<number | null>`AVG(EXTRACT(EPOCH FROM (${garmentReturnCases.resolvedAt} - ${garmentReturnCases.returnedAt})) / 3600) FILTER (WHERE ${garmentReturnCases.resolvedAt} IS NOT NULL)`,
+      estimatedCost: sql<string>`COALESCE(SUM(${garmentReturnCases.estimatedCost}), 0)::text`,
+      overdueActions: sql<number>`COUNT(*) FILTER (WHERE ${garmentReturnCases.correctiveAction} IS NOT NULL AND ${garmentReturnCases.correctiveActionCompletedAt} IS NULL AND ${garmentReturnCases.correctiveActionDueAt} < NOW())::int`,
+    }).from(garmentReturnCases).where(and(
+      eq(garmentReturnCases.organisationId, organisationId),
+      inArray(garmentReturnCases.siteId, siteIds),
+    ));
+    const causes = await db.select({ rootCause: garmentReturnCases.rootCause, count: sql<number>`COUNT(*)::int` })
+      .from(garmentReturnCases).where(and(
+        eq(garmentReturnCases.organisationId, organisationId),
+        inArray(garmentReturnCases.siteId, siteIds),
+        sql`${garmentReturnCases.rootCause} IS NOT NULL`,
+      )).groupBy(garmentReturnCases.rootCause).orderBy(desc(sql`COUNT(*)`)).limit(5);
+    res.json({ ...rows[0], topCauses: causes });
+  });
+
   app.post("/api/garment-returns/:id/decision", isAuthenticated, async (req: any, res) => {
     const organisationId = await organisationIdFor(req);
     const id = Number(req.params.id);
@@ -198,6 +229,8 @@ export function registerGarmentReturnRoutes(app: Express) {
     if (!(await requireManagerOrOwner(req, res, organisationId, current.siteId))) return;
     if (current.status !== "pending_review") return res.status(409).json({ message: "This return has already been reviewed" });
     if (requiresDecisionJustification(parsed.data.decision) && parsed.data.notes.length < 3) return res.status(400).json({ message: "A justification is required for this decision" });
+    if (["high", "critical"].includes(parsed.data.severity) && parsed.data.notes.length < 8) return res.status(400).json({ message: "A detailed justification is required for a high-severity case" });
+    if (parsed.data.correctiveAction && !parsed.data.correctiveActionDueAt) return res.status(400).json({ message: "A corrective action requires a due date" });
     const toStatus = parsed.data.decision === "reject" ? "rejected" : "approved";
     const result = await db.transaction(async (tx) => {
       const [updated] = await tx.update(garmentReturnCases).set({
@@ -205,6 +238,12 @@ export function registerGarmentReturnRoutes(app: Express) {
         decision: parsed.data.decision,
         assignedStage: assignedStageForDecision(parsed.data.decision),
         decisionNotes: parsed.data.notes || null,
+        severity: parsed.data.severity,
+        rootCause: parsed.data.rootCause || null,
+        responsibility: parsed.data.responsibility || null,
+        estimatedCost: String(parsed.data.estimatedCost),
+        correctiveAction: parsed.data.correctiveAction || null,
+        correctiveActionDueAt: parsed.data.correctiveActionDueAt || null,
         decidedByUserId: req.userId,
         decidedAt: new Date(),
         updatedAt: new Date(),

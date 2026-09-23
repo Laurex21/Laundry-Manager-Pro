@@ -2,18 +2,20 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, FileText, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronRight, Clock3, FileText, RotateCcw, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { useAuth } from "@/hooks/use-auth";
+import { useCurrency } from "@/hooks/use-currency";
 
 const STATUSES = ["all", "pending_review", "approved", "in_rework", "quality_check", "rejected", "resolved"] as const;
 
 export default function QualityOperations({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
   const { currentSite } = useAuth();
+  const currencySymbol = useCurrency((state) => state.getSymbol());
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("all");
   const { data = [], isLoading, isError } = useQuery<any[]>({
     queryKey: ["/api/garment-returns", currentSite?.id ?? "all", status],
@@ -26,6 +28,11 @@ export default function QualityOperations({ embedded = false }: { embedded?: boo
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
+  const { data: summary } = useQuery<any>({ queryKey: ["/api/garment-returns/summary", currentSite?.id ?? "all"], queryFn: async () => {
+    const response = await fetch("/api/garment-returns/summary", { credentials: "include" });
+    if (!response.ok) throw new Error("Unable to load quality summary");
+    return response.json();
+  }});
 
   return <div className="space-y-4 page-fade-in">
     {!embedded && <div className="flex items-start justify-between gap-3">
@@ -44,6 +51,13 @@ export default function QualityOperations({ embedded = false }: { embedded?: boo
       >
         {value === "all" ? t("quality_operations_all") : t(`customer_return_status_${value}`)}
       </button>)}
+    </div>
+
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="quality-management-summary">
+      <QualityMetric icon={<RotateCcw />} label={t("quality_open_cases", "Dossiers ouverts")} value={summary?.openCases ?? 0} />
+      <QualityMetric icon={<Clock3 />} label={t("quality_resolution_time", "Délai moyen de résolution")} value={summary?.averageResolutionHours == null ? "—" : `${Number(summary.averageResolutionHours).toFixed(1)} h`} />
+      <QualityMetric icon={<Wallet />} label={t("quality_estimated_cost", "Coût estimé")} value={`${Number(summary?.estimatedCost || 0).toLocaleString()} ${currencySymbol}`} />
+      <QualityMetric icon={<AlertTriangle />} label={t("quality_overdue_actions", "Actions en retard")} value={summary?.overdueActions ?? 0} danger={Number(summary?.overdueActions || 0) > 0} />
     </div>
 
     {isLoading ? <div className="space-y-2"><Skeleton className="h-28" /><Skeleton className="h-28" /></div> : null}
@@ -75,4 +89,8 @@ export default function QualityOperations({ embedded = false }: { embedded?: boo
       </Link>)}
     </div>
   </div>;
+}
+
+function QualityMetric({ icon, label, value, danger = false }: { icon: React.ReactNode; label: string; value: React.ReactNode; danger?: boolean }) {
+  return <Card><CardContent className="flex items-center gap-3 p-4"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${danger ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"}`}>{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><p className={`text-xl font-bold ${danger ? "text-red-700" : "text-[#082D5B]"}`}>{value}</p></div></CardContent></Card>;
 }

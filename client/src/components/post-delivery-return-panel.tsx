@@ -31,6 +31,12 @@ function ReturnCaseCard({ row, isManager, invalidate }: { row: any; isManager: b
   const { toast } = useToast();
   const [decision, setDecision] = useState("rewash");
   const [notes, setNotes] = useState("");
+  const [severity, setSeverity] = useState("medium");
+  const [rootCause, setRootCause] = useState("unknown");
+  const [responsibility, setResponsibility] = useState("undetermined");
+  const [estimatedCost, setEstimatedCost] = useState("0");
+  const [correctiveAction, setCorrectiveAction] = useState("");
+  const [correctiveDueAt, setCorrectiveDueAt] = useState("");
   const status = row.returnCase.status;
   const nextStatus = NEXT_STATUS[status];
   const mutate = useMutation({
@@ -72,12 +78,22 @@ function ReturnCaseCard({ row, isManager, invalidate }: { row: any; isManager: b
               <SelectContent>{DECISIONS.map((value) => <SelectItem key={value} value={value}>{t(`customer_return_decision_${value}`)}</SelectItem>)}</SelectContent>
             </Select>
           </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5"><Label>{t("quality_severity", "Gravité")}</Label><Select value={severity} onValueChange={setSeverity}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["low", "medium", "high", "critical"].map((value) => <SelectItem key={value} value={value}>{t(`quality_severity_${value}`, value)}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>{t("quality_root_cause", "Cause racine")}</Label><Select value={rootCause} onValueChange={setRootCause}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["process", "machine", "product", "human", "customer", "unknown"].map((value) => <SelectItem key={value} value={value}>{t(`quality_root_cause_${value}`, value)}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>{t("quality_responsibility", "Responsabilité")}</Label><Select value={responsibility} onValueChange={setResponsibility}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["company", "customer", "shared", "supplier", "undetermined"].map((value) => <SelectItem key={value} value={value}>{t(`quality_responsibility_${value}`, value)}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5"><Label htmlFor={`quality-cost-${row.returnCase.id}`}>{t("quality_estimated_cost", "Coût estimé")}</Label><Input id={`quality-cost-${row.returnCase.id}`} type="number" min="0" step="0.01" value={estimatedCost} onChange={(event) => setEstimatedCost(event.target.value)} /></div>
+            <div className="space-y-1.5"><Label htmlFor={`quality-due-${row.returnCase.id}`}>{t("quality_corrective_due", "Échéance corrective")}</Label><Input id={`quality-due-${row.returnCase.id}`} type="datetime-local" value={correctiveDueAt} onChange={(event) => setCorrectiveDueAt(event.target.value)} /></div>
+          </div>
+          <div className="space-y-1.5"><Label htmlFor={`quality-action-${row.returnCase.id}`}>{t("quality_corrective_action", "Action corrective")}</Label><Textarea id={`quality-action-${row.returnCase.id}`} value={correctiveAction} onChange={(event) => setCorrectiveAction(event.target.value)} /></div>
           <div className="space-y-1.5">
             <Label htmlFor={`decision-notes-${row.returnCase.id}`}>{t("customer_return_decision_notes")}</Label>
             <Textarea id={`decision-notes-${row.returnCase.id}`} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
           {["credit", "refund"].includes(decision) && <p className="text-xs text-amber-700 dark:text-amber-300">{t("customer_return_financial_notice")}</p>}
-          <Button type="button" onClick={() => mutate.mutate({ endpoint: `/api/garment-returns/${row.returnCase.id}/decision`, body: { decision, notes } })} disabled={mutate.isPending}>
+          <Button type="button" onClick={() => mutate.mutate({ endpoint: `/api/garment-returns/${row.returnCase.id}/decision`, body: { decision, notes, severity, rootCause, responsibility, estimatedCost: Number(estimatedCost || 0), correctiveAction, correctiveActionDueAt: correctiveDueAt || null } })} disabled={mutate.isPending}>
             {mutate.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}{t("customer_return_confirm_decision")}
           </Button>
         </fieldset>
