@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -7,7 +7,9 @@ import {
   BarChart3,
   Building2,
   CalendarClock,
+  CircleDollarSign,
   CreditCard,
+  FileClock,
   Loader2,
   LockKeyhole,
   LogOut,
@@ -65,6 +67,36 @@ type AuditEvent = {
   targetType: string;
   targetId: string | null;
   createdAt: string;
+};
+
+type OrganisationDetail = {
+  id: number;
+  name: string;
+  createdAt: string;
+  owner: Subscriber["owner"];
+  subscription: (NonNullable<Subscriber["subscription"]> & {
+    id: number;
+    ordersUsed: number;
+    planPrice: number;
+  }) | null;
+  footprint: {
+    sites: Array<{ id: number; name: string; city: string | null; active: boolean; createdAt: string }>;
+    roles: Array<{ role: string; count: number }>;
+  };
+  usage: {
+    orderCount: number;
+    ordersLast30Days: number;
+    revenueLast30Days: number;
+    lastOrderAt: string | null;
+    customerCount: number;
+    customersLast30Days: number;
+  };
+  billing: {
+    completedRevenue: number;
+    successfulPaymentCount: number;
+    payments: Array<{ id: number; amount: number; method: string; status: string; createdAt: string; planName: string }>;
+  };
+  audit: Array<{ id: number; action: string; targetType: string; targetId: string | null; actorEmail: string | null; createdAt: string }>;
 };
 
 type AdminStatus = {
@@ -424,7 +456,82 @@ function OrganisationDirectory({ loading, error, organisations, search, setSearc
 
 function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
   const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner";
-  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" onClick={close}><aside className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">Organisation detail</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div><Button variant="ghost" onClick={close}>Close</Button></div><div className="space-y-6 p-6"><section className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-4"><Store className="h-4 w-4 text-slate-500"/><p className="mt-3 text-2xl font-bold">{subscriber.siteCount}</p><p className="text-xs text-slate-500">Active sites</p></div><div className="rounded-xl bg-slate-50 p-4"><Users className="h-4 w-4 text-slate-500"/><p className="mt-3 text-2xl font-bold">{subscriber.staffCount}</p><p className="text-xs text-slate-500">Staff accounts</p></div></section><section><h3 className="font-semibold">Owner</h3><div className="mt-3 rounded-xl border border-slate-200 p-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-sm text-slate-500">{subscriber.owner.email || "No email"}</p><p className="mt-1 text-sm text-slate-500">{subscriber.owner.phone || "No phone"}</p></div></section><section><h3 className="font-semibold">Subscription</h3><div className="mt-3 rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || "No plan"}</Badge><span className="text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</span></div><dl className="mt-4 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-slate-500">Started</dt><dd className="mt-1 font-medium">{formatDate(subscriber.subscription?.startDate)}</dd></div><div><dt className="text-slate-500">Renews / ends</dt><dd className="mt-1 font-medium">{formatDate(subscriber.subscription?.endDate)}</dd></div></dl></div></section><section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">Read-only boundary</p><p className="mt-1 text-sm text-cyan-800">This view deliberately exposes no plan, suspension or user-management actions until audited write APIs and approval rules are implemented.</p></section></div></aside></div>;
+  const detail = useQuery<OrganisationDetail>({
+    queryKey: ["/api/platform-admin/organisations", subscriber.id],
+    queryFn: () => apiJson(`/api/platform-admin/organisations/${subscriber.id}`),
+  });
+
+  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" onClick={close}>
+    <aside className="h-full w-full max-w-4xl overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">Organisation workspace · read-only</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div>
+        <Button variant="ghost" onClick={close}>Close</Button>
+      </div>
+
+      {detail.isLoading && <div className="grid min-h-[420px] place-items-center text-slate-500"><div className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/><p className="mt-3 text-sm">Loading organisation workspace</p></div></div>}
+      {detail.error && <div className="m-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{detail.error.message}</div>}
+      {detail.data && <div className="space-y-6 p-5 sm:p-7">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <PanelMetric icon={Store} label="Active sites" value={detail.data.footprint.sites.filter((site) => site.active).length} />
+          <PanelMetric icon={Users} label="User accounts" value={detail.data.footprint.roles.reduce((total, role) => total + role.count, 0)} />
+          <PanelMetric icon={Activity} label="Orders · 30 days" value={detail.data.usage.ordersLast30Days} />
+          <PanelMetric icon={CircleDollarSign} label="Operational receipts · 30 days" value={formatMoney(detail.data.usage.revenueLast30Days)} />
+        </section>
+
+        <Tabs defaultValue="summary">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <TabsTrigger value="summary">Summary</TabsTrigger><TabsTrigger value="subscription">Subscription</TabsTrigger><TabsTrigger value="sites">Sites</TabsTrigger><TabsTrigger value="users">Users</TabsTrigger><TabsTrigger value="payments">Payments</TabsTrigger><TabsTrigger value="audit">Audit</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="summary" className="mt-5 space-y-5">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <PanelSection title="Owner and account">
+                <p className="font-semibold">{ownerName}</p><p className="mt-1 text-sm text-slate-500">{detail.data.owner.email || "No email"}</p><p className="mt-1 text-sm text-slate-500">{detail.data.owner.phone || "No phone"}</p><p className="mt-4 text-xs text-slate-400">Organisation created {formatDate(detail.data.createdAt)}</p>
+              </PanelSection>
+              <PanelSection title="Activity snapshot">
+                <dl className="grid grid-cols-2 gap-4 text-sm"><PanelDatum label="All orders" value={detail.data.usage.orderCount}/><PanelDatum label="Last order" value={formatDate(detail.data.usage.lastOrderAt)}/><PanelDatum label="Customers" value={detail.data.usage.customerCount}/><PanelDatum label="New customers · 30 days" value={detail.data.usage.customersLast30Days}/></dl>
+              </PanelSection>
+            </div>
+            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">Read-only boundary</p><p className="mt-1 text-sm text-cyan-800">This workspace exposes operational evidence without plan changes, suspensions, impersonation or user-management actions.</p></section>
+          </TabsContent>
+
+          <TabsContent value="subscription" className="mt-5">
+            <PanelSection title="Current subscription">
+              <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || "No plan"}</Badge><span className="text-sm capitalize text-slate-500">{detail.data.subscription?.status || "inactive"}</span></div>
+              <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label="Plan price" value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label="Orders used" value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label="Started" value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label="Renews / ends" value={formatDate(detail.data.subscription?.endDate)}/></dl>
+            </PanelSection>
+          </TabsContent>
+
+          <TabsContent value="sites" className="mt-5"><PanelSection title={`Sites (${detail.data.footprint.sites.length})`}><div className="divide-y divide-slate-100">{detail.data.footprint.sites.map((site) => <div key={site.id} className="flex items-center justify-between gap-4 py-3"><div><p className="font-medium">{site.name}</p><p className="text-xs text-slate-500">{site.city || "City not set"} · Added {formatDate(site.createdAt)}</p></div><Badge variant="outline" className={site.active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>{site.active ? "Active" : "Inactive"}</Badge></div>)}{!detail.data.footprint.sites.length && <EmptyPanel text="No sites registered."/>}</div></PanelSection></TabsContent>
+
+          <TabsContent value="users" className="mt-5"><PanelSection title="Accounts by role"><div className="grid gap-3 sm:grid-cols-2">{detail.data.footprint.roles.map((role) => <div key={role.role} className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="font-medium capitalize">{role.role.replaceAll("_", " ")}</span><strong>{role.count}</strong></div>)}{!detail.data.footprint.roles.length && <EmptyPanel text="No user accounts registered."/>}</div><p className="mt-5 text-xs text-slate-400">Only aggregate role counts are shown to minimise unnecessary exposure of personal data.</p></PanelSection></TabsContent>
+
+          <TabsContent value="payments" className="mt-5 space-y-5">
+            <section className="grid gap-3 sm:grid-cols-2"><PanelMetric icon={CircleDollarSign} label="Completed subscription revenue" value={formatMoney(detail.data.billing.completedRevenue)}/><PanelMetric icon={CreditCard} label="Successful payments shown" value={detail.data.billing.successfulPaymentCount}/></section>
+            <PanelSection title="Recent subscription payments"><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={payment.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{payment.planName}</p><p className="text-xs text-slate-500">{payment.method} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{payment.status}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text="No subscription payment recorded."/>}</div></PanelSection>
+          </TabsContent>
+
+          <TabsContent value="audit" className="mt-5"><PanelSection title="Organisation audit activity"><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{event.action.replaceAll(".", " ")}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || "System"}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text="No audited organisation activity yet."/>}</div></PanelSection></TabsContent>
+        </Tabs>
+      </div>}
+    </aside>
+  </div>;
+}
+
+function PanelMetric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string | number }) {
+  return <div className="rounded-xl border border-slate-200 bg-white p-4"><Icon className="h-4 w-4 text-cyan-700"/><p className="mt-3 break-words text-xl font-bold text-slate-950">{value}</p><p className="mt-1 text-xs text-slate-500">{label}</p></div>;
+}
+
+function PanelSection({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-semibold">{title}</h3><div className="mt-4">{children}</div></section>;
+}
+
+function PanelDatum({ label, value }: { label: string; value: string | number }) {
+  return <div><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-950">{value}</dd></div>;
+}
+
+function EmptyPanel({ text }: { text: string }) {
+  return <div className="py-8 text-center text-sm text-slate-500"><FileClock className="mx-auto mb-2 h-5 w-5 text-slate-400"/>{text}</div>;
 }
 
 export default function PlatformAdminPage() {
