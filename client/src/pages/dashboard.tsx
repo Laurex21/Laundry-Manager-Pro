@@ -174,11 +174,13 @@ export default function Dashboard() {
             };
             const s = styles[alert.type] || styles.info;
             const Icon = s.icon;
+            const message = t(alert.messageKey, alert.params);
+            const detail = alert.detailKey ? t(alert.detailKey, alert.params) : null;
             return (
               <div key={i} className={`flex items-center gap-3 px-3.5 py-2 rounded-lg border text-sm ${s.bg}`} data-testid={`alert-banner-${i}`}>
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                <span className="font-medium">{t(alert.messageKey, alert.params)}</span>
-                {alert.detailKey && <span className="ml-1 opacity-75">{t(alert.detailKey, alert.params)}</span>}
+                <span className="font-medium">{typeof message === "string" ? message : alert.messageKey}</span>
+                {detail !== null && <span className="ml-1 opacity-75">{typeof detail === "string" ? detail : alert.detailKey}</span>}
               </div>
             );
           })}

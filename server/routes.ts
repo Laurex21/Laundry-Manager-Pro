@@ -14,7 +14,7 @@ import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
 import { restoreSubscriptionUsageForCancelledOrder } from "./lib/membership-routes";
 import { addDecimals, compareDecimals, isIntegerDecimal, multiplyDecimal, normalizeDecimalInput } from "@shared/exact-decimal";
-import { registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
+import { invalidateSubscriptionDashboard, registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
 import { recordSecurityAudit } from "./lib/security-audit";
 import { registerGarmentReturnRoutes } from "./lib/garment-return-routes";
