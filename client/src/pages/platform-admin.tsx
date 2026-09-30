@@ -2,6 +2,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Activity,
+  AlertTriangle,
+  ArrowRight,
+  BarChart3,
   Building2,
   CalendarClock,
   CreditCard,
@@ -20,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Overview = {
   organisationCount: number;
@@ -298,10 +302,28 @@ function MetricCard({ label, value, icon: Icon }: { label: string; value: string
   );
 }
 
+function statusTone(status: string | undefined) {
+  if (status === "active") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "trial") return "border-cyan-200 bg-cyan-50 text-cyan-700";
+  if (status === "expired" || status === "cancelled") return "border-red-200 bg-red-50 text-red-700";
+  return "border-amber-200 bg-amber-50 text-amber-700";
+}
+
+function subscriptionSegment(subscriber: Subscriber) {
+  if (!subscriber.subscription) return "no-plan";
+  if (subscriber.subscription.status === "active" && subscriber.subscription.endDate) {
+    const days = (new Date(subscriber.subscription.endDate).getTime() - Date.now()) / 86_400_000;
+    if (days >= 0 && days <= 14) return "expiring";
+  }
+  return subscriber.subscription.status;
+}
+
 function AdminDashboard() {
   const { logout } = useAuth();
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [segment, setSegment] = useState("all");
+  const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
 
   const overview = useQuery<Overview>({
     queryKey: ["/api/platform-admin/overview"],
@@ -309,175 +331,100 @@ function AdminDashboard() {
   });
   const subscribers = useQuery<Subscriber[]>({
     queryKey: ["/api/platform-admin/subscribers", searchTerm],
-    queryFn: () => apiJson(`/api/platform-admin/subscribers?search=${encodeURIComponent(searchTerm)}`),
+    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=200&search=${encodeURIComponent(searchTerm)}`),
   });
   const auditEvents = useQuery<AuditEvent[]>({
     queryKey: ["/api/platform-admin/audit-events"],
-    queryFn: () => apiJson("/api/platform-admin/audit-events?limit=8"),
+    queryFn: () => apiJson("/api/platform-admin/audit-events?limit=12"),
   });
 
   const metrics = overview.data;
+  const organisations = subscribers.data ?? [];
+  const filteredOrganisations = organisations.filter((subscriber) => segment === "all" || subscriptionSegment(subscriber) === segment);
+  const payingRate = metrics?.organisationCount ? Math.round((metrics.activeSubscriptionCount / metrics.organisationCount) * 100) : 0;
+  const noPlanCount = organisations.filter((item) => !item.subscription).length;
+  const riskCount = noPlanCount + (metrics?.expiringSoonCount ?? 0);
   const loading = overview.isLoading || subscribers.isLoading;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-[1560px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-slate-950 text-cyan-300 grid place-items-center">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="font-display font-bold leading-tight">XpressPro Control</p>
-              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">Platform administration</p>
-            </div>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-cyan-300"><ShieldCheck className="h-5 w-5" /></div>
+            <div><p className="font-display font-bold leading-tight">XpressPro Control</p><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">Platform administration</p></div>
           </div>
           <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9 border border-slate-200">
-              <AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback>
-            </Avatar>
-            <Button variant="ghost" size="icon" onClick={() => logout()} aria-label="Sign out">
-              <LogOut className="h-4 w-4" />
-            </Button>
+            <Badge variant="outline" className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 sm:flex"><span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />Read-only controls</Badge>
+            <Avatar className="h-9 w-9 border border-slate-200"><AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback></Avatar>
+            <Button variant="ghost" size="icon" onClick={() => logout()} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1500px] px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-cyan-700">Platform overview</p>
-            <h1 className="font-display text-3xl font-bold tracking-tight mt-1">Subscriber operations</h1>
-            <p className="text-slate-500 mt-2">Monitor organisations, subscriptions, and security activity.</p>
-          </div>
-          <Badge variant="outline" className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700">
-            <span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Read-only administration
-          </Badge>
+      <main className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div><p className="text-sm font-semibold text-cyan-700">Executive control centre</p><h1 className="mt-1 font-display text-3xl font-bold tracking-tight">Platform health and subscriber growth</h1><p className="mt-2 max-w-2xl text-slate-500">Focus on revenue, activation risk, renewals and audited platform activity.</p></div>
+          <div className="grid grid-cols-2 gap-2 sm:flex"><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Paying rate</p><p className="font-bold">{payingRate}%</p></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Attention needed</p><p className="font-bold text-amber-700">{riskCount}</p></div></div>
         </div>
 
-        {overview.error && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
-            {overview.error.message}
-          </p>
-        )}
+        {overview.error && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{overview.error.message}</p>}
 
-        <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Subscriber organisations" value={metrics?.organisationCount ?? "—"} icon={Building2} />
-          <MetricCard label="Active sites" value={metrics?.activeSiteCount ?? "—"} icon={Store} />
-          <MetricCard label="Active subscriptions" value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
-          <MetricCard label="Subscription revenue this month" value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
-          <MetricCard label="Platform users" value={metrics?.userCount ?? "—"} icon={Users} />
-          <MetricCard label="Staff accounts" value={metrics?.staffCount ?? "—"} icon={Users} />
-          <MetricCard label="Expiring in 14 days" value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
-        </section>
+        <Tabs defaultValue="overview" className="mt-7">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
+            <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />Overview</TabsTrigger>
+            <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />Organisations</TabsTrigger>
+            <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />Security</TabsTrigger>
+          </TabsList>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-          <Card className="border-slate-200/80 shadow-sm overflow-hidden">
-            <CardHeader className="border-b border-slate-100">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <CardTitle className="text-lg">Subscribers</CardTitle>
-                  <p className="mt-1 text-sm text-slate-500">Organisation owners and current subscription status</p>
-                </div>
-                <form
-                  className="relative w-full md:w-80"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    setSearchTerm(search.trim());
-                  }}
-                >
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    className="pl-9"
-                    placeholder="Search business or owner"
-                    aria-label="Search subscribers"
-                  />
-                </form>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-sm">
-                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-5 py-3 font-semibold">Organisation</th>
-                      <th className="px-5 py-3 font-semibold">Owner</th>
-                      <th className="px-5 py-3 font-semibold">Plan</th>
-                      <th className="px-5 py-3 font-semibold">Sites / staff</th>
-                      <th className="px-5 py-3 font-semibold">Renewal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {loading && (
-                      <tr><td colSpan={5} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Loading subscribers</td></tr>
-                    )}
-                    {!loading && subscribers.error && (
-                      <tr><td colSpan={5} className="px-5 py-10 text-center text-red-600">{subscribers.error.message}</td></tr>
-                    )}
-                    {!loading && !subscribers.error && subscribers.data?.length === 0 && (
-                      <tr><td colSpan={5} className="px-5 py-12 text-center text-slate-500">No subscribers found.</td></tr>
-                    )}
-                    {!loading && subscribers.data?.map((subscriber) => {
-                      const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner";
-                      return (
-                        <tr key={subscriber.id} className="hover:bg-slate-50/80">
-                          <td className="px-5 py-4">
-                            <p className="font-semibold text-slate-900">{subscriber.name}</p>
-                            <p className="mt-1 text-xs text-slate-500">Joined {formatDate(subscriber.createdAt)}</p>
-                          </td>
-                          <td className="px-5 py-4">
-                            <p className="font-medium">{ownerName}</p>
-                            <p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || "No email"}</p>
-                          </td>
-                          <td className="px-5 py-4">
-                            <Badge variant="outline" className="capitalize">
-                              {subscriber.subscription?.planName || "No plan"}
-                            </Badge>
-                            <p className="mt-1 text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</p>
-                          </td>
-                          <td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td>
-                          <td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <TabsContent value="overview" className="mt-5 space-y-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard label="Monthly subscription revenue" value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
+              <MetricCard label="Active subscriptions" value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
+              <MetricCard label="Subscriber organisations" value={metrics?.organisationCount ?? "—"} icon={Building2} />
+              <MetricCard label="Renewals due in 14 days" value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
+            </section>
 
-          <Card className="border-slate-200/80 shadow-sm h-fit">
-            <CardHeader>
-              <CardTitle className="text-lg">Recent security activity</CardTitle>
-              <p className="text-sm text-slate-500">Latest audited actions across organisations</p>
-            </CardHeader>
-            <CardContent>
-              {auditEvents.isLoading && <Loader2 className="h-5 w-5 animate-spin text-slate-400" />}
-              {auditEvents.error && <p className="text-sm text-red-600">{auditEvents.error.message}</p>}
-              <div className="space-y-5">
-                {auditEvents.data?.map((event) => (
-                  <div key={event.id} className="relative pl-6">
-                    <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-cyan-500 ring-4 ring-cyan-50" />
-                    <p className="text-sm font-semibold text-slate-800">{event.action.replaceAll(".", " ")}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {event.organisationName || event.targetType} · {event.actorEmail || "System"}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-400">{formatDate(event.createdAt)}</p>
-                  </div>
-                ))}
-                {!auditEvents.isLoading && auditEvents.data?.length === 0 && (
-                  <p className="text-sm text-slate-500">No audited activity yet.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+              <Card className="border-slate-200/80 shadow-sm">
+                <CardHeader><CardTitle className="text-lg">Activation snapshot</CardTitle><p className="text-sm text-slate-500">Separate registered organisations from organisations that currently pay.</p></CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-xl bg-slate-950 p-5 text-white"><p className="text-sm text-slate-400">Registered</p><p className="mt-2 text-3xl font-bold">{metrics?.organisationCount ?? "—"}</p><p className="mt-2 text-xs text-slate-400">All organisations created</p></div>
+                  <div className="rounded-xl bg-emerald-50 p-5"><p className="text-sm text-emerald-700">Paying</p><p className="mt-2 text-3xl font-bold text-emerald-950">{metrics?.activeSubscriptionCount ?? "—"}</p><p className="mt-2 text-xs text-emerald-700">{payingRate}% of registered</p></div>
+                  <div className="rounded-xl bg-amber-50 p-5"><p className="text-sm text-amber-700">Without plan</p><p className="mt-2 text-3xl font-bold text-amber-950">{noPlanCount}</p><p className="mt-2 text-xs text-amber-700">Requires activation review</p></div>
+                </CardContent>
+              </Card>
+              <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
+                <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5 text-amber-600" />Priority queue</CardTitle></CardHeader>
+                <CardContent className="space-y-3 text-sm"><div className="flex items-center justify-between"><span>Expiring within 14 days</span><strong>{metrics?.expiringSoonCount ?? "—"}</strong></div><div className="flex items-center justify-between"><span>Organisations without plan</span><strong>{noPlanCount}</strong></div><div className="flex items-center justify-between"><span>Active sites</span><strong>{metrics?.activeSiteCount ?? "—"}</strong></div></CardContent>
+              </Card>
+            </section>
+
+            <OrganisationDirectory loading={loading} error={subscribers.error as Error | null} organisations={organisations.slice(0, 8)} search={search} setSearch={setSearch} submitSearch={() => setSearchTerm(search.trim())} segment="all" setSegment={() => {}} select={setSelectedSubscriber} compact />
+          </TabsContent>
+
+          <TabsContent value="organisations" className="mt-5">
+            <OrganisationDirectory loading={loading} error={subscribers.error as Error | null} organisations={filteredOrganisations} search={search} setSearch={setSearch} submitSearch={() => setSearchTerm(search.trim())} segment={segment} setSegment={setSegment} select={setSelectedSubscriber} />
+          </TabsContent>
+
+          <TabsContent value="security" className="mt-5">
+            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>Security and audit activity</CardTitle><p className="text-sm text-slate-500">Latest audited actions across organisations. Administration remains read-only.</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{event.action.replaceAll(".", " ")}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || "Platform"}<br/><span className="text-xs text-slate-400">{event.actorEmail || "System"}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">No audited activity yet.</p>}</CardContent></Card>
+          </TabsContent>
+        </Tabs>
       </main>
+
+      {selectedSubscriber && <OrganisationPanel subscriber={selectedSubscriber} close={() => setSelectedSubscriber(null)} />}
     </div>
   );
+}
+
+function OrganisationDirectory({ loading, error, organisations, search, setSearch, submitSearch, segment, setSegment, select, compact = false }: { loading: boolean; error: Error | null; organisations: Subscriber[]; search: string; setSearch: (value: string) => void; submitSearch: () => void; segment: string; setSegment: (value: string) => void; select: (subscriber: Subscriber) => void; compact?: boolean }) {
+  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? "Organisations requiring attention" : "Organisation directory"}</CardTitle><p className="mt-1 text-sm text-slate-500">Owner, plan, footprint and renewal status in one place.</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search business or owner" /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="trial">Trial</option><option value="expiring">Expiring soon</option><option value="no-plan">No plan</option><option value="expired">Expired</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Organisation</th><th className="px-5 py-3">Owner</th><th className="px-5 py-3">Plan / status</th><th className="px-5 py-3">Sites / staff</th><th className="px-5 py-3">Renewal</th><th className="px-5 py-3 text-right">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Loading organisations</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">No organisations match these filters.</td></tr>}{!loading && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner"; return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">Joined {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || "No email"}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || "No plan"}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>View <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div></CardContent></Card>;
+}
+
+function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
+  const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner";
+  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" onClick={close}><aside className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">Organisation detail</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div><Button variant="ghost" onClick={close}>Close</Button></div><div className="space-y-6 p-6"><section className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-4"><Store className="h-4 w-4 text-slate-500"/><p className="mt-3 text-2xl font-bold">{subscriber.siteCount}</p><p className="text-xs text-slate-500">Active sites</p></div><div className="rounded-xl bg-slate-50 p-4"><Users className="h-4 w-4 text-slate-500"/><p className="mt-3 text-2xl font-bold">{subscriber.staffCount}</p><p className="text-xs text-slate-500">Staff accounts</p></div></section><section><h3 className="font-semibold">Owner</h3><div className="mt-3 rounded-xl border border-slate-200 p-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-sm text-slate-500">{subscriber.owner.email || "No email"}</p><p className="mt-1 text-sm text-slate-500">{subscriber.owner.phone || "No phone"}</p></div></section><section><h3 className="font-semibold">Subscription</h3><div className="mt-3 rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || "No plan"}</Badge><span className="text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</span></div><dl className="mt-4 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-slate-500">Started</dt><dd className="mt-1 font-medium">{formatDate(subscriber.subscription?.startDate)}</dd></div><div><dt className="text-slate-500">Renews / ends</dt><dd className="mt-1 font-medium">{formatDate(subscriber.subscription?.endDate)}</dd></div></dl></div></section><section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">Read-only boundary</p><p className="mt-1 text-sm text-cyan-800">This view deliberately exposes no plan, suspension or user-management actions until audited write APIs and approval rules are implemented.</p></section></div></aside></div>;
 }
 
 export default function PlatformAdminPage() {

@@ -7,7 +7,8 @@ const customers = readFileSync(join(root, "client/src/pages/customers.tsx"), "ut
 const layout = readFileSync(join(root, "client/src/components/layout-shell.tsx"), "utf8");
 const translations = readFileSync(join(root, "client/src/lib/i18n.ts"), "utf8");
 
-assert.match(customers, /grid grid-cols-1 gap-2 sm:flex/);
+assert.match(customers, /grid grid-cols-1 items-center gap-3 sm:grid-cols-\[minmax\(260px,1fr\)_190px_auto\]/);
+assert.match(customers, /hidden min-w-0 flex-wrap gap-1[^\"]*sm:flex/);
 assert.match(customers, /h-11 w-full[^"]*sm:hidden/);
 assert.match(customers, /aria-pressed=\{showMembershipColumns\}/);
 assert.match(customers, /show_subscription_details/);
@@ -17,7 +18,7 @@ assert.match(customers, /remaining_balance/);
 
 assert.match(layout, /const BOTTOM_NAV_HREFS = \["\/", "\/orders", "\/customers", "\/payments"\]/);
 assert.match(layout, /BOTTOM_NAV_HREFS\.includes\(item\.href\)/);
-assert.match(layout, /bottom-\[calc\(5\.75rem\+env\(safe-area-inset-bottom\)\)\]/);
+assert.match(layout, /pb-\[env\(safe-area-inset-bottom\)\]/);
 
 assert.match(translations, /"show_subscription_details": "Show subscriptions"/);
 assert.match(translations, /"show_subscription_details": "Afficher les abonnements"/);

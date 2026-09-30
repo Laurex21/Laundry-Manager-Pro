@@ -22,6 +22,7 @@ assert.match(orders, /data-testid="order-form-primary-column"/);
 assert.match(orders, /data-testid="order-form-summary-column"/);
 assert.match(orders, /sm:\[scrollbar-gutter:stable\]/);
 assert.match(orders, /DialogHeader className="sticky top-0 z-20/);
-assert.match(orders, /className="sticky bottom-0 z-20 -mx-1/);
+assert.match(orders, /className="flex gap-2 border-t bg-background px-1 pb-\[env\(safe-area-inset-bottom\)\] pt-3"/);
+assert.match(orders, /wizardStep < 5 \? <Button type="button"/);
 
 console.log("order dialog responsive regression tests passed");
