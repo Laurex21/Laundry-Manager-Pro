@@ -409,6 +409,225 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/platform-admin/organisations/:organisationId", isAuthenticated, requirePlatformAdmin, async (req: any, res) => {
+    const organisationId = Number(req.params.organisationId);
+    if (!Number.isInteger(organisationId) || organisationId < 1) {
+      return res.status(400).json({ message: "Invalid organisation identifier" });
+    }
+
+    try {
+      const [organisationResult, sitesResult, rolesResult, paymentsResult, auditResult] = await Promise.all([
+        pool.query(
+          `
+            SELECT
+              o.id,
+              o.name,
+              o.created_at,
+              owner.id AS owner_id,
+              owner.email AS owner_email,
+              owner.first_name AS owner_first_name,
+              owner.last_name AS owner_last_name,
+              owner.phone AS owner_phone,
+              latest_subscription.id AS subscription_id,
+              latest_subscription.status AS subscription_status,
+              latest_subscription.start_date AS subscription_start_date,
+              latest_subscription.end_date AS subscription_end_date,
+              latest_subscription.orders_used,
+              latest_subscription.plan_slug,
+              latest_subscription.plan_name,
+              latest_subscription.plan_price,
+              COALESCE(activity.order_count, 0)::int AS order_count,
+              COALESCE(activity.orders_last_30_days, 0)::int AS orders_last_30_days,
+              COALESCE(activity.revenue_last_30_days, 0)::numeric AS revenue_last_30_days,
+              COALESCE(activity.last_order_at, NULL) AS last_order_at,
+              COALESCE(customer_activity.customer_count, 0)::int AS customer_count,
+              COALESCE(customer_activity.customers_last_30_days, 0)::int AS customers_last_30_days
+            FROM organisations o
+            INNER JOIN users owner ON owner.id = o.owner_id
+            LEFT JOIN LATERAL (
+              SELECT
+                sub.id,
+                sub.status,
+                sub.start_date,
+                sub.end_date,
+                sub.orders_used,
+                p.slug AS plan_slug,
+                p.name AS plan_name,
+                p.price AS plan_price
+              FROM subscriptions sub
+              INNER JOIN plans p ON p.id = sub.plan_id
+              WHERE sub.user_id = o.owner_id
+              ORDER BY sub.created_at DESC, sub.id DESC
+              LIMIT 1
+            ) latest_subscription ON true
+            LEFT JOIN LATERAL (
+              SELECT
+                count(ord.id)::int AS order_count,
+                count(ord.id) FILTER (WHERE ord.created_at >= now() - interval '30 days')::int AS orders_last_30_days,
+                COALESCE(sum(ord.paid_amount_30_days), 0)::numeric AS revenue_last_30_days,
+                max(ord.created_at) AS last_order_at
+              FROM sites site_scope
+              LEFT JOIN LATERAL (
+                SELECT
+                  organisation_order.id,
+                  organisation_order.created_at,
+                  COALESCE(sum(payment.amount) FILTER (WHERE payment.date >= now() - interval '30 days'), 0)::numeric AS paid_amount_30_days
+                FROM orders organisation_order
+                LEFT JOIN payments payment ON payment.order_id = organisation_order.id
+                WHERE organisation_order.site_id = site_scope.id
+                GROUP BY organisation_order.id, organisation_order.created_at
+              ) ord ON true
+              WHERE site_scope.organisation_id = o.id
+            ) activity ON true
+            LEFT JOIN LATERAL (
+              SELECT
+                count(DISTINCT customer.id)::int AS customer_count,
+                count(DISTINCT customer.id) FILTER (WHERE customer.created_at >= now() - interval '30 days')::int AS customers_last_30_days
+              FROM sites customer_sites
+              LEFT JOIN customers customer ON customer.site_id = customer_sites.id
+              WHERE customer_sites.organisation_id = o.id
+            ) customer_activity ON true
+            WHERE o.id = $1
+            LIMIT 1
+          `,
+          [organisationId],
+        ),
+        pool.query(
+          `SELECT id, name, city, is_active, created_at
+           FROM sites
+           WHERE organisation_id = $1
+           ORDER BY is_active DESC, created_at ASC, id ASC`,
+          [organisationId],
+        ),
+        pool.query(
+          `SELECT COALESCE(role, user_type, 'unknown') AS role, count(*)::int AS count
+           FROM users
+           WHERE organisation_id = $1
+           GROUP BY COALESCE(role, user_type, 'unknown')
+           ORDER BY count(*) DESC, role ASC`,
+          [organisationId],
+        ),
+        pool.query(
+          `SELECT
+             payment.id,
+             payment.amount,
+             payment.method,
+             payment.status,
+             payment.created_at,
+             plan.name AS plan_name
+           FROM subscription_payments payment
+           INNER JOIN users owner ON owner.id = payment.user_id
+           INNER JOIN organisations organisation ON organisation.owner_id = owner.id
+           INNER JOIN plans plan ON plan.id = payment.plan_id
+           WHERE organisation.id = $1
+           ORDER BY payment.created_at DESC, payment.id DESC
+           LIMIT 20`,
+          [organisationId],
+        ),
+        pool.query(
+          `SELECT
+             event.id,
+             event.action,
+             event.target_type,
+             event.target_id,
+             event.created_at,
+             actor.email AS actor_email
+           FROM security_audit_events event
+           LEFT JOIN users actor ON actor.id = event.actor_user_id
+           WHERE event.organisation_id = $1
+           ORDER BY event.created_at DESC, event.id DESC
+           LIMIT 30`,
+          [organisationId],
+        ),
+      ]);
+
+      const row = organisationResult.rows[0];
+      if (!row) return res.status(404).json({ message: "Organisation not found" });
+
+      const payments = paymentsResult.rows.map((payment) => ({
+        id: Number(payment.id),
+        amount: Number(payment.amount || 0),
+        method: payment.method,
+        status: payment.status,
+        createdAt: payment.created_at,
+        planName: payment.plan_name,
+      }));
+      const completedPayments = payments.filter((payment) => payment.status === "completed");
+
+      await recordPlatformAdminEventBestEffort(
+        req,
+        "platform_admin.organisation_view",
+        "success",
+        req.session?.userId || null,
+        { organisationId },
+      );
+
+      res.json({
+        id: Number(row.id),
+        name: row.name,
+        createdAt: row.created_at,
+        owner: {
+          id: row.owner_id,
+          email: row.owner_email,
+          firstName: row.owner_first_name,
+          lastName: row.owner_last_name,
+          phone: row.owner_phone,
+        },
+        subscription: row.plan_slug ? {
+          id: Number(row.subscription_id),
+          status: row.subscription_status,
+          startDate: row.subscription_start_date,
+          endDate: row.subscription_end_date,
+          ordersUsed: Number(row.orders_used || 0),
+          planSlug: row.plan_slug,
+          planName: row.plan_name,
+          planPrice: Number(row.plan_price || 0),
+        } : null,
+        footprint: {
+          sites: sitesResult.rows.map((site) => ({
+            id: Number(site.id),
+            name: site.name,
+            city: site.city,
+            active: site.is_active,
+            createdAt: site.created_at,
+          })),
+          roles: rolesResult.rows.map((role) => ({ role: role.role, count: Number(role.count || 0) })),
+        },
+        usage: {
+          orderCount: Number(row.order_count || 0),
+          ordersLast30Days: Number(row.orders_last_30_days || 0),
+          revenueLast30Days: Number(row.revenue_last_30_days || 0),
+          lastOrderAt: row.last_order_at,
+          customerCount: Number(row.customer_count || 0),
+          customersLast30Days: Number(row.customers_last_30_days || 0),
+        },
+        billing: {
+          completedRevenue: completedPayments.reduce((total, payment) => total + payment.amount, 0),
+          successfulPaymentCount: completedPayments.length,
+          payments,
+        },
+        audit: auditResult.rows.map((event) => ({
+          id: Number(event.id),
+          action: event.action,
+          targetType: event.target_type,
+          targetId: event.target_id,
+          actorEmail: event.actor_email,
+          createdAt: event.created_at,
+        })),
+      });
+    } catch (error) {
+      console.error("Platform admin organisation detail failed:", error);
+      await recordPlatformAdminEventBestEffort(
+        req,
+        "platform_admin.organisation_view",
+        "failure",
+        req.session?.userId || null,
+        { organisationId },
+      );
+      res.status(500).json({ message: "Failed to load organisation detail" });
+    }
+  });
+
   app.get("/api/platform-admin/audit-events", isAuthenticated, requirePlatformAdmin, async (req, res) => {
     try {
       const limit = safeLimit(req.query.limit, 30, 100);
