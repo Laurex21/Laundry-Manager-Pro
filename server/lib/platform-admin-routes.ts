@@ -295,12 +295,25 @@ export function registerPlatformAdminRoutes(app: Express): void {
   app.get("/api/platform-admin/overview", isAuthenticated, requirePlatformAdmin, async (_req, res) => {
     try {
       const result = await pool.query(`
+        WITH organisation_subscription AS (
+          SELECT o.id, latest_subscription.status, latest_subscription.end_date, latest_subscription.plan_slug
+          FROM organisations o
+          LEFT JOIN LATERAL (
+            SELECT sub.status, sub.end_date, p.slug AS plan_slug
+            FROM subscriptions sub
+            INNER JOIN plans p ON p.id = sub.plan_id
+            WHERE sub.user_id = o.owner_id
+            ORDER BY sub.created_at DESC, sub.id DESC
+            LIMIT 1
+          ) latest_subscription ON true
+        )
         SELECT
-          (SELECT count(*)::int FROM organisations) AS organisation_count,
+          (SELECT count(*)::int FROM organisation_subscription) AS organisation_count,
           (SELECT count(*)::int FROM sites WHERE is_active = true) AS active_site_count,
           (SELECT count(*)::int FROM users) AS user_count,
           (SELECT count(*)::int FROM users WHERE user_type = 'staff') AS staff_count,
-          (SELECT count(*)::int FROM subscriptions WHERE status = 'active') AS active_subscription_count,
+          (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active') AS active_subscription_count,
+          (SELECT count(*)::int FROM organisation_subscription WHERE plan_slug IS NULL) AS without_plan_count,
           (
             SELECT COALESCE(sum(amount), 0)::numeric
             FROM subscription_payments
@@ -309,7 +322,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
           ) AS subscription_revenue_month,
           (
             SELECT count(*)::int
-            FROM subscriptions
+            FROM organisation_subscription
             WHERE status = 'active'
               AND end_date IS NOT NULL
               AND end_date >= now()
@@ -323,6 +336,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
         userCount: Number(row.user_count || 0),
         staffCount: Number(row.staff_count || 0),
         activeSubscriptionCount: Number(row.active_subscription_count || 0),
+        withoutPlanCount: Number(row.without_plan_count || 0),
         subscriptionRevenueMonth: Number(row.subscription_revenue_month || 0),
         expiringSoonCount: Number(row.expiring_soon_count || 0),
       });
@@ -335,9 +349,46 @@ export function registerPlatformAdminRoutes(app: Express): void {
   app.get("/api/platform-admin/subscribers", isAuthenticated, requirePlatformAdmin, async (req, res) => {
     try {
       const search = String(req.query.search || "").trim().slice(0, 120);
-      const limit = safeLimit(req.query.limit);
-      const result = await pool.query(
-        `
+      const segment = String(req.query.segment || "all");
+      if (!["all", "active", "trial", "expiring", "no-plan", "expired", "cancelled"].includes(segment)) {
+        return res.status(400).json({ message: "Invalid subscription status filter" });
+      }
+      const limit = safeLimit(req.query.limit, 25, 100);
+      const parsedOffset = Number(req.query.offset || 0);
+      const offset = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? Math.min(parsedOffset, 1_000_000) : 0;
+      const fromWhere = `
+          FROM organisations o
+          INNER JOIN users owner ON owner.id = o.owner_id
+          LEFT JOIN LATERAL (
+            SELECT sub.status, sub.start_date, sub.end_date, p.slug AS plan_slug, p.name AS plan_name
+            FROM subscriptions sub
+            INNER JOIN plans p ON p.id = sub.plan_id
+            WHERE sub.user_id = o.owner_id
+            ORDER BY sub.created_at DESC, sub.id DESC
+            LIMIT 1
+          ) latest_subscription ON true
+          WHERE (
+            $1 = ''
+            OR o.name ILIKE '%' || $1 || '%'
+            OR COALESCE(owner.email, '') ILIKE '%' || $1 || '%'
+            OR COALESCE(owner.first_name, '') ILIKE '%' || $1 || '%'
+            OR COALESCE(owner.last_name, '') ILIKE '%' || $1 || '%'
+          )
+          AND (
+            $2 = 'all'
+            OR ($2 = 'no-plan' AND latest_subscription.plan_slug IS NULL)
+            OR ($2 = 'expiring' AND latest_subscription.status = 'active'
+                AND latest_subscription.end_date >= now()
+                AND latest_subscription.end_date < now() + interval '14 days')
+            OR ($2 = 'active' AND latest_subscription.status = 'active'
+                AND (latest_subscription.end_date IS NULL
+                     OR latest_subscription.end_date < now()
+                     OR latest_subscription.end_date >= now() + interval '14 days'))
+            OR ($2 IN ('trial', 'expired', 'cancelled') AND latest_subscription.status = $2)
+          )`;
+      const [countResult, result] = await Promise.all([
+        pool.query(`SELECT count(*)::int AS total ${fromWhere}`, [search, segment]),
+        pool.query(`
           SELECT
             o.id,
             o.name,
@@ -354,35 +405,18 @@ export function registerPlatformAdminRoutes(app: Express): void {
             latest_subscription.end_date AS subscription_end_date,
             latest_subscription.plan_slug,
             latest_subscription.plan_name
-          FROM organisations o
-          INNER JOIN users owner ON owner.id = o.owner_id
-          LEFT JOIN LATERAL (
-            SELECT
-              sub.status,
-              sub.start_date,
-              sub.end_date,
-              p.slug AS plan_slug,
-              p.name AS plan_name
-            FROM subscriptions sub
-            INNER JOIN plans p ON p.id = sub.plan_id
-            WHERE sub.user_id = o.owner_id
-            ORDER BY sub.created_at DESC, sub.id DESC
-            LIMIT 1
-          ) latest_subscription ON true
-          WHERE (
-            $1 = ''
-            OR o.name ILIKE '%' || $1 || '%'
-            OR COALESCE(owner.email, '') ILIKE '%' || $1 || '%'
-            OR COALESCE(owner.first_name, '') ILIKE '%' || $1 || '%'
-            OR COALESCE(owner.last_name, '') ILIKE '%' || $1 || '%'
-          )
+          ${fromWhere}
           ORDER BY o.created_at DESC, o.id DESC
-          LIMIT $2
+          LIMIT $3 OFFSET $4
         `,
-        [search, limit],
-      );
+        [search, segment, limit, offset],
+      )]);
 
-      res.json(result.rows.map((row) => ({
+      res.json({
+        total: Number(countResult.rows[0]?.total || 0),
+        limit,
+        offset,
+        items: result.rows.map((row) => ({
         id: Number(row.id),
         name: row.name,
         createdAt: row.created_at,
@@ -402,7 +436,8 @@ export function registerPlatformAdminRoutes(app: Express): void {
           planSlug: row.plan_slug,
           planName: row.plan_name,
         } : null,
-      })));
+        })),
+      });
     } catch (error) {
       console.error("Platform admin subscriber list failed:", error);
       res.status(500).json({ message: "Failed to load subscribers" });
