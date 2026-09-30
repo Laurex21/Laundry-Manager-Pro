@@ -152,7 +152,7 @@ export default function Dashboard() {
 
       {/* Core KPI strip */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="dashboard-core-kpis">
-        <MetricCard label={t('total_revenue')} value={money(dashData?.monthRevenue || stats?.totalRevenue)} icon={DollarSign} color="green" data-testid="card-month-revenue" />
+        <MetricCard label={`${t('total_revenue')} · ${t('this_month')}`} value={money(dashData?.monthRevenue ?? 0)} icon={DollarSign} color="green" data-testid="card-month-revenue" />
         <MetricCard label={t('net_profit')} value={money(monthProfit)} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
         <MetricCard href="/orders?status=received" label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
         <MetricCard href="/orders?status=ready" label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
