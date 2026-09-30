@@ -393,7 +393,9 @@ export const organisations = pgTable("organisations", {
   name: varchar("name", { length: 255 }).notNull(),
   ownerId: varchar("owner_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("organisations_owner_id_unique").on(table.ownerId),
+]);
 
 export const platformAdmins = pgTable("platform_admins", {
   userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),

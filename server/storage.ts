@@ -1664,6 +1664,10 @@ export class DatabaseStorage implements IStorage {
 
   async createOrganisationWithSite(ownerId: string, orgName: string, siteName: string): Promise<{ organisation: Organisation; site: Site }> {
     return await db.transaction(async (tx) => {
+      // Serialize creation per owner until the database uniqueness migration is applied.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`);
+      const [existing] = await tx.select({ id: organisations.id }).from(organisations).where(eq(organisations.ownerId, ownerId)).limit(1);
+      if (existing) throw new Error("Owner already has an organisation");
       const [org] = await tx.insert(organisations).values({ name: orgName, ownerId }).returning();
       const [site] = await tx.insert(sites).values({ organisationId: org.id, name: siteName }).returning();
       await tx.insert(siteMembers).values({ siteId: site.id, userId: ownerId, role: "owner" });
@@ -1938,13 +1942,18 @@ export class DatabaseStorage implements IStorage {
       try {
         const orgName = user.businessName || `${user.firstName || 'My'} Business`;
         const siteName = user.businessName || "Main Site";
-        const [org] = await db.insert(organisations).values({ name: orgName, ownerId: user.id }).returning();
-        const [site] = await db.insert(sites).values({ organisationId: org.id, name: siteName }).returning();
-        const existing = await db.select().from(siteMembers).where(and(eq(siteMembers.siteId, site.id), eq(siteMembers.userId, user.id)));
-        if (existing.length === 0) {
-          await db.insert(siteMembers).values({ siteId: site.id, userId: user.id, role: "owner" });
-        }
-        await db.update(users).set({ organisationId: org.id, currentSiteId: site.id }).where(eq(users.id, user.id));
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${user.id}))`);
+          const [currentUser] = await tx.select({ organisationId: users.organisationId }).from(users).where(eq(users.id, user.id)).limit(1);
+          if (!currentUser || currentUser.organisationId) return;
+          let [org] = await tx.select().from(organisations).where(eq(organisations.ownerId, user.id)).orderBy(organisations.id).limit(1);
+          if (!org) [org] = await tx.insert(organisations).values({ name: orgName, ownerId: user.id }).returning();
+          let [site] = await tx.select().from(sites).where(eq(sites.organisationId, org.id)).orderBy(sites.id).limit(1);
+          if (!site) [site] = await tx.insert(sites).values({ organisationId: org.id, name: siteName }).returning();
+          const [membership] = await tx.select({ id: siteMembers.id }).from(siteMembers).where(and(eq(siteMembers.siteId, site.id), eq(siteMembers.userId, user.id))).limit(1);
+          if (!membership) await tx.insert(siteMembers).values({ siteId: site.id, userId: user.id, role: "owner" });
+          await tx.update(users).set({ organisationId: org.id, currentSiteId: site.id }).where(eq(users.id, user.id));
+        });
       } catch (err) {
         console.error(`migrateToMultiSite: error for user ${user.id}:`, err);
       }
