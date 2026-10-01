@@ -34,6 +34,12 @@ function shortReportingDate(value: string, language: string): string {
     .format(new Date(`${value}T12:00:00Z`));
 }
 
+function endOfReportingWeek(monday: string): string {
+  const sunday = new Date(`${monday}T12:00:00Z`);
+  sunday.setUTCDate(sunday.getUTCDate() + 6);
+  return sunday.toISOString().slice(0, 10);
+}
+
 const QUEUE_STAGES = [
   { key: "received", colorCls: "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400" },
   { key: "washing",  colorCls: "text-sky-700 bg-sky-50 border-sky-100 dark:bg-sky-950/20 dark:border-sky-900/30 dark:text-sky-400" },
@@ -78,7 +84,7 @@ export default function Dashboard() {
   const symbol = getSymbol();
   const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${symbol}`;
   const weekPeriod = dashData?.weekStartDate && dashData?.reportingDate
-    ? `${shortReportingDate(dashData.weekStartDate, i18n.language)} – ${shortReportingDate(dashData.reportingDate, i18n.language)}`
+    ? `${shortReportingDate(dashData.weekStartDate, i18n.language)} – ${shortReportingDate(endOfReportingWeek(dashData.weekStartDate), i18n.language)} · ${t('week_to_date')}`
     : undefined;
   const monthPeriod = dashData?.reportingDate
     ? `${shortReportingDate(`${dashData.reportingDate.slice(0, 7)}-01`, i18n.language)} – ${shortReportingDate(dashData.reportingDate, i18n.language)}`
