@@ -25,7 +25,7 @@ import {
 } from "@shared/schema";
 import { users, type User } from "@shared/models/auth";
 import { eq, ne, desc, asc, sql, and, gte, lte, inArray, or, isNull } from "drizzle-orm";
-import { formatReportingDay, reportingDateRange, reportingDateString, shiftReportingDate, validReportingTimeZone } from "./lib/reporting-date";
+import { formatReportingDay, reportingDateRange, reportingDateString, reportingWeekStart, shiftReportingDate, validReportingTimeZone } from "./lib/reporting-date";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
@@ -1218,7 +1218,7 @@ export class DatabaseStorage implements IStorage {
     const today = reportingDateString(now, timeZone);
     const { start: todayStart, end: todayEnd } = reportingDateRange(today, today, timeZone);
     const { start: monthStart, end: monthEnd } = reportingDateRange(`${today.slice(0, 7)}-01`, today, timeZone);
-    const weekStartDate = shiftReportingDate(today, -7);
+    const weekStartDate = reportingWeekStart(today);
     const { start: weekStart, end: weekEnd } = reportingDateRange(weekStartDate, today, timeZone);
 
     const siteWhere = this.siteWhere(orders.siteId, scope) ?? sql`1=1`;
@@ -1312,7 +1312,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       todayKg: 0, todayOrders, todayRevenue,
-      weekOrders, weekRevenue,
+      weekOrders, weekRevenue, weekStartDate, reportingDate: today,
       monthKg: 0, monthOrders, monthRevenue, monthExpenses,
       profit, costPerKg, profitPerKg, dailyTarget, targetAchievement,
       ordersByStatus, revenueByDay, kgByDay, alerts,

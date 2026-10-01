@@ -6,6 +6,7 @@ import {
   parseLocalDateParam,
   reportingDateRange,
   reportingDateString,
+  reportingWeekStart,
   validReportingTimeZone,
 } from "./reporting-date";
 
@@ -61,5 +62,8 @@ assert.equal(johannesburgMonth.end.toISOString(), "2026-08-31T21:59:59.999Z");
 
 assert.equal(reportingDateString(new Date("2026-08-29T23:30:00.000Z"), "Africa/Douala"), "2026-08-30");
 assert.equal(validReportingTimeZone("Not/A_Timezone"), "UTC");
+assert.equal(reportingWeekStart("2026-10-01"), "2026-09-28");
+assert.equal(reportingWeekStart("2026-10-04"), "2026-09-28");
+assert.equal(reportingWeekStart("2026-10-05"), "2026-10-05");
 
 console.log("reporting-date historical order tests passed");
