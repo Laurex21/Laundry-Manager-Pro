@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
+import { useAuth } from "@/hooks/use-auth";
 import { format, subDays, startOfMonth, endOfMonth, differenceInCalendarMonths, eachMonthOfInterval, type Locale } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import {
@@ -57,6 +58,7 @@ import {
   Legend,
   BarChart,
   Bar,
+  ComposedChart,
 } from "recharts";
 
 const CHART_COLORS = [
@@ -94,28 +96,62 @@ type PerformanceData = {
   monthlyComparison: { month: string; income: number; expenses: number }[];
 };
 
+type EvolutionMetric = "customersServed" | "newCustomers" | "revenue" | "expenses" | "profit";
+type EvolutionRow = { period: string; customersServed: number; newCustomers: number; revenue: number; expenses: number; profit: number };
+type EvolutionData = { start: string; end: string; granularity: "day" | "week" | "month"; items: EvolutionRow[] };
+const EVOLUTION_COLORS: Record<EvolutionMetric, string> = {
+  customersServed: "#0d9488", newCustomers: "#3971d8", revenue: "#082d5b", expenses: "#d98b21", profit: "#c95e62",
+};
+
 export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const { t, i18n } = useTranslation();
+  const { allSites, currentSite } = useAuth();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const activeDateLocale = dateLocaleFor(i18n.language);
 
   const [dateFrom, setDateFrom] = useState<Date>(startOfMonth(new Date()));
   const [dateTo, setDateTo] = useState<Date>(new Date());
+  const [granularity, setGranularity] = useState<"day" | "week" | "month">("day");
+  const [siteChoice, setSiteChoice] = useState("current");
+  const [visibleMetrics, setVisibleMetrics] = useState<Record<EvolutionMetric, boolean>>({
+    customersServed: true, newCustomers: true, revenue: true, expenses: true, profit: true,
+  });
 
   const queryParams = useMemo(() => {
     const start = format(dateFrom, "yyyy-MM-dd");
     const end = format(dateTo, "yyyy-MM-dd");
-    return { start, end };
-  }, [dateFrom, dateTo]);
+    return { start, end, site: siteChoice };
+  }, [dateFrom, dateTo, siteChoice]);
 
   const { data, isLoading } = useQuery<ReportData>({
-    queryKey: [`/api/reports?start=${queryParams.start}&end=${queryParams.end}`],
+    queryKey: [`/api/reports?start=${queryParams.start}&end=${queryParams.end}&site=${queryParams.site}`],
   });
 
   const { data: perfData, isLoading: perfLoading } = useQuery<PerformanceData>({
-    queryKey: [`/api/reports/performance?start=${queryParams.start}&end=${queryParams.end}`],
+    queryKey: [`/api/reports/performance?start=${queryParams.start}&end=${queryParams.end}&site=${queryParams.site}`],
   });
+
+  const evolutionRangeValid = dateFrom <= dateTo && (dateTo.getTime() - dateFrom.getTime()) <= 366 * 86400000;
+  const evolution = useQuery<EvolutionData>({
+    queryKey: [`/api/reports/business-evolution?start=${queryParams.start}&end=${queryParams.end}&granularity=${granularity}&site=${queryParams.site}`],
+    enabled: evolutionRangeValid,
+  });
+
+  const evolutionRows = evolution.data?.items ?? [];
+  const evolutionMetrics: { key: EvolutionMetric; label: string; kind: "money" | "count" }[] = [
+    { key: "customersServed", label: t("evolution_customers_served"), kind: "count" },
+    { key: "newCustomers", label: t("evolution_new_customers"), kind: "count" },
+    { key: "revenue", label: t("evolution_revenue"), kind: "money" },
+    { key: "expenses", label: t("evolution_expenses"), kind: "money" },
+    { key: "profit", label: t("evolution_profit"), kind: "money" },
+  ];
+  const periodLabel = (period: string) => {
+    const date = new Date(`${period}T12:00:00Z`);
+    if (granularity === "month") return format(date, "MMM yyyy", { locale: activeDateLocale });
+    if (granularity === "week") return format(date, "d MMM", { locale: activeDateLocale });
+    return format(date, "d MMM", { locale: activeDateLocale });
+  };
 
   const alerts = useMemo(() => {
     if (!perfData) return [];
@@ -259,6 +295,94 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
           />
         </div>
       </div>
+
+      <Card className="rounded-2xl border-primary/10 shadow-sm" data-testid="business-evolution">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-xl text-[#082D5B]">{t("business_evolution_title")}</CardTitle>
+          <p className="text-sm text-muted-foreground">{t("business_evolution_subtitle")}</p>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="space-y-1 text-sm font-medium">
+              <span className="block text-muted-foreground">{t("business_evolution_granularity")}</span>
+              <select value={granularity} onChange={event => setGranularity(event.target.value as "day" | "week" | "month")}
+                className="h-10 rounded-md border border-input bg-background px-3" aria-label={t("business_evolution_granularity")}
+                data-testid="select-evolution-granularity">
+                <option value="day">{t("business_evolution_day")}</option>
+                <option value="week">{t("business_evolution_week")}</option>
+                <option value="month">{t("business_evolution_month")}</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-sm font-medium">
+              <span className="block text-muted-foreground">{t("business_evolution_site")}</span>
+              <select value={siteChoice} onChange={event => setSiteChoice(event.target.value)}
+                className="h-10 max-w-64 rounded-md border border-input bg-background px-3" aria-label={t("business_evolution_site")}
+                data-testid="select-evolution-site">
+                <option value="current">{currentSite?.name || t("all_sites")}</option>
+                {allSites.length > 1 && <option value="all">{t("all_sites")}</option>}
+                {allSites.length > 1 && allSites.map((site: any) => <option key={site.id} value={String(site.id)}>{site.name}</option>)}
+              </select>
+            </label>
+            <p className="pb-2 text-xs text-muted-foreground">{t("business_evolution_period_hint")}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("business_evolution_indicators")}>
+            {evolutionMetrics.map(metric => <button key={metric.key} type="button"
+              aria-pressed={visibleMetrics[metric.key]}
+              onClick={() => setVisibleMetrics(previous => ({ ...previous, [metric.key]: !previous[metric.key] }))}
+              className={cn("rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary", visibleMetrics[metric.key] ? "border-primary/25 bg-primary/5 text-foreground" : "border-border text-muted-foreground")}
+              data-testid={`toggle-evolution-${metric.key}`}>
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: visibleMetrics[metric.key] ? EVOLUTION_COLORS[metric.key] : "#94a3b8" }} />
+              {metric.label}
+            </button>)}
+          </div>
+
+          {!evolutionRangeValid && <p className="text-sm text-destructive" role="alert">{t("business_evolution_invalid_range")}</p>}
+          {evolution.error && <p className="text-sm text-destructive" role="alert">{t("business_evolution_load_error")}</p>}
+          {evolution.isLoading && <Skeleton className="h-72 w-full rounded-xl" />}
+          {!evolution.isLoading && !evolution.error && evolutionRangeValid && (
+            <>
+              <div className="overflow-x-auto rounded-xl border border-border p-3" data-testid="business-evolution-chart">
+                <div style={{ minWidth: Math.max(640, evolutionRows.length * (granularity === "day" ? 34 : 55)) }}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ComposedChart data={evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }))} margin={{ top: 12, right: 18, left: 8, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                      <YAxis yAxisId="money" tick={{ fontSize: 11 }} width={65} tickFormatter={value => Number(value).toLocaleString(i18n.language)} />
+                      <YAxis yAxisId="clients" orientation="right" allowDecimals={false} tick={{ fontSize: 11 }} width={35} />
+                      <Tooltip formatter={(value, name) => {
+                        const metric = evolutionMetrics.find(item => item.label === name);
+                        return metric?.kind === "money" ? `${Number(value).toLocaleString(i18n.language)} ${symbol}` : Number(value).toLocaleString(i18n.language);
+                      }} />
+                      {visibleMetrics.revenue && <Bar yAxisId="money" dataKey="revenue" name={t("business_evolution_revenue")} fill={EVOLUTION_COLORS.revenue} radius={[3, 3, 0, 0]} />}
+                      {visibleMetrics.expenses && <Bar yAxisId="money" dataKey="expenses" name={t("business_evolution_expenses")} fill={EVOLUTION_COLORS.expenses} radius={[3, 3, 0, 0]} />}
+                      {visibleMetrics.profit && <Line yAxisId="money" dataKey="profit" name={t("business_evolution_profit")} stroke={EVOLUTION_COLORS.profit} strokeWidth={2} dot={false} />}
+                      {visibleMetrics.customersServed && <Line yAxisId="clients" dataKey="customersServed" name={t("business_evolution_customers_served")} stroke={EVOLUTION_COLORS.customersServed} strokeWidth={2} dot={false} />}
+                      {visibleMetrics.newCustomers && <Line yAxisId="clients" dataKey="newCustomers" name={t("business_evolution_new_customers")} stroke={EVOLUTION_COLORS.newCustomers} strokeWidth={2} dot={false} />}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("business_evolution_definition")}</p>
+              <div className="overflow-x-auto rounded-xl border border-border" data-testid="business-evolution-table">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead>{t("period")}</TableHead>
+                    {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableHead key={metric.key} className="text-right whitespace-nowrap">{metric.label}</TableHead>)}
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {evolutionRows.map(item => <TableRow key={item.period}>
+                      <TableCell className="font-medium whitespace-nowrap">{periodLabel(item.period)}</TableCell>
+                      {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableCell key={metric.key} className="text-right tabular-nums whitespace-nowrap">{Number(item[metric.key]).toLocaleString(i18n.language)}{metric.kind === "money" ? ` ${symbol}` : ""}</TableCell>)}
+                    </TableRow>)}
+                    {evolutionRows.length === 0 && <TableRow><TableCell colSpan={6}>{t("business_evolution_empty")}</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
