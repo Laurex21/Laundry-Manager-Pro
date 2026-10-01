@@ -342,37 +342,46 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
           {evolution.isLoading && <Skeleton className="h-72 w-full rounded-xl" />}
           {!evolution.isLoading && !evolution.error && evolutionRangeValid && (
             <>
-              <div className="overflow-x-auto rounded-xl border border-border p-3" data-testid="business-evolution-chart">
-                <div style={{ minWidth: Math.max(640, evolutionRows.length * (granularity === "day" ? 34 : 55)) }}>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <ComposedChart data={evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }))} margin={{ top: 12, right: 18, left: 8, bottom: 10 }}>
+              <div className="space-y-3" data-testid="business-evolution-chart">
+                {(visibleMetrics.revenue || visibleMetrics.expenses || visibleMetrics.profit) && <div className="min-w-0 rounded-xl border border-border p-3">
+                  <p className="mb-2 text-sm font-semibold">{t("business_evolution_finances_chart")}</p>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <ComposedChart data={evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }))} margin={{ top: 8, right: 8, left: 8, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                      <YAxis yAxisId="money" tick={{ fontSize: 11 }} width={65} tickFormatter={value => Number(value).toLocaleString(i18n.language)} />
-                      <YAxis yAxisId="clients" orientation="right" allowDecimals={false} tick={{ fontSize: 11 }} width={35} />
-                      <Tooltip formatter={(value, name) => {
-                        const metric = evolutionMetrics.find(item => item.label === name);
-                        return metric?.kind === "money" ? `${Number(value).toLocaleString(i18n.language)} ${symbol}` : Number(value).toLocaleString(i18n.language);
-                      }} />
-                      {visibleMetrics.revenue && <Bar yAxisId="money" dataKey="revenue" name={t("business_evolution_revenue")} fill={EVOLUTION_COLORS.revenue} radius={[3, 3, 0, 0]} />}
-                      {visibleMetrics.expenses && <Bar yAxisId="money" dataKey="expenses" name={t("business_evolution_expenses")} fill={EVOLUTION_COLORS.expenses} radius={[3, 3, 0, 0]} />}
-                      {visibleMetrics.profit && <Line yAxisId="money" dataKey="profit" name={t("business_evolution_profit")} stroke={EVOLUTION_COLORS.profit} strokeWidth={2} dot={false} />}
-                      {visibleMetrics.customersServed && <Line yAxisId="clients" dataKey="customersServed" name={t("business_evolution_customers_served")} stroke={EVOLUTION_COLORS.customersServed} strokeWidth={2} dot={false} />}
-                      {visibleMetrics.newCustomers && <Line yAxisId="clients" dataKey="newCustomers" name={t("business_evolution_new_customers")} stroke={EVOLUTION_COLORS.newCustomers} strokeWidth={2} dot={false} />}
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={30} />
+                      <YAxis tick={{ fontSize: 11 }} width={65} tickFormatter={value => Number(value).toLocaleString(i18n.language)} />
+                      <Tooltip formatter={value => `${Number(value).toLocaleString(i18n.language)} ${symbol}`} />
+                      {visibleMetrics.revenue && <Bar dataKey="revenue" name={t("business_evolution_revenue")} fill={EVOLUTION_COLORS.revenue} radius={[3, 3, 0, 0]} />}
+                      {visibleMetrics.expenses && <Bar dataKey="expenses" name={t("business_evolution_expenses")} fill={EVOLUTION_COLORS.expenses} radius={[3, 3, 0, 0]} />}
+                      {visibleMetrics.profit && <Line dataKey="profit" name={t("business_evolution_profit")} stroke={EVOLUTION_COLORS.profit} strokeWidth={2} dot={false} />}
                     </ComposedChart>
                   </ResponsiveContainer>
-                </div>
+                </div>}
+                {(visibleMetrics.customersServed || visibleMetrics.newCustomers) && <div className="min-w-0 rounded-xl border border-border p-3">
+                  <p className="mb-2 text-sm font-semibold">{t("business_evolution_clients_chart")}</p>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }))} margin={{ top: 8, right: 8, left: 8, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={30} />
+                      <YAxis domain={[0, "auto"]} allowDecimals={false} tick={{ fontSize: 11 }} width={45} />
+                      <Tooltip formatter={value => Number(value).toLocaleString(i18n.language)} />
+                      {visibleMetrics.customersServed && <Line dataKey="customersServed" name={t("business_evolution_customers_served")} stroke={EVOLUTION_COLORS.customersServed} strokeWidth={2} dot={false} />}
+                      {visibleMetrics.newCustomers && <Line dataKey="newCustomers" name={t("business_evolution_new_customers")} stroke={EVOLUTION_COLORS.newCustomers} strokeWidth={2} dot={false} />}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>}
+                {!evolutionMetrics.some(metric => visibleMetrics[metric.key]) && <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">{t("business_evolution_select_indicator")}</p>}
               </div>
               <p className="text-xs text-muted-foreground">{t("business_evolution_definition")}</p>
-              <div className="overflow-x-auto rounded-xl border border-border" data-testid="business-evolution-table">
-                <Table>
+              <div className="max-h-[440px] overflow-auto rounded-xl border border-border" data-testid="business-evolution-table">
+                <Table className="min-w-[720px]">
                   <TableHeader><TableRow>
-                    <TableHead>{t("period")}</TableHead>
-                    {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableHead key={metric.key} className="text-right whitespace-nowrap">{metric.label}</TableHead>)}
+                    <TableHead className="sticky left-0 top-0 z-20 bg-background">{t("period")}</TableHead>
+                    {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableHead key={metric.key} className="sticky top-0 z-10 bg-background text-right whitespace-nowrap">{metric.label}</TableHead>)}
                   </TableRow></TableHeader>
                   <TableBody>
                     {evolutionRows.map(item => <TableRow key={item.period}>
-                      <TableCell className="font-medium whitespace-nowrap">{periodLabel(item.period)}</TableCell>
+                      <TableCell className="sticky left-0 bg-background font-medium whitespace-nowrap">{periodLabel(item.period)}</TableCell>
                       {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableCell key={metric.key} className="text-right tabular-nums whitespace-nowrap">{Number(item[metric.key]).toLocaleString(i18n.language)}{metric.kind === "money" ? ` ${symbol}` : ""}</TableCell>)}
                     </TableRow>)}
                     {evolutionRows.length === 0 && <TableRow><TableCell colSpan={6}>{t("business_evolution_empty")}</TableCell></TableRow>}
