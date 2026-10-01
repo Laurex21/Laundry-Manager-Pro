@@ -33,6 +33,7 @@ type Overview = {
   userCount: number;
   staffCount: number;
   activeSubscriptionCount: number;
+  withoutPlanCount: number;
   subscriptionRevenueMonth: number;
   expiringSoonCount: number;
 };
@@ -58,6 +59,8 @@ type Subscriber = {
     planName: string;
   } | null;
 };
+
+type SubscriberPage = { items: Subscriber[]; total: number; limit: number; offset: number };
 
 type AuditEvent = {
   id: number;
@@ -341,29 +344,25 @@ function statusTone(status: string | undefined) {
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
-function subscriptionSegment(subscriber: Subscriber) {
-  if (!subscriber.subscription) return "no-plan";
-  if (subscriber.subscription.status === "active" && subscriber.subscription.endDate) {
-    const days = (new Date(subscriber.subscription.endDate).getTime() - Date.now()) / 86_400_000;
-    if (days >= 0 && days <= 14) return "expiring";
-  }
-  return subscriber.subscription.status;
-}
-
 function AdminDashboard() {
   const { logout } = useAuth();
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [segment, setSegment] = useState("all");
+  const [page, setPage] = useState(0);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
 
   const overview = useQuery<Overview>({
     queryKey: ["/api/platform-admin/overview"],
     queryFn: () => apiJson("/api/platform-admin/overview"),
   });
-  const subscribers = useQuery<Subscriber[]>({
-    queryKey: ["/api/platform-admin/subscribers", searchTerm],
-    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=200&search=${encodeURIComponent(searchTerm)}`),
+  const preview = useQuery<SubscriberPage>({
+    queryKey: ["/api/platform-admin/subscribers", "preview", searchTerm],
+    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=8&search=${encodeURIComponent(searchTerm)}`),
+  });
+  const subscribers = useQuery<SubscriberPage>({
+    queryKey: ["/api/platform-admin/subscribers", searchTerm, segment, page],
+    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=25&offset=${page * 25}&search=${encodeURIComponent(searchTerm)}&segment=${encodeURIComponent(segment)}`),
   });
   const auditEvents = useQuery<AuditEvent[]>({
     queryKey: ["/api/platform-admin/audit-events"],
@@ -371,12 +370,12 @@ function AdminDashboard() {
   });
 
   const metrics = overview.data;
-  const organisations = subscribers.data ?? [];
-  const filteredOrganisations = organisations.filter((subscriber) => segment === "all" || subscriptionSegment(subscriber) === segment);
-  const payingRate = metrics?.organisationCount ? Math.round((metrics.activeSubscriptionCount / metrics.organisationCount) * 100) : 0;
-  const noPlanCount = organisations.filter((item) => !item.subscription).length;
-  const riskCount = noPlanCount + (metrics?.expiringSoonCount ?? 0);
-  const loading = overview.isLoading || subscribers.isLoading;
+  const organisations = subscribers.data?.items ?? [];
+  const activePlanRate = metrics ? (metrics.organisationCount ? Math.round((metrics.activeSubscriptionCount / metrics.organisationCount) * 100) : 0) : null;
+  const noPlanCount = metrics?.withoutPlanCount;
+  const riskCount = metrics ? metrics.withoutPlanCount + metrics.expiringSoonCount : null;
+  const submitSearch = () => { setPage(0); setSearchTerm(search.trim()); };
+  const changeSegment = (value: string) => { setPage(0); setSegment(value); };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -397,7 +396,7 @@ function AdminDashboard() {
       <main className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div><p className="text-sm font-semibold text-cyan-700">Executive control centre</p><h1 className="mt-1 font-display text-3xl font-bold tracking-tight">Platform health and subscriber growth</h1><p className="mt-2 max-w-2xl text-slate-500">Focus on revenue, activation risk, renewals and audited platform activity.</p></div>
-          <div className="grid grid-cols-2 gap-2 sm:flex"><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Paying rate</p><p className="font-bold">{payingRate}%</p></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Attention needed</p><p className="font-bold text-amber-700">{riskCount}</p></div></div>
+          <div className="grid grid-cols-2 gap-2 sm:flex"><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Active plan rate</p><p className="font-bold">{activePlanRate === null ? "—" : `${activePlanRate}%`}</p></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Attention needed</p><p className="font-bold text-amber-700">{riskCount ?? "—"}</p></div></div>
         </div>
 
         {overview.error && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{overview.error.message}</p>}
@@ -413,30 +412,30 @@ function AdminDashboard() {
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard label="Monthly subscription revenue" value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
               <MetricCard label="Active subscriptions" value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
-              <MetricCard label="Subscriber organisations" value={metrics?.organisationCount ?? "—"} icon={Building2} />
+              <MetricCard label="Registered organisations" value={metrics?.organisationCount ?? "—"} icon={Building2} />
               <MetricCard label="Renewals due in 14 days" value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
               <Card className="border-slate-200/80 shadow-sm">
-                <CardHeader><CardTitle className="text-lg">Activation snapshot</CardTitle><p className="text-sm text-slate-500">Separate registered organisations from organisations that currently pay.</p></CardHeader>
+                <CardHeader><CardTitle className="text-lg">Activation snapshot</CardTitle><p className="text-sm text-slate-500">Separate registered organisations from organisations with active plans.</p></CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-3">
                   <div className="rounded-xl bg-slate-950 p-5 text-white"><p className="text-sm text-slate-400">Registered</p><p className="mt-2 text-3xl font-bold">{metrics?.organisationCount ?? "—"}</p><p className="mt-2 text-xs text-slate-400">All organisations created</p></div>
-                  <div className="rounded-xl bg-emerald-50 p-5"><p className="text-sm text-emerald-700">Paying</p><p className="mt-2 text-3xl font-bold text-emerald-950">{metrics?.activeSubscriptionCount ?? "—"}</p><p className="mt-2 text-xs text-emerald-700">{payingRate}% of registered</p></div>
-                  <div className="rounded-xl bg-amber-50 p-5"><p className="text-sm text-amber-700">Without plan</p><p className="mt-2 text-3xl font-bold text-amber-950">{noPlanCount}</p><p className="mt-2 text-xs text-amber-700">Requires activation review</p></div>
+                  <div className="rounded-xl bg-emerald-50 p-5"><p className="text-sm text-emerald-700">Active plans</p><p className="mt-2 text-3xl font-bold text-emerald-950">{metrics?.activeSubscriptionCount ?? "—"}</p><p className="mt-2 text-xs text-emerald-700">{activePlanRate === null ? "—" : `${activePlanRate}%`} of registered</p></div>
+                  <div className="rounded-xl bg-amber-50 p-5"><p className="text-sm text-amber-700">Without plan</p><p className="mt-2 text-3xl font-bold text-amber-950">{noPlanCount ?? "—"}</p><p className="mt-2 text-xs text-amber-700">Requires activation review</p></div>
                 </CardContent>
               </Card>
               <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
                 <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5 text-amber-600" />Priority queue</CardTitle></CardHeader>
-                <CardContent className="space-y-3 text-sm"><div className="flex items-center justify-between"><span>Expiring within 14 days</span><strong>{metrics?.expiringSoonCount ?? "—"}</strong></div><div className="flex items-center justify-between"><span>Organisations without plan</span><strong>{noPlanCount}</strong></div><div className="flex items-center justify-between"><span>Active sites</span><strong>{metrics?.activeSiteCount ?? "—"}</strong></div></CardContent>
+                <CardContent className="space-y-3 text-sm"><div className="flex items-center justify-between"><span>Expiring within 14 days</span><strong>{metrics?.expiringSoonCount ?? "—"}</strong></div><div className="flex items-center justify-between"><span>Organisations without plan</span><strong>{noPlanCount ?? "—"}</strong></div><div className="flex items-center justify-between"><span>Active sites</span><strong>{metrics?.activeSiteCount ?? "—"}</strong></div></CardContent>
               </Card>
             </section>
 
-            <OrganisationDirectory loading={loading} error={subscribers.error as Error | null} organisations={organisations.slice(0, 8)} search={search} setSearch={setSearch} submitSearch={() => setSearchTerm(search.trim())} segment="all" setSegment={() => {}} select={setSelectedSubscriber} compact />
+            <OrganisationDirectory loading={preview.isLoading} error={preview.error as Error | null} organisations={preview.data?.items ?? []} search={search} setSearch={setSearch} submitSearch={submitSearch} segment="all" setSegment={changeSegment} select={setSelectedSubscriber} compact />
           </TabsContent>
 
           <TabsContent value="organisations" className="mt-5">
-            <OrganisationDirectory loading={loading} error={subscribers.error as Error | null} organisations={filteredOrganisations} search={search} setSearch={setSearch} submitSearch={() => setSearchTerm(search.trim())} segment={segment} setSegment={setSegment} select={setSelectedSubscriber} />
+            <OrganisationDirectory loading={subscribers.isLoading} error={subscribers.error as Error | null} organisations={organisations} search={search} setSearch={setSearch} submitSearch={submitSearch} segment={segment} setSegment={changeSegment} select={setSelectedSubscriber} page={page} total={subscribers.data?.total ?? 0} pageSize={25} onPageChange={setPage} />
           </TabsContent>
 
           <TabsContent value="security" className="mt-5">
@@ -450,8 +449,8 @@ function AdminDashboard() {
   );
 }
 
-function OrganisationDirectory({ loading, error, organisations, search, setSearch, submitSearch, segment, setSegment, select, compact = false }: { loading: boolean; error: Error | null; organisations: Subscriber[]; search: string; setSearch: (value: string) => void; submitSearch: () => void; segment: string; setSegment: (value: string) => void; select: (subscriber: Subscriber) => void; compact?: boolean }) {
-  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? "Organisations requiring attention" : "Organisation directory"}</CardTitle><p className="mt-1 text-sm text-slate-500">Owner, plan, footprint and renewal status in one place.</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search business or owner" /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="trial">Trial</option><option value="expiring">Expiring soon</option><option value="no-plan">No plan</option><option value="expired">Expired</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Organisation</th><th className="px-5 py-3">Owner</th><th className="px-5 py-3">Plan / status</th><th className="px-5 py-3">Sites / staff</th><th className="px-5 py-3">Renewal</th><th className="px-5 py-3 text-right">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Loading organisations</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">No organisations match these filters.</td></tr>}{!loading && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner"; return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">Joined {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || "No email"}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || "No plan"}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>View <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div></CardContent></Card>;
+function OrganisationDirectory({ loading, error, organisations, search, setSearch, submitSearch, segment, setSegment, select, compact = false, page = 0, total = 0, pageSize = 25, onPageChange }: { loading: boolean; error: Error | null; organisations: Subscriber[]; search: string; setSearch: (value: string) => void; submitSearch: () => void; segment: string; setSegment: (value: string) => void; select: (subscriber: Subscriber) => void; compact?: boolean; page?: number; total?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
+  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? "Organisations requiring attention" : "Organisation directory"}</CardTitle><p className="mt-1 text-sm text-slate-500">Owner, plan, footprint and renewal status in one place.</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search business or owner" /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="trial">Trial</option><option value="expiring">Expiring soon</option><option value="no-plan">No plan</option><option value="expired">Expired</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Organisation</th><th className="px-5 py-3">Owner</th><th className="px-5 py-3">Plan / status</th><th className="px-5 py-3">Sites / staff</th><th className="px-5 py-3">Renewal</th><th className="px-5 py-3 text-right">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Loading organisations</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">No organisations match these filters.</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner"; return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">Joined {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || "No email"}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || "No plan"}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>View <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? "0 organisations" : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} of ${total} organisations`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>Previous</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>Next</Button></div></div>}</CardContent></Card>;
 }
 
 function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
