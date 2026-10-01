@@ -140,11 +140,11 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
 
   const evolutionRows = evolution.data?.items ?? [];
   const evolutionMetrics: { key: EvolutionMetric; label: string; kind: "money" | "count" }[] = [
-    { key: "customersServed", label: t("evolution_customers_served"), kind: "count" },
-    { key: "newCustomers", label: t("evolution_new_customers"), kind: "count" },
-    { key: "revenue", label: t("evolution_revenue"), kind: "money" },
-    { key: "expenses", label: t("evolution_expenses"), kind: "money" },
-    { key: "profit", label: t("evolution_profit"), kind: "money" },
+    { key: "customersServed", label: t("business_evolution_customers_served"), kind: "count" },
+    { key: "newCustomers", label: t("business_evolution_new_customers"), kind: "count" },
+    { key: "revenue", label: t("business_evolution_revenue"), kind: "money" },
+    { key: "expenses", label: t("business_evolution_expenses"), kind: "money" },
+    { key: "profit", label: t("business_evolution_profit"), kind: "money" },
   ];
   const periodLabel = (period: string) => {
     const date = new Date(`${period}T12:00:00Z`);
