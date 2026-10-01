@@ -436,7 +436,8 @@ export default function Orders() {
       const start = new Date(now);
       if (periodFilter === "today") start.setHours(0, 0, 0, 0);
       if (periodFilter === "week") {
-        start.setDate(start.getDate() - 7);
+        const daysSinceMonday = (start.getDay() + 6) % 7;
+        start.setDate(start.getDate() - daysSinceMonday);
         start.setHours(0, 0, 0, 0);
       }
       if (periodFilter === "month") {

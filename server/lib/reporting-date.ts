@@ -66,6 +66,14 @@ export function shiftReportingDate(date: string, days: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
+/** Monday of the reporting week containing an ISO date, independent of server TZ. */
+export function reportingWeekStart(date: string): string {
+  const match = ISO_DATE_ONLY.exec(date);
+  if (!match) return date;
+  const day = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
+  return shiftReportingDate(date, -(day === 0 ? 6 : day - 1));
+}
+
 export function parseLocalDateParam(value: string | undefined, fallback: Date, endOfDay = false): Date {
   const match = value ? ISO_DATE_ONLY.exec(value) : null;
   const date = match

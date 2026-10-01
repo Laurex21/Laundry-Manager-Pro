@@ -28,6 +28,12 @@ function dateLocaleFor(language: string) {
   return enUS;
 }
 
+function shortReportingDate(value: string, language: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return new Intl.DateTimeFormat(language, { day: "numeric", month: "short", timeZone: "UTC" })
+    .format(new Date(`${value}T12:00:00Z`));
+}
+
 const QUEUE_STAGES = [
   { key: "received", colorCls: "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400" },
   { key: "washing",  colorCls: "text-sky-700 bg-sky-50 border-sky-100 dark:bg-sky-950/20 dark:border-sky-900/30 dark:text-sky-400" },
@@ -71,6 +77,12 @@ export default function Dashboard() {
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${symbol}`;
+  const weekPeriod = dashData?.weekStartDate && dashData?.reportingDate
+    ? `${shortReportingDate(dashData.weekStartDate, i18n.language)} – ${shortReportingDate(dashData.reportingDate, i18n.language)}`
+    : undefined;
+  const monthPeriod = dashData?.reportingDate
+    ? `${shortReportingDate(`${dashData.reportingDate.slice(0, 7)}-01`, i18n.language)} – ${shortReportingDate(dashData.reportingDate, i18n.language)}`
+    : undefined;
 
   const isAllSitesMode = isOwner && currentSite === null;
   const sitesOverview: any[] = dashData?.sitesOverview ?? [];
@@ -152,8 +164,8 @@ export default function Dashboard() {
 
       {/* Core KPI strip */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="dashboard-core-kpis">
-        <MetricCard label={`${t('total_revenue')} · ${t('this_month')}`} value={money(dashData?.monthRevenue ?? 0)} icon={DollarSign} color="green" data-testid="card-month-revenue" />
-        <MetricCard label={t('net_profit')} value={money(monthProfit)} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
+        <MetricCard label={`${t('total_revenue')} · ${t('this_month')}`} value={money(dashData?.monthRevenue ?? 0)} period={monthPeriod} icon={DollarSign} color="green" data-testid="card-month-revenue" />
+        <MetricCard label={`${t('net_profit')} · ${t('this_month')}`} value={money(monthProfit)} period={monthPeriod} icon={TrendingUp} color={monthProfit >= 0 ? "green" : "red"} data-testid="card-month-profit" />
         <MetricCard href="/orders?status=received" label={t('pending_orders')} value={stats?.pendingOrders || 0} icon={Clock} color="amber" data-testid="card-pending-orders" />
         <MetricCard href="/orders?status=ready" label={t('ready_for_pickup')} value={readyForPickup.length} icon={Package} color="emerald" data-testid="card-ready-count" />
       </div>
@@ -228,10 +240,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" data-testid="dashboard-supporting-kpis">
         <MetricCard href="/orders?period=today" label={t('today_orders')} value={dashData?.todayOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-today-orders" />
         <MetricCard label={t('today_revenue')} value={money(dashData?.todayRevenue)} icon={DollarSign} color="green" data-testid="card-today-revenue" />
-        <MetricCard href="/orders?period=week" label={t('week_orders')} value={dashData?.weekOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
-        <MetricCard label={t('week_revenue')} value={money(dashData?.weekRevenue)} icon={DollarSign} color="green" data-testid="card-week-revenue" />
-        <MetricCard href="/orders?period=month" label={t('total_orders')} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
-        <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={t('total_expenses_label')} value={money(dashData?.monthExpenses)} icon={DollarSign} color="red" data-testid="card-month-expenses" />
+        <MetricCard href="/orders?period=week" label={t('week_orders')} value={dashData?.weekOrders ?? 0} period={weekPeriod} icon={ShoppingBag} color="neutral" data-testid="card-week-orders" />
+        <MetricCard label={t('week_revenue')} value={money(dashData?.weekRevenue)} period={weekPeriod} icon={DollarSign} color="green" data-testid="card-week-revenue" />
+        <MetricCard href="/orders?period=month" label={`${t('total_orders')} · ${t('this_month')}`} value={dashData?.monthOrders ?? stats?.totalOrders ?? 0} period={monthPeriod} icon={ShoppingBag} color="neutral" data-testid="card-month-orders" />
+        <MetricCard href={`/expenses?period=${format(new Date(), "yyyy-MM")}`} label={`${t('total_expenses_label')} · ${t('this_month')}`} value={money(dashData?.monthExpenses)} period={monthPeriod} icon={DollarSign} color="red" data-testid="card-month-expenses" />
       </div>
       <div className="space-y-3">
         {Number(creditSummary?.totalCreditBalance ?? 0) > 0 && (
@@ -460,7 +472,7 @@ export default function Dashboard() {
   );
 }
 
-function MetricCard({ label, value, icon: Icon, color, href, ...props }: any) {
+function MetricCard({ label, value, period, icon: Icon, color, href, ...props }: any) {
   const iconCls: Record<string, string> = {
     neutral: "text-muted-foreground",
     green:   "text-emerald-600 dark:text-emerald-400",
@@ -484,6 +496,7 @@ function MetricCard({ label, value, icon: Icon, color, href, ...props }: any) {
         </div>
       </div>
       <p className="text-lg font-bold text-[#082D5B] dark:text-foreground tabular-nums leading-none">{value}</p>
+      {period && <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{period}</p>}
     </div>
   );
   if (!href) return content;
