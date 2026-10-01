@@ -10,6 +10,7 @@ import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema, orderDrafts, orders, orderStatusHistory, sites } from "@shared/schema";
 import { reportingDateRange, reportingDateString, validReportingTimeZone } from "./lib/reporting-date";
+import { getBusinessEvolution } from "./lib/business-evolution";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
 import { registerMembershipRoutes } from "./lib/membership-routes";
 import { restoreSubscriptionUsageForCancelledOrder } from "./lib/membership-routes";
@@ -96,6 +97,15 @@ function reportingTimeZone(req: any): string {
 
 function orgScopedSites(req: any): number[] {
   return Array.isArray(req.organisationSiteScope) ? req.organisationSiteScope : scopedSites(req);
+}
+
+function reportSiteScope(req: any): number[] | null {
+  const requested = req.query.site;
+  if (requested === undefined || requested === "current") return scopedSites(req);
+  const allowed = orgScopedSites(req);
+  if (requested === "all") return allowed;
+  const siteId = Number(requested);
+  return Number.isInteger(siteId) && allowed.includes(siteId) ? [siteId] : null;
 }
 
 function resolveWriteSiteId(req: any): number | null {
@@ -1109,6 +1119,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get(api.performance.get.path, isAuthenticated, async (req: any, res) => {
+    const reportSites = reportSiteScope(req);
+    if (reportSites === null) return res.status(403).json({ message: "Forbidden site" });
     const { start, end } = req.query;
     const now = new Date();
     const timeZone = reportingTimeZone(req);
@@ -1119,11 +1131,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       timeZone,
     );
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
-    const data = await storage.getPerformanceData(scopedSites(req), startDate, endDate);
+    const data = await storage.getPerformanceData(reportSites, startDate, endDate);
     res.json(data);
   });
 
   app.get(api.reports.get.path, isAuthenticated, async (req: any, res) => {
+    const reportSites = reportSiteScope(req);
+    if (reportSites === null) return res.status(403).json({ message: "Forbidden site" });
     const { start, end } = req.query;
     const now = new Date();
     const timeZone = reportingTimeZone(req);
@@ -1134,8 +1148,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       timeZone,
     );
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
-    const data = await storage.getReportData(startDate, endDate, scopedSites(req), timeZone);
+    const data = await storage.getReportData(startDate, endDate, reportSites, timeZone);
     res.json(data);
+  });
+
+  app.get("/api/reports/business-evolution", isAuthenticated, async (req: any, res) => {
+    const reportSites = reportSiteScope(req);
+    if (reportSites === null) return res.status(403).json({ message: "Forbidden site" });
+    const params = z.object({
+      start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      granularity: z.enum(["day", "week", "month"]).default("month"),
+    }).safeParse(req.query);
+    if (!params.success) return res.status(400).json({ message: "Invalid report filters" });
+    const { start, end, granularity } = params.data;
+    const startDay = new Date(`${start}T12:00:00Z`);
+    const endDay = new Date(`${end}T12:00:00Z`);
+    if (Number.isNaN(startDay.getTime()) || Number.isNaN(endDay.getTime()) ||
+        startDay.toISOString().slice(0, 10) !== start || endDay.toISOString().slice(0, 10) !== end ||
+        startDay > endDay || endDay.getTime() - startDay.getTime() > 366 * 86400000) {
+      return res.status(400).json({ message: "Choose a valid period of at most 366 days" });
+    }
+    const timeZone = reportingTimeZone(req);
+    const { start: from, end: to } = reportingDateRange(start, end, timeZone);
+    const items = await getBusinessEvolution(from, to, start, end, granularity, reportSites, timeZone);
+    res.json({ start, end, granularity, items });
   });
 
   app.get(api.stats.get.path, isAuthenticated, async (req: any, res) => {
