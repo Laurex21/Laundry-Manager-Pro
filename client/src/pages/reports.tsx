@@ -152,6 +152,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     if (granularity === "week") return format(date, "d MMM", { locale: activeDateLocale });
     return format(date, "d MMM", { locale: activeDateLocale });
   };
+  const evolutionChartRows = evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }));
 
   const alerts = useMemo(() => {
     if (!perfData) return [];
@@ -342,33 +343,26 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
           {evolution.isLoading && <Skeleton className="h-72 w-full rounded-xl" />}
           {!evolution.isLoading && !evolution.error && evolutionRangeValid && (
             <>
-              <div className="space-y-3" data-testid="business-evolution-chart">
-                {(visibleMetrics.revenue || visibleMetrics.expenses || visibleMetrics.profit) && <div className="min-w-0 rounded-xl border border-border p-3">
-                  <p className="mb-2 text-sm font-semibold">{t("business_evolution_finances_chart")}</p>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <ComposedChart data={evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }))} margin={{ top: 8, right: 8, left: 8, bottom: 10 }}>
+              <div data-testid="business-evolution-chart">
+                {evolutionMetrics.some(metric => visibleMetrics[metric.key]) && <div className="min-w-0 rounded-xl border border-border p-3 sm:p-4">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
+                    <span>{t("business_evolution_finances_chart")}</span>
+                    <span>{t("business_evolution_clients_chart")}</span>
+                  </div>
+                  {evolutionChartRows.length > 0 ? <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={evolutionChartRows} barSize={Math.min(24, Math.max(8, 360 / evolutionChartRows.length))} barGap={2} margin={{ top: 8, right: 0, left: 0, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={30} />
-                      <YAxis tick={{ fontSize: 11 }} width={65} tickFormatter={value => Number(value).toLocaleString(i18n.language)} />
-                      <Tooltip formatter={value => `${Number(value).toLocaleString(i18n.language)} ${symbol}`} />
-                      {visibleMetrics.revenue && <Bar dataKey="revenue" name={t("business_evolution_revenue")} fill={EVOLUTION_COLORS.revenue} radius={[3, 3, 0, 0]} />}
-                      {visibleMetrics.expenses && <Bar dataKey="expenses" name={t("business_evolution_expenses")} fill={EVOLUTION_COLORS.expenses} radius={[3, 3, 0, 0]} />}
-                      {visibleMetrics.profit && <Line dataKey="profit" name={t("business_evolution_profit")} stroke={EVOLUTION_COLORS.profit} strokeWidth={2} dot={false} />}
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
+                      <YAxis yAxisId="money" tick={{ fontSize: 10 }} width={56} tickFormatter={value => Number(value).toLocaleString(i18n.language)} hide={!visibleMetrics.revenue && !visibleMetrics.expenses && !visibleMetrics.profit} />
+                      <YAxis yAxisId="count" orientation="right" domain={[0, "auto"]} allowDecimals={false} tick={{ fontSize: 10 }} width={30} hide={!visibleMetrics.customersServed && !visibleMetrics.newCustomers} />
+                      <Tooltip formatter={(value, name) => `${Number(value).toLocaleString(i18n.language)}${[t("business_evolution_revenue"), t("business_evolution_expenses"), t("business_evolution_profit")].includes(String(name)) ? ` ${symbol}` : ""}`} />
+                      {visibleMetrics.revenue && <Bar yAxisId="money" dataKey="revenue" name={t("business_evolution_revenue")} fill={EVOLUTION_COLORS.revenue} radius={[3, 3, 0, 0]} />}
+                      {visibleMetrics.expenses && <Bar yAxisId="money" dataKey="expenses" name={t("business_evolution_expenses")} fill={EVOLUTION_COLORS.expenses} radius={[3, 3, 0, 0]} />}
+                      {visibleMetrics.profit && <Line yAxisId="money" dataKey="profit" name={t("business_evolution_profit")} stroke={EVOLUTION_COLORS.profit} strokeWidth={2} dot={evolutionChartRows.length <= 3} connectNulls={false} />}
+                      {visibleMetrics.customersServed && <Line yAxisId="count" dataKey="customersServed" name={t("business_evolution_customers_served")} stroke={EVOLUTION_COLORS.customersServed} strokeWidth={2} dot={evolutionChartRows.length <= 3} connectNulls={false} />}
+                      {visibleMetrics.newCustomers && <Line yAxisId="count" dataKey="newCustomers" name={t("business_evolution_new_customers")} stroke={EVOLUTION_COLORS.newCustomers} strokeWidth={2} dot={evolutionChartRows.length <= 3} connectNulls={false} />}
                     </ComposedChart>
-                  </ResponsiveContainer>
-                </div>}
-                {(visibleMetrics.customersServed || visibleMetrics.newCustomers) && <div className="min-w-0 rounded-xl border border-border p-3">
-                  <p className="mb-2 text-sm font-semibold">{t("business_evolution_clients_chart")}</p>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={evolutionRows.map(item => ({ ...item, label: periodLabel(item.period) }))} margin={{ top: 8, right: 8, left: 8, bottom: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={30} />
-                      <YAxis domain={[0, "auto"]} allowDecimals={false} tick={{ fontSize: 11 }} width={45} />
-                      <Tooltip formatter={value => Number(value).toLocaleString(i18n.language)} />
-                      {visibleMetrics.customersServed && <Line dataKey="customersServed" name={t("business_evolution_customers_served")} stroke={EVOLUTION_COLORS.customersServed} strokeWidth={2} dot={false} />}
-                      {visibleMetrics.newCustomers && <Line dataKey="newCustomers" name={t("business_evolution_new_customers")} stroke={EVOLUTION_COLORS.newCustomers} strokeWidth={2} dot={false} />}
-                    </LineChart>
-                  </ResponsiveContainer>
+                  </ResponsiveContainer> : <p className="py-12 text-center text-sm text-muted-foreground">{t("business_evolution_empty")}</p>}
                 </div>}
                 {!evolutionMetrics.some(metric => visibleMetrics[metric.key]) && <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">{t("business_evolution_select_indicator")}</p>}
               </div>
