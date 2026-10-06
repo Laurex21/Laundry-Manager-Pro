@@ -346,6 +346,7 @@ function statusTone(status: string | undefined) {
 
 function AdminDashboard() {
   const { logout } = useAuth();
+  const [activeTab, setActiveTab] = useState("overview");
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [segment, setSegment] = useState("all");
@@ -376,6 +377,12 @@ function AdminDashboard() {
   const riskCount = metrics ? metrics.withoutPlanCount + metrics.expiringSoonCount : null;
   const submitSearch = () => { setPage(0); setSearchTerm(search.trim()); };
   const changeSegment = (value: string) => { setPage(0); setSegment(value); };
+  const openPrioritySegment = (value: "expiring" | "no-plan") => {
+    setSearch("");
+    setSearchTerm("");
+    changeSegment(value);
+    setActiveTab("organisations");
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -401,7 +408,7 @@ function AdminDashboard() {
 
         {overview.error && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{overview.error.message}</p>}
 
-        <Tabs defaultValue="overview" className="mt-7">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-7">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
             <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />Overview</TabsTrigger>
             <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />Organisations</TabsTrigger>
@@ -427,7 +434,14 @@ function AdminDashboard() {
               </Card>
               <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
                 <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5 text-amber-600" />Priority queue</CardTitle></CardHeader>
-                <CardContent className="space-y-3 text-sm"><div className="flex items-center justify-between"><span>Expiring within 14 days</span><strong>{metrics?.expiringSoonCount ?? "—"}</strong></div><div className="flex items-center justify-between"><span>Organisations without plan</span><strong>{noPlanCount ?? "—"}</strong></div><div className="flex items-center justify-between"><span>Active sites</span><strong>{metrics?.activeSiteCount ?? "—"}</strong></div></CardContent>
+                <CardContent className="space-y-2 text-sm">
+                  <button type="button" onClick={() => openPrioritySegment("expiring")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label="View organisations expiring within 14 days">
+                    <span>Expiring within 14 days</span><span className="flex items-center gap-2"><strong>{metrics?.expiringSoonCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
+                  </button>
+                  <button type="button" onClick={() => openPrioritySegment("no-plan")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label="View organisations without plan">
+                    <span>Organisations without plan</span><span className="flex items-center gap-2"><strong>{noPlanCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
+                  </button>
+                </CardContent>
               </Card>
             </section>
 
