@@ -351,6 +351,7 @@ function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [segment, setSegment] = useState("all");
   const [page, setPage] = useState(0);
+  const [renewalPage, setRenewalPage] = useState(0);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
 
   const overview = useQuery<Overview>({
@@ -364,6 +365,11 @@ function AdminDashboard() {
   const subscribers = useQuery<SubscriberPage>({
     queryKey: ["/api/platform-admin/subscribers", searchTerm, segment, page],
     queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=25&offset=${page * 25}&search=${encodeURIComponent(searchTerm)}&segment=${encodeURIComponent(segment)}`),
+  });
+  const renewals = useQuery<SubscriberPage>({
+    queryKey: ["/api/platform-admin/subscribers", "renewals", renewalPage],
+    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=25&offset=${renewalPage * 25}&segment=expiring`),
+    enabled: activeTab === "renewals",
   });
   const auditEvents = useQuery<AuditEvent[]>({
     queryKey: ["/api/platform-admin/audit-events"],
@@ -412,6 +418,7 @@ function AdminDashboard() {
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
             <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />Overview</TabsTrigger>
             <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />Organisations</TabsTrigger>
+            <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />Renewals</TabsTrigger>
             <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />Security</TabsTrigger>
           </TabsList>
 
@@ -450,6 +457,21 @@ function AdminDashboard() {
 
           <TabsContent value="organisations" className="mt-5">
             <OrganisationDirectory loading={subscribers.isLoading} error={subscribers.error as Error | null} organisations={organisations} search={search} setSearch={setSearch} submitSearch={submitSearch} segment={segment} setSegment={changeSegment} select={setSelectedSubscriber} page={page} total={subscribers.data?.total ?? 0} pageSize={25} onPageChange={setPage} />
+          </TabsContent>
+
+          <TabsContent value="renewals" className="mt-5">
+            <Card className="overflow-hidden border-slate-200/80 shadow-sm">
+              <CardHeader><CardTitle className="text-lg">Renewals due within 14 days</CardTitle><p className="text-sm text-slate-500">Active subscriptions, soonest renewal first. Select an organisation for its subscription and payment history.</p></CardHeader>
+              <CardContent className="p-0">
+                {renewals.error && <p className="p-6 text-sm text-red-600" role="alert">{renewals.error.message}</p>}
+                <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Renewal date</th><th className="px-5 py-3">Organisation</th><th className="px-5 py-3">Owner</th><th className="px-5 py-3">Plan</th><th className="px-5 py-3 text-right">Details</th></tr></thead><tbody className="divide-y divide-slate-100">
+                  {renewals.isLoading && <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-500">Loading renewals…</td></tr>}
+                  {!renewals.isLoading && !renewals.error && renewals.data?.items.map(item => <tr key={item.id}><td className="whitespace-nowrap px-5 py-4 font-semibold text-amber-800">{formatDate(item.subscription?.endDate)}</td><td className="px-5 py-4 font-medium">{item.name}</td><td className="px-5 py-4 text-slate-600">{[item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || item.owner.email || "—"}</td><td className="px-5 py-4">{item.subscription?.planName || "—"}</td><td className="px-5 py-4 text-right"><Button type="button" variant="ghost" size="sm" onClick={() => setSelectedSubscriber(item)} aria-label={`View ${item.name} subscription`}>View <ArrowRight className="ml-1 h-4 w-4" /></Button></td></tr>)}
+                  {!renewals.isLoading && !renewals.error && !renewals.data?.items.length && <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-500">No renewals due in the next 14 days.</td></tr>}
+                </tbody></table></div>
+                {!!renewals.data?.total && <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"><span>{renewalPage * 25 + 1}–{Math.min((renewalPage + 1) * 25, renewals.data.total)} of {renewals.data.total} renewals</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={renewalPage === 0} onClick={() => setRenewalPage(value => value - 1)}>Previous</Button><Button type="button" variant="outline" size="sm" disabled={(renewalPage + 1) * 25 >= renewals.data.total} onClick={() => setRenewalPage(value => value + 1)}>Next</Button></div></div>}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="security" className="mt-5">

@@ -406,7 +406,8 @@ export function registerPlatformAdminRoutes(app: Express): void {
             latest_subscription.plan_slug,
             latest_subscription.plan_name
           ${fromWhere}
-          ORDER BY o.created_at DESC, o.id DESC
+          ORDER BY CASE WHEN $2 = 'expiring' THEN latest_subscription.end_date END ASC NULLS LAST,
+                   o.created_at DESC, o.id DESC
           LIMIT $3 OFFSET $4
         `,
         [search, segment, limit, offset],
