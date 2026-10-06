@@ -19,6 +19,8 @@ import {
   Users,
 } from "lucide-react";
 import QRCode from "qrcode";
+import i18n from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,18 +113,82 @@ type AdminStatus = {
 
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
+const ADMIN_FR: Record<string, string> = {
+  "Access is recorded and limited to authorised platform administrators.": "Accès réservé et journalisé pour les administrateurs autorisés.",
+  "Account owner": "Propriétaire du compte", "Accounts by role": "Comptes par rôle", "Activation snapshot": "État des activations",
+  "Active": "Actif", "Active plan rate": "Taux de formules actives", "Active plans": "Formules actives", "Active sites": "Boutiques actives",
+  "Active subscriptions": "Abonnements actifs", "Activity snapshot": "Aperçu de l’activité", "Added": "Ajouté le", "Administrator sign in": "Connexion administrateur",
+  "All orders": "Toutes les commandes", "All organisations created": "Toutes les organisations créées", "All statuses": "Tous les statuts",
+  "Attention needed": "À examiner", "Audit": "Audit", "City not set": "Ville non renseignée", "Close": "Fermer",
+  "Completed revenue · latest 20 payments": "Encaissements confirmés · 20 derniers paiements", "Continue securely": "Continuer en sécurité",
+  "Current subscription": "Abonnement actuel", "Customers": "Clients", "Details": "Détails", "Email address": "Adresse e-mail",
+  "Enable MFA": "Activer la double authentification", "Enter the six-digit code from your authenticator app.": "Saisissez le code à six chiffres de votre application d’authentification.",
+  "Executive control centre": "Centre de pilotage", "Expired": "Expiré", "Expiring soon": "Échéance proche", "Expiring within 14 days": "Échéance sous 14 jours",
+  "Focus on revenue, activation risk, renewals and audited platform activity.": "Suivez les revenus, les activations, les échéances et l’activité auditée de la plateforme.",
+  "Inactive": "Inactif", "Joined": "Créée le", "Last order": "Dernière commande", "Latest audited actions across organisations. Administration remains read-only.": "Dernières actions auditées. L’administration reste en lecture seule.",
+  "Loading organisation workspace": "Chargement de la fiche organisation", "Loading organisations": "Chargement des organisations", "Loading renewals…": "Chargement des échéances…",
+  "Manage the platform without crossing subscriber boundaries.": "Pilotez la plateforme sans franchir les limites des organisations.",
+  "MFA setup failed": "Échec de la configuration de la double authentification", "Monthly subscription revenue": "Revenus des abonnements du mois",
+  "Monitor organisations, subscriptions, sites, and security activity from one controlled workspace.": "Suivez les organisations, les abonnements, les boutiques et la sécurité depuis un espace contrôlé.",
+  "New customers · 30 days": "Nouveaux clients · 30 jours", "Next": "Suivant", "No audited activity yet.": "Aucune activité auditée.",
+  "No email": "E-mail non renseigné", "No organisations match these filters.": "Aucune organisation ne correspond à ces filtres.",
+  "No phone": "Téléphone non renseigné", "No plan": "Sans formule", "No renewals due in the next 14 days.": "Aucune échéance dans les 14 prochains jours.",
+  "No sites registered.": "Aucune boutique enregistrée.", "No subscription payment recorded.": "Aucun paiement d’abonnement enregistré.",
+  "No user accounts registered.": "Aucun compte utilisateur enregistré.", "Not set": "Non défini", "Only aggregate role counts are shown to minimise unnecessary exposure of personal data.": "Seuls les totaux par rôle sont affichés afin de limiter l’exposition des données personnelles.",
+  "Operational receipts · 30 days": "Encaissements opérationnels · 30 jours", "Orders · 30 days": "Commandes · 30 jours",
+  "Organisation": "Organisation", "Organisation audit activity": "Audit de l’organisation", "Organisation directory": "Annuaire des organisations",
+  "Organisation workspace · read-only": "Fiche organisation · lecture seule", "Organisations": "Organisations", "Organisations requiring attention": "Organisations à examiner",
+  "Organisations without plan": "Organisations sans formule", "Overview": "Vue d’ensemble", "Owner": "Propriétaire",
+  "Owner and account": "Propriétaire et compte", "Owner, plan, footprint and renewal status in one place.": "Propriétaire, formule, boutiques et échéance au même endroit.",
+  "Password": "Mot de passe", "Payments": "Paiements", "Plan": "Formule", "Plan / status": "Formule / statut", "Plan price": "Prix de la formule",
+  "Platform administration": "Administration de la plateforme", "Platform health and subscriber growth": "Santé de la plateforme et croissance des abonnés",
+  "Previous": "Précédent", "Priority queue": "Priorités", "Read-only boundary": "Accès en lecture seule", "Read-only controls": "Commandes en lecture seule",
+  "Recent subscription payments": "Paiements d’abonnement récents", "Registered": "Inscrites", "Registered organisations": "Organisations inscrites",
+  "Renewal": "Échéance", "Renewal date": "Date d’échéance", "Renewals": "Échéances", "Renewals due in 14 days": "Échéances sous 14 jours",
+  "Renewals due within 14 days": "Échéances dans les 14 jours", "Request failed": "Échec de la requête",
+  "Requires activation review": "Activation à examiner", "Restricted operations portal": "Portail d’administration sécurisé",
+  "Scan this code with an authenticator app, then enter the current six-digit code.": "Scannez ce code avec une application d’authentification, puis saisissez le code à six chiffres.",
+  "Search business or owner": "Rechercher une organisation ou un propriétaire", "Secure your account": "Sécurisez votre compte",
+  "Security": "Sécurité", "Security and audit activity": "Sécurité et journal d’audit", "Separate registered organisations from organisations with active plans.": "Distinguez les organisations inscrites de celles ayant une formule active.",
+  "Sign in failed": "Échec de la connexion", "Sign out": "Se déconnecter", "Sites": "Boutiques", "Sites / staff": "Boutiques / personnel",
+  "Six-digit code": "Code à six chiffres", "Started": "Début", "Subscription": "Abonnement", "Successful payments shown": "Paiements réussis affichés",
+  "Summary": "Résumé", "This workspace exposes operational evidence without plan changes, suspensions, impersonation or user-management actions.": "Cet espace présente les données opérationnelles sans modification des formules, suspension, usurpation ou gestion des utilisateurs.",
+  "Trial": "Essai", "Users": "Utilisateurs", "User accounts": "Comptes utilisateurs", "Verification code": "Code de vérification",
+  "Verification failed": "Échec de la vérification", "Verify and open portal": "Vérifier et ouvrir le portail", "View": "Voir",
+  "Without plan": "Sans formule", "XpressPro Control": "XpressPro Pilotage",
+  "Active subscriptions, soonest renewal first. Select an organisation for its subscription and payment history.": "Abonnements actifs, par date d’échéance. Ouvrez une organisation pour consulter son abonnement et ses paiements.",
+  "Organisation created": "Organisation créée le", "Orders used": "Commandes utilisées",
+  "Renews / ends": "Renouvellement / fin", "of registered": "des inscrites", "of": "sur", "renewals": "échéances", "organisations": "organisations",
+  "View organisations expiring within 14 days": "Voir les organisations dont la formule expire sous 14 jours",
+  "View organisations without plan": "Voir les organisations sans formule", "View subscription for": "Voir l’abonnement de",
+  "Platform": "Plateforme", "System": "Système", "No audited organisation activity yet.": "Aucune activité auditée pour cette organisation.",
+  "Cancelled": "Annulé", "Completed": "Terminé",
+  "Use an account authorised for platform administration.": "Utilisez un compte autorisé à administrer la plateforme.",
+  "Authenticator setup QR code": "QR code de configuration de l’authentification",
+};
+
+function adminText(english: string): string {
+  return i18n.language.startsWith("fr") ? ADMIN_FR[english] || english : english;
+}
+
+function adminStatus(status: string | null | undefined): string {
+  if (!status) return adminText("Inactive");
+  const english: Record<string, string> = { active: "Active", trial: "Trial", expired: "Expired", cancelled: "Cancelled", inactive: "Inactive", completed: "Completed" };
+  return adminText(english[status] || status);
+}
+
 async function apiJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { credentials: "include" });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.message || "Request failed");
+    throw new Error(payload?.message || adminText('Request failed'));
   }
   return response.json();
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+  if (!value) return adminText('Not set');
+  return new Intl.DateTimeFormat(i18n.language.startsWith("fr") ? "fr-FR" : undefined, { dateStyle: "medium" }).format(new Date(value));
 }
 
 function formatMoney(value: number) {
@@ -151,11 +217,11 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
     })
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.message || "MFA setup failed");
+        if (!response.ok) throw new Error(payload?.message || adminText('MFA setup failed'));
         return payload as { secret: string; otpauthUri: string };
       })
       .then(async (payload) => setSetup({ ...payload, qrCode: await QRCode.toDataURL(payload.otpauthUri, { width: 220, margin: 1 }) }))
-      .catch((error) => setSetupError(error instanceof Error ? error.message : "MFA setup failed"));
+      .catch((error) => setSetupError(error instanceof Error ? error.message : adminText('MFA setup failed')));
   }, [setup, step]);
 
   const login = useMutation({
@@ -167,7 +233,7 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
         body: JSON.stringify({ email, password }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "Sign in failed");
+      if (!response.ok) throw new Error(payload?.message || adminText('Sign in failed'));
       return payload;
     },
     onSuccess: (payload) => {
@@ -186,7 +252,7 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
         body: JSON.stringify({ code }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.message || "Verification failed");
+      if (!response.ok) throw new Error(payload?.message || adminText('Verification failed'));
       return payload;
     },
     onSuccess: () => window.location.reload(),
@@ -207,19 +273,19 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
           </div>
           <div>
             <p className="font-display font-bold tracking-tight">XpressPro</p>
-            <p className="text-xs text-slate-400 uppercase tracking-[0.2em]">Platform administration</p>
+            <p className="text-xs text-slate-400 uppercase tracking-[0.2em]">{adminText('Platform administration')}</p>
           </div>
         </div>
         <div className="max-w-xl">
-          <p className="text-cyan-300 text-sm font-semibold uppercase tracking-[0.18em] mb-5">Restricted operations portal</p>
+          <p className="text-cyan-300 text-sm font-semibold uppercase tracking-[0.18em] mb-5">{adminText('Restricted operations portal')}</p>
           <h1 className="font-display text-5xl xl:text-6xl font-bold leading-[1.05] tracking-tight">
-            Manage the platform without crossing subscriber boundaries.
+            {adminText("Manage the platform without crossing subscriber boundaries.")}
           </h1>
           <p className="mt-6 text-lg leading-8 text-slate-300 max-w-lg">
-            Monitor organisations, subscriptions, sites, and security activity from one controlled workspace.
+            {adminText("Monitor organisations, subscriptions, sites, and security activity from one controlled workspace.")}
           </p>
         </div>
-        <p className="text-xs text-slate-500">Access is recorded and limited to authorised platform administrators.</p>
+        <p className="text-xs text-slate-500">{adminText('Access is recorded and limited to authorised platform administrators.')}</p>
       </section>
 
       <section className="flex items-center justify-center p-6 sm:p-10">
@@ -230,7 +296,7 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
             </div>
             <div>
               <p className="font-display font-bold">XpressPro</p>
-              <p className="text-xs text-slate-400">Platform administration</p>
+              <p className="text-xs text-slate-400">{adminText('Platform administration')}</p>
             </div>
           </div>
           <div className="mb-8">
@@ -238,20 +304,20 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
               superadmin.xpressclean.cm
             </Badge>
             <h2 className="font-display text-3xl font-bold mt-5">
-              {step === "credentials" ? "Administrator sign in" : step === "enroll" ? "Secure your account" : "Verification code"}
+              {step === "credentials" ? adminText('Administrator sign in') : step === "enroll" ? adminText('Secure your account') : adminText('Verification code')}
             </h2>
             <p className="text-slate-400 mt-2">
               {step === "credentials"
-                ? "Use an account authorised for platform administration."
+                ? adminText('Use an account authorised for platform administration.')
                 : step === "enroll"
-                  ? "Scan this code with an authenticator app, then enter the current six-digit code."
-                  : "Enter the six-digit code from your authenticator app."}
+                  ? adminText('Scan this code with an authenticator app, then enter the current six-digit code.')
+                  : adminText('Enter the six-digit code from your authenticator app.')}
             </p>
           </div>
           <form onSubmit={submit} className="space-y-5">
             {step === "credentials" ? <>
             <div>
-              <label htmlFor="admin-email" className="text-sm font-medium text-slate-300">Email address</label>
+              <label htmlFor="admin-email" className="text-sm font-medium text-slate-300">{adminText('Email address')}</label>
               <Input
                 id="admin-email"
                 type="email"
@@ -264,7 +330,7 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
               />
             </div>
             <div>
-              <label htmlFor="admin-password" className="text-sm font-medium text-slate-300">Password</label>
+              <label htmlFor="admin-password" className="text-sm font-medium text-slate-300">{adminText('Password')}</label>
               <Input
                 id="admin-password"
                 type="password"
@@ -278,13 +344,13 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
             </> : <>
               {step === "enroll" && setup && (
                 <div className="rounded-xl border border-white/10 bg-white p-4 text-center">
-                  <img src={setup.qrCode} alt="Authenticator setup QR code" className="mx-auto h-[220px] w-[220px]" />
+                  <img src={setup.qrCode} alt={adminText('Authenticator setup QR code')} className="mx-auto h-[220px] w-[220px]" />
                   <p className="mt-3 break-all font-mono text-xs text-slate-700">{setup.secret}</p>
                 </div>
               )}
               {step === "enroll" && !setup && !setupError && <div className="grid place-items-center py-8"><Loader2 className="h-6 w-6 animate-spin text-cyan-300" /></div>}
               <div>
-                <label htmlFor="admin-code" className="text-sm font-medium text-slate-300">Six-digit code</label>
+                <label htmlFor="admin-code" className="text-sm font-medium text-slate-300">{adminText('Six-digit code')}</label>
                 <Input
                   id="admin-code"
                   inputMode="numeric"
@@ -310,7 +376,7 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
               className="w-full h-12 bg-cyan-400 text-slate-950 hover:bg-cyan-300 font-semibold"
             >
               {(login.isPending || verify.isPending) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LockKeyhole className="mr-2 h-4 w-4" />}
-              {step === "credentials" ? "Continue securely" : step === "enroll" ? "Enable MFA" : "Verify and open portal"}
+              {step === "credentials" ? adminText('Continue securely') : step === "enroll" ? adminText('Enable MFA') : adminText('Verify and open portal')}
             </Button>
           </form>
         </div>
@@ -396,57 +462,57 @@ function AdminDashboard() {
         <div className="mx-auto flex h-16 max-w-[1560px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-cyan-300"><ShieldCheck className="h-5 w-5" /></div>
-            <div><p className="font-display font-bold leading-tight">XpressPro Control</p><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">Platform administration</p></div>
+            <div><p className="font-display font-bold leading-tight">{adminText('XpressPro Control')}</p><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">{adminText('Platform administration')}</p></div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 sm:flex"><span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />Read-only controls</Badge>
+            <Badge variant="outline" className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 sm:flex"><span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />{adminText('Read-only controls')}</Badge>
             <Avatar className="h-9 w-9 border border-slate-200"><AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback></Avatar>
-            <Button variant="ghost" size="icon" onClick={() => logout()} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => logout()} aria-label={adminText('Sign out')}><LogOut className="h-4 w-4" /></Button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div><p className="text-sm font-semibold text-cyan-700">Executive control centre</p><h1 className="mt-1 font-display text-3xl font-bold tracking-tight">Platform health and subscriber growth</h1><p className="mt-2 max-w-2xl text-slate-500">Focus on revenue, activation risk, renewals and audited platform activity.</p></div>
-          <div className="grid grid-cols-2 gap-2 sm:flex"><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Active plan rate</p><p className="font-bold">{activePlanRate === null ? "—" : `${activePlanRate}%`}</p></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">Attention needed</p><p className="font-bold text-amber-700">{riskCount ?? "—"}</p></div></div>
+          <div><p className="text-sm font-semibold text-cyan-700">{adminText('Executive control centre')}</p><h1 className="mt-1 font-display text-3xl font-bold tracking-tight">{adminText('Platform health and subscriber growth')}</h1><p className="mt-2 max-w-2xl text-slate-500">{adminText('Focus on revenue, activation risk, renewals and audited platform activity.')}</p></div>
+          <div className="grid grid-cols-2 gap-2 sm:flex"><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">{adminText('Active plan rate')}</p><p className="font-bold">{activePlanRate === null ? "—" : `${activePlanRate}%`}</p></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">{adminText('Attention needed')}</p><p className="font-bold text-amber-700">{riskCount ?? "—"}</p></div></div>
         </div>
 
         {overview.error && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{overview.error.message}</p>}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-7">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
-            <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />Overview</TabsTrigger>
-            <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />Organisations</TabsTrigger>
-            <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />Renewals</TabsTrigger>
-            <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />Security</TabsTrigger>
+            <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />{adminText('Overview')}</TabsTrigger>
+            <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />{adminText('Organisations')}</TabsTrigger>
+            <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />{adminText('Renewals')}</TabsTrigger>
+            <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />{adminText('Security')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-5 space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label="Monthly subscription revenue" value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
-              <MetricCard label="Active subscriptions" value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
-              <MetricCard label="Registered organisations" value={metrics?.organisationCount ?? "—"} icon={Building2} />
-              <MetricCard label="Renewals due in 14 days" value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
+              <MetricCard label={adminText('Monthly subscription revenue')} value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
+              <MetricCard label={adminText('Active subscriptions')} value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
+              <MetricCard label={adminText('Registered organisations')} value={metrics?.organisationCount ?? "—"} icon={Building2} />
+              <MetricCard label={adminText('Renewals due in 14 days')} value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
               <Card className="border-slate-200/80 shadow-sm">
-                <CardHeader><CardTitle className="text-lg">Activation snapshot</CardTitle><p className="text-sm text-slate-500">Separate registered organisations from organisations with active plans.</p></CardHeader>
+                <CardHeader><CardTitle className="text-lg">{adminText('Activation snapshot')}</CardTitle><p className="text-sm text-slate-500">{adminText('Separate registered organisations from organisations with active plans.')}</p></CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-xl bg-slate-950 p-5 text-white"><p className="text-sm text-slate-400">Registered</p><p className="mt-2 text-3xl font-bold">{metrics?.organisationCount ?? "—"}</p><p className="mt-2 text-xs text-slate-400">All organisations created</p></div>
-                  <div className="rounded-xl bg-emerald-50 p-5"><p className="text-sm text-emerald-700">Active plans</p><p className="mt-2 text-3xl font-bold text-emerald-950">{metrics?.activeSubscriptionCount ?? "—"}</p><p className="mt-2 text-xs text-emerald-700">{activePlanRate === null ? "—" : `${activePlanRate}%`} of registered</p></div>
-                  <div className="rounded-xl bg-amber-50 p-5"><p className="text-sm text-amber-700">Without plan</p><p className="mt-2 text-3xl font-bold text-amber-950">{noPlanCount ?? "—"}</p><p className="mt-2 text-xs text-amber-700">Requires activation review</p></div>
+                  <div className="rounded-xl bg-slate-950 p-5 text-white"><p className="text-sm text-slate-400">{adminText('Registered')}</p><p className="mt-2 text-3xl font-bold">{metrics?.organisationCount ?? "—"}</p><p className="mt-2 text-xs text-slate-400">{adminText('All organisations created')}</p></div>
+                  <div className="rounded-xl bg-emerald-50 p-5"><p className="text-sm text-emerald-700">{adminText('Active plans')}</p><p className="mt-2 text-3xl font-bold text-emerald-950">{metrics?.activeSubscriptionCount ?? "—"}</p><p className="mt-2 text-xs text-emerald-700">{activePlanRate === null ? "—" : `${activePlanRate}%`} {adminText("of registered")}</p></div>
+                  <div className="rounded-xl bg-amber-50 p-5"><p className="text-sm text-amber-700">{adminText('Without plan')}</p><p className="mt-2 text-3xl font-bold text-amber-950">{noPlanCount ?? "—"}</p><p className="mt-2 text-xs text-amber-700">{adminText('Requires activation review')}</p></div>
                 </CardContent>
               </Card>
               <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
-                <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5 text-amber-600" />Priority queue</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5 text-amber-600" />{adminText('Priority queue')}</CardTitle></CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <button type="button" onClick={() => openPrioritySegment("expiring")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label="View organisations expiring within 14 days">
-                    <span>Expiring within 14 days</span><span className="flex items-center gap-2"><strong>{metrics?.expiringSoonCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
+                  <button type="button" onClick={() => openPrioritySegment("expiring")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label={adminText("View organisations expiring within 14 days")}>
+                    <span>{adminText('Expiring within 14 days')}</span><span className="flex items-center gap-2"><strong>{metrics?.expiringSoonCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
                   </button>
-                  <button type="button" onClick={() => openPrioritySegment("no-plan")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label="View organisations without plan">
-                    <span>Organisations without plan</span><span className="flex items-center gap-2"><strong>{noPlanCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
+                  <button type="button" onClick={() => openPrioritySegment("no-plan")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label={adminText("View organisations without plan")}>
+                    <span>{adminText('Organisations without plan')}</span><span className="flex items-center gap-2"><strong>{noPlanCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
                   </button>
                 </CardContent>
               </Card>
@@ -461,21 +527,21 @@ function AdminDashboard() {
 
           <TabsContent value="renewals" className="mt-5">
             <Card className="overflow-hidden border-slate-200/80 shadow-sm">
-              <CardHeader><CardTitle className="text-lg">Renewals due within 14 days</CardTitle><p className="text-sm text-slate-500">Active subscriptions, soonest renewal first. Select an organisation for its subscription and payment history.</p></CardHeader>
+              <CardHeader><CardTitle className="text-lg">{adminText('Renewals due within 14 days')}</CardTitle><p className="text-sm text-slate-500">{adminText('Active subscriptions, soonest renewal first. Select an organisation for its subscription and payment history.')}</p></CardHeader>
               <CardContent className="p-0">
                 {renewals.error && <p className="p-6 text-sm text-red-600" role="alert">{renewals.error.message}</p>}
-                <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Renewal date</th><th className="px-5 py-3">Organisation</th><th className="px-5 py-3">Owner</th><th className="px-5 py-3">Plan</th><th className="px-5 py-3 text-right">Details</th></tr></thead><tbody className="divide-y divide-slate-100">
-                  {renewals.isLoading && <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-500">Loading renewals…</td></tr>}
-                  {!renewals.isLoading && !renewals.error && renewals.data?.items.map(item => <tr key={item.id}><td className="whitespace-nowrap px-5 py-4 font-semibold text-amber-800">{formatDate(item.subscription?.endDate)}</td><td className="px-5 py-4 font-medium">{item.name}</td><td className="px-5 py-4 text-slate-600">{[item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || item.owner.email || "—"}</td><td className="px-5 py-4">{item.subscription?.planName || "—"}</td><td className="px-5 py-4 text-right"><Button type="button" variant="ghost" size="sm" onClick={() => setSelectedSubscriber(item)} aria-label={`View ${item.name} subscription`}>View <ArrowRight className="ml-1 h-4 w-4" /></Button></td></tr>)}
-                  {!renewals.isLoading && !renewals.error && !renewals.data?.items.length && <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-500">No renewals due in the next 14 days.</td></tr>}
+                <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">{adminText('Renewal date')}</th><th className="px-5 py-3">{adminText('Organisation')}</th><th className="px-5 py-3">{adminText('Owner')}</th><th className="px-5 py-3">{adminText('Plan')}</th><th className="px-5 py-3 text-right">{adminText('Details')}</th></tr></thead><tbody className="divide-y divide-slate-100">
+                  {renewals.isLoading && <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-500">{adminText('Loading renewals…')}</td></tr>}
+                  {!renewals.isLoading && !renewals.error && renewals.data?.items.map(item => <tr key={item.id}><td className="whitespace-nowrap px-5 py-4 font-semibold text-amber-800">{formatDate(item.subscription?.endDate)}</td><td className="px-5 py-4 font-medium">{item.name}</td><td className="px-5 py-4 text-slate-600">{[item.owner.firstName, item.owner.lastName].filter(Boolean).join(" ") || item.owner.email || "—"}</td><td className="px-5 py-4">{item.subscription?.planName || "—"}</td><td className="px-5 py-4 text-right"><Button type="button" variant="ghost" size="sm" onClick={() => setSelectedSubscriber(item)} aria-label={`${adminText("View subscription for")} ${item.name}`}>{adminText('View')} <ArrowRight className="ml-1 h-4 w-4" /></Button></td></tr>)}
+                  {!renewals.isLoading && !renewals.error && !renewals.data?.items.length && <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-500">{adminText('No renewals due in the next 14 days.')}</td></tr>}
                 </tbody></table></div>
-                {!!renewals.data?.total && <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"><span>{renewalPage * 25 + 1}–{Math.min((renewalPage + 1) * 25, renewals.data.total)} of {renewals.data.total} renewals</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={renewalPage === 0} onClick={() => setRenewalPage(value => value - 1)}>Previous</Button><Button type="button" variant="outline" size="sm" disabled={(renewalPage + 1) * 25 >= renewals.data.total} onClick={() => setRenewalPage(value => value + 1)}>Next</Button></div></div>}
+                {!!renewals.data?.total && <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"><span>{renewalPage * 25 + 1}–{Math.min((renewalPage + 1) * 25, renewals.data.total)} {adminText("of")} {renewals.data.total} {adminText("renewals")}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={renewalPage === 0} onClick={() => setRenewalPage(value => value - 1)}>{adminText('Previous')}</Button><Button type="button" variant="outline" size="sm" disabled={(renewalPage + 1) * 25 >= renewals.data.total} onClick={() => setRenewalPage(value => value + 1)}>{adminText('Next')}</Button></div></div>}
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="security" className="mt-5">
-            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>Security and audit activity</CardTitle><p className="text-sm text-slate-500">Latest audited actions across organisations. Administration remains read-only.</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{event.action.replaceAll(".", " ")}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || "Platform"}<br/><span className="text-xs text-slate-400">{event.actorEmail || "System"}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">No audited activity yet.</p>}</CardContent></Card>
+            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administration remains read-only.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{event.action.replaceAll(".", " ")}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -486,67 +552,67 @@ function AdminDashboard() {
 }
 
 function OrganisationDirectory({ loading, error, organisations, search, setSearch, submitSearch, segment, setSegment, select, compact = false, page = 0, total = 0, pageSize = 25, onPageChange }: { loading: boolean; error: Error | null; organisations: Subscriber[]; search: string; setSearch: (value: string) => void; submitSearch: () => void; segment: string; setSegment: (value: string) => void; select: (subscriber: Subscriber) => void; compact?: boolean; page?: number; total?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
-  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? "Organisations requiring attention" : "Organisation directory"}</CardTitle><p className="mt-1 text-sm text-slate-500">Owner, plan, footprint and renewal status in one place.</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search business or owner" /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="trial">Trial</option><option value="expiring">Expiring soon</option><option value="no-plan">No plan</option><option value="expired">Expired</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Organisation</th><th className="px-5 py-3">Owner</th><th className="px-5 py-3">Plan / status</th><th className="px-5 py-3">Sites / staff</th><th className="px-5 py-3">Renewal</th><th className="px-5 py-3 text-right">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Loading organisations</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">No organisations match these filters.</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner"; return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">Joined {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || "No email"}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || "No plan"}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{subscriber.subscription?.status || "inactive"}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>View <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? "0 organisations" : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} of ${total} organisations`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>Previous</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>Next</Button></div></div>}</CardContent></Card>;
+  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? adminText('Organisations requiring attention') : adminText('Organisation directory')}</CardTitle><p className="mt-1 text-sm text-slate-500">{adminText('Owner, plan, footprint and renewal status in one place.')}</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder={adminText('Search business or owner')} /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">{adminText('All statuses')}</option><option value="active">{adminText('Active')}</option><option value="trial">{adminText('Trial')}</option><option value="expiring">{adminText('Expiring soon')}</option><option value="no-plan">{adminText('No plan')}</option><option value="expired">{adminText('Expired')}</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">{adminText('Organisation')}</th><th className="px-5 py-3">{adminText('Owner')}</th><th className="px-5 py-3">{adminText('Plan / status')}</th><th className="px-5 py-3">{adminText('Sites / staff')}</th><th className="px-5 py-3">{adminText('Renewal')}</th><th className="px-5 py-3 text-right">{adminText('Details')}</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>{adminText('Loading organisations')}</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">{adminText('No organisations match these filters.')}</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner'); return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">{adminText("Joined")} {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || adminText('No email')}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || adminText('No plan')}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{adminStatus(subscriber.subscription?.status)}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>{adminText('View')} <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? `0 ${adminText("organisations")}` : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} ${adminText("of")} ${total} ${adminText("organisations")}`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>{adminText('Previous')}</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>{adminText('Next')}</Button></div></div>}</CardContent></Card>;
 }
 
 function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
-  const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || "Account owner";
+  const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner');
   const detail = useQuery<OrganisationDetail>({
     queryKey: ["/api/platform-admin/organisations", subscriber.id],
     queryFn: () => apiJson(`/api/platform-admin/organisations/${subscriber.id}`),
   });
 
   return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" onClick={close}>
-    <aside className="h-full w-full max-w-4xl overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+    <aside className="h-full w-full max-w-4xl overflow-y-auto bg-white shadow-2xl sm:my-5 sm:h-auto sm:max-h-[calc(100vh-2.5rem)] sm:self-start sm:rounded-l-2xl" onClick={(event) => event.stopPropagation()}>
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
-        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">Organisation workspace · read-only</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div>
-        <Button variant="ghost" onClick={close}>Close</Button>
+        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">{adminText('Organisation workspace · read-only')}</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div>
+        <Button variant="ghost" onClick={close}>{adminText('Close')}</Button>
       </div>
 
-      {detail.isLoading && <div className="grid min-h-[420px] place-items-center text-slate-500"><div className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/><p className="mt-3 text-sm">Loading organisation workspace</p></div></div>}
+      {detail.isLoading && <div className="grid min-h-[220px] place-items-center text-slate-500"><div className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/><p className="mt-3 text-sm">{adminText('Loading organisation workspace')}</p></div></div>}
       {detail.error && <div className="m-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{detail.error.message}</div>}
       {detail.data && <div className="space-y-6 p-5 sm:p-7">
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <PanelMetric icon={Store} label="Active sites" value={detail.data.footprint.sites.filter((site) => site.active).length} />
-          <PanelMetric icon={Users} label="User accounts" value={detail.data.footprint.roles.reduce((total, role) => total + role.count, 0)} />
-          <PanelMetric icon={Activity} label="Orders · 30 days" value={detail.data.usage.ordersLast30Days} />
-          <PanelMetric icon={CircleDollarSign} label="Operational receipts · 30 days" value={formatMoney(detail.data.usage.revenueLast30Days)} />
+          <PanelMetric icon={Store} label={adminText('Active sites')} value={detail.data.footprint.sites.filter((site) => site.active).length} />
+          <PanelMetric icon={Users} label={adminText('User accounts')} value={detail.data.footprint.roles.reduce((total, role) => total + role.count, 0)} />
+          <PanelMetric icon={Activity} label={adminText('Orders · 30 days')} value={detail.data.usage.ordersLast30Days} />
+          <PanelMetric icon={CircleDollarSign} label={adminText('Operational receipts · 30 days')} value={formatMoney(detail.data.usage.revenueLast30Days)} />
         </section>
 
         <Tabs defaultValue="summary">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
-            <TabsTrigger value="summary">Summary</TabsTrigger><TabsTrigger value="subscription">Subscription</TabsTrigger><TabsTrigger value="sites">Sites</TabsTrigger><TabsTrigger value="users">Users</TabsTrigger><TabsTrigger value="payments">Payments</TabsTrigger><TabsTrigger value="audit">Audit</TabsTrigger>
+            <TabsTrigger value="summary">{adminText('Summary')}</TabsTrigger><TabsTrigger value="subscription">{adminText('Subscription')}</TabsTrigger><TabsTrigger value="sites">{adminText('Sites')}</TabsTrigger><TabsTrigger value="users">{adminText('Users')}</TabsTrigger><TabsTrigger value="payments">{adminText('Payments')}</TabsTrigger><TabsTrigger value="audit">{adminText('Audit')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="summary" className="mt-5 space-y-5">
             <div className="grid gap-5 lg:grid-cols-2">
-              <PanelSection title="Owner and account">
-                <p className="font-semibold">{ownerName}</p><p className="mt-1 text-sm text-slate-500">{detail.data.owner.email || "No email"}</p><p className="mt-1 text-sm text-slate-500">{detail.data.owner.phone || "No phone"}</p><p className="mt-4 text-xs text-slate-400">Organisation created {formatDate(detail.data.createdAt)}</p>
+              <PanelSection title={adminText('Owner and account')}>
+                <p className="font-semibold">{ownerName}</p><p className="mt-1 text-sm text-slate-500">{detail.data.owner.email || adminText('No email')}</p><p className="mt-1 text-sm text-slate-500">{detail.data.owner.phone || adminText('No phone')}</p><p className="mt-4 text-xs text-slate-400">{adminText("Organisation created")} {formatDate(detail.data.createdAt)}</p>
               </PanelSection>
-              <PanelSection title="Activity snapshot">
-                <dl className="grid grid-cols-2 gap-4 text-sm"><PanelDatum label="All orders" value={detail.data.usage.orderCount}/><PanelDatum label="Last order" value={formatDate(detail.data.usage.lastOrderAt)}/><PanelDatum label="Customers" value={detail.data.usage.customerCount}/><PanelDatum label="New customers · 30 days" value={detail.data.usage.customersLast30Days}/></dl>
+              <PanelSection title={adminText('Activity snapshot')}>
+                <dl className="grid grid-cols-2 gap-4 text-sm"><PanelDatum label={adminText('All orders')} value={detail.data.usage.orderCount}/><PanelDatum label={adminText('Last order')} value={formatDate(detail.data.usage.lastOrderAt)}/><PanelDatum label={adminText('Customers')} value={detail.data.usage.customerCount}/><PanelDatum label={adminText('New customers · 30 days')} value={detail.data.usage.customersLast30Days}/></dl>
               </PanelSection>
             </div>
-            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">Read-only boundary</p><p className="mt-1 text-sm text-cyan-800">This workspace exposes operational evidence without plan changes, suspensions, impersonation or user-management actions.</p></section>
+            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">{adminText('Read-only boundary')}</p><p className="mt-1 text-sm text-cyan-800">{adminText('This workspace exposes operational evidence without plan changes, suspensions, impersonation or user-management actions.')}</p></section>
           </TabsContent>
 
           <TabsContent value="subscription" className="mt-5">
-            <PanelSection title="Current subscription">
-              <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || "No plan"}</Badge><span className="text-sm capitalize text-slate-500">{detail.data.subscription?.status || "inactive"}</span></div>
-              <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label="Plan price" value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label="Orders used" value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label="Started" value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label="Renews / ends" value={formatDate(detail.data.subscription?.endDate)}/></dl>
+            <PanelSection title={adminText('Current subscription')}>
+              <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || adminText('No plan')}</Badge><span className="text-sm capitalize text-slate-500">{adminStatus(detail.data.subscription?.status)}</span></div>
+              <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label={adminText('Plan price')} value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label={adminText("Orders used")} value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label={adminText('Started')} value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label={adminText("Renews / ends")} value={formatDate(detail.data.subscription?.endDate)}/></dl>
             </PanelSection>
           </TabsContent>
 
-          <TabsContent value="sites" className="mt-5"><PanelSection title={`Sites (${detail.data.footprint.sites.length})`}><div className="divide-y divide-slate-100">{detail.data.footprint.sites.map((site) => <div key={site.id} className="flex items-center justify-between gap-4 py-3"><div><p className="font-medium">{site.name}</p><p className="text-xs text-slate-500">{site.city || "City not set"} · Added {formatDate(site.createdAt)}</p></div><Badge variant="outline" className={site.active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>{site.active ? "Active" : "Inactive"}</Badge></div>)}{!detail.data.footprint.sites.length && <EmptyPanel text="No sites registered."/>}</div></PanelSection></TabsContent>
+          <TabsContent value="sites" className="mt-5"><PanelSection title={`${adminText("Sites")} (${detail.data.footprint.sites.length})`}><div className="divide-y divide-slate-100">{detail.data.footprint.sites.map((site) => <div key={site.id} className="flex items-center justify-between gap-4 py-3"><div><p className="font-medium">{site.name}</p><p className="text-xs text-slate-500">{site.city || adminText('City not set')} · {adminText("Added")} {formatDate(site.createdAt)}</p></div><Badge variant="outline" className={site.active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>{site.active ? adminText('Active') : adminText('Inactive')}</Badge></div>)}{!detail.data.footprint.sites.length && <EmptyPanel text={adminText('No sites registered.')}/>}</div></PanelSection></TabsContent>
 
-          <TabsContent value="users" className="mt-5"><PanelSection title="Accounts by role"><div className="grid gap-3 sm:grid-cols-2">{detail.data.footprint.roles.map((role) => <div key={role.role} className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="font-medium capitalize">{role.role.replaceAll("_", " ")}</span><strong>{role.count}</strong></div>)}{!detail.data.footprint.roles.length && <EmptyPanel text="No user accounts registered."/>}</div><p className="mt-5 text-xs text-slate-400">Only aggregate role counts are shown to minimise unnecessary exposure of personal data.</p></PanelSection></TabsContent>
+          <TabsContent value="users" className="mt-5"><PanelSection title={adminText('Accounts by role')}><div className="grid gap-3 sm:grid-cols-2">{detail.data.footprint.roles.map((role) => <div key={role.role} className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="font-medium capitalize">{role.role.replaceAll("_", " ")}</span><strong>{role.count}</strong></div>)}{!detail.data.footprint.roles.length && <EmptyPanel text={adminText('No user accounts registered.')}/>}</div><p className="mt-5 text-xs text-slate-400">{adminText('Only aggregate role counts are shown to minimise unnecessary exposure of personal data.')}</p></PanelSection></TabsContent>
 
           <TabsContent value="payments" className="mt-5 space-y-5">
-            <section className="grid gap-3 sm:grid-cols-2"><PanelMetric icon={CircleDollarSign} label="Completed revenue · latest 20 payments" value={formatMoney(detail.data.billing.completedRevenue)}/><PanelMetric icon={CreditCard} label="Successful payments shown" value={detail.data.billing.successfulPaymentCount}/></section>
-            <PanelSection title="Recent subscription payments"><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={payment.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{payment.planName}</p><p className="text-xs text-slate-500">{payment.method} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{payment.status}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text="No subscription payment recorded."/>}</div></PanelSection>
+            <section className="grid gap-3 sm:grid-cols-2"><PanelMetric icon={CircleDollarSign} label={adminText('Completed revenue · latest 20 payments')} value={formatMoney(detail.data.billing.completedRevenue)}/><PanelMetric icon={CreditCard} label={adminText('Successful payments shown')} value={detail.data.billing.successfulPaymentCount}/></section>
+            <PanelSection title={adminText('Recent subscription payments')}><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={payment.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{payment.planName}</p><p className="text-xs text-slate-500">{payment.method} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{adminStatus(payment.status)}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text={adminText('No subscription payment recorded.')}/>}</div></PanelSection>
           </TabsContent>
 
-          <TabsContent value="audit" className="mt-5"><PanelSection title="Organisation audit activity"><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{event.action.replaceAll(".", " ")}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || "System"}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text="No audited organisation activity yet."/>}</div></PanelSection></TabsContent>
+          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{event.action.replaceAll(".", " ")}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
         </Tabs>
       </div>}
     </aside>
@@ -566,10 +632,11 @@ function PanelDatum({ label, value }: { label: string; value: string | number })
 }
 
 function EmptyPanel({ text }: { text: string }) {
-  return <div className="py-8 text-center text-sm text-slate-500"><FileClock className="mx-auto mb-2 h-5 w-5 text-slate-400"/>{text}</div>;
+  return <div className="py-4 text-center text-sm text-slate-500"><FileClock className="mx-auto mb-2 h-5 w-5 text-slate-400"/>{text}</div>;
 }
 
 export default function PlatformAdminPage() {
+  useTranslation();
   const { logout } = useAuth();
   const status = useQuery<AdminStatus>({
     queryKey: ["/api/platform-admin/status"],
