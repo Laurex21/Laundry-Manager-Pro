@@ -177,6 +177,17 @@ function adminStatus(status: string | null | undefined): string {
   return adminText(english[status] || status);
 }
 
+function AdminLanguageSwitch({ dark = false }: { dark?: boolean }) {
+  const { i18n: currentI18n } = useTranslation();
+  const selected = currentI18n.language.startsWith("fr") ? "fr" : "en";
+  return <div className={`inline-flex rounded-lg border p-1 ${dark ? "border-white/20 bg-white/5" : "border-slate-200 bg-slate-50"}`} role="group" aria-label="Language / Langue">
+    {(["fr", "en"] as const).map(language => <button key={language} type="button" onClick={() => currentI18n.changeLanguage(language)} aria-pressed={selected === language} aria-label={language === "fr" ? "Français" : "English"}
+      className={`min-h-9 min-w-11 rounded-md px-2 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${selected === language ? "bg-cyan-400 text-slate-950" : dark ? "text-slate-200 hover:bg-white/10" : "text-slate-600 hover:bg-slate-200"}`}>
+      {language.toUpperCase()}
+    </button>)}
+  </div>;
+}
+
 async function apiJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { credentials: "include" });
   if (!response.ok) {
@@ -290,6 +301,7 @@ function AdminLogin({ initialStep = "credentials" }: { initialStep?: AdminAuthSt
 
       <section className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-md">
+          <div className="mb-6 flex justify-end"><AdminLanguageSwitch dark /></div>
           <div className="lg:hidden flex items-center gap-3 mb-10">
             <div className="h-10 w-10 rounded-xl bg-cyan-400 text-slate-950 grid place-items-center">
               <ShieldCheck className="h-5 w-5" />
@@ -465,8 +477,9 @@ function AdminDashboard() {
             <div><p className="font-display font-bold leading-tight">{adminText('XpressPro Control')}</p><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">{adminText('Platform administration')}</p></div>
           </div>
           <div className="flex items-center gap-3">
+            <AdminLanguageSwitch />
             <Badge variant="outline" className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 sm:flex"><span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />{adminText('Read-only controls')}</Badge>
-            <Avatar className="h-9 w-9 border border-slate-200"><AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback></Avatar>
+            <Avatar className="hidden h-9 w-9 border border-slate-200 sm:flex"><AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback></Avatar>
             <Button variant="ghost" size="icon" onClick={() => logout()} aria-label={adminText('Sign out')}><LogOut className="h-4 w-4" /></Button>
           </div>
         </div>
