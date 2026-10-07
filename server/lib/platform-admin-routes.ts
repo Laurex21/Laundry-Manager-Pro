@@ -296,10 +296,10 @@ export function registerPlatformAdminRoutes(app: Express): void {
     try {
       const result = await pool.query(`
         WITH organisation_subscription AS (
-          SELECT o.id, latest_subscription.status, latest_subscription.end_date, latest_subscription.plan_slug
+          SELECT o.id, latest_subscription.status, latest_subscription.end_date, latest_subscription.plan_slug, latest_subscription.plan_price
           FROM organisations o
           LEFT JOIN LATERAL (
-            SELECT sub.status, sub.end_date, p.slug AS plan_slug
+            SELECT sub.status, sub.end_date, p.slug AS plan_slug, p.price AS plan_price
             FROM subscriptions sub
             INNER JOIN plans p ON p.id = sub.plan_id
             WHERE sub.user_id = o.owner_id
@@ -313,6 +313,8 @@ export function registerPlatformAdminRoutes(app: Express): void {
           (SELECT count(*)::int FROM users) AS user_count,
           (SELECT count(*)::int FROM users WHERE user_type = 'staff') AS staff_count,
           (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active') AS active_subscription_count,
+          (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active' AND plan_price = 0) AS active_free_plan_count,
+          (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active' AND plan_price > 0) AS active_paid_plan_count,
           (SELECT count(*)::int FROM organisation_subscription WHERE plan_slug IS NULL) AS without_plan_count,
           (
             SELECT COALESCE(sum(amount), 0)::numeric
@@ -336,6 +338,8 @@ export function registerPlatformAdminRoutes(app: Express): void {
         userCount: Number(row.user_count || 0),
         staffCount: Number(row.staff_count || 0),
         activeSubscriptionCount: Number(row.active_subscription_count || 0),
+        activeFreePlanCount: Number(row.active_free_plan_count || 0),
+        activePaidPlanCount: Number(row.active_paid_plan_count || 0),
         withoutPlanCount: Number(row.without_plan_count || 0),
         subscriptionRevenueMonth: Number(row.subscription_revenue_month || 0),
         expiringSoonCount: Number(row.expiring_soon_count || 0),
@@ -661,6 +665,79 @@ export function registerPlatformAdminRoutes(app: Express): void {
         { organisationId },
       );
       res.status(500).json({ message: "Failed to load organisation detail" });
+    }
+  });
+
+  app.get("/api/platform-admin/plans", isAuthenticated, requirePlatformAdmin, async (_req, res) => {
+    try {
+      const result = await pool.query("SELECT id, name, slug, price FROM plans WHERE active = true ORDER BY price, id");
+      res.json(result.rows.map((row) => ({ id: Number(row.id), name: row.name, slug: row.slug, price: Number(row.price) })));
+    } catch (error) {
+      console.error("Platform admin plans failed:", error);
+      res.status(500).json({ message: "Failed to load plans" });
+    }
+  });
+
+  app.post("/api/platform-admin/organisations/:organisationId/plan", isAuthenticated, requirePlatformAdmin, async (req: any, res) => {
+    const organisationId = Number(req.params.organisationId);
+    const planId = Number(req.body?.planId);
+    const expectedSubscriptionId = req.body?.expectedSubscriptionId === null ? null : Number(req.body?.expectedSubscriptionId);
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    const endDateInput = req.body?.endDate;
+    const endDate = typeof endDateInput === "string" && /^\d{4}-\d{2}-\d{2}$/.test(endDateInput)
+      ? new Date(`${endDateInput}T23:59:59.999Z`) : null;
+    if (!Number.isSafeInteger(organisationId) || organisationId < 1 || !Number.isSafeInteger(planId) || planId < 1 ||
+        !(expectedSubscriptionId === null || (Number.isSafeInteger(expectedSubscriptionId) && expectedSubscriptionId > 0)) ||
+        reason.length < 10 || reason.length > 500 || !endDate || Number.isNaN(endDate.getTime()) ||
+        endDate.toISOString().slice(0, 10) !== endDateInput || endDate <= new Date()) {
+      return res.status(400).json({ message: "Valid organisation, plan, current subscription, future end date and reason (10–500 characters) required" });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const organisation = await client.query("SELECT owner_id FROM organisations WHERE id = $1 FOR UPDATE", [organisationId]);
+      if (!organisation.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Organisation not found" });
+      }
+      const ownerId = organisation.rows[0].owner_id;
+      const plan = await client.query("SELECT id, name, price FROM plans WHERE id = $1 AND active = true", [planId]);
+      if (!plan.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Plan unavailable" });
+      }
+      const previous = await client.query(
+        "SELECT id, plan_id, status FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE",
+        [ownerId],
+      );
+      const previousId = previous.rows[0]?.id ?? null;
+      if (previousId !== expectedSubscriptionId) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Subscription changed; refresh and try again" });
+      }
+      await client.query("UPDATE subscriptions SET status = 'cancelled' WHERE user_id = $1 AND status = 'active'", [ownerId]);
+      const created = await client.query(
+        "INSERT INTO subscriptions (user_id, plan_id, status, start_date, end_date, orders_used) VALUES ($1, $2, 'active', now(), $3, 0) RETURNING id",
+        [ownerId, planId, endDate],
+      );
+      const metadata = { organisationId, previousSubscriptionId: previousId, previousPlanId: previous.rows[0]?.plan_id ?? null,
+        newSubscriptionId: created.rows[0].id, newPlanId: planId, endDate: endDateInput, reason, paymentRecorded: false };
+      await client.query(
+        `INSERT INTO platform_admin_audit_events (user_id, action, outcome, request_id, ip_hash, user_agent, metadata)
+         VALUES ($1, $2, 'success', $3, $4, $5, $6::jsonb)`,
+        [req.session.userId, "platform_admin.plan_assign", req.requestId || null,
+          crypto.createHash("sha256").update(requestIp(req)).digest("hex"),
+          String(req.get?.("user-agent") || "").slice(0, 500) || null, JSON.stringify(metadata)],
+      );
+      await client.query("COMMIT");
+      res.json({ subscriptionId: Number(created.rows[0].id), planName: plan.rows[0].name, paymentRecorded: false });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      console.error("Platform admin plan assignment failed:", error);
+      res.status(500).json({ message: "Failed to assign plan" });
+    } finally {
+      client.release();
     }
   });
 

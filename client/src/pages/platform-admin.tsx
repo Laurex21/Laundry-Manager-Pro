@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
@@ -35,10 +35,14 @@ type Overview = {
   userCount: number;
   staffCount: number;
   activeSubscriptionCount: number;
+  activeFreePlanCount: number;
+  activePaidPlanCount: number;
   withoutPlanCount: number;
   subscriptionRevenueMonth: number;
   expiringSoonCount: number;
 };
+
+type AdminPlan = { id: number; name: string; slug: string; price: number };
 
 type Subscriber = {
   id: number;
@@ -114,6 +118,28 @@ type AdminStatus = {
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
+  "Organisation workspace": "Fiche organisation",
+  "Controlled administration": "Administration encadrée",
+  "Only plan assignment is editable here. It is audited and does not record a payment. Other operational data remains read-only.": "Seule l’attribution de formule est modifiable ici. Elle est auditée et ne crée aucun paiement. Les autres données restent en lecture seule.",
+  "Assign a plan manually": "Attribuer une formule manuellement",
+  "Select a plan": "Choisir une formule",
+  "End date": "Date de fin",
+  "Ends": "Fin",
+  "Reason": "Motif",
+  "Reason for manual assignment": "Motif de l’attribution manuelle",
+  "The previous active plan will end. No payment will be recorded.": "La formule active précédente prendra fin. Aucun paiement ne sera enregistré.",
+  "No payment will be recorded.": "Aucun paiement ne sera enregistré.",
+  "Plan assigned successfully. No payment recorded.": "Formule attribuée. Aucun paiement enregistré.",
+  "Confirm plan assignment": "Confirmer l’attribution de formule",
+  "Plan assignment failed": "Échec de l’attribution de formule",
+  "Saving…": "Enregistrement…",
+  "Assign plan": "Attribuer la formule",
+  "Subscription payments marked completed this month": "Paiements d’abonnement marqués terminés ce mois",
+  "Organisations with an active plan": "Organisations avec formule active",
+  "Active plans by price": "Formules actives par prix",
+  "Free": "Gratuites",
+  "Paid plan, not necessarily paid": "Payantes, sans paiement nécessairement enregistré",
+  "Plan assignment does not count as a payment.": "L’attribution d’une formule ne constitue pas un paiement.",
   "Access is recorded and limited to authorised platform administrators.": "Accès réservé et journalisé pour les administrateurs autorisés.",
   "Account owner": "Propriétaire du compte", "Accounts by role": "Comptes par rôle", "Activation snapshot": "État des activations",
   "Active": "Actif", "Active plan rate": "Taux de formules actives", "Active plans": "Formules actives", "Active sites": "Boutiques actives",
@@ -503,11 +529,12 @@ function AdminDashboard() {
 
           <TabsContent value="overview" className="mt-5 space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label={adminText('Monthly subscription revenue')} value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
-              <MetricCard label={adminText('Active subscriptions')} value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
+              <MetricCard label={adminText('Subscription payments marked completed this month')} value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
+              <MetricCard label={adminText('Organisations with an active plan')} value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
               <MetricCard label={adminText('Registered organisations')} value={metrics?.organisationCount ?? "—"} icon={Building2} />
               <MetricCard label={adminText('Renewals due in 14 days')} value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
             </section>
+            {metrics && <p className="-mt-3 text-sm text-slate-500">{adminText('Active plans by price')}: {adminText('Free')} {metrics.activeFreePlanCount} · {adminText('Paid plan, not necessarily paid')} {metrics.activePaidPlanCount}. {adminText('Plan assignment does not count as a payment.')}</p>}
 
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
               <Card className="border-slate-200/80 shadow-sm">
@@ -570,15 +597,48 @@ function OrganisationDirectory({ loading, error, organisations, search, setSearc
 
 function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
   const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner');
+  const queryClient = useQueryClient();
+  const [planId, setPlanId] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [reason, setReason] = useState("");
+  const plans = useQuery<AdminPlan[]>({
+    queryKey: ["/api/platform-admin/plans"],
+    queryFn: () => apiJson("/api/platform-admin/plans"),
+  });
   const detail = useQuery<OrganisationDetail>({
     queryKey: ["/api/platform-admin/organisations", subscriber.id],
     queryFn: () => apiJson(`/api/platform-admin/organisations/${subscriber.id}`),
   });
+  const assignPlan = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/platform-admin/organisations/${subscriber.id}/plan`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: Number(planId), endDate, reason: reason.trim(), expectedSubscriptionId: detail.data?.subscription?.id ?? null }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || adminText('Plan assignment failed'));
+      return result;
+    },
+    onSuccess: async () => {
+      setPlanId(""); setEndDate(""); setReason("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/subscribers"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/organisations", subscriber.id] }),
+      ]);
+    },
+  });
+  const submitPlan = (event: FormEvent) => {
+    event.preventDefault();
+    const selected = plans.data?.find((plan) => plan.id === Number(planId));
+    if (!selected || !detail.data || reason.trim().length < 10 || !endDate) return;
+    if (window.confirm(`${adminText('Confirm plan assignment')}\n${subscriber.name} → ${selected.name}\n${adminText('Ends')}: ${endDate}\n${adminText('No payment will be recorded.')}`)) assignPlan.mutate();
+  };
 
   return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" onClick={close}>
     <aside className="h-full w-full max-w-4xl overflow-y-auto bg-white shadow-2xl sm:my-5 sm:h-auto sm:max-h-[calc(100vh-2.5rem)] sm:self-start sm:rounded-l-2xl" onClick={(event) => event.stopPropagation()}>
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
-        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">{adminText('Organisation workspace · read-only')}</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div>
+        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">{adminText('Organisation workspace')}</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div>
         <Button variant="ghost" onClick={close}>{adminText('Close')}</Button>
       </div>
 
@@ -606,13 +666,25 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
                 <dl className="grid grid-cols-2 gap-4 text-sm"><PanelDatum label={adminText('All orders')} value={detail.data.usage.orderCount}/><PanelDatum label={adminText('Last order')} value={formatDate(detail.data.usage.lastOrderAt)}/><PanelDatum label={adminText('Customers')} value={detail.data.usage.customerCount}/><PanelDatum label={adminText('New customers · 30 days')} value={detail.data.usage.customersLast30Days}/></dl>
               </PanelSection>
             </div>
-            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">{adminText('Read-only boundary')}</p><p className="mt-1 text-sm text-cyan-800">{adminText('This workspace exposes operational evidence without plan changes, suspensions, impersonation or user-management actions.')}</p></section>
+            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">{adminText('Controlled administration')}</p><p className="mt-1 text-sm text-cyan-800">{adminText('Only plan assignment is editable here. It is audited and does not record a payment. Other operational data remains read-only.')}</p></section>
           </TabsContent>
 
           <TabsContent value="subscription" className="mt-5">
             <PanelSection title={adminText('Current subscription')}>
               <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || adminText('No plan')}</Badge><span className="text-sm capitalize text-slate-500">{adminStatus(detail.data.subscription?.status)}</span></div>
               <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label={adminText('Plan price')} value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label={adminText("Orders used")} value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label={adminText('Started')} value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label={adminText("Renews / ends")} value={formatDate(detail.data.subscription?.endDate)}/></dl>
+            </PanelSection>
+            <PanelSection title={adminText('Assign a plan manually')}>
+              <form onSubmit={submitPlan} className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-1 text-sm">{adminText('Plan')}<select className="h-10 rounded-md border border-slate-300 px-3" value={planId} onChange={(event) => setPlanId(event.target.value)} required><option value="">{adminText('Select a plan')}</option>{plans.data?.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatMoney(plan.price)}</option>)}</select></label>
+                <label className="grid gap-1 text-sm">{adminText('End date')}<Input type="date" value={endDate} min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)} onChange={(event) => setEndDate(event.target.value)} required /></label>
+                <label className="grid gap-1 text-sm sm:col-span-2">{adminText('Reason')}<Input value={reason} minLength={10} maxLength={500} onChange={(event) => setReason(event.target.value)} required placeholder={adminText('Reason for manual assignment')} /></label>
+                <p className="text-xs text-slate-500 sm:col-span-2">{adminText('The previous active plan will end. No payment will be recorded.')}</p>
+                {plans.error && <p className="text-sm text-red-700 sm:col-span-2">{plans.error.message}</p>}
+                {assignPlan.error && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{assignPlan.error.message}</p>}
+                {assignPlan.isSuccess && <p role="status" className="text-sm text-emerald-700 sm:col-span-2">{adminText('Plan assigned successfully. No payment recorded.')}</p>}
+                <Button type="submit" disabled={assignPlan.isPending || !plans.data?.length || !detail.data}>{assignPlan.isPending ? adminText('Saving…') : adminText('Assign plan')}</Button>
+              </form>
             </PanelSection>
           </TabsContent>
 
