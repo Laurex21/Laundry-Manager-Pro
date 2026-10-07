@@ -2,7 +2,7 @@ import { db } from "./db";
 import { 
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
   machines, employees, employeeActivities, employeeAttendance, machineUsage,
-  plans, subscriptions, subscriptionPayments, orderStatusHistory,
+  plans, subscriptions, orderStatusHistory,
   orderCorrections,
   businessSettings, organisations, sites, siteMembers, siteInvitations,
   type Customer, type InsertCustomer,
@@ -128,7 +128,7 @@ export interface IStorage {
   seedPlans(): Promise<void>;
 
   getUserSubscription(userId: string): Promise<SubscriptionWithPlan | null>;
-  createSubscription(userId: string, planId: number, method: string): Promise<Subscription>;
+  createSubscription(userId: string, planId: number): Promise<Subscription>;
 
   requestCancellation(id: number, reason: string, requestedBy: string): Promise<Order | undefined>;
   approveCancellation(id: number, reviewedBy: string): Promise<Order | undefined>;
@@ -1199,14 +1199,14 @@ export class DatabaseStorage implements IStorage {
     return { ...sub, plan };
   }
 
-  async createSubscription(userId: string, planId: number, method: string): Promise<Subscription> {
+  async createSubscription(userId: string, planId: number): Promise<Subscription> {
     return await db.transaction(async (tx) => {
+      const [plan] = await tx.select().from(plans).where(and(eq(plans.id, planId), eq(plans.active, true))).limit(1);
+      if (!plan) throw new Error("Plan unavailable");
       await tx.update(subscriptions).set({ status: "cancelled" }).where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active")));
       const endDate = new Date();
       endDate.setMonth(endDate.getMonth() + 1);
       const [sub] = await tx.insert(subscriptions).values({ userId, planId, status: "active", endDate }).returning();
-      const [plan] = await tx.select().from(plans).where(eq(plans.id, planId));
-      await tx.insert(subscriptionPayments).values({ userId, planId, subscriptionId: sub.id, amount: plan.price, method, status: "completed" });
       return sub;
     });
   }

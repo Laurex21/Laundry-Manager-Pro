@@ -36,6 +36,7 @@ import {
   OrderCorrectionError,
 } from "./lib/order-corrections";
 import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
+import { rateLimit } from "./lib/rate-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 
@@ -1735,16 +1736,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(sub);
   });
 
-  app.post("/api/subscriptions/pay", isAuthenticated, async (req, res) => {
+  app.post("/api/subscriptions/activate", isAuthenticated, rateLimit({ name: "subscription-activate", windowMs: 60 * 60 * 1000, max: 10, key: (req) => String(req.session?.userId || ""), keyOnly: true }), async (req, res) => {
     if (!(await requireOwnerOrganisation(req, res))) return;
-    const { planId, method } = req.body;
-    if (!planId || !method) return res.status(400).json({ message: "planId and method are required" });
+    const planId = Number(req.body?.planId);
+    if (!Number.isSafeInteger(planId) || planId < 1) return res.status(400).json({ message: "Valid planId required" });
     try {
-      const sub = await storage.createSubscription((req.session as any).userId, planId, method);
+      const sub = await storage.createSubscription((req.session as any).userId, planId);
       res.status(201).json(sub);
     } catch (err) {
-      res.status(400).json({ message: "Failed to create subscription" });
+      res.status(400).json({ message: "Failed to activate plan" });
     }
+  });
+  app.post("/api/subscriptions/pay", isAuthenticated, (_req, res) => {
+    res.status(410).json({ message: "This simulated payment flow is closed. Refresh the app to activate a plan without payment." });
   });
 
   app.get("/api/analytics/dashboard", isAuthenticated, async (req, res) => {

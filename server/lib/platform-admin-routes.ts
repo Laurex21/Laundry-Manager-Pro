@@ -40,6 +40,14 @@ const platformAdminMfaLimiter = rateLimit({
   keyOnly: true,
 });
 
+const platformAdminPlanLimiter = rateLimit({
+  name: "platform-admin-plan-assign",
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  key: (req) => String(req.session?.userId || ""),
+  keyOnly: true,
+});
+
 async function getPlatformAdmin(userId: string | null | undefined): Promise<PlatformAdminRecord | null> {
   if (!userId) return null;
   const result = await pool.query<PlatformAdminRecord>(
@@ -678,7 +686,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/platform-admin/organisations/:organisationId/plan", isAuthenticated, requirePlatformAdmin, async (req: any, res) => {
+  app.post("/api/platform-admin/organisations/:organisationId/plan", isAuthenticated, requirePlatformAdmin, platformAdminPlanLimiter, async (req: any, res) => {
     const organisationId = Number(req.params.organisationId);
     const planId = Number(req.body?.planId);
     const expectedSubscriptionId = req.body?.expectedSubscriptionId === null ? null : Number(req.body?.expectedSubscriptionId);
