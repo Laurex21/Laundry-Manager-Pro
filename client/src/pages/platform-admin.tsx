@@ -43,6 +43,8 @@ type Overview = {
 };
 
 type AdminPlan = { id: number; name: string; slug: string; price: number };
+type SandboxCheckout = { checkoutId: string; amountXaf: number; status: string; providerStatus: string | null;
+  redirectUrl: string | null; callbackReceivedAt: string | null; createdAt: string };
 
 type Subscriber = {
   id: number;
@@ -118,6 +120,15 @@ type AdminStatus = {
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
+  "PawaPay sandbox test": "Test PawaPay Sandbox",
+  "This 1,000 FCFA sandbox checkout does not activate a plan or record a real payment.": "Ce checkout de 1 000 FCFA en Sandbox n’active aucune formule et n’enregistre aucun paiement réel.",
+  "Create test checkout": "Créer un checkout de test",
+  "Creating…": "Création…",
+  "Refresh status": "Actualiser le statut",
+  "Check with PawaPay": "Vérifier auprès de PawaPay",
+  "Open PawaPay sandbox checkout": "Ouvrir le checkout PawaPay Sandbox",
+  "Open test": "Ouvrir le test",
+  "Sandbox checkout failed": "Échec du checkout Sandbox",
   "Organisation workspace": "Fiche organisation",
   "Controlled administration": "Administration encadrée",
   "Only plan assignment is editable here. It is audited and does not record a payment. Other operational data remains read-only.": "Seule l’attribution de formule est modifiable ici. Elle est auditée et ne crée aucun paiement. Les autres données restent en lecture seule.",
@@ -686,6 +697,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
                 <Button type="submit" disabled={assignPlan.isPending || !plans.data?.length || !detail.data}>{assignPlan.isPending ? adminText('Saving…') : adminText('Assign plan')}</Button>
               </form>
             </PanelSection>
+            <SandboxCheckoutPanel organisationId={subscriber.id} />
           </TabsContent>
 
           <TabsContent value="sites" className="mt-5"><PanelSection title={`${adminText("Sites")} (${detail.data.footprint.sites.length})`}><div className="divide-y divide-slate-100">{detail.data.footprint.sites.map((site) => <div key={site.id} className="flex items-center justify-between gap-4 py-3"><div><p className="font-medium">{site.name}</p><p className="text-xs text-slate-500">{site.city || adminText('City not set')} · {adminText("Added")} {formatDate(site.createdAt)}</p></div><Badge variant="outline" className={site.active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>{site.active ? adminText('Active') : adminText('Inactive')}</Badge></div>)}{!detail.data.footprint.sites.length && <EmptyPanel text={adminText('No sites registered.')}/>}</div></PanelSection></TabsContent>
@@ -702,6 +714,53 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
       </div>}
     </aside>
   </div>;
+}
+
+function SandboxCheckoutPanel({ organisationId }: { organisationId: number }) {
+  const queryClient = useQueryClient();
+  const queryKey = ["/api/platform-admin/pawapay-sandbox-checkouts", organisationId];
+  const checkouts = useQuery<SandboxCheckout[]>({
+    queryKey,
+    queryFn: () => apiJson(`/api/platform-admin/pawapay-sandbox-checkouts?organisationId=${organisationId}`),
+  });
+  const create = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/platform-admin/organisations/${organisationId}/pawapay-sandbox-checkouts`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || adminText('Sandbox checkout failed'));
+      return result as { checkoutId: string; redirectUrl: string };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+  const refreshProvider = useMutation({
+    mutationFn: async (checkoutId: string) => {
+      const response = await fetch(`/api/platform-admin/pawapay-sandbox-checkouts/${checkoutId}/refresh`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || adminText('Sandbox checkout failed'));
+      return result;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  });
+  return <PanelSection title={adminText('PawaPay sandbox test')}>
+    <p className="mb-4 text-sm text-slate-600">{adminText('This 1,000 FCFA sandbox checkout does not activate a plan or record a real payment.')}</p>
+    <div className="flex flex-wrap items-center gap-3">
+      <Button type="button" variant="outline" disabled={create.isPending} onClick={() => create.mutate()}>{create.isPending ? adminText('Creating…') : adminText('Create test checkout')}</Button>
+      <Button type="button" variant="ghost" onClick={() => queryClient.invalidateQueries({ queryKey })}>{adminText('Refresh status')}</Button>
+      <Button type="button" variant="ghost" disabled={!checkouts.data?.length || refreshProvider.isPending} onClick={() => checkouts.data?.[0] && refreshProvider.mutate(checkouts.data[0].checkoutId)}>{adminText('Check with PawaPay')}</Button>
+    </div>
+    {create.error && <p role="alert" className="mt-3 text-sm text-red-700">{create.error.message}</p>}
+    {checkouts.error && <p role="alert" className="mt-3 text-sm text-red-700">{checkouts.error.message}</p>}
+    {refreshProvider.error && <p role="alert" className="mt-3 text-sm text-red-700">{refreshProvider.error.message}</p>}
+    {create.data?.redirectUrl && <a href={create.data.redirectUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm font-semibold text-cyan-700 underline">{adminText('Open PawaPay sandbox checkout')}</a>}
+    <div className="mt-4 divide-y divide-slate-100">{checkouts.data?.map((checkout) => <div key={checkout.checkoutId} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+      <div><strong>{checkout.status}</strong><p className="text-xs text-slate-500">{checkout.checkoutId} · {formatDate(checkout.createdAt)}</p></div>
+      {checkout.redirectUrl && <a href={checkout.redirectUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 underline">{adminText('Open test')}</a>}
+    </div>)}</div>
+  </PanelSection>;
 }
 
 function PanelMetric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string | number }) {

@@ -99,7 +99,39 @@ export function registerPawapaySandboxCallback(app: Express): void {
       if (typeof id !== "string" || !/^[a-f\d-]{36}$/i.test(id) || typeof event?.status !== "string") {
         return res.status(400).json({ message: "Invalid callback body" });
       }
-      // Sandbox intake only. No payment or subscription state is changed here.
+      if (event.checkoutId) {
+        const { pawapaySandboxSchemaReady } = await import("./pawapay-sandbox-schema");
+        await pawapaySandboxSchemaReady();
+        const { pool } = await import("../db");
+        const finalStatus = String(event.status).toUpperCase();
+        if (!["COMPLETED", "FAILED", "EXPIRED", "CANCELLED"].includes(finalStatus)) {
+          return res.status(400).json({ message: "Invalid checkout final status" });
+        }
+        const expected = await pool.query(
+          "SELECT amount_xaf, checkout_code, status FROM pawapay_sandbox_checkouts WHERE checkout_id = $1",
+          [id],
+        );
+        if (!expected.rowCount) return res.status(404).json({ message: "Unknown sandbox checkout" });
+        const expectedAmount = Number(expected.rows[0].amount_xaf);
+        const amountMatches = Array.isArray(event.amounts) && event.amounts.some((amount: any) =>
+          amount?.country === "CMR" && amount?.currency === "XAF" && Number(amount?.amount) === expectedAmount);
+        if (!amountMatches || (expected.rows[0].checkout_code && event.checkoutCode !== expected.rows[0].checkout_code)) {
+          return res.status(400).json({ message: "Sandbox checkout details do not match" });
+        }
+        const updated = await pool.query(
+          `UPDATE pawapay_sandbox_checkouts
+           SET status = $2, provider_status = $2, callback_received_at = now(), updated_at = now()
+           WHERE checkout_id = $1 AND status NOT IN ('COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED')
+           RETURNING checkout_id`,
+          [id, finalStatus],
+        );
+        if (!updated.rowCount) {
+          const existing = await pool.query("SELECT status FROM pawapay_sandbox_checkouts WHERE checkout_id = $1", [id]);
+          if (!existing.rowCount) return res.status(404).json({ message: "Unknown sandbox checkout" });
+          if (existing.rows[0].status !== finalStatus) return res.status(409).json({ message: "Conflicting final status" });
+        }
+      }
+      // Sandbox-only state. No payment or subscription state is changed here.
       console.info("Verified PawaPay sandbox callback", { operationId: id, status: event.status });
       return res.status(200).json({ received: true });
     } catch (error) {
