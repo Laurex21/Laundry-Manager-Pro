@@ -58,7 +58,7 @@ export function registerPawapaySandboxCheckoutRoutes(app: Express): void {
             checkoutId, returnUrl: RETURN_URL, defaultLanguage: "fr", countries: ["CMR"], expiresAfter: 30,
             amounts: [{ country: "CMR", currency: "XAF", amount: TEST_AMOUNT_XAF }],
             clientReferenceId: `XP-SBX-${checkoutId.slice(0, 18)}`,
-            reason: { fr: "Test de paiement XPress Pro", en: "XPress Pro sandbox payment test" },
+            reason: { fr: "Test XPress Pro", en: "XPress Pro Test" },
             metadata: [{ organisationId: String(organisationId) }],
           }),
         });
