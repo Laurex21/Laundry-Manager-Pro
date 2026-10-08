@@ -124,8 +124,14 @@ const ADMIN_FR: Record<string, string> = {
   "This 1,000 FCFA sandbox checkout does not activate a plan or record a real payment.": "Ce checkout de 1 000 FCFA en Sandbox n’active aucune formule et n’enregistre aucun paiement réel.",
   "Create test checkout": "Créer un checkout de test",
   "Creating…": "Création…",
+  "Loading…": "Chargement…",
+  "Checking…": "Vérification…",
   "Refresh status": "Actualiser le statut",
   "Check with PawaPay": "Vérifier auprès de PawaPay",
+  "PawaPay check": "Vérification PawaPay",
+  "Signed callback received": "Callback signé reçu",
+  "No signed callback received": "Aucun callback signé reçu",
+  "Status refreshed": "Statut actualisé",
   "Open PawaPay sandbox checkout": "Ouvrir le checkout PawaPay Sandbox",
   "Open test": "Ouvrir le test",
   "Sandbox checkout failed": "Échec du checkout Sandbox",
@@ -718,6 +724,8 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
 
 function SandboxCheckoutPanel({ organisationId }: { organisationId: number }) {
   const queryClient = useQueryClient();
+  const [lastCheck, setLastCheck] = useState<{ status: string; callbackReceivedAt: string | null; checkedAt: string } | null>(null);
+  const [lastLocalRefresh, setLastLocalRefresh] = useState<string | null>(null);
   const queryKey = ["/api/platform-admin/pawapay-sandbox-checkouts", organisationId];
   const checkouts = useQuery<SandboxCheckout[]>({
     queryKey,
@@ -743,18 +751,23 @@ function SandboxCheckoutPanel({ organisationId }: { organisationId: number }) {
       if (!response.ok) throw new Error(result.message || adminText('Sandbox checkout failed'));
       return result;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: (result: { status: string; callbackReceivedAt: string | null }) => {
+      setLastCheck({ ...result, checkedAt: new Date().toLocaleTimeString() });
+      queryClient.invalidateQueries({ queryKey });
+    },
   });
   return <PanelSection title={adminText('PawaPay sandbox test')}>
     <p className="mb-4 text-sm text-slate-600">{adminText('This 1,000 FCFA sandbox checkout does not activate a plan or record a real payment.')}</p>
     <div className="flex flex-wrap items-center gap-3">
       <Button type="button" variant="outline" disabled={create.isPending} onClick={() => create.mutate()}>{create.isPending ? adminText('Creating…') : adminText('Create test checkout')}</Button>
-      <Button type="button" variant="ghost" onClick={() => queryClient.invalidateQueries({ queryKey })}>{adminText('Refresh status')}</Button>
-      <Button type="button" variant="ghost" disabled={!checkouts.data?.length || refreshProvider.isPending} onClick={() => checkouts.data?.[0] && refreshProvider.mutate(checkouts.data[0].checkoutId)}>{adminText('Check with PawaPay')}</Button>
+      <Button type="button" variant="ghost" disabled={checkouts.isFetching} onClick={async () => { await checkouts.refetch(); setLastLocalRefresh(new Date().toLocaleTimeString()); }}>{checkouts.isFetching ? adminText('Loading…') : adminText('Refresh status')}</Button>
+      <Button type="button" variant="ghost" disabled={!checkouts.data?.length || refreshProvider.isPending} onClick={() => checkouts.data?.[0] && refreshProvider.mutate(checkouts.data[0].checkoutId)}>{refreshProvider.isPending ? adminText('Checking…') : adminText('Check with PawaPay')}</Button>
     </div>
     {create.error && <p role="alert" className="mt-3 text-sm text-red-700">{create.error.message}</p>}
     {checkouts.error && <p role="alert" className="mt-3 text-sm text-red-700">{checkouts.error.message}</p>}
+    {lastLocalRefresh && !checkouts.error && <p role="status" className="mt-3 text-sm text-slate-700">{adminText('Status refreshed')} · {lastLocalRefresh}</p>}
     {refreshProvider.error && <p role="alert" className="mt-3 text-sm text-red-700">{refreshProvider.error.message}</p>}
+    {lastCheck && <p role="status" className="mt-3 text-sm text-slate-700">{adminText('PawaPay check')}: <strong>{lastCheck.status}</strong> · {lastCheck.checkedAt} · {lastCheck.callbackReceivedAt ? adminText('Signed callback received') : adminText('No signed callback received')}</p>}
     {create.data?.redirectUrl && <a href={create.data.redirectUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm font-semibold text-cyan-700 underline">{adminText('Open PawaPay sandbox checkout')}</a>}
     <div className="mt-4 divide-y divide-slate-100">{checkouts.data?.map((checkout) => <div key={checkout.checkoutId} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
       <div><strong>{checkout.status}</strong><p className="text-xs text-slate-500">{checkout.checkoutId} · {formatDate(checkout.createdAt)}</p></div>
