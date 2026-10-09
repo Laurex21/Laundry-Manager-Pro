@@ -18,6 +18,15 @@ The production inventory query is in `scripts/inventory-saas-v4-readonly.sql`. I
 | Sites/staff/add-ons | Existing sites/staff; no central v4 entitlement source found in first pass | Atomic org-scoped quota and add-on billing | Partial; endpoint-by-endpoint audit required |
 | UI | Existing subscription cards and Sandbox test | v4 prices, cycle, quotas, trial countdown, precise payment terms | Existing, incompatible |
 
+## Quota enforcement entry points found
+
+- `POST /api/sites` → `storage.createSite`: the insertion is transactional but does not lock the organisation or check active-site entitlement. A count in the route alone would race under concurrent requests.
+- `POST /api/employees` and `PATCH /api/employees/:id`: these operate on employee records, which are not identical to authenticated staff seats. The SaaS quota must not use employee-record count as its sole source of truth.
+- `POST /api/staff/onboard/:token` → `storage.createStaffFromInvitation`, plus `storage.acceptInvitation`: both create or attach authenticated staff accounts/site membership. They require organisation-scoped, atomic seat checks at acceptance. Merely limiting invitation creation is insufficient.
+- Site deactivation uses `storage.deleteSite` to set `is_active = false`; existing members and data remain. This is compatible with data preservation but must be reconciled with the v4 rule that optional-site removal takes effect at the *next* renewal, not immediately.
+
+**Implementation gate:** define one canonical active staff-seat representation, including subscription-suspended sessions, before writing these guards. Neither `users` nor `employees` currently has a subscription-suspended status. Applying a simple count could block legitimate users or allow concurrent over-allocation.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.
