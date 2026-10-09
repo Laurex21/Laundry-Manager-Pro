@@ -32,8 +32,7 @@ import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
 import { effectiveSaasPlanV4 } from "./lib/saas-entitlement-v4";
 import { saasCapacityV4 } from "./lib/saas-plan-v4";
 
-async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number): Promise<void> {
-  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+async function lockedV4CapacityInTransaction(tx: any, organisationId: number) {
   // All v4 site/seat writers must lock this row before counting. A missing row
   // is a migration error, never a reason to grant another site.
   const locked = await tx.execute(sql`
@@ -50,6 +49,12 @@ async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number
   }, new Date());
   const capacity = saasCapacityV4(plan, plan === "business" ? Number(row.paid_extra_sites) : 0,
     plan === "starter" ? 0 : Number(row.paid_extra_staff));
+  return capacity;
+}
+
+async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number): Promise<void> {
+  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  const capacity = await lockedV4CapacityInTransaction(tx, organisationId);
   const count = await tx.execute(sql`
     SELECT count(*)::integer AS active_sites FROM sites
     WHERE organisation_id = ${organisationId} AND is_active = true
@@ -57,6 +62,37 @@ async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number
   if (Number(count.rows[0]?.active_sites ?? 0) >= capacity.maxActiveSites) {
     throw new Error("SAAS_SITE_QUOTA_REACHED");
   }
+}
+
+async function reserveV4StaffSeatInTransaction(tx: any, organisationId: number, userId?: string): Promise<void> {
+  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  const capacity = await lockedV4CapacityInTransaction(tx, organisationId);
+  if (userId) {
+    const existing = await tx.execute(sql`
+      SELECT state FROM saas_staff_seats_v4
+      WHERE organisation_id = ${organisationId} AND user_id = ${userId}
+    `);
+    if (existing.rows[0]?.state === "active") return;
+    if (existing.rows[0]) throw new Error("SAAS_STAFF_SEAT_SUSPENDED");
+  }
+  const count = await tx.execute(sql`
+    SELECT count(*)::integer AS active_staff FROM saas_staff_seats_v4
+    WHERE organisation_id = ${organisationId} AND state = 'active'
+  `);
+  if (Number(count.rows[0]?.active_staff ?? 0) >= capacity.maxActiveStaffExcludingOwner) {
+    throw new Error("SAAS_STAFF_QUOTA_REACHED");
+  }
+  // A new account is inserted by the caller after the capacity check, while
+  // the organisation entitlement lock remains held until transaction commit.
+}
+
+async function insertV4StaffSeatInTransaction(tx: any, organisationId: number, userId: string): Promise<void> {
+  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  await tx.execute(sql`
+    INSERT INTO saas_staff_seats_v4 (organisation_id, user_id, state)
+    VALUES (${organisationId}, ${userId}, 'active')
+    ON CONFLICT (organisation_id, user_id) DO NOTHING
+  `);
 }
 
 let businessSettingsSchemaReady = false;
@@ -1850,8 +1886,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     return await db.transaction(async (tx) => {
+      const pending = await tx.execute(sql`
+        SELECT id FROM site_invitations WHERE token = ${token}
+          AND status = 'pending' AND expires_at > now() FOR UPDATE
+      `);
+      if (!pending.rows.length) return null;
       const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
       if (!site || site.organisationId !== inv.organisationId) return null;
+      await reserveV4StaffSeatInTransaction(tx, inv.organisationId);
 
       const [staffUser] = await tx.insert(users).values({
         email: data.email || null,
@@ -1865,6 +1907,7 @@ export class DatabaseStorage implements IStorage {
         currentSiteId: inv.siteId,
       }).returning();
 
+      await insertV4StaffSeatInTransaction(tx, inv.organisationId, staffUser.id);
       await tx.insert(siteMembers).values({ siteId: inv.siteId, userId: staffUser.id, role: inv.role });
       await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id));
       return staffUser;
@@ -1889,11 +1932,18 @@ export class DatabaseStorage implements IStorage {
       throw new Error("INVITATION_IDENTIFIER_MISMATCH");
     }
     return await db.transaction(async (tx) => {
+      const pending = await tx.execute(sql`
+        SELECT id FROM site_invitations WHERE token = ${token}
+          AND status = 'pending' AND expires_at > now() FOR UPDATE
+      `);
+      if (!pending.rows.length) return null;
       const [site] = await tx.select().from(sites).where(and(
         eq(sites.id, inv.siteId),
         eq(sites.organisationId, inv.organisationId),
       ));
       if (!site) return null;
+      await reserveV4StaffSeatInTransaction(tx, inv.organisationId, userId);
+      await insertV4StaffSeatInTransaction(tx, inv.organisationId, userId);
       const existing = await tx.select().from(siteMembers).where(and(eq(siteMembers.siteId, inv.siteId), eq(siteMembers.userId, userId)));
       if (existing.length === 0) {
         await tx.insert(siteMembers).values({ siteId: inv.siteId, userId, role: inv.role });

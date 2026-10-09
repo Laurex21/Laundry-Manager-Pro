@@ -33,6 +33,8 @@ An access-time staff check is now staged in `isAuthenticated` behind `SAAS_V4_EN
 
 `storage.createSite` now locks the v4 entitlement row and checks active-site capacity in the same transaction, under the same disabled flag. Concurrent site creates therefore serialize once the flag is enabled. Other site insertion paths and staff-seat writers still need review before turning it on. TypeScript check in this worktree is blocked by the existing local dependency gap `@replit/connectors-sdk` in auth/routes.ts; no v4 TypeScript errors remain after the site guard change.
 
+Both invitation acceptance paths now lock the pending invitation and the organisation entitlement, reserve an authenticated staff seat and insert/attach the account in one transaction under the disabled flag. Existing active seats can join another site without consuming another seat; suspended seats cannot self-reactivate via invitation. The remaining high-risk work is a reviewed legacy-seat backfill, an owner-controlled selection/restore flow for over-quota accounts, and a full endpoint/permission test with a database. Do not confuse this with `employees` personnel records.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.

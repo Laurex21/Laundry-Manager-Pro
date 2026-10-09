@@ -510,6 +510,9 @@ export function registerAuthRoutes(app: Express): void {
       const response = await buildUserResponse(user.id);
       res.status(201).json(response);
     } catch (error) {
+      if (error instanceof Error && error.message === "SAAS_STAFF_QUOTA_REACHED") {
+        return res.status(409).json({ code: error.message, message: "Staff limit reached for the current subscription" });
+      }
       console.error("Staff onboarding error:", error);
       res.status(500).json({ message: "Staff onboarding failed" });
     }

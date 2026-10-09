@@ -2614,6 +2614,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (err instanceof Error && err.message === "INVITATION_IDENTIFIER_MISMATCH") {
         return res.status(403).json({ message: "This invitation is for a different email or phone number." });
       }
+      if (err instanceof Error && err.message === "SAAS_STAFF_QUOTA_REACHED") {
+        return res.status(409).json({ code: err.message, message: "Staff limit reached for the current subscription" });
+      }
+      if (err instanceof Error && err.message === "SAAS_STAFF_SEAT_SUSPENDED") {
+        return res.status(403).json({ code: err.message, message: "This staff seat is suspended by the subscription" });
+      }
       res.status(500).json({ message: "Failed to accept invitation" });
     }
   });
