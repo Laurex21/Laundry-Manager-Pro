@@ -3,7 +3,7 @@ import { pool } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { rateLimit } from "./rate-limit";
 import { createProductionPlanCheckoutV4 } from "./pawapay-production-create-v4";
-import { reconcileProductionCheckoutV4 } from "./pawapay-production-reconcile-v4";
+import { reconcileProductionCheckoutV4, startProductionCheckoutReconciliationV4 } from "./pawapay-production-reconcile-v4";
 import { SAAS_PLANS_V4 } from "./saas-plan-v4";
 
 async function ownerOrganisationId(userId: string): Promise<number | null> {
@@ -20,6 +20,7 @@ function pilotEnabled(organisationId: number): boolean {
 }
 
 export function registerSaasPaidCheckoutRoutesV4(app: Express): void {
+  startProductionCheckoutReconciliationV4();
   app.get("/api/subscriptions/v4/paid-pilot", isAuthenticated, async (req: any, res) => {
     try {
       const organisationId = await ownerOrganisationId(req.session.userId);
