@@ -14,6 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
 import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
+import { SaasTrialNoticeV4Banner } from "@/components/saas-trial-notice-v4-banner";
 import { PwaInstallDialog } from "@/components/pwa-install-dialog";
 import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
@@ -543,6 +544,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
         {/* Demo banner */}
         <DemoBanner />
+        <SaasTrialNoticeV4Banner />
 
         {/* Page content */}
         <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] mx-auto w-full pb-24 lg:pb-8 min-w-0 overflow-x-hidden">
