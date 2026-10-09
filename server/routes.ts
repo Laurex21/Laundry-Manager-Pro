@@ -40,6 +40,7 @@ import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
 import { registerPawapaySandboxCallback } from "./lib/pawapay-sandbox-callback";
 import { registerPawapaySandboxCheckoutRoutes } from "./lib/pawapay-sandbox-checkout-routes";
 import { registerSaasPaidCheckoutRoutesV4 } from "./lib/saas-paid-checkout-routes-v4";
+import { registerSaasV4ShadowSandboxRoutes } from "./lib/saas-v4-shadow-sandbox-routes";
 import { rateLimit } from "./lib/rate-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
@@ -309,6 +310,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);
   registerSaasPaidCheckoutRoutesV4(app);
+  registerSaasV4ShadowSandboxRoutes(app);
   startTemporalIntelligenceJob();
 
   app.get("/api/public/stats", async (_req, res) => {

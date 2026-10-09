@@ -21,6 +21,11 @@ type PaidPilotV4 = { enabled: false } | { enabled: true; providerEnvironment: "s
   planSlug: "starter" | "pro" | "business"; state: string;
   trialEndsAt: string | null; cycleEndsAt: string | null;
 } };
+type ShadowTestV4 = { enabled: false } | { enabled: true;
+  prices: { pro: number; business: number };
+  entitlement: { plan_slug: string; cycle_ends_at: string } | null;
+  checkouts: Array<{ checkout_id: string; target_plan_slug: string; amount_xaf: number; status: string; redirect_url: string | null }>;
+};
 
 function dateLocaleFor(language: string) {
   if (language.startsWith("fr")) return fr;
@@ -46,6 +51,7 @@ export default function Subscriptions() {
     },
   });
   const paidPilot = useQuery<PaidPilotV4>({ queryKey: ["/api/subscriptions/v4/paid-pilot"] });
+  const shadowTest = useQuery<ShadowTestV4>({ queryKey: ["/api/subscriptions/v4/shadow-test"] });
 
   const activePlanId = currentSub?.planId;
 
@@ -63,6 +69,8 @@ export default function Subscriptions() {
         <p className="mt-1 text-sm text-muted-foreground">{i18n.language.startsWith("fr") ? "Consultez votre forfait XpressPro actuel et comparez les offres disponibles." : i18n.language.startsWith("pt") ? "Consulte o seu plano XpressPro atual e compare as ofertas disponíveis." : "Review your current XpressPro plan and compare available offers."}</p>
       </div>
       <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-200">{t("plans_free_period_notice")}</p>
+
+      {shadowTest.data?.enabled && <ShadowSubscriptionTestV4 data={shadowTest.data} />}
 
       {sandboxTest.data?.enabled && <Card className="border-cyan-200 bg-cyan-50/50">
         <CardContent className="space-y-3 p-5">
@@ -146,6 +154,42 @@ export default function Subscriptions() {
       <PlanActivationDialog plan={planDialog} sandboxEnabled={!!sandboxTest.data?.enabled} onClose={() => setPlanDialog(null)} />
     </div>
   );
+}
+
+function ShadowSubscriptionTestV4({ data }: { data: Extract<ShadowTestV4, { enabled: true }> }) {
+  const queryClient = useQueryClient();
+  const create = useMutation({
+    mutationFn: async (targetPlanSlug: "pro" | "business") => {
+      const response = await apiRequest("POST", "/api/subscriptions/v4/shadow-test", { targetPlanSlug });
+      return response.json() as Promise<{ checkoutId: string; redirectUrl: string }>;
+    },
+    onSuccess: ({ redirectUrl }) => window.location.assign(redirectUrl),
+  });
+  const refresh = useMutation({
+    mutationFn: async (checkoutId: string) => {
+      const response = await apiRequest("POST", `/api/subscriptions/v4/shadow-test/${checkoutId}/refresh`);
+      return response.json() as Promise<{ status: string }>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/v4/shadow-test"] }),
+  });
+  return <Card className="border-amber-300 bg-amber-50/50"><CardContent className="space-y-3 p-5">
+    <h2 className="font-semibold">Essai v4 — PawaPay Sandbox</h2>
+    <p className="text-sm">Paiement fictif aux prix Pro ou Business. Le résultat apparaît uniquement ici ; votre vraie formule, vos droits et vos paiements restent inchangés.</p>
+    {data.entitlement && <p className="text-sm font-medium">Formule de test : {data.entitlement.plan_slug} · jusqu’au {new Date(data.entitlement.cycle_ends_at).toLocaleDateString("fr-CM")}</p>}
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" disabled={create.isPending || data.checkouts.some((item) => ["created", "accepted", "review"].includes(item.status))}
+        onClick={() => create.mutate("pro")}>Tester Pro · {data.prices.pro.toLocaleString("fr-CM")} FCFA fictifs</Button>
+      <Button type="button" variant="outline" disabled={create.isPending || data.checkouts.some((item) => ["created", "accepted", "review"].includes(item.status))}
+        onClick={() => create.mutate("business")}>Tester Business · {data.prices.business.toLocaleString("fr-CM")} FCFA fictifs</Button>
+    </div>
+    {data.checkouts.map((item) => <div key={item.checkout_id} className="flex flex-wrap items-center gap-3 border-t pt-2 text-sm">
+      <span>{item.target_plan_slug} · {item.status} · {item.amount_xaf.toLocaleString("fr-CM")} FCFA fictifs</span>
+      {item.status === "accepted" && <Button type="button" size="sm" variant="outline" disabled={refresh.isPending}
+        onClick={() => refresh.mutate(item.checkout_id)}>Vérifier le paiement</Button>}
+      {item.redirect_url && item.status === "accepted" && <a className="underline" href={item.redirect_url}>Ouvrir PawaPay Sandbox</a>}
+    </div>)}
+    {(create.error || refresh.error) && <p role="alert" className="text-sm text-red-700">Test indisponible. Aucun changement de formule réelle.</p>}
+  </CardContent></Card>;
 }
 
 function PaidPilotSubscriptionsV4({ entitlement, plans, providerEnvironment }: {
