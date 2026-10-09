@@ -5,6 +5,7 @@ import { inspectProductionCheckoutV4 } from "./pawapay-production-checkout-v4.ts
 const intent = {
   checkoutId: "17f59011-21c2-48df-a371-2d319ac2841e",
   checkoutCode: "expected-code",
+  clientReferenceId: "XP-PROD-424-001",
   organisationId: 424,
   targetPlanSlug: "business" as const,
   amountXaf: 18999,
@@ -12,7 +13,8 @@ const intent = {
 const completed = {
   status: "FOUND",
   data: {
-    checkoutId: intent.checkoutId, checkoutCode: intent.checkoutCode, status: "COMPLETED",
+    checkoutId: intent.checkoutId, checkoutCode: intent.checkoutCode,
+    clientReferenceId: intent.clientReferenceId, status: "COMPLETED",
     amounts: [{ country: "CMR", currency: "XAF", amount: "18999" }],
     metadata: [{ organisationId: "424" }, { planSlug: "business" }],
   },
@@ -29,5 +31,6 @@ test("wrong amount, tenant, plan or checkout code fails closed", () => {
   assert.throws(() => inspectProductionCheckoutV4(intent, mismatch({ metadata: [{ organisationId: "425" }, { planSlug: "business" }] })));
   assert.throws(() => inspectProductionCheckoutV4(intent, mismatch({ metadata: [{ organisationId: "424" }, { planSlug: "pro" }] })));
   assert.throws(() => inspectProductionCheckoutV4(intent, mismatch({ checkoutCode: "different" })));
+  assert.throws(() => inspectProductionCheckoutV4(intent, mismatch({ clientReferenceId: "different" })));
   assert.throws(() => inspectProductionCheckoutV4(intent, { status: "NOT_FOUND" }));
 });

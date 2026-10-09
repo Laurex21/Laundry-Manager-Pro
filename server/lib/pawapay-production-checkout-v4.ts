@@ -3,6 +3,7 @@ import type { PaidSaasPlanV4 } from "./saas-plan-transition-v4";
 export type ProductionCheckoutIntentV4 = {
   checkoutId: string;
   checkoutCode: string;
+  clientReferenceId: string;
   organisationId: number;
   targetPlanSlug: PaidSaasPlanV4;
   amountXaf: number;
@@ -37,6 +38,7 @@ export function inspectProductionCheckoutV4(intent: ProductionCheckoutIntentV4,
     typeof entry?.amount === "string" && /^\d+(?:\.0+)?$/.test(entry.amount) &&
     Number(entry.amount) === intent.amountXaf);
   if (data.checkoutId !== intent.checkoutId || data.checkoutCode !== intent.checkoutCode ||
+      data.clientReferenceId !== intent.clientReferenceId ||
       !amountMatches || metadataValue(data.metadata, "organisationId") !== String(intent.organisationId) ||
       metadataValue(data.metadata, "planSlug") !== intent.targetPlanSlug) {
     throw new Error("PAWAPAY_CHECKOUT_MISMATCH");
