@@ -22,12 +22,16 @@ An organisation's paid entitlement may change only after the server verifies a f
 5. Show distinct states to the customer: awaiting payment, provider confirmed, plan activated, failed/expired, and requires manual review. The Super Admin should show the source and time of verification; manual plan grants remain audited and are not counted as revenue.
 6. Count only provider-verified production receipts as confirmed subscription revenue. Keep historical `completed` rows separately labelled as unverified legacy records until reconciled; do not delete or rewrite them automatically.
 
-## Business decisions required before enabling production charging
+## Confirmed v4 commercial rules (9 October 2026)
 
-- Confirm the actual monthly prices and currency. Current cards explicitly call their prices *indicative future prices*.
-- On a paid switch while another plan is active, choose immediate replacement, scheduled change at the current term end, or credit/proration. This affects entitlement and refunds.
-- Define expiry/grace behavior and renewal timing. A calendar-month addition and an `active` status alone are insufficient.
-- Decide the date and scope of the first paid pilot. Default must remain off; enabling payment for everyone is a separate rollout decision.
+The previous prices and open questions in this document are superseded by `PROMPT_IMPLEMENTATION_ABONNEMENTS_XPRESSPRO_v4` supplied by Stevve. The live cards are *not* the approved tariff schedule.
+
+- Starter: **0 XAF**, one site, owner only, unlimited orders. Pro: **10,999 XAF/month**, one site, two active staff plus owner, unlimited orders. Business: **18,999 XAF/month**, two sites, five active staff plus owner, unlimited orders. Enterprise is not part of the target catalogue.
+- Each additional active staff member costs **2,000 XAF/month**. Each additional Business site costs **5,000 XAF/month** and grants two further active staff slots. Owner is outside staff quota.
+- A confirmed paid plan change starts immediately at the full price of the new plan, with a fresh monthly cycle and no credit or plan-price proration. A customer-requested downgrade is scheduled for the next renewal. Added sites/staff are prorated over the exact remainder of the current cycle; removals take effect at the next renewal.
+- A new organisation gets 30 days of Pro trial, without automatic charging, then Starter. An expired unpaid paid cycle returns immediately to Starter without grace. Preserve all historical data and suspend excess staff rather than deleting them.
+- Existing organisations require a reviewed migration inventory. Organisations older than 30 days get a seven-day transitional Pro period; newer organisations complete their original trial with at least seven days' notice. Do not apply this to production without migration approval.
+- The first paid pilot date and scope remain undecided. Default must remain off. Production credentials, provider reconciliation, and entitlement activation remain separate from the fictive Sandbox flow.
 
 ## Required acceptance tests
 
