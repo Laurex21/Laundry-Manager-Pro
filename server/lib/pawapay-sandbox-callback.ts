@@ -64,7 +64,8 @@ export function verifyPawapaySandboxCallback(input: CallbackInput): boolean {
   const signatureMatch = /^sig-pp=:([A-Za-z0-9+/]+={0,2}):$/.exec(headers.signature || "");
   if (!signatureMatch) return false;
   const signature = Buffer.from(signatureMatch[1], "base64");
-  if (signature.length !== 64) return false;
+  // PawaPay uses ASN.1 DER-encoded ECDSA signatures (variable length), not IEEE P1363.
+  if (signature.length < 64 || signature.length > 80) return false;
   const publicKey = keys.find((key) => key.id === keyId)?.key;
   if (!publicKey) return false;
   const values: Record<string, string | undefined> = {
@@ -74,7 +75,7 @@ export function verifyPawapaySandboxCallback(input: CallbackInput): boolean {
   if (components.some((component) => !values[component])) return false;
   const base = `${components.map((component) => `"${component}": ${values[component]}`).join("\n")}\n"@signature-params": ${params}`;
   try {
-    return crypto.verify("sha256", Buffer.from(base), { key: publicKey, dsaEncoding: "ieee-p1363" }, signature);
+    return crypto.verify("sha256", Buffer.from(base), publicKey, signature);
   } catch {
     return false;
   }
@@ -121,7 +122,7 @@ export function registerPawapaySandboxCallback(app: Express): void {
         const updated = await pool.query(
           `UPDATE pawapay_sandbox_checkouts
            SET status = $2, provider_status = $2, callback_received_at = now(), updated_at = now()
-           WHERE checkout_id = $1 AND status NOT IN ('COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED')
+           WHERE checkout_id = $1 AND (status NOT IN ('COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED') OR status = $2)
            RETURNING checkout_id`,
           [id, finalStatus],
         );
