@@ -41,6 +41,8 @@ The pure paid-plan transition now models confirmed trial/Starter-to-paid and **a
 
 An additive, production-only payment-intent and receipt ledger is staged in the unexecuted migration. It separates real payments from the 1,000 XAF Sandbox table, snapshots the requested plan/amount, constrains the environment to production and permits at most one receipt per checkout ID. A composite foreign key prevents a receipt being recorded under a different organisation from its intent. No production checkout endpoint, PawaPay token use, provider verification or entitlement activation is wired yet; a schema alone is not a payment safety gate.
 
+The [official pawaPay Merchant API v2 Postman collection](https://www.postman.com/pawapay-4106/pawapay/documentation/f2x5p5r/pawapay-merchant-api-v2) lists both `GET /v2/checkouts/{checkoutId}` and `GET /v2/deposits/{depositId}`; its deposit-status example includes final status, amount, currency and country. The staged checkout inspector checks immutable identity/amount/organisation/plan but *never* treats checkout `COMPLETED` as authority to activate: it returns `deposit_verification_required`. The exact deposit linkage in the checkout-status response still requires a verified v2 sample; do not guess a field name or enable charging until a completed deposit can be matched and validated. No provider call has been made from the v4 branch.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.
