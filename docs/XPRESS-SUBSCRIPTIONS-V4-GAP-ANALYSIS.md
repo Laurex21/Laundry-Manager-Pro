@@ -2,6 +2,8 @@
 
 Status: source-code review only, 9 October 2026. No production database inventory, migration or deployment performed. The attached v4 commercial specification is the target, not the current UI.
 
+Branch progress: the pure v4 tariff/proration module and an additive organisation-scoped entitlement schema are staged. The schema migration is intentionally **not** included in the automatic migration runner, and no production records have been backfilled. The live subscription reads and activation API still use legacy tables until the full transition is verified.
+
 | Area | Current state | v4 target | Assessment |
 | --- | --- | --- | --- |
 | Catalogue | `server/storage.ts` seeds Starter 6,000, Pro 15,000, Business 30,000, Enterprise 50,000 XAF, with order/user limits | Free Starter; Pro 10,999; Business 18,999; unlimited orders; no Enterprise | Existing, incompatible |

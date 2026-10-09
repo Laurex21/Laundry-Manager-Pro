@@ -397,6 +397,28 @@ export const organisations = pgTable("organisations", {
   uniqueIndex("organisations_owner_id_unique").on(table.ownerId),
 ]);
 
+// Staged v4 SaaS entitlement. No legacy subscription is read or migrated into
+// this table automatically; the production backfill requires review.
+export const saasEntitlementsV4 = pgTable("saas_entitlements_v4", {
+  organisationId: integer("organisation_id").primaryKey().references(() => organisations.id),
+  planSlug: varchar("plan_slug", { length: 20 }).notNull(),
+  state: varchar("state", { length: 20 }).notNull(),
+  trialStartedAt: timestamp("trial_started_at", { withTimezone: true }),
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  cycleStartedAt: timestamp("cycle_started_at", { withTimezone: true }),
+  cycleEndsAt: timestamp("cycle_ends_at", { withTimezone: true }),
+  paidExtraSites: integer("paid_extra_sites").notNull().default(0),
+  paidExtraStaff: integer("paid_extra_staff").notNull().default(0),
+  scheduledPlanSlug: varchar("scheduled_plan_slug", { length: 20 }),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("saas_entitlements_v4_plan_check", sql`${table.planSlug} IN ('starter', 'pro', 'business')`),
+  check("saas_entitlements_v4_state_check", sql`${table.state} IN ('trialing', 'active', 'starter', 'past_due')`),
+  check("saas_entitlements_v4_extra_check", sql`${table.paidExtraSites} >= 0 AND ${table.paidExtraStaff} >= 0`),
+  check("saas_entitlements_v4_version_check", sql`${table.version} > 0`),
+]);
+
 export const pawapaySandboxCheckouts = pgTable("pawapay_sandbox_checkouts", {
   checkoutId: uuid("checkout_id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
