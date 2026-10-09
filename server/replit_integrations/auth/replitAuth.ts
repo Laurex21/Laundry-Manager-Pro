@@ -550,7 +550,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   try {
     const { db } = await import("../../db");
     const { users } = await import("@shared/models/auth");
-    const { organisations, sites, siteMembers } = await import("@shared/schema");
+    const { organisations, sites, siteMembers, saasEntitlementsV4, saasStaffSeatsV4 } = await import("@shared/schema");
     const { and, eq } = await import("drizzle-orm");
 
     let [user] = await db
@@ -567,6 +567,10 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         .from(users)
         .where(eq(users.id, req.userId))
         .limit(1);
+    }
+
+    if (process.env.SAAS_V4_ENFORCEMENT === "true" && user?.userType === "staff" && !user.organisationId) {
+      return res.status(403).json({ code: "SAAS_STAFF_ACCESS_SUSPENDED", message: "Staff organisation is unavailable" });
     }
 
     let authorizedSiteIds: number[] = [];
@@ -586,6 +590,29 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         .map((site) => site.id);
 
       isOrganisationOwner = org?.ownerId === req.userId;
+      if (process.env.SAAS_V4_ENFORCEMENT === "true" && !isOrganisationOwner) {
+        const { canUseStaffAccountV4 } = await import("../../lib/saas-entitlement-v4");
+        const [entitlement] = await db.select().from(saasEntitlementsV4)
+          .where(eq(saasEntitlementsV4.organisationId, user.organisationId)).limit(1);
+        const [seat] = await db.select({ state: saasStaffSeatsV4.state }).from(saasStaffSeatsV4)
+          .where(and(eq(saasStaffSeatsV4.organisationId, user.organisationId),
+            eq(saasStaffSeatsV4.userId, req.userId))).limit(1);
+        const planSlug = entitlement?.planSlug === "starter" ? "starter" :
+          entitlement?.planSlug === "pro" ? "pro" : entitlement?.planSlug === "business" ? "business" : null;
+        const state = entitlement?.state === "trialing" ? "trialing" :
+          entitlement?.state === "active" ? "active" : entitlement?.state === "starter" ? "starter" :
+          entitlement?.state === "past_due" ? "past_due" : null;
+        const effectiveEntitlement = entitlement && planSlug && state ? {
+          planSlug, state, trialStartedAt: entitlement.trialStartedAt,
+          trialEndsAt: entitlement.trialEndsAt, cycleStartedAt: entitlement.cycleStartedAt,
+          cycleEndsAt: entitlement.cycleEndsAt,
+        } : null;
+        if (!canUseStaffAccountV4(false, effectiveEntitlement,
+          seat?.state === "active" || seat?.state === "subscription_suspended" ? seat.state : null,
+          new Date())) {
+          return res.status(403).json({ code: "SAAS_STAFF_ACCESS_SUSPENDED", message: "Staff access requires an active subscription seat" });
+        }
+      }
       if (isOrganisationOwner) {
         authorizedSiteIds = organisationSiteIds;
       } else {

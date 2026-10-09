@@ -29,6 +29,8 @@ The production inventory query is in `scripts/inventory-saas-v4-readonly.sql`. I
 
 The staged `saas_staff_seats_v4` schema now represents one authenticated account per organisation with `active` or `subscription_suspended` state. It is not backfilled or enforced yet. The database foreign keys alone do not prove that the user belongs to the same organisation; the eventual migration and all seat mutations must validate `users.organisation_id`, and all activation must lock the organisation/entitlement row before counting seats. Existing open sessions must be checked at each authenticated request, not just at login. `server/replit_integrations/auth/replitAuth.ts:isAuthenticated` is the central session gate; login and invitation onboarding are additional entry points to inspect.
 
+An access-time staff check is now staged in `isAuthenticated` behind `SAAS_V4_ENFORCEMENT=true` (default off). It denies missing/expired entitlements or suspended/missing seats on every authenticated request, while preserving owner access. **Do not enable the flag** before applying the reviewed schema, backfilling every legitimate staff account, and verifying login/onboarding and non-`isAuthenticated` routes. The access check does not enforce atomic seat allocation; that remains a separate required lot.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.
