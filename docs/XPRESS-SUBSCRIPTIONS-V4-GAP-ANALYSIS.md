@@ -27,6 +27,8 @@ The production inventory query is in `scripts/inventory-saas-v4-readonly.sql`. I
 
 **Implementation gate:** define one canonical active staff-seat representation, including subscription-suspended sessions, before writing these guards. Neither `users` nor `employees` currently has a subscription-suspended status. Applying a simple count could block legitimate users or allow concurrent over-allocation.
 
+The staged `saas_staff_seats_v4` schema now represents one authenticated account per organisation with `active` or `subscription_suspended` state. It is not backfilled or enforced yet. The database foreign keys alone do not prove that the user belongs to the same organisation; the eventual migration and all seat mutations must validate `users.organisation_id`, and all activation must lock the organisation/entitlement row before counting seats. Existing open sessions must be checked at each authenticated request, not just at login. `server/replit_integrations/auth/replitAuth.ts:isAuthenticated` is the central session gate; login and invitation onboarding are additional entry points to inspect.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.

@@ -31,3 +31,17 @@ CREATE INDEX IF NOT EXISTS idx_saas_entitlements_v4_trial_ends
 CREATE INDEX IF NOT EXISTS idx_saas_entitlements_v4_cycle_ends
   ON saas_entitlements_v4 (cycle_ends_at)
   WHERE state = 'active';
+
+-- Authenticated staff seats, distinct from the pressing's employee records.
+-- No backfill or suspension is performed by this schema-only migration.
+CREATE TABLE IF NOT EXISTS saas_staff_seats_v4 (
+  organisation_id integer NOT NULL REFERENCES organisations(id),
+  user_id varchar NOT NULL REFERENCES users(id),
+  state varchar(30) NOT NULL CHECK (state IN ('active', 'subscription_suspended')),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT saas_staff_seats_v4_org_user_unique UNIQUE (organisation_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_saas_staff_seats_v4_active_by_org
+  ON saas_staff_seats_v4 (organisation_id)
+  WHERE state = 'active';

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { effectiveSaasPlanV4, newOrganisationTrialV4, TRIAL_DURATION_MS } from "./saas-entitlement-v4.ts";
+import { canUseStaffAccountV4, effectiveSaasPlanV4, newOrganisationTrialV4, TRIAL_DURATION_MS } from "./saas-entitlement-v4.ts";
 
 test("new organisation trial lasts exactly 30 UTC days", () => {
   const start = new Date("2026-10-09T12:00:00Z");
@@ -25,4 +25,14 @@ test("paid rights stop at cycle end even if database state still says active", (
 
 test("missing entitlement never grants paid rights", () => {
   assert.equal(effectiveSaasPlanV4(null, new Date("2026-10-09T00:00:00Z")), "starter");
+});
+
+test("owner retains access, suspended staff and stale sessions do not", () => {
+  const trial = newOrganisationTrialV4(new Date("2026-10-09T00:00:00Z"));
+  const during = new Date("2026-10-10T00:00:00Z");
+  assert.equal(canUseStaffAccountV4(true, null, null, during), true);
+  assert.equal(canUseStaffAccountV4(false, trial, "active", during), true);
+  assert.equal(canUseStaffAccountV4(false, trial, "subscription_suspended", during), false);
+  assert.equal(canUseStaffAccountV4(false, trial, null, during), false);
+  assert.equal(canUseStaffAccountV4(false, trial, "active", trial.trialEndsAt!), false);
 });

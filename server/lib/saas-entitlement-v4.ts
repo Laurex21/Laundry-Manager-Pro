@@ -40,3 +40,9 @@ export function effectiveSaasPlanV4(entitlement: SaasEntitlementV4 | null, now: 
   }
   return "starter";
 }
+
+export function canUseStaffAccountV4(isOrganisationOwner: boolean, entitlement: SaasEntitlementV4 | null,
+  seatState: "active" | "subscription_suspended" | null, now: Date): boolean {
+  if (isOrganisationOwner) return true;
+  return seatState === "active" && effectiveSaasPlanV4(entitlement, now) !== "starter";
+}

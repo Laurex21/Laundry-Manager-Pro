@@ -419,6 +419,18 @@ export const saasEntitlementsV4 = pgTable("saas_entitlements_v4", {
   check("saas_entitlements_v4_version_check", sql`${table.version} > 0`),
 ]);
 
+// A staff seat is an authenticated account, not an employee personnel record.
+// Retain suspended rows so a paid renewal can restore access without deletion.
+export const saasStaffSeatsV4 = pgTable("saas_staff_seats_v4", {
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  state: varchar("state", { length: 30 }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("saas_staff_seats_v4_org_user_unique").on(table.organisationId, table.userId),
+  check("saas_staff_seats_v4_state_check", sql`${table.state} IN ('active', 'subscription_suspended')`),
+]);
+
 export const pawapaySandboxCheckouts = pgTable("pawapay_sandbox_checkouts", {
   checkoutId: uuid("checkout_id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
