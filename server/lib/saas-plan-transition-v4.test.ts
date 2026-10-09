@@ -14,13 +14,15 @@ test("payment during trial activates paid Business immediately at full price", (
   assert.equal(switched.entitlement.trialStartedAt?.toISOString(), trial.trialStartedAt?.toISOString());
 });
 
-test("paid Pro upgrade to Business discards remaining Pro cycle without credit", () => {
+test("any confirmed switch to another paid plan starts immediately at full price", () => {
   const paidPro = confirmedPaidPlanSwitchV4(null, "pro", new Date("2026-10-01T00:00:00Z")).entitlement;
   const upgrade = confirmedPaidPlanSwitchV4(paidPro, "business", new Date("2026-10-20T00:00:00Z"));
   assert.equal(upgrade.fullPlanPriceXaf, 18999);
   assert.equal(upgrade.entitlement.cycleEndsAt?.toISOString(), "2026-11-20T00:00:00.000Z");
-  assert.throws(() => confirmedPaidPlanSwitchV4(upgrade.entitlement, "pro", new Date("2026-10-21T00:00:00Z")),
-    /DOWNGRADE_MUST_BE_SCHEDULED/);
+  const switchBack = confirmedPaidPlanSwitchV4(upgrade.entitlement, "pro", new Date("2026-10-21T00:00:00Z"));
+  assert.equal(switchBack.fullPlanPriceXaf, 10999);
+  assert.equal(switchBack.entitlement.planSlug, "pro");
+  assert.equal(switchBack.entitlement.cycleEndsAt?.toISOString(), "2026-11-21T00:00:00.000Z");
 });
 
 test("monthly anniversary clamps 31st to the last day of shorter month", () => {

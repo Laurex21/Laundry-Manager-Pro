@@ -21,9 +21,6 @@ export function confirmedPaidPlanSwitchV4(previous: SaasEntitlementV4 | null,
   const confirmedTime = confirmedAt.getTime();
   if (!Number.isFinite(confirmedTime)) throw new RangeError("Invalid payment confirmation time");
   const effective = effectiveSaasPlanV4(previous, confirmedAt);
-  if (previous?.state === "active" && effective === "business" && target === "pro") {
-    throw new Error("DOWNGRADE_MUST_BE_SCHEDULED");
-  }
   if (previous?.state === "active" && effective === target) {
     throw new Error("EARLY_SAME_PLAN_RENEWAL_NOT_DEFINED");
   }
