@@ -20,8 +20,8 @@ const completed = {
   },
 };
 
-test("completed checkout cannot activate until actual deposit is verified", () => {
-  assert.equal(inspectProductionCheckoutV4(intent, completed), "deposit_verification_required");
+test("server-verified matching completed checkout confirms payment", () => {
+  assert.equal(inspectProductionCheckoutV4(intent, completed), "completed");
   assert.equal(inspectProductionCheckoutV4(intent, { ...completed, data: { ...completed.data, status: "ACCEPTED" } }), "pending");
 });
 

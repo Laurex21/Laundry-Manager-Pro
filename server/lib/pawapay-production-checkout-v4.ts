@@ -22,11 +22,11 @@ function metadataValue(metadata: unknown, key: string): string | null {
   return null;
 }
 
-// Checkout status establishes identity and requested amount. Even a completed
-// checkout is only a candidate; verify its completed deposit's actual amount
-// through the deposits API before granting any entitlement.
+// Product decision (Stevve, 9 Oct 2026): a server-fetched COMPLETED checkout
+// confirms payment. This inspector does not activate a plan; the caller must
+// persist the verified intent and apply an idempotent transaction.
 export function inspectProductionCheckoutV4(intent: ProductionCheckoutIntentV4,
-  providerResponse: unknown): "pending" | "failed" | "deposit_verification_required" {
+  providerResponse: unknown): "pending" | "failed" | "completed" {
   const response = providerResponse as { status?: unknown; data?: Record<string, unknown> } | null;
   if (response?.status !== "FOUND" || !response.data || typeof response.data !== "object") {
     throw new Error("PAWAPAY_CHECKOUT_NOT_FOUND");
@@ -43,7 +43,7 @@ export function inspectProductionCheckoutV4(intent: ProductionCheckoutIntentV4,
       metadataValue(data.metadata, "planSlug") !== intent.targetPlanSlug) {
     throw new Error("PAWAPAY_CHECKOUT_MISMATCH");
   }
-  if (data.status === "COMPLETED") return "deposit_verification_required";
+  if (data.status === "COMPLETED") return "completed";
   if (["FAILED", "EXPIRED", "CANCELLED"].includes(String(data.status))) return "failed";
   if (["CREATED", "ACCEPTED", "PENDING"].includes(String(data.status))) return "pending";
   throw new Error("PAWAPAY_CHECKOUT_STATUS_UNKNOWN");
