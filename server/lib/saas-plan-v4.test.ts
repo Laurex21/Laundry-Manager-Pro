@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SAAS_PLANS_V4, saasMonthlyQuoteV4, prorateAddedOptionXaf } from "./saas-plan-v4.ts";
+import { SAAS_PLANS_V4, saasMonthlyQuoteV4, prorateAddedOptionXaf,
+  saasCapacityV4, canActivateSaasSiteV4, canActivateSaasStaffV4 } from "./saas-plan-v4.ts";
 
 test("approved base prices and unlimited-order catalogue shape", () => {
   assert.deepEqual(Object.keys(SAAS_PLANS_V4), ["starter", "pro", "business"]);
@@ -17,6 +18,18 @@ test("Business site adds two included staff places and add-ons are itemised", ()
   assert.equal(saasMonthlyQuoteV4("business", 4, 10).totalXaf, 30999);
   assert.throws(() => saasMonthlyQuoteV4("starter", 1, 1));
   assert.throws(() => saasMonthlyQuoteV4("pro", 2, 0));
+});
+
+test("paid options determine server-side active capacity; owner is excluded", () => {
+  assert.deepEqual(saasCapacityV4("business", 1, 2), {
+    maxActiveSites: 3, maxActiveStaffExcludingOwner: 9,
+  });
+  assert.equal(canActivateSaasSiteV4("business", 1, 0, 2), true);
+  assert.equal(canActivateSaasSiteV4("business", 1, 0, 3), false);
+  assert.equal(canActivateSaasStaffV4("business", 1, 0, 6), true);
+  assert.equal(canActivateSaasStaffV4("business", 1, 0, 7), false);
+  assert.equal(canActivateSaasStaffV4("starter", 0, 0, 0), false);
+  assert.throws(() => saasCapacityV4("starter", 0, 1));
 });
 
 test("option proration uses actual UTC cycle and half-up FCFA rounding", () => {
