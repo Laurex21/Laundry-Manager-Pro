@@ -55,6 +55,11 @@ The [official pawaPay Merchant API v2 Postman collection](https://www.postman.co
 
 ## Devil's advocate / blockers
 
+### Isolated schema check — 9 October 2026
+
+The v4 migration was applied to an ephemeral PGlite PostgreSQL database with only stub organisation/user parent rows. Inserts verified that the partial unique index rejects a second open checkout for one organisation, the composite foreign key rejects a receipt attached to a different organisation, and the receipt primary key rejects a duplicate receipt. This is **schema-level evidence only**. It does not exercise the application transaction, PawaPay API, existing Replit schema, or production migration/backfill. No production data was read or changed.
+
+
 - **Critical:** the free activation endpoint allows a paid plan without payment. Do not enable paid billing while it exists for pilot organisations.
 - **High:** historical Enterprise subscribers may depend on rights absent from v4 Business/Pro. Automatically downgrading them risks service loss. A production inventory and per-organisation transition review are required.
 - **High:** provider `COMPLETED` for a fictive Sandbox checkout proves connectivity, not production settlement. Never count Sandbox or legacy `subscription_payments.completed` as paid SaaS revenue.
