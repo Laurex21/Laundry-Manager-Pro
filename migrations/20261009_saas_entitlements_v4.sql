@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS saas_entitlements_v4 (
   paid_extra_sites integer NOT NULL DEFAULT 0 CHECK (paid_extra_sites >= 0),
   paid_extra_staff integer NOT NULL DEFAULT 0 CHECK (paid_extra_staff >= 0),
   scheduled_plan_slug varchar(20) CHECK (scheduled_plan_slug IN ('starter', 'pro', 'business')),
+  time_zone varchar(80) NOT NULL DEFAULT 'Africa/Douala',
   version integer NOT NULL DEFAULT 1 CHECK (version > 0),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT saas_entitlements_v4_trial_window_check
@@ -45,3 +46,18 @@ CREATE TABLE IF NOT EXISTS saas_staff_seats_v4 (
 CREATE INDEX IF NOT EXISTS idx_saas_staff_seats_v4_active_by_org
   ON saas_staff_seats_v4 (organisation_id)
   WHERE state = 'active';
+
+-- In-app owner notices only; no outbound messaging integration.
+CREATE TABLE IF NOT EXISTS saas_trial_notices_v4 (
+  id bigserial PRIMARY KEY,
+  organisation_id integer NOT NULL REFERENCES organisations(id),
+  kind varchar(30) NOT NULL CHECK (kind IN ('trial_reminder', 'trial_expired')),
+  local_date date NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT saas_trial_notices_v4_once_per_local_day
+    UNIQUE (organisation_id, kind, local_date)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS saas_trial_notices_v4_expired_once
+  ON saas_trial_notices_v4 (organisation_id)
+  WHERE kind = 'trial_expired';

@@ -410,6 +410,7 @@ export const saasEntitlementsV4 = pgTable("saas_entitlements_v4", {
   paidExtraSites: integer("paid_extra_sites").notNull().default(0),
   paidExtraStaff: integer("paid_extra_staff").notNull().default(0),
   scheduledPlanSlug: varchar("scheduled_plan_slug", { length: 20 }),
+  timeZone: varchar("time_zone", { length: 80 }).notNull().default("Africa/Douala"),
   version: integer("version").notNull().default(1),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -417,6 +418,18 @@ export const saasEntitlementsV4 = pgTable("saas_entitlements_v4", {
   check("saas_entitlements_v4_state_check", sql`${table.state} IN ('trialing', 'active', 'starter', 'past_due')`),
   check("saas_entitlements_v4_extra_check", sql`${table.paidExtraSites} >= 0 AND ${table.paidExtraStaff} >= 0`),
   check("saas_entitlements_v4_version_check", sql`${table.version} > 0`),
+]);
+
+export const saasTrialNoticesV4 = pgTable("saas_trial_notices_v4", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  kind: varchar("kind", { length: 30 }).notNull(),
+  localDate: date("local_date").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("saas_trial_notices_v4_once_per_local_day").on(table.organisationId, table.kind, table.localDate),
+  uniqueIndex("saas_trial_notices_v4_expired_once").on(table.organisationId).where(sql`${table.kind} = 'trial_expired'`),
+  check("saas_trial_notices_v4_kind_check", sql`${table.kind} IN ('trial_reminder', 'trial_expired')`),
 ]);
 
 // A staff seat is an authenticated account, not an employee personnel record.
