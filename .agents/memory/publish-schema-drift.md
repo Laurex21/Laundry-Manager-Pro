@@ -8,3 +8,9 @@ description: Why production broke after publishing the customer-credit update, a
 **Why:** July 2026 outage — the app was published from `feat/customer-credit-20260728` while main and the dev DB lacked `customers.credit_balance` etc. All customer pages went down in production.
 
 **How to apply:** Before publishing schema-dependent code: (1) merge to main, (2) apply the migration or schema push to the development database, (3) verify the expected columns there, then (4) republish and review the production schema diff. Never bypass Publish with direct production DDL or startup-time schema mutation.
+
+**Rule:** Include application-owned tables in the declared schema even when services access them through raw SQL. A migration file alone does not establish the development database schema.
+
+**Why:** A production-only sandbox table triggered a destructive Publish proposal despite still being used by the application. Runtime creation can recreate this mismatch after publication.
+
+**How to apply:** Declare the table and apply its reviewed additive migration to development only. Compare existing columns, constraints, and indexes against production through read-only metadata queries; distinguish safe additions from destructive changes.

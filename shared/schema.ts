@@ -1,4 +1,4 @@
-import { pgTable, text, serial, bigserial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, bigserial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check, bigint, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -395,6 +395,25 @@ export const organisations = pgTable("organisations", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   uniqueIndex("organisations_owner_id_unique").on(table.ownerId),
+]);
+
+export const pawapaySandboxCheckouts = pgTable("pawapay_sandbox_checkouts", {
+  checkoutId: uuid("checkout_id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  amountXaf: decimal("amount_xaf", { precision: 10, scale: 2 }).notNull(),
+  status: varchar("status", { length: 30 }).notNull().default("CREATED"),
+  checkoutCode: varchar("checkout_code", { length: 100 }),
+  redirectUrl: text("redirect_url"),
+  providerStatus: varchar("provider_status", { length: 30 }),
+  callbackReceivedAt: timestamp("callback_received_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  planId: integer("plan_id").references(() => plans.id),
+}, (table) => [
+  check("pawapay_sandbox_checkouts_amount_xaf_check", sql`${table.amountXaf} > 0`),
+  index("idx_pawapay_sandbox_checkouts_organisation_created")
+    .on(table.organisationId, table.createdAt.desc()),
 ]);
 
 export const platformAdmins = pgTable("platform_admins", {
