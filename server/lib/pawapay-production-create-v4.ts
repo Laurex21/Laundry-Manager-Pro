@@ -4,8 +4,7 @@ import { db } from "../db";
 import { SAAS_PLANS_V4 } from "./saas-plan-v4";
 import type { PaidSaasPlanV4 } from "./saas-plan-transition-v4";
 import { effectiveSaasPlanV4 } from "./saas-entitlement-v4";
-
-const API_URL = "https://api.pawapay.io/v2/checkouts";
+import { saasV4ApiToken, saasV4CheckoutApiUrl, saasV4CheckoutRedirectOrigin, saasV4ProviderEnvironment } from "./saas-v4-provider-mode";
 
 export async function createProductionPlanCheckoutV4(input: {
   organisationId: number;
@@ -19,8 +18,8 @@ export async function createProductionPlanCheckoutV4(input: {
   if (input.targetPlanSlug !== "pro" && input.targetPlanSlug !== "business") {
     throw new Error("SAAS_PLAN_NOT_PURCHASABLE");
   }
-  const token = process.env.PAWAPAY_PRODUCTION_API_TOKEN;
-  if (!token) throw new Error("PAWAPAY_PRODUCTION_TOKEN_MISSING");
+  const providerEnvironment = await saasV4ProviderEnvironment();
+  const token = saasV4ApiToken(providerEnvironment);
   const appOrigin = process.env.SAAS_V4_PUBLIC_APP_ORIGIN;
   if (!appOrigin) throw new Error("SAAS_PUBLIC_APP_ORIGIN_MISSING");
   const origin = new URL(appOrigin);
@@ -49,12 +48,12 @@ export async function createProductionPlanCheckoutV4(input: {
   }
   await db.execute(sql`INSERT INTO saas_payment_intents_v4
     (checkout_id, client_reference_id, organisation_id, created_by_user_id,
-     target_plan_slug, amount_xaf)
+     target_plan_slug, amount_xaf, provider_environment)
     VALUES (${checkoutId}, ${clientReferenceId}, ${input.organisationId},
-      ${input.createdByUserId}, ${input.targetPlanSlug}, ${amountXaf})`);
+      ${input.createdByUserId}, ${input.targetPlanSlug}, ${amountXaf}, ${providerEnvironment})`);
   let response: Response;
   try {
-    response = await fetch(API_URL, {
+    response = await fetch(saasV4CheckoutApiUrl(providerEnvironment), {
       method: "POST", signal: AbortSignal.timeout(10000),
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -85,7 +84,7 @@ export async function createProductionPlanCheckoutV4(input: {
     throw new Error("PAWAPAY_PRODUCTION_CREATE_REJECTED_OR_INVALID");
   }
   const redirect = new URL(data.redirectUrl);
-  if (redirect.origin !== "https://checkout.pawapay.io") {
+  if (redirect.origin !== saasV4CheckoutRedirectOrigin(providerEnvironment)) {
     await db.execute(sql`UPDATE saas_payment_intents_v4 SET state = 'review',
       updated_at = now() WHERE checkout_id = ${checkoutId}`);
     throw new Error("PAWAPAY_PRODUCTION_REDIRECT_INVALID");

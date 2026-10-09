@@ -432,8 +432,9 @@ export const saasTrialNoticesV4 = pgTable("saas_trial_notices_v4", {
   check("saas_trial_notices_v4_kind_check", sql`${table.kind} IN ('trial_reminder', 'trial_expired')`),
 ]);
 
-// Production-only payment ledger. Sandbox checkouts remain in their own table
-// and can never be interpreted as paid SaaS receipts.
+// V4 pilot ledger labels provider environment on each intent and receipt.
+// The legacy 1,000 XAF Sandbox checkouts remain in their own table. Only
+// production-labelled receipts may count as actual SaaS revenue.
 export const saasPaymentIntentsV4 = pgTable("saas_payment_intents_v4", {
   checkoutId: uuid("checkout_id").primaryKey(),
   clientReferenceId: varchar("client_reference_id", { length: 100 }).notNull().unique(),
@@ -452,9 +453,9 @@ export const saasPaymentIntentsV4 = pgTable("saas_payment_intents_v4", {
 }, (table) => [
   check("saas_payment_intents_v4_plan_check", sql`${table.targetPlanSlug} IN ('pro', 'business')`),
   check("saas_payment_intents_v4_amount_check", sql`${table.amountXaf} > 0`),
-  check("saas_payment_intents_v4_environment_check", sql`${table.providerEnvironment} = 'production'`),
+  check("saas_payment_intents_v4_environment_check", sql`${table.providerEnvironment} IN ('production', 'sandbox')`),
   check("saas_payment_intents_v4_state_check", sql`${table.state} IN ('created', 'accepted', 'completed', 'failed', 'expired', 'cancelled', 'review')`),
-  uniqueIndex("saas_payment_intents_v4_checkout_org_unique").on(table.checkoutId, table.organisationId),
+  uniqueIndex("saas_payment_intents_v4_checkout_org_unique").on(table.checkoutId, table.organisationId, table.providerEnvironment),
   index("idx_saas_payment_intents_v4_org_created").on(table.organisationId, table.createdAt.desc()),
   uniqueIndex("saas_payment_intents_v4_one_open_per_org").on(table.organisationId)
     .where(sql`${table.state} IN ('created', 'accepted', 'review')`),
@@ -463,14 +464,16 @@ export const saasPaymentIntentsV4 = pgTable("saas_payment_intents_v4", {
 export const saasPaymentReceiptsV4 = pgTable("saas_payment_receipts_v4", {
   checkoutId: uuid("checkout_id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  providerEnvironment: varchar("provider_environment", { length: 20 }).notNull(),
   amountXaf: integer("amount_xaf").notNull(),
   providerVerifiedAt: timestamp("provider_verified_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   check("saas_payment_receipts_v4_amount_check", sql`${table.amountXaf} > 0`),
+  check("saas_payment_receipts_v4_environment_check", sql`${table.providerEnvironment} IN ('production', 'sandbox')`),
   foreignKey({ name: "saas_payment_receipts_v4_intent_org_fk",
-    columns: [table.checkoutId, table.organisationId],
-    foreignColumns: [saasPaymentIntentsV4.checkoutId, saasPaymentIntentsV4.organisationId] }),
+    columns: [table.checkoutId, table.organisationId, table.providerEnvironment],
+    foreignColumns: [saasPaymentIntentsV4.checkoutId, saasPaymentIntentsV4.organisationId, saasPaymentIntentsV4.providerEnvironment] }),
 ]);
 
 // A staff seat is an authenticated account, not an employee personnel record.

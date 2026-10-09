@@ -3,6 +3,7 @@ import { db } from "../db";
 import { inspectProductionCheckoutV4 } from "./pawapay-production-checkout-v4";
 import { confirmedPaidPlanSwitchV4, type PaidSaasPlanV4 } from "./saas-plan-transition-v4";
 import type { SaasEntitlementV4 } from "./saas-entitlement-v4";
+import type { SaasV4ProviderEnvironment } from "./saas-v4-provider-mode";
 
 type ActivationResult = "activated" | "already_activated" | "pending" | "failed";
 
@@ -10,6 +11,7 @@ type ActivationResult = "activated" | "already_activated" | "pending" | "failed"
 // endpoint on the server. Never pass a browser payload or a callback body.
 export async function activateVerifiedProductionCheckoutV4(
   checkoutId: string, providerResponse: unknown, verifiedAt: Date = new Date(),
+  providerEnvironment: SaasV4ProviderEnvironment = "production",
 ): Promise<ActivationResult> {
   if (process.env.SAAS_V4_PAID_BILLING !== "true") throw new Error("SAAS_PAID_BILLING_DISABLED");
   if (!Number.isFinite(verifiedAt.getTime())) throw new RangeError("Invalid verification time");
@@ -17,10 +19,11 @@ export async function activateVerifiedProductionCheckoutV4(
     const intentResult = await tx.execute(sql`
       SELECT checkout_id, client_reference_id, checkout_code, organisation_id,
              target_plan_slug, amount_xaf, provider_environment, activated_at
-      FROM saas_payment_intents_v4 WHERE checkout_id = ${checkoutId} FOR UPDATE
+      FROM saas_payment_intents_v4 WHERE checkout_id = ${checkoutId}
+        AND provider_environment = ${providerEnvironment} FOR UPDATE
     `);
     const intent = intentResult.rows[0];
-    if (!intent || intent.provider_environment !== "production" || !intent.checkout_code) {
+    if (!intent || !intent.checkout_code) {
       throw new Error("SAAS_PRODUCTION_INTENT_NOT_READY");
     }
     if (intent.activated_at) return "already_activated";
@@ -59,8 +62,8 @@ export async function activateVerifiedProductionCheckoutV4(
       throw new Error("SAAS_PRICE_SNAPSHOT_MISMATCH");
     }
     await tx.execute(sql`INSERT INTO saas_payment_receipts_v4
-      (checkout_id, organisation_id, amount_xaf, provider_verified_at)
-      VALUES (${checkoutId}, ${intent.organisation_id}, ${intent.amount_xaf}, ${verifiedAt})`);
+      (checkout_id, organisation_id, provider_environment, amount_xaf, provider_verified_at)
+      VALUES (${checkoutId}, ${intent.organisation_id}, ${providerEnvironment}, ${intent.amount_xaf}, ${verifiedAt})`);
     await tx.execute(sql`UPDATE saas_entitlements_v4 SET
       plan_slug = ${switched.entitlement.planSlug}, state = 'active',
       cycle_started_at = ${switched.entitlement.cycleStartedAt},

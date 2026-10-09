@@ -5,6 +5,7 @@ import { rateLimit } from "./rate-limit";
 import { createProductionPlanCheckoutV4 } from "./pawapay-production-create-v4";
 import { reconcileProductionCheckoutV4, startProductionCheckoutReconciliationV4 } from "./pawapay-production-reconcile-v4";
 import { SAAS_PLANS_V4 } from "./saas-plan-v4";
+import { saasV4ProviderEnvironment } from "./saas-v4-provider-mode";
 
 async function ownerOrganisationId(userId: string): Promise<number | null> {
   const result = await pool.query(
@@ -30,7 +31,7 @@ export function registerSaasPaidCheckoutRoutesV4(app: Express): void {
          FROM saas_entitlements_v4 WHERE organisation_id = $1`, [organisationId],
       );
       if (!entitlement.rowCount) return res.status(503).json({ message: "Subscription pilot not initialized" });
-      res.json({ enabled: true, plans: SAAS_PLANS_V4, entitlement: {
+      res.json({ enabled: true, providerEnvironment: await saasV4ProviderEnvironment(), plans: SAAS_PLANS_V4, entitlement: {
         planSlug: entitlement.rows[0].plan_slug, state: entitlement.rows[0].state,
         trialEndsAt: entitlement.rows[0].trial_ends_at,
         cycleEndsAt: entitlement.rows[0].cycle_ends_at,

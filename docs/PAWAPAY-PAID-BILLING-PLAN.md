@@ -2,6 +2,10 @@
 
 Status: design only. Do not activate production charging from this document. The current free plan selection and isolated PawaPay Sandbox test remain unchanged.
 
+### Isolated v4 Sandbox pilot (staged, not deployed)
+
+The v4 pilot can use PawaPay Sandbox only when `SAAS_V4_PAID_BILLING=true`, `SAAS_V4_PILOT_PROVIDER=sandbox`, `SAAS_V4_TEST_DATABASE=true`, a pilot-organisation allowlist, and the marker from `scripts/create-saas-v4-test-marker.sql` exists in a **disposable test database**. The marker is deliberately not part of the production migration. Sandbox intents and receipts carry `provider_environment='sandbox'` and must never be counted as real revenue. The legacy 1,000 XAF Sandbox test remains separate and does not activate a plan. Do not set these flags on the production database or deployment.
+
 ## Verified current state
 
 - The Sandbox Checkout links an organisation and a selected plan and has been observed to reach `COMPLETED` by direct PawaPay status verification. It intentionally does not modify `subscriptions` or `subscription_payments`.
