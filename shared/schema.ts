@@ -436,6 +436,7 @@ export const saasTrialNoticesV4 = pgTable("saas_trial_notices_v4", {
 // and can never be interpreted as paid SaaS receipts.
 export const saasPaymentIntentsV4 = pgTable("saas_payment_intents_v4", {
   checkoutId: uuid("checkout_id").primaryKey(),
+  clientReferenceId: varchar("client_reference_id", { length: 100 }).notNull().unique(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
   createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
   targetPlanSlug: varchar("target_plan_slug", { length: 20 }).notNull(),

@@ -66,6 +66,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS saas_trial_notices_v4_expired_once
 -- Creating these tables does not enable production checkout or charging.
 CREATE TABLE IF NOT EXISTS saas_payment_intents_v4 (
   checkout_id uuid PRIMARY KEY,
+  client_reference_id varchar(100) NOT NULL UNIQUE,
   organisation_id integer NOT NULL REFERENCES organisations(id),
   created_by_user_id varchar NOT NULL REFERENCES users(id),
   target_plan_slug varchar(20) NOT NULL CHECK (target_plan_slug IN ('pro', 'business')),
