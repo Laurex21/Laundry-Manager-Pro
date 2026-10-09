@@ -14,10 +14,10 @@ Sandbox setup:
 
 ## User-account sandbox test
 
-- Set `PAWAPAY_USER_SANDBOX_ORGANISATION_ID` to the numeric ID of the single test organisation in the Replit Deployment secrets. The user test is hidden and returns 404 for creation when this is unset or the owner belongs to another organisation.
+- Set `PAWAPAY_USER_SANDBOX_EMAIL` to the test organisation owner's email address in the Replit Deployment secrets. The user test is hidden and returns 404 for creation when this is unset or the signed-in owner email differs. Never hard-code the email in GitHub.
 - The organisation owner sees a separate Sandbox test on `/subscriptions`, can select a plan, and creates a fixed 1,000 XAF checkout. The selected `plan_id` is stored only in `pawapay_sandbox_checkouts`; this never creates a real payment or changes `subscriptions`.
 - A server-side job checks nonfinal Sandbox checkouts through PawaPay's status API every minute for up to two hours. It validates checkout ID, amount, currency, country and checkout code before recording a final Sandbox status. The existing signed callback can also update the Sandbox status but is not required for polling.
-- Keep `PAWAPAY_USER_SANDBOX_ORGANISATION_ID` unset until a test owner/organisation is chosen. This feature is a test, not the paid launch.
+- Keep `PAWAPAY_USER_SANDBOX_EMAIL` unset until a test owner is chosen. This feature is a test, not the paid launch.
 4. Store the sandbox API token in the server-side Replit Secret `PAWAPAY_SANDBOX_API_TOKEN`, never in chat or source code. Do not configure a production token under this name.
 5. In the Super Admin, open a test organisation's **Subscription** tab and create a 1,000 XAF sandbox Checkout. Open its hosted payment page, use PawaPay's Cameroon sandbox test data, then refresh the checkout list to confirm the final status arrived. **Check with PawaPay** queries the provider directly if the callback was missed; it never changes a real subscription or payment.
 6. Verify that no row was written to `subscription_payments`, no subscription was changed and the financial KPI did not increase. An unsigned or tampered callback must return HTTP 401.

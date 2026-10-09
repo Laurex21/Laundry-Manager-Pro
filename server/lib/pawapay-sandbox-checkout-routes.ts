@@ -11,14 +11,17 @@ const USER_RETURN_URL = "https://app.xpressclean.cm/subscriptions";
 const checkoutRateLimit = () => rateLimit({ name: "pawapay-sandbox-checkout", windowMs: 60 * 60 * 1000, max: 10,
   key: (req) => String(req.session?.userId || ""), keyOnly: true });
 
-async function ownerOrganisation(userId: string): Promise<number | null> {
-  const result = await pool.query("SELECT id FROM organisations WHERE owner_id = $1 LIMIT 1", [userId]);
-  return result.rows[0]?.id ?? null;
+async function ownerOrganisation(userId: string): Promise<{ id: number; email: string } | null> {
+  const result = await pool.query(
+    "SELECT organisation.id, owner.email FROM organisations organisation JOIN users owner ON owner.id = organisation.owner_id WHERE organisation.owner_id = $1 LIMIT 1",
+    [userId],
+  );
+  return result.rows[0] ?? null;
 }
 
-function sandboxUserEnabled(organisationId: number): boolean {
-  const allowedId = Number(process.env.PAWAPAY_USER_SANDBOX_ORGANISATION_ID);
-  return Number.isSafeInteger(allowedId) && allowedId > 0 && allowedId === organisationId;
+function sandboxUserEnabled(owner: { id: number; email: string }): boolean {
+  const allowedEmail = process.env.PAWAPAY_USER_SANDBOX_EMAIL?.trim().toLowerCase();
+  return !!allowedEmail && owner.email.toLowerCase() === allowedEmail;
 }
 
 function handleError(res: any, error: unknown, fallback: string): void {
@@ -75,14 +78,14 @@ export function registerPawapaySandboxCheckoutRoutes(app: Express): void {
 
   app.get("/api/subscriptions/sandbox-test", isAuthenticated, async (req: any, res) => {
     try {
-      const organisationId = await ownerOrganisation(req.session.userId);
-      if (!organisationId) return res.status(403).json({ message: "Organisation owner required" });
-      if (!sandboxUserEnabled(organisationId)) return res.json({ enabled: false, checkouts: [] });
+      const owner = await ownerOrganisation(req.session.userId);
+      if (!owner) return res.status(403).json({ message: "Organisation owner required" });
+      if (!sandboxUserEnabled(owner)) return res.json({ enabled: false, checkouts: [] });
       await pawapaySandboxSchemaReady();
       const result = await pool.query(
         `SELECT checkout_id, plan_id, amount_xaf, status, redirect_url, created_at
          FROM pawapay_sandbox_checkouts WHERE organisation_id = $1 AND plan_id IS NOT NULL
-         ORDER BY created_at DESC LIMIT 10`, [organisationId],
+         ORDER BY created_at DESC LIMIT 10`, [owner.id],
       );
       res.json({ enabled: true, checkouts: result.rows.map((row) => ({
         checkoutId: row.checkout_id, planId: row.plan_id, amountXaf: Number(row.amount_xaf),
@@ -95,12 +98,12 @@ export function registerPawapaySandboxCheckoutRoutes(app: Express): void {
     const planId = Number(req.body?.planId);
     if (!Number.isSafeInteger(planId) || planId < 1) return res.status(400).json({ message: "Valid planId required" });
     try {
-      const organisationId = await ownerOrganisation(req.session.userId);
-      if (!organisationId) return res.status(403).json({ message: "Organisation owner required" });
-      if (!sandboxUserEnabled(organisationId)) return res.status(404).json({ message: "Sandbox user test is not enabled" });
+      const owner = await ownerOrganisation(req.session.userId);
+      if (!owner) return res.status(403).json({ message: "Organisation owner required" });
+      if (!sandboxUserEnabled(owner)) return res.status(404).json({ message: "Sandbox user test is not enabled" });
       const plan = await pool.query("SELECT id FROM plans WHERE id = $1 AND active = true", [planId]);
       if (!plan.rowCount) return res.status(404).json({ message: "Plan not found" });
-      const result = await createSandboxCheckout({ organisationId, userId: req.session.userId, planId, returnUrl: USER_RETURN_URL });
+      const result = await createSandboxCheckout({ organisationId: owner.id, userId: req.session.userId, planId, returnUrl: USER_RETURN_URL });
       res.status(201).json({ ...result, status: "ACCEPTED" });
     } catch (error) { handleError(res, error, "Sandbox checkout could not be started; check its status before retrying"); }
   });
