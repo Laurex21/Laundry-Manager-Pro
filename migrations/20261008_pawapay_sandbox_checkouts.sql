@@ -14,3 +14,5 @@ CREATE TABLE IF NOT EXISTS pawapay_sandbox_checkouts (
 
 CREATE INDEX IF NOT EXISTS idx_pawapay_sandbox_checkouts_organisation_created
   ON pawapay_sandbox_checkouts(organisation_id, created_at DESC);
+
+ALTER TABLE pawapay_sandbox_checkouts ADD COLUMN IF NOT EXISTS plan_id integer REFERENCES plans(id);

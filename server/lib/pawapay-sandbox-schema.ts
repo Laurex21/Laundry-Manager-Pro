@@ -24,6 +24,7 @@ export function pawapaySandboxSchemaReady(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_pawapay_sandbox_checkouts_organisation_created
         ON pawapay_sandbox_checkouts(organisation_id, created_at DESC)
       `);
+      await pool.query(`ALTER TABLE pawapay_sandbox_checkouts ADD COLUMN IF NOT EXISTS plan_id integer REFERENCES plans(id)`);
     })().catch((error) => {
       schemaPromise = null;
       throw error;

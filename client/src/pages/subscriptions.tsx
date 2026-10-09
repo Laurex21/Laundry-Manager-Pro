@@ -16,6 +16,8 @@ import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import type { Plan, SubscriptionWithPlan } from "@shared/schema";
 
+type SandboxTest = { enabled: boolean; checkouts: Array<{ checkoutId: string; planId: number; amountXaf: number; status: string; redirectUrl: string | null; createdAt: string }> };
+
 function dateLocaleFor(language: string) {
   if (language.startsWith("fr")) return fr;
   if (language.startsWith("pt")) return pt;
@@ -30,6 +32,15 @@ export default function Subscriptions() {
 
   const { data: plans, isLoading: plansLoading } = useQuery<Plan[]>({ queryKey: ["/api/plans"] });
   const { data: currentSub } = useQuery<SubscriptionWithPlan | null>({ queryKey: ["/api/subscriptions/current"] });
+  const sandboxTest = useQuery<SandboxTest>({
+    queryKey: ["/api/subscriptions/sandbox-test"],
+    queryFn: async () => {
+      const response = await fetch("/api/subscriptions/sandbox-test", { credentials: "include" });
+      if (response.status === 403) return { enabled: false, checkouts: [] };
+      if (!response.ok) throw new Error("Sandbox status unavailable");
+      return response.json();
+    },
+  });
 
   const activePlanId = currentSub?.planId;
 
@@ -45,6 +56,20 @@ export default function Subscriptions() {
         <p className="mt-1 text-sm text-muted-foreground">{i18n.language.startsWith("fr") ? "Consultez votre forfait XpressPro actuel et comparez les offres disponibles." : i18n.language.startsWith("pt") ? "Consulte o seu plano XpressPro atual e compare as ofertas disponíveis." : "Review your current XpressPro plan and compare available offers."}</p>
       </div>
       <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-200">{t("plans_free_period_notice")}</p>
+
+      {sandboxTest.data?.enabled && <Card className="border-cyan-200 bg-cyan-50/50">
+        <CardContent className="space-y-3 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-semibold">{i18n.language.startsWith("fr") ? "Test de paiement PawaPay Sandbox" : "PawaPay Sandbox payment test"}</h2>
+              <p className="text-sm text-muted-foreground">{i18n.language.startsWith("fr") ? "Choisissez une formule ci-dessous, puis lancez un test de 1 000 FCFA. Aucune formule ne sera activée par ce paiement." : "Choose a plan below, then run a 1,000 FCFA test. This payment will not activate a plan."}</p></div>
+            <Button type="button" variant="outline" onClick={() => sandboxTest.refetch()}>{i18n.language.startsWith("fr") ? "Actualiser" : "Refresh"}</Button>
+          </div>
+          {sandboxTest.data.checkouts.map((checkout) => <div key={checkout.checkoutId} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-sm">
+            <span>{plans?.find((plan) => plan.id === checkout.planId)?.name || "Plan"} · <strong>{checkout.status}</strong> · 1 000 FCFA</span>
+            {checkout.redirectUrl && <a href={checkout.redirectUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 underline">{i18n.language.startsWith("fr") ? "Ouvrir le test" : "Open test"}</a>}
+          </div>)}
+        </CardContent>
+      </Card>}
 
       {currentSub && (
         <Card className="shadow-sm border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20" data-testid="card-current-subscription">
@@ -111,13 +136,13 @@ export default function Subscriptions() {
         })}
       </div>
 
-      <PlanActivationDialog plan={planDialog} onClose={() => setPlanDialog(null)} />
+      <PlanActivationDialog plan={planDialog} sandboxEnabled={!!sandboxTest.data?.enabled} onClose={() => setPlanDialog(null)} />
     </div>
   );
 }
 
-function PlanActivationDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void }) {
-  const { t } = useTranslation();
+function PlanActivationDialog({ plan, sandboxEnabled, onClose }: { plan: Plan | null; sandboxEnabled: boolean; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const queryClient = useQueryClient();
@@ -128,6 +153,13 @@ function PlanActivationDialog({ plan, onClose }: { plan: Plan | null; onClose: (
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       onClose();
     },
+  });
+  const sandboxMutation = useMutation({
+    mutationFn: async (planId: number) => {
+      const response = await apiRequest("POST", "/api/subscriptions/sandbox-test", { planId });
+      return response.json() as Promise<{ checkoutId: string; redirectUrl: string }>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/sandbox-test"] }),
   });
 
   if (!plan) return null;
@@ -152,6 +184,14 @@ function PlanActivationDialog({ plan, onClose }: { plan: Plan | null; onClose: (
           <Button className="w-full" onClick={() => mutation.mutate(plan.id)} disabled={mutation.isPending} data-testid="button-confirm-plan-activation">
             {mutation.isPending ? t("processing") : t("activate_plan")}
           </Button>
+          {sandboxEnabled && <div className="space-y-2 border-t pt-4">
+            <p className="text-sm text-muted-foreground">{i18n.language.startsWith("fr") ? "Test Sandbox : 1 000 FCFA fictifs. Ne change pas votre formule." : "Sandbox test: 1,000 test FCFA. Does not change your plan."}</p>
+            <Button type="button" variant="outline" className="w-full" disabled={sandboxMutation.isPending} onClick={() => sandboxMutation.mutate(plan.id)}>
+              {sandboxMutation.isPending ? t("processing") : (i18n.language.startsWith("fr") ? "Tester le paiement PawaPay" : "Test PawaPay payment")}
+            </Button>
+            {sandboxMutation.error && <p role="alert" className="text-sm text-red-700">{sandboxMutation.error.message}</p>}
+            {sandboxMutation.data?.redirectUrl && <a href={sandboxMutation.data.redirectUrl} target="_blank" rel="noopener noreferrer" className="block text-center text-sm font-medium text-cyan-700 underline">{i18n.language.startsWith("fr") ? "Ouvrir le Checkout Sandbox" : "Open Sandbox Checkout"}</a>}
+          </div>}
         </div>
       </DialogContent>
     </Dialog>
