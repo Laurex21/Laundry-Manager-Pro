@@ -39,6 +39,8 @@ Trial reminder policy is staged as a pure rule with organisation IANA time zone 
 
 The pure paid-plan transition now models confirmed trial/Starter-to-paid and **any switch to another paid plan**, including Business-to-Pro: full target base price, immediate new UTC monthly cycle, no credit, with short-month clamping. Stevve's 9 October clarification overrides the v4 document's scheduled downgrade rule *when the customer pays for the other plan immediately*; a downgrade request without immediate payment remains scheduled. This is **not connected to any provider or database write**. Same-plan early renewal is intentionally rejected pending a defined renewal policy; recurring anniversary anchoring after a short month also needs a deterministic decision/test before charging.
 
+An additive, production-only payment-intent and receipt ledger is staged in the unexecuted migration. It separates real payments from the 1,000 XAF Sandbox table, snapshots the requested plan/amount, constrains the environment to production and permits at most one receipt per checkout ID. A composite foreign key prevents a receipt being recorded under a different organisation from its intent. No production checkout endpoint, PawaPay token use, provider verification or entitlement activation is wired yet; a schema alone is not a payment safety gate.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.

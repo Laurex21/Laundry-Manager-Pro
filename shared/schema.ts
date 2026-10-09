@@ -1,4 +1,4 @@
-import { pgTable, text, serial, bigserial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check, bigint, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, bigserial, integer, boolean, timestamp, decimal, varchar, jsonb, index, date, uniqueIndex, check, bigint, uuid, foreignKey } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -430,6 +430,44 @@ export const saasTrialNoticesV4 = pgTable("saas_trial_notices_v4", {
   uniqueIndex("saas_trial_notices_v4_once_per_local_day").on(table.organisationId, table.kind, table.localDate),
   uniqueIndex("saas_trial_notices_v4_expired_once").on(table.organisationId).where(sql`${table.kind} = 'trial_expired'`),
   check("saas_trial_notices_v4_kind_check", sql`${table.kind} IN ('trial_reminder', 'trial_expired')`),
+]);
+
+// Production-only payment ledger. Sandbox checkouts remain in their own table
+// and can never be interpreted as paid SaaS receipts.
+export const saasPaymentIntentsV4 = pgTable("saas_payment_intents_v4", {
+  checkoutId: uuid("checkout_id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+  targetPlanSlug: varchar("target_plan_slug", { length: 20 }).notNull(),
+  amountXaf: integer("amount_xaf").notNull(),
+  providerEnvironment: varchar("provider_environment", { length: 20 }).notNull().default("production"),
+  checkoutCode: varchar("checkout_code", { length: 100 }),
+  state: varchar("state", { length: 25 }).notNull().default("created"),
+  providerStatus: varchar("provider_status", { length: 30 }),
+  providerVerifiedAt: timestamp("provider_verified_at", { withTimezone: true }),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("saas_payment_intents_v4_plan_check", sql`${table.targetPlanSlug} IN ('pro', 'business')`),
+  check("saas_payment_intents_v4_amount_check", sql`${table.amountXaf} > 0`),
+  check("saas_payment_intents_v4_environment_check", sql`${table.providerEnvironment} = 'production'`),
+  check("saas_payment_intents_v4_state_check", sql`${table.state} IN ('created', 'accepted', 'completed', 'failed', 'expired', 'cancelled', 'review')`),
+  uniqueIndex("saas_payment_intents_v4_checkout_org_unique").on(table.checkoutId, table.organisationId),
+  index("idx_saas_payment_intents_v4_org_created").on(table.organisationId, table.createdAt.desc()),
+]);
+
+export const saasPaymentReceiptsV4 = pgTable("saas_payment_receipts_v4", {
+  checkoutId: uuid("checkout_id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  amountXaf: integer("amount_xaf").notNull(),
+  providerVerifiedAt: timestamp("provider_verified_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check("saas_payment_receipts_v4_amount_check", sql`${table.amountXaf} > 0`),
+  foreignKey({ name: "saas_payment_receipts_v4_intent_org_fk",
+    columns: [table.checkoutId, table.organisationId],
+    foreignColumns: [saasPaymentIntentsV4.checkoutId, saasPaymentIntentsV4.organisationId] }),
 ]);
 
 // A staff seat is an authenticated account, not an employee personnel record.

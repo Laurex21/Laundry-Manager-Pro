@@ -61,3 +61,38 @@ CREATE TABLE IF NOT EXISTS saas_trial_notices_v4 (
 CREATE UNIQUE INDEX IF NOT EXISTS saas_trial_notices_v4_expired_once
   ON saas_trial_notices_v4 (organisation_id)
   WHERE kind = 'trial_expired';
+
+-- Production payments are isolated from fictive PawaPay Sandbox checkouts.
+-- Creating these tables does not enable production checkout or charging.
+CREATE TABLE IF NOT EXISTS saas_payment_intents_v4 (
+  checkout_id uuid PRIMARY KEY,
+  organisation_id integer NOT NULL REFERENCES organisations(id),
+  created_by_user_id varchar NOT NULL REFERENCES users(id),
+  target_plan_slug varchar(20) NOT NULL CHECK (target_plan_slug IN ('pro', 'business')),
+  amount_xaf integer NOT NULL CHECK (amount_xaf > 0),
+  provider_environment varchar(20) NOT NULL DEFAULT 'production'
+    CHECK (provider_environment = 'production'),
+  checkout_code varchar(100),
+  state varchar(25) NOT NULL DEFAULT 'created'
+    CHECK (state IN ('created', 'accepted', 'completed', 'failed', 'expired', 'cancelled', 'review')),
+  provider_status varchar(30),
+  provider_verified_at timestamptz,
+  activated_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT saas_payment_intents_v4_checkout_org_unique UNIQUE (checkout_id, organisation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_saas_payment_intents_v4_org_created
+  ON saas_payment_intents_v4 (organisation_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS saas_payment_receipts_v4 (
+  checkout_id uuid PRIMARY KEY,
+  organisation_id integer NOT NULL REFERENCES organisations(id),
+  amount_xaf integer NOT NULL CHECK (amount_xaf > 0),
+  provider_verified_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT saas_payment_receipts_v4_intent_org_fk
+    FOREIGN KEY (checkout_id, organisation_id)
+    REFERENCES saas_payment_intents_v4(checkout_id, organisation_id)
+);
