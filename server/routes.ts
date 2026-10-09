@@ -17,6 +17,7 @@ import { restoreSubscriptionUsageForCancelledOrder } from "./lib/membership-rout
 import { addDecimals, compareDecimals, isIntegerDecimal, multiplyDecimal, normalizeDecimalInput } from "@shared/exact-decimal";
 import { invalidateSubscriptionDashboard, registerSubscriptionDashboardRoutes } from "./lib/subscription-dashboard";
 import { registerSubscriptionNotificationRoutes } from "./lib/subscription-notifications";
+import { registerSaasTrialNoticeV4Routes } from "./lib/saas-trial-notice-v4-routes";
 import { recordSecurityAudit } from "./lib/security-audit";
 import { registerGarmentReturnRoutes } from "./lib/garment-return-routes";
 import { registerInventoryRoutes } from "./lib/inventory-routes";
@@ -302,6 +303,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerDailySiteReportRoutes(app);
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
+  registerSaasTrialNoticeV4Routes(app);
   registerPlatformAdminRoutes(app);
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);

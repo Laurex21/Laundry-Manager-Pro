@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,6 +17,7 @@ import { enUS, fr, pt } from "date-fns/locale";
 import type { Plan, SubscriptionWithPlan } from "@shared/schema";
 
 type SandboxTest = { enabled: boolean; checkouts: Array<{ checkoutId: string; planId: number; amountXaf: number; status: string; redirectUrl: string | null; createdAt: string }> };
+type TrialNoticeV4 = { enabled: boolean; notice: { kind: "trial_reminder" | "trial_expired"; remainingMs: number } | null };
 
 function dateLocaleFor(language: string) {
   if (language.startsWith("fr")) return fr;
@@ -29,6 +30,16 @@ export default function Subscriptions() {
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const [planDialog, setPlanDialog] = useState<Plan | null>(null);
+  const [trialNotice, setTrialNotice] = useState<TrialNoticeV4["notice"]>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/saas-v4/trial-notice/claim", { method: "POST", credentials: "include" })
+      .then((response) => response.ok ? response.json() as Promise<TrialNoticeV4> : null)
+      .then((data) => { if (!cancelled && data?.enabled) setTrialNotice(data.notice); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const { data: plans, isLoading: plansLoading } = useQuery<Plan[]>({ queryKey: ["/api/plans"] });
   const { data: currentSub } = useQuery<SubscriptionWithPlan | null>({ queryKey: ["/api/subscriptions/current"] });
@@ -56,6 +67,19 @@ export default function Subscriptions() {
         <p className="mt-1 text-sm text-muted-foreground">{i18n.language.startsWith("fr") ? "Consultez votre forfait XpressPro actuel et comparez les offres disponibles." : i18n.language.startsWith("pt") ? "Consulte o seu plano XpressPro atual e compare as ofertas disponíveis." : "Review your current XpressPro plan and compare available offers."}</p>
       </div>
       <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-200">{t("plans_free_period_notice")}</p>
+
+      {trialNotice && <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20" role="status">
+        <CardContent className="p-5 text-sm">
+          <p className="font-semibold">{trialNotice.kind === "trial_expired"
+            ? (i18n.language.startsWith("fr") ? "Votre essai Pro est terminé" : "Your Pro trial has ended")
+            : (i18n.language.startsWith("fr") ? "Votre essai Pro se termine bientôt" : "Your Pro trial ends soon")}</p>
+          <p>{trialNotice.kind === "trial_expired"
+            ? (i18n.language.startsWith("fr") ? "Votre organisation est passée à Starter gratuit. Vos données sont conservées." : "Your organisation has moved to free Starter. Your data is preserved.")
+            : (i18n.language.startsWith("fr")
+              ? `Il reste ${Math.ceil(trialNotice.remainingMs / 3_600_000)} heures. Choisissez une formule ci-dessous si vous souhaitez conserver Pro.`
+              : `${Math.ceil(trialNotice.remainingMs / 3_600_000)} hours remain. Choose a plan below to keep Pro.`)}</p>
+        </CardContent>
+      </Card>}
 
       {sandboxTest.data?.enabled && <Card className="border-cyan-200 bg-cyan-50/50">
         <CardContent className="space-y-3 p-5">
