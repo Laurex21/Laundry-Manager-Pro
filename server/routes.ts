@@ -39,6 +39,7 @@ import {
 import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
 import { registerPawapaySandboxCallback } from "./lib/pawapay-sandbox-callback";
 import { registerPawapaySandboxCheckoutRoutes } from "./lib/pawapay-sandbox-checkout-routes";
+import { registerSaasPaidCheckoutRoutesV4 } from "./lib/saas-paid-checkout-routes-v4";
 import { rateLimit } from "./lib/rate-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
@@ -307,6 +308,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerPlatformAdminRoutes(app);
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);
+  registerSaasPaidCheckoutRoutesV4(app);
   startTemporalIntelligenceJob();
 
   app.get("/api/public/stats", async (_req, res) => {
@@ -1743,7 +1745,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/subscriptions/activate", isAuthenticated, rateLimit({ name: "subscription-activate", windowMs: 60 * 60 * 1000, max: 10, key: (req) => String(req.session?.userId || ""), keyOnly: true }), async (req, res) => {
-    if (!(await requireOwnerOrganisation(req, res))) return;
+    const ownerOrganisation = await requireOwnerOrganisation(req, res);
+    if (!ownerOrganisation) return;
+    if (process.env.SAAS_V4_PAID_BILLING === "true" &&
+        (process.env.SAAS_V4_PILOT_ORGANISATION_IDS ?? "").split(",")
+          .some((id) => Number(id.trim()) === ownerOrganisation.id)) {
+      return res.status(409).json({ message: "Use the paid subscription checkout for this organisation" });
+    }
     const planId = Number(req.body?.planId);
     if (!Number.isSafeInteger(planId) || planId < 1) return res.status(400).json({ message: "Valid planId required" });
     try {

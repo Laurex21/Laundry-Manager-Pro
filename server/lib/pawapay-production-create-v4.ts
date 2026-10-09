@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db";
 import { SAAS_PLANS_V4 } from "./saas-plan-v4";
 import type { PaidSaasPlanV4 } from "./saas-plan-transition-v4";
+import { effectiveSaasPlanV4 } from "./saas-entitlement-v4";
 
 const API_URL = "https://api.pawapay.io/v2/checkouts";
 
@@ -29,6 +30,23 @@ export async function createProductionPlanCheckoutV4(input: {
   const checkoutId = crypto.randomUUID();
   const clientReferenceId = `XP-PROD-${checkoutId}`;
   const amountXaf = SAAS_PLANS_V4[input.targetPlanSlug].monthlyXaf;
+  const entitlement = await db.execute(sql`
+    SELECT plan_slug, state, trial_started_at, trial_ends_at,
+           cycle_started_at, cycle_ends_at
+    FROM saas_entitlements_v4 WHERE organisation_id = ${input.organisationId}
+  `);
+  const current = entitlement.rows[0];
+  if (!current) throw new Error("SAAS_ENTITLEMENT_MISSING");
+  if (current.state === "active" && effectiveSaasPlanV4({
+    planSlug: current.plan_slug as "starter" | "pro" | "business",
+    state: "active",
+    trialStartedAt: current.trial_started_at as Date | null,
+    trialEndsAt: current.trial_ends_at as Date | null,
+    cycleStartedAt: current.cycle_started_at as Date | null,
+    cycleEndsAt: current.cycle_ends_at as Date | null,
+  }, new Date()) === input.targetPlanSlug) {
+    throw new Error("EARLY_SAME_PLAN_RENEWAL_NOT_DEFINED");
+  }
   await db.execute(sql`INSERT INTO saas_payment_intents_v4
     (checkout_id, client_reference_id, organisation_id, created_by_user_id,
      target_plan_slug, amount_xaf)

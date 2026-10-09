@@ -456,6 +456,8 @@ export const saasPaymentIntentsV4 = pgTable("saas_payment_intents_v4", {
   check("saas_payment_intents_v4_state_check", sql`${table.state} IN ('created', 'accepted', 'completed', 'failed', 'expired', 'cancelled', 'review')`),
   uniqueIndex("saas_payment_intents_v4_checkout_org_unique").on(table.checkoutId, table.organisationId),
   index("idx_saas_payment_intents_v4_org_created").on(table.organisationId, table.createdAt.desc()),
+  uniqueIndex("saas_payment_intents_v4_one_open_per_org").on(table.organisationId)
+    .where(sql`${table.state} IN ('created', 'accepted', 'review')`),
 ]);
 
 export const saasPaymentReceiptsV4 = pgTable("saas_payment_receipts_v4", {

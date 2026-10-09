@@ -87,6 +87,12 @@ CREATE TABLE IF NOT EXISTS saas_payment_intents_v4 (
 CREATE INDEX IF NOT EXISTS idx_saas_payment_intents_v4_org_created
   ON saas_payment_intents_v4 (organisation_id, created_at DESC);
 
+-- Prevent two simultaneous unpaid checkouts for one organisation. A review
+-- state is deliberately blocking until an operator resolves uncertain cases.
+CREATE UNIQUE INDEX IF NOT EXISTS saas_payment_intents_v4_one_open_per_org
+  ON saas_payment_intents_v4 (organisation_id)
+  WHERE state IN ('created', 'accepted', 'review');
+
 CREATE TABLE IF NOT EXISTS saas_payment_receipts_v4 (
   checkout_id uuid PRIMARY KEY,
   organisation_id integer NOT NULL REFERENCES organisations(id),
