@@ -8,6 +8,12 @@ export async function saasV4ProviderEnvironment(): Promise<SaasV4ProviderEnviron
   if (mode !== "sandbox" || process.env.SAAS_V4_TEST_DATABASE !== "true") {
     throw new Error("SAAS_V4_PROVIDER_MODE_INVALID");
   }
+  const configuredOrigin = process.env.SAAS_V4_PUBLIC_APP_ORIGIN;
+  if (!configuredOrigin) throw new Error("SAAS_V4_TEST_ORIGIN_MISSING");
+  const testHost = new URL(configuredOrigin).hostname.toLowerCase();
+  if (["app.xpressclean.cm", "superadmin.xpressclean.cm", "laundry-manager-pro.replit.app"].includes(testHost)) {
+    throw new Error("SAAS_V4_SANDBOX_ON_PUBLIC_HOST_FORBIDDEN");
+  }
   // This marker is deliberately excluded from the v4 migration. It must be
   // created manually in the disposable test database, never production.
   const marker = await pool.query("SELECT to_regclass('saas_v4_test_environment_marker') AS marker");
