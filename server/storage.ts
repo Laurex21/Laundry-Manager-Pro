@@ -29,6 +29,35 @@ import { formatReportingDay, reportingDateRange, reportingDateString, reportingW
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
+import { effectiveSaasPlanV4 } from "./lib/saas-entitlement-v4";
+import { saasCapacityV4 } from "./lib/saas-plan-v4";
+
+async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number): Promise<void> {
+  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  // All v4 site/seat writers must lock this row before counting. A missing row
+  // is a migration error, never a reason to grant another site.
+  const locked = await tx.execute(sql`
+    SELECT plan_slug, state, trial_started_at, trial_ends_at, cycle_started_at,
+           cycle_ends_at, paid_extra_sites, paid_extra_staff
+    FROM saas_entitlements_v4 WHERE organisation_id = ${organisationId} FOR UPDATE
+  `);
+  const row = locked.rows[0];
+  if (!row) throw new Error("SAAS_ENTITLEMENT_MISSING");
+  const plan = effectiveSaasPlanV4({
+    planSlug: row.plan_slug, state: row.state,
+    trialStartedAt: row.trial_started_at, trialEndsAt: row.trial_ends_at,
+    cycleStartedAt: row.cycle_started_at, cycleEndsAt: row.cycle_ends_at,
+  }, new Date());
+  const capacity = saasCapacityV4(plan, plan === "business" ? Number(row.paid_extra_sites) : 0,
+    plan === "starter" ? 0 : Number(row.paid_extra_staff));
+  const count = await tx.execute(sql`
+    SELECT count(*)::integer AS active_sites FROM sites
+    WHERE organisation_id = ${organisationId} AND is_active = true
+  `);
+  if (Number(count.rows[0]?.active_sites ?? 0) >= capacity.maxActiveSites) {
+    throw new Error("SAAS_SITE_QUOTA_REACHED");
+  }
+}
 
 let businessSettingsSchemaReady = false;
 
@@ -1695,6 +1724,7 @@ export class DatabaseStorage implements IStorage {
 
   async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
     return await db.transaction(async (tx) => {
+      await assertV4SiteCapacityInTransaction(tx, organisationId);
       const [site] = await tx.insert(sites).values({
         organisationId,
         name: data.name,

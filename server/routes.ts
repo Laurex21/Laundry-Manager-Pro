@@ -2387,6 +2387,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.status(201).json(site);
     } catch (err) {
+      if (err instanceof Error && err.message === "SAAS_SITE_QUOTA_REACHED") {
+        return res.status(409).json({ code: err.message, message: "Site limit reached for the current subscription" });
+      }
       res.status(500).json({ message: "Failed to create site" });
     }
   });

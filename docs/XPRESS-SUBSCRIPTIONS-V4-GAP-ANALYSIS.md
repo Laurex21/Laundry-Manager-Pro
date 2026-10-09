@@ -31,6 +31,8 @@ The staged `saas_staff_seats_v4` schema now represents one authenticated account
 
 An access-time staff check is now staged in `isAuthenticated` behind `SAAS_V4_ENFORCEMENT=true` (default off). It denies missing/expired entitlements or suspended/missing seats on every authenticated request, while preserving owner access. **Do not enable the flag** before applying the reviewed schema, backfilling every legitimate staff account, and verifying login/onboarding and non-`isAuthenticated` routes. The access check does not enforce atomic seat allocation; that remains a separate required lot.
 
+`storage.createSite` now locks the v4 entitlement row and checks active-site capacity in the same transaction, under the same disabled flag. Concurrent site creates therefore serialize once the flag is enabled. Other site insertion paths and staff-seat writers still need review before turning it on. TypeScript check in this worktree is blocked by the existing local dependency gap `@replit/connectors-sdk` in auth/routes.ts; no v4 TypeScript errors remain after the site guard change.
+
 ## Safe implementation order
 
 1. Inventory production organisations, current Enterprise subscriptions, site/staff counts and expiry dates read-only. Identify whose access would narrow. Review migration mapping before any production write.

@@ -597,12 +597,13 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         const [seat] = await db.select({ state: saasStaffSeatsV4.state }).from(saasStaffSeatsV4)
           .where(and(eq(saasStaffSeatsV4.organisationId, user.organisationId),
             eq(saasStaffSeatsV4.userId, req.userId))).limit(1);
-        const planSlug = entitlement?.planSlug === "starter" ? "starter" :
+        const planSlug: "starter" | "pro" | "business" | null = entitlement?.planSlug === "starter" ? "starter" :
           entitlement?.planSlug === "pro" ? "pro" : entitlement?.planSlug === "business" ? "business" : null;
-        const state = entitlement?.state === "trialing" ? "trialing" :
+        const state: "trialing" | "active" | "starter" | "past_due" | null = entitlement?.state === "trialing" ? "trialing" :
           entitlement?.state === "active" ? "active" : entitlement?.state === "starter" ? "starter" :
           entitlement?.state === "past_due" ? "past_due" : null;
-        const effectiveEntitlement = entitlement && planSlug && state ? {
+        const effectiveEntitlement: import("../../lib/saas-entitlement-v4").SaasEntitlementV4 | null =
+          entitlement && planSlug && state ? {
           planSlug, state, trialStartedAt: entitlement.trialStartedAt,
           trialEndsAt: entitlement.trialEndsAt, cycleStartedAt: entitlement.cycleStartedAt,
           cycleEndsAt: entitlement.cycleEndsAt,
