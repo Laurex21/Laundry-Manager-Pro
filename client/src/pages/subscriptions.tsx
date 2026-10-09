@@ -17,6 +17,10 @@ import { enUS, fr, pt } from "date-fns/locale";
 import type { Plan, SubscriptionWithPlan } from "@shared/schema";
 
 type SandboxTest = { enabled: boolean; checkouts: Array<{ checkoutId: string; planId: number; amountXaf: number; status: string; redirectUrl: string | null; createdAt: string }> };
+type PaidPilotV4 = { enabled: false } | { enabled: true; plans: Record<"starter" | "pro" | "business", { monthlyXaf: number; includedSites: number; includedStaff: number }>; entitlement: {
+  planSlug: "starter" | "pro" | "business"; state: string;
+  trialEndsAt: string | null; cycleEndsAt: string | null;
+} };
 
 function dateLocaleFor(language: string) {
   if (language.startsWith("fr")) return fr;
@@ -41,12 +45,15 @@ export default function Subscriptions() {
       return response.json();
     },
   });
+  const paidPilot = useQuery<PaidPilotV4>({ queryKey: ["/api/subscriptions/v4/paid-pilot"] });
 
   const activePlanId = currentSub?.planId;
 
-  if (plansLoading) {
+  if (plansLoading || paidPilot.isLoading) {
     return <div className="space-y-8"><Skeleton className="h-10 w-64" /><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-96 rounded-xl" />)}</div></div>;
   }
+
+  if (paidPilot.data?.enabled) return <PaidPilotSubscriptionsV4 entitlement={paidPilot.data.entitlement} plans={paidPilot.data.plans} />;
 
   return (
     <div className="space-y-8 page-fade-in" data-testid="current-subscription-redesign">
@@ -139,6 +146,70 @@ export default function Subscriptions() {
       <PlanActivationDialog plan={planDialog} sandboxEnabled={!!sandboxTest.data?.enabled} onClose={() => setPlanDialog(null)} />
     </div>
   );
+}
+
+function PaidPilotSubscriptionsV4({ entitlement, plans }: {
+  entitlement: Extract<PaidPilotV4, { enabled: true }>["entitlement"];
+  plans: Extract<PaidPilotV4, { enabled: true }>["plans"];
+}) {
+  const queryClient = useQueryClient();
+  const [checkoutId, setCheckoutId] = useState(() => sessionStorage.getItem("saas-v4-pending-checkout"));
+  const createCheckout = useMutation({
+    mutationFn: async (targetPlanSlug: "pro" | "business") => {
+      const response = await apiRequest("POST", "/api/subscriptions/v4/paid-checkouts", { targetPlanSlug });
+      return response.json() as Promise<{ checkoutId: string; redirectUrl: string }>;
+    },
+    onSuccess: ({ checkoutId: id, redirectUrl }) => {
+      sessionStorage.setItem("saas-v4-pending-checkout", id);
+      setCheckoutId(id);
+      window.location.assign(redirectUrl);
+    },
+  });
+  const refreshCheckout = useMutation({
+    mutationFn: async () => {
+      if (!checkoutId) throw new Error("No pending checkout");
+      const response = await apiRequest("POST", `/api/subscriptions/v4/paid-checkouts/${checkoutId}/refresh`);
+      return response.json() as Promise<{ status: string }>;
+    },
+    onSuccess: ({ status }) => {
+      if (status === "activated" || status === "already_activated" || status === "failed") {
+        sessionStorage.removeItem("saas-v4-pending-checkout");
+        setCheckoutId(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/subscriptions/v4/paid-pilot"] });
+    },
+  });
+  const currentPlan = entitlement.state === "active" && entitlement.cycleEndsAt &&
+    new Date(entitlement.cycleEndsAt).getTime() > Date.now() ? entitlement.planSlug :
+    entitlement.state === "trialing" && entitlement.trialEndsAt &&
+    new Date(entitlement.trialEndsAt).getTime() > Date.now() ? "pro" : "starter";
+  return <div className="space-y-6 page-fade-in">
+    <h1 className="text-2xl font-bold">Abonnement XPress Pro</h1>
+    <Card><CardContent className="p-5 space-y-2">
+      <p className="font-semibold">Formule actuelle : {currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : "Business"}</p>
+      {entitlement.state === "trialing" && entitlement.trialEndsAt && <p className="text-sm">Essai Pro jusqu’au {new Date(entitlement.trialEndsAt).toLocaleDateString("fr-CM")}</p>}
+      {entitlement.state === "active" && entitlement.cycleEndsAt && <p className="text-sm">Cycle en cours jusqu’au {new Date(entitlement.cycleEndsAt).toLocaleDateString("fr-CM")}</p>}
+    </CardContent></Card>
+    <p className="text-sm text-muted-foreground">Un changement de formule payante prend effet immédiatement après confirmation du paiement. Le prix intégral est facturé, un nouveau mois commence et le reliquat de l’ancienne formule n’est pas crédité.</p>
+    <div className="grid gap-4 md:grid-cols-3">
+      {([ ["starter", "Starter"], ["pro", "Pro"], ["business", "Business"] ] as const).map(([slug, label]) =>
+        <Card key={slug}><CardContent className="p-5 space-y-3">
+          <h2 className="text-lg font-bold">{label}</h2>
+          <p className="text-2xl font-bold">{plans[slug].monthlyXaf.toLocaleString("fr-CM")} FCFA <span className="text-sm font-normal">/ mois</span></p>
+          <p className="text-sm">{plans[slug].includedSites} boutique{plans[slug].includedSites > 1 ? "s" : ""} · {slug === "starter" ? "propriétaire seul" : `${plans[slug].includedStaff} employés actifs`} · commandes illimitées</p>
+          {slug === "starter" ? <p className="text-sm text-muted-foreground">Disponible à la fin du cycle payé</p> :
+            <Button className="w-full" disabled={!!checkoutId || createCheckout.isPending || currentPlan === slug}
+              onClick={() => createCheckout.mutate(slug)}>{currentPlan === slug ? "Formule actuelle" : `Payer ${label}`}</Button>}
+        </CardContent></Card>) }
+    </div>
+    {checkoutId && <Card><CardContent className="p-5 space-y-2">
+      <p className="text-sm">Paiement en attente de vérification</p>
+      <Button onClick={() => refreshCheckout.mutate()} disabled={refreshCheckout.isPending}>Vérifier le paiement</Button>
+      {refreshCheckout.data && <p className="text-sm">Statut : {refreshCheckout.data.status}</p>}
+      {refreshCheckout.error && <p role="alert" className="text-sm text-red-700">Vérification indisponible. Réessayez plus tard.</p>}
+    </CardContent></Card>}
+    {createCheckout.error && <p role="alert" className="text-sm text-red-700">Impossible de démarrer ce paiement. Vérifiez le statut avant de réessayer.</p>}
+  </div>;
 }
 
 function PlanActivationDialog({ plan, sandboxEnabled, onClose }: { plan: Plan | null; sandboxEnabled: boolean; onClose: () => void }) {

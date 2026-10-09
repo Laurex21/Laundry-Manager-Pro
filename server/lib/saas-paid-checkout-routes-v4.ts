@@ -4,6 +4,7 @@ import { isAuthenticated } from "../replit_integrations/auth";
 import { rateLimit } from "./rate-limit";
 import { createProductionPlanCheckoutV4 } from "./pawapay-production-create-v4";
 import { reconcileProductionCheckoutV4 } from "./pawapay-production-reconcile-v4";
+import { SAAS_PLANS_V4 } from "./saas-plan-v4";
 
 async function ownerOrganisationId(userId: string): Promise<number | null> {
   const result = await pool.query(
@@ -19,6 +20,26 @@ function pilotEnabled(organisationId: number): boolean {
 }
 
 export function registerSaasPaidCheckoutRoutesV4(app: Express): void {
+  app.get("/api/subscriptions/v4/paid-pilot", isAuthenticated, async (req: any, res) => {
+    try {
+      const organisationId = await ownerOrganisationId(req.session.userId);
+      if (!organisationId || !pilotEnabled(organisationId)) return res.json({ enabled: false });
+      const entitlement = await pool.query(
+        `SELECT plan_slug, state, trial_ends_at, cycle_ends_at
+         FROM saas_entitlements_v4 WHERE organisation_id = $1`, [organisationId],
+      );
+      if (!entitlement.rowCount) return res.status(503).json({ message: "Subscription pilot not initialized" });
+      res.json({ enabled: true, plans: SAAS_PLANS_V4, entitlement: {
+        planSlug: entitlement.rows[0].plan_slug, state: entitlement.rows[0].state,
+        trialEndsAt: entitlement.rows[0].trial_ends_at,
+        cycleEndsAt: entitlement.rows[0].cycle_ends_at,
+      } });
+    } catch (error) {
+      console.error("Could not load paid subscription pilot", error);
+      res.status(503).json({ message: "Subscription pilot unavailable" });
+    }
+  });
+
   app.post("/api/subscriptions/v4/paid-checkouts", isAuthenticated,
     rateLimit({ name: "saas-paid-checkout-v4", windowMs: 60 * 60 * 1000, max: 5,
       key: (req) => String(req.session?.userId || ""), keyOnly: true }),
