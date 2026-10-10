@@ -5,6 +5,7 @@ import { pool } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { authStorage } from "../replit_integrations/auth/storage";
 import { rateLimit } from "./rate-limit";
+import { isPaidPilotOrganisationV4 } from "./saas-v4-pilot-plan";
 import {
   buildTotpUri,
   decryptTotpSecret,
@@ -429,7 +430,17 @@ export function registerPlatformAdminRoutes(app: Express): void {
         total: Number(countResult.rows[0]?.total || 0),
         limit,
         offset,
-        items: result.rows.map((row) => ({
+        items: await Promise.all(result.rows.map(async (row) => {
+        const organisationId = Number(row.id);
+        const pilot = isPaidPilotOrganisationV4(organisationId) ? await pool.query(
+          `SELECT e.plan_slug, e.state, e.cycle_started_at, e.cycle_ends_at
+           FROM saas_entitlements_v4 e
+           WHERE e.organisation_id = $1 AND EXISTS (
+             SELECT 1 FROM saas_payment_receipts_v4 r
+             WHERE r.organisation_id = e.organisation_id)`, [organisationId],
+        ) : null;
+        const activePilot = pilot?.rows[0];
+        return {
         id: Number(row.id),
         name: row.name,
         createdAt: row.created_at,
@@ -442,14 +453,14 @@ export function registerPlatformAdminRoutes(app: Express): void {
         },
         siteCount: Number(row.site_count || 0),
         staffCount: Number(row.staff_count || 0),
-        subscription: row.plan_slug ? {
-          status: row.subscription_status,
-          startDate: row.subscription_start_date,
-          endDate: row.subscription_end_date,
-          planSlug: row.plan_slug,
-          planName: row.plan_name,
+        subscription: activePilot || row.plan_slug ? {
+          status: activePilot?.state ?? row.subscription_status,
+          startDate: activePilot?.cycle_started_at ?? row.subscription_start_date,
+          endDate: activePilot?.cycle_ends_at ?? row.subscription_end_date,
+          planSlug: activePilot?.plan_slug ?? row.plan_slug,
+          planName: activePilot ? `V4 ${activePilot.plan_slug}` : row.plan_name,
         } : null,
-        })),
+        }; })),
       });
     } catch (error) {
       console.error("Platform admin subscriber list failed:", error);
@@ -592,6 +603,17 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const row = organisationResult.rows[0];
       if (!row) return res.status(404).json({ message: "Organisation not found" });
 
+      const pilotResult = isPaidPilotOrganisationV4(organisationId) ? await pool.query(
+        `SELECT e.plan_slug, e.state, e.cycle_started_at, e.cycle_ends_at,
+                EXISTS (SELECT 1 FROM saas_payment_receipts_v4 r
+                        WHERE r.organisation_id = e.organisation_id) AS activated
+         FROM saas_entitlements_v4 e WHERE e.organisation_id = $1`, [organisationId],
+      ) : null;
+      if (pilotResult && !pilotResult.rowCount) {
+        return res.status(503).json({ message: "Subscription pilot not initialized" });
+      }
+      const pilotRow = pilotResult?.rows[0]?.activated ? pilotResult.rows[0] : null;
+
       const payments = paymentsResult.rows.map((payment) => ({
         id: Number(payment.id),
         amount: Number(payment.amount || 0),
@@ -612,6 +634,12 @@ export function registerPlatformAdminRoutes(app: Express): void {
 
       res.json({
         id: Number(row.id),
+        paidPilotV4: pilotRow ? {
+          planSlug: pilotRow.plan_slug,
+          state: pilotRow.state,
+          cycleStartedAt: pilotRow.cycle_started_at,
+          cycleEndsAt: pilotRow.cycle_ends_at,
+        } : null,
         name: row.name,
         createdAt: row.created_at,
         owner: {
@@ -688,6 +716,9 @@ export function registerPlatformAdminRoutes(app: Express): void {
 
   app.post("/api/platform-admin/organisations/:organisationId/plan", isAuthenticated, requirePlatformAdmin, platformAdminPlanLimiter, async (req: any, res) => {
     const organisationId = Number(req.params.organisationId);
+    if (Number.isSafeInteger(organisationId) && isPaidPilotOrganisationV4(organisationId)) {
+      return res.status(409).json({ message: "Pilot plan is controlled by verified v4 payment" });
+    }
     const planId = Number(req.body?.planId);
     const expectedSubscriptionId = req.body?.expectedSubscriptionId === null ? null : Number(req.body?.expectedSubscriptionId);
     const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";

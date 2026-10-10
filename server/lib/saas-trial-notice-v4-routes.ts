@@ -4,13 +4,14 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { trialNoticeCandidateV4 } from "./saas-trial-notice-v4";
+import { isEnforcedPilotOrganisationV4 } from "./saas-v4-pilot-plan";
 
 export function registerSaasTrialNoticeV4Routes(app: Express): void {
   app.post("/api/saas-v4/trial-notice/claim", isAuthenticated, async (req: any, res) => {
-    if (process.env.SAAS_V4_ENFORCEMENT !== "true") return res.json({ enabled: false, notice: null });
     try {
       const org = await storage.getOrganisationByOwner(req.session.userId);
       if (!org) return res.status(403).json({ message: "Only organisation owners can view trial reminders" });
+      if (!(await isEnforcedPilotOrganisationV4(org.id))) return res.json({ enabled: false, notice: null });
       const notice = await db.transaction(async (tx) => {
         const locked = await tx.execute(sql`
           SELECT plan_slug, state, trial_started_at, trial_ends_at,

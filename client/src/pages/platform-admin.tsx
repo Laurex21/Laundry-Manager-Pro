@@ -82,6 +82,7 @@ type AuditEvent = {
 
 type OrganisationDetail = {
   id: number;
+  paidPilotV4: { planSlug: string; state: string; cycleStartedAt: string | null; cycleEndsAt: string | null } | null;
   name: string;
   createdAt: string;
   owner: Subscriber["owner"];
@@ -687,11 +688,16 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
           </TabsContent>
 
           <TabsContent value="subscription" className="mt-5">
+            {detail.data.paidPilotV4 && <PanelSection title="Abonnement pilote v4 — référence actuelle">
+              <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline">{detail.data.paidPilotV4.planSlug}</Badge><span className="text-sm capitalize text-slate-500">{detail.data.paidPilotV4.state}</span></div>
+              <dl className="mt-5 grid gap-4 sm:grid-cols-2"><PanelDatum label="Début du cycle" value={formatDate(detail.data.paidPilotV4.cycleStartedAt)}/><PanelDatum label="Fin du cycle" value={formatDate(detail.data.paidPilotV4.cycleEndsAt)}/></dl>
+              <p className="mt-3 text-xs text-slate-500">L’abonnement historique ci-dessous est conservé pour référence ; il ne détermine plus les droits de cette organisation pilote.</p>
+            </PanelSection>}
             <PanelSection title={adminText('Current subscription')}>
               <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || adminText('No plan')}</Badge><span className="text-sm capitalize text-slate-500">{adminStatus(detail.data.subscription?.status)}</span></div>
               <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label={adminText('Plan price')} value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label={adminText("Orders used")} value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label={adminText('Started')} value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label={adminText("Renews / ends")} value={formatDate(detail.data.subscription?.endDate)}/></dl>
             </PanelSection>
-            <PanelSection title={adminText('Assign a plan manually')}>
+            {!detail.data.paidPilotV4 && <PanelSection title={adminText('Assign a plan manually')}>
               <form onSubmit={submitPlan} className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-1 text-sm">{adminText('Plan')}<select className="h-10 rounded-md border border-slate-300 px-3" value={planId} onChange={(event) => setPlanId(event.target.value)} required><option value="">{adminText('Select a plan')}</option>{plans.data?.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatMoney(plan.price)}</option>)}</select></label>
                 <label className="grid gap-1 text-sm">{adminText('End date')}<Input type="date" value={endDate} min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)} onChange={(event) => setEndDate(event.target.value)} required /></label>
@@ -702,7 +708,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
                 {assignPlan.isSuccess && <p role="status" className="text-sm text-emerald-700 sm:col-span-2">{adminText('Plan assigned successfully. No payment recorded.')}</p>}
                 <Button type="submit" disabled={assignPlan.isPending || !plans.data?.length || !detail.data}>{assignPlan.isPending ? adminText('Saving…') : adminText('Assign plan')}</Button>
               </form>
-            </PanelSection>
+            </PanelSection>}
             <SandboxCheckoutPanel organisationId={subscriber.id} />
           </TabsContent>
 

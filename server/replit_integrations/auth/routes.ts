@@ -16,6 +16,7 @@ import {
   recordCurrentLegalAcceptance,
 } from "../../lib/legal";
 import { isActivePlatformAdmin } from "../../lib/platform-admin-routes";
+import { paidPilotPlanV4 } from "../../lib/saas-v4-pilot-plan";
 
 async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
   if (!organisationId) return null;
@@ -35,7 +36,7 @@ async function buildUserResponse(userId: string) {
   const isOrgOwner = user.userType !== "staff" && (!orgOwnerId || orgOwnerId === userId);
   const subscriptionOwnerId = isOrgOwner ? userId : orgOwnerId;
   const sub = subscriptionOwnerId ? await storage.getUserSubscription(subscriptionOwnerId) : null;
-  const planSlug = sub?.plan?.slug ?? "starter";
+  const planSlug = await paidPilotPlanV4(user.organisationId) ?? sub?.plan?.slug ?? "starter";
 
   // Determine effective role: check if user is the org owner or a site member
   let effectiveRole = user.role ?? "owner";

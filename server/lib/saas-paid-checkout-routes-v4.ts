@@ -31,7 +31,19 @@ export function registerSaasPaidCheckoutRoutesV4(app: Express): void {
          FROM saas_entitlements_v4 WHERE organisation_id = $1`, [organisationId],
       );
       if (!entitlement.rowCount) return res.status(503).json({ message: "Subscription pilot not initialized" });
-      res.json({ enabled: true, providerEnvironment: await saasV4ProviderEnvironment(), plans: SAAS_PLANS_V4, entitlement: {
+      const activation = await pool.query(
+        `SELECT EXISTS (SELECT 1 FROM saas_payment_receipts_v4 WHERE organisation_id = $1) AS activated`,
+        [organisationId],
+      );
+      const legacy = await pool.query(
+        `SELECT p.name AS plan_name FROM organisations o
+         JOIN subscriptions s ON s.user_id = o.owner_id AND s.status = 'active'
+         JOIN plans p ON p.id = s.plan_id WHERE o.id = $1
+         ORDER BY s.created_at DESC, s.id DESC LIMIT 1`, [organisationId],
+      );
+      res.json({ enabled: true, providerEnvironment: await saasV4ProviderEnvironment(), plans: SAAS_PLANS_V4,
+        v4Activated: Boolean(activation.rows[0]?.activated), legacyPlanName: legacy.rows[0]?.plan_name ?? null,
+        entitlement: {
         planSlug: entitlement.rows[0].plan_slug, state: entitlement.rows[0].state,
         trialEndsAt: entitlement.rows[0].trial_ends_at,
         cycleEndsAt: entitlement.rows[0].cycle_ends_at,

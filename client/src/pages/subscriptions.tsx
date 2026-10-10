@@ -17,7 +17,7 @@ import { enUS, fr, pt } from "date-fns/locale";
 import type { Plan, SubscriptionWithPlan } from "@shared/schema";
 
 type SandboxTest = { enabled: boolean; checkouts: Array<{ checkoutId: string; planId: number; amountXaf: number; status: string; redirectUrl: string | null; createdAt: string }> };
-type PaidPilotV4 = { enabled: false } | { enabled: true; providerEnvironment: "sandbox" | "production"; plans: Record<"starter" | "pro" | "business", { monthlyXaf: number; includedSites: number; includedStaff: number }>; entitlement: {
+type PaidPilotV4 = { enabled: false } | { enabled: true; providerEnvironment: "sandbox" | "production"; v4Activated: boolean; legacyPlanName: string | null; plans: Record<"starter" | "pro" | "business", { monthlyXaf: number; includedSites: number; includedStaff: number }>; entitlement: {
   planSlug: "starter" | "pro" | "business"; state: string;
   trialEndsAt: string | null; cycleEndsAt: string | null;
 } };
@@ -59,7 +59,7 @@ export default function Subscriptions() {
     return <div className="space-y-8"><Skeleton className="h-10 w-64" /><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-96 rounded-xl" />)}</div></div>;
   }
 
-  if (paidPilot.data?.enabled) return <PaidPilotSubscriptionsV4 entitlement={paidPilot.data.entitlement} plans={paidPilot.data.plans} providerEnvironment={paidPilot.data.providerEnvironment} />;
+  if (paidPilot.data?.enabled) return <PaidPilotSubscriptionsV4 entitlement={paidPilot.data.entitlement} plans={paidPilot.data.plans} providerEnvironment={paidPilot.data.providerEnvironment} v4Activated={paidPilot.data.v4Activated} legacyPlanName={paidPilot.data.legacyPlanName} />;
 
   return (
     <div className="space-y-8 page-fade-in" data-testid="current-subscription-redesign">
@@ -192,10 +192,12 @@ function ShadowSubscriptionTestV4({ data }: { data: Extract<ShadowTestV4, { enab
   </CardContent></Card>;
 }
 
-function PaidPilotSubscriptionsV4({ entitlement, plans, providerEnvironment }: {
+function PaidPilotSubscriptionsV4({ entitlement, plans, providerEnvironment, v4Activated, legacyPlanName }: {
   entitlement: Extract<PaidPilotV4, { enabled: true }>["entitlement"];
   plans: Extract<PaidPilotV4, { enabled: true }>["plans"];
   providerEnvironment: "sandbox" | "production";
+  v4Activated: boolean;
+  legacyPlanName: string | null;
 }) {
   const queryClient = useQueryClient();
   const [checkoutId, setCheckoutId] = useState(() => sessionStorage.getItem("saas-v4-pending-checkout"));
@@ -232,7 +234,8 @@ function PaidPilotSubscriptionsV4({ entitlement, plans, providerEnvironment }: {
     <h1 className="text-2xl font-bold">Abonnement XPress Pro</h1>
     {providerEnvironment === "sandbox" && <p className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900">Environnement de test PawaPay Sandbox : paiements fictifs, aucune recette réelle.</p>}
     <Card><CardContent className="p-5 space-y-2">
-      <p className="font-semibold">Formule actuelle : {currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : "Business"}</p>
+      <p className="font-semibold">Formule actuelle : {!v4Activated && legacyPlanName ? `${legacyPlanName} (historique)` : currentPlan === "starter" ? "Starter" : currentPlan === "pro" ? "Pro" : "Business"}</p>
+      {!v4Activated && legacyPlanName && <p className="text-sm text-amber-800">Votre formule historique reste active jusqu’à confirmation d’un paiement v4. La nouvelle formule démarrera alors immédiatement, sans crédit du temps restant.</p>}
       {entitlement.state === "trialing" && entitlement.trialEndsAt && <p className="text-sm">Essai Pro jusqu’au {new Date(entitlement.trialEndsAt).toLocaleDateString("fr-CM")}</p>}
       {entitlement.state === "active" && entitlement.cycleEndsAt && <p className="text-sm">Cycle en cours jusqu’au {new Date(entitlement.cycleEndsAt).toLocaleDateString("fr-CM")}</p>}
     </CardContent></Card>
@@ -244,8 +247,8 @@ function PaidPilotSubscriptionsV4({ entitlement, plans, providerEnvironment }: {
           <p className="text-2xl font-bold">{plans[slug].monthlyXaf.toLocaleString("fr-CM")} FCFA <span className="text-sm font-normal">/ mois</span></p>
           <p className="text-sm">{plans[slug].includedSites} boutique{plans[slug].includedSites > 1 ? "s" : ""} · {slug === "starter" ? "propriétaire seul" : `${plans[slug].includedStaff} employés actifs`} · commandes illimitées</p>
           {slug === "starter" ? <p className="text-sm text-muted-foreground">Disponible à la fin du cycle payé</p> :
-            <Button className="w-full" disabled={!!checkoutId || createCheckout.isPending || currentPlan === slug}
-              onClick={() => createCheckout.mutate(slug)}>{currentPlan === slug ? "Formule actuelle" : providerEnvironment === "sandbox" ? `Tester ${label}` : `Payer ${label}`}</Button>}
+            <Button className="w-full" disabled={!!checkoutId || createCheckout.isPending || (v4Activated && currentPlan === slug)}
+              onClick={() => createCheckout.mutate(slug)}>{v4Activated && currentPlan === slug ? "Formule actuelle" : providerEnvironment === "sandbox" ? `Tester ${label}` : `Payer ${label}`}</Button>}
         </CardContent></Card>) }
     </div>
     {checkoutId && <Card><CardContent className="p-5 space-y-2">

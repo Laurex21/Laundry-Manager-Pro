@@ -31,6 +31,7 @@ import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quanti
 import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
 import { effectiveSaasPlanV4 } from "./lib/saas-entitlement-v4";
 import { saasCapacityV4 } from "./lib/saas-plan-v4";
+import { isEnforcedPilotOrganisationV4 } from "./lib/saas-v4-pilot-plan";
 
 async function lockedV4CapacityInTransaction(tx: any, organisationId: number) {
   // All v4 site/seat writers must lock this row before counting. A missing row
@@ -53,7 +54,7 @@ async function lockedV4CapacityInTransaction(tx: any, organisationId: number) {
 }
 
 async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number): Promise<void> {
-  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  if (!(await isEnforcedPilotOrganisationV4(organisationId))) return;
   const capacity = await lockedV4CapacityInTransaction(tx, organisationId);
   const count = await tx.execute(sql`
     SELECT count(*)::integer AS active_sites FROM sites
@@ -65,7 +66,7 @@ async function assertV4SiteCapacityInTransaction(tx: any, organisationId: number
 }
 
 async function reserveV4StaffSeatInTransaction(tx: any, organisationId: number, userId?: string): Promise<void> {
-  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  if (!(await isEnforcedPilotOrganisationV4(organisationId))) return;
   const capacity = await lockedV4CapacityInTransaction(tx, organisationId);
   if (userId) {
     const existing = await tx.execute(sql`
@@ -87,7 +88,7 @@ async function reserveV4StaffSeatInTransaction(tx: any, organisationId: number, 
 }
 
 async function insertV4StaffSeatInTransaction(tx: any, organisationId: number, userId: string): Promise<void> {
-  if (process.env.SAAS_V4_ENFORCEMENT !== "true") return;
+  if (!(await isEnforcedPilotOrganisationV4(organisationId))) return;
   await tx.execute(sql`
     INSERT INTO saas_staff_seats_v4 (organisation_id, user_id, state)
     VALUES (${organisationId}, ${userId}, 'active')

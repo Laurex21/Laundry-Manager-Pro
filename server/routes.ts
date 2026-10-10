@@ -283,6 +283,11 @@ async function effectivePlanSlug(req: any): Promise<string> {
   const { organisations } = await import("@shared/schema");
   const { eq } = await import("drizzle-orm");
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (user?.organisationId) {
+    const { paidPilotPlanV4 } = await import("./lib/saas-v4-pilot-plan");
+    const pilotPlan = await paidPilotPlanV4(user.organisationId);
+    if (pilotPlan) return pilotPlan;
+  }
   let subscriptionOwnerId = userId;
   if (user?.organisationId) {
     const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId)).limit(1);

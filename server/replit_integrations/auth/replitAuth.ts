@@ -569,10 +569,6 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         .limit(1);
     }
 
-    if (process.env.SAAS_V4_ENFORCEMENT === "true" && user?.userType === "staff" && !user.organisationId) {
-      return res.status(403).json({ code: "SAAS_STAFF_ACCESS_SUSPENDED", message: "Staff organisation is unavailable" });
-    }
-
     let authorizedSiteIds: number[] = [];
     let organisationSiteIds: number[] = [];
     let isOrganisationOwner = false;
@@ -590,7 +586,8 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
         .map((site) => site.id);
 
       isOrganisationOwner = org?.ownerId === req.userId;
-      if (process.env.SAAS_V4_ENFORCEMENT === "true" && !isOrganisationOwner) {
+      const { isEnforcedPilotOrganisationV4 } = await import("../../lib/saas-v4-pilot-plan");
+      if ((await isEnforcedPilotOrganisationV4(user.organisationId)) && !isOrganisationOwner) {
         const { canUseStaffAccountV4 } = await import("../../lib/saas-entitlement-v4");
         const [entitlement] = await db.select().from(saasEntitlementsV4)
           .where(eq(saasEntitlementsV4.organisationId, user.organisationId)).limit(1);
