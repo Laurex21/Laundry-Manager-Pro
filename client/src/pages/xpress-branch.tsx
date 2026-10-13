@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, MessageCircle } from "lucide-react";
 
 type Branch = "pro" | "consulting" | "clean";
+type PublicStats = { totalOrders: number; totalCustomers: number; totalLaundries: number; totalCountries: number };
 const money = (amount: number) => `${new Intl.NumberFormat("fr-FR").format(amount)} FCFA`;
 const wa = (number: string, text: string) => `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 const consultingContact = wa("237651638889", "Bonjour, je souhaite en savoir plus sur Xpress Consulting.");
@@ -32,6 +34,13 @@ function ContactLink({ href, children, dark = false }: { href: string; children:
   return <a href={href} target="_blank" rel="noopener noreferrer" className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 py-3 font-bold transition hover:-translate-y-0.5 ${dark ? "bg-[#0d1b4b] text-white" : "bg-white text-[#0d1b4b]"}`}><MessageCircle className="h-4 w-4" />{children}</a>;
 }
 export default function XpressBranchPage({ branch }: { branch: Branch }) {
+  const { data: stats } = useQuery<PublicStats>({ queryKey: ["/api/public/stats"], staleTime: 60_000, enabled: branch === "pro" });
+  const metrics = [
+    { value: stats?.totalLaundries, label: "Pressings actifs" },
+    { value: stats?.totalOrders, label: "Commandes traitées" },
+    { value: stats?.totalCustomers, label: "Clients enregistrés" },
+    { value: stats?.totalCountries, label: "Pays couverts" },
+  ].filter(metric => Number(metric.value) > 0);
   const config = {
     pro: { name: "XpressPro", label: "Plateforme de gestion", title: "Votre pressing sous contrôle, du dépôt au pilotage.", intro: "Clients, commandes, paiements et performances réunis dans une plateforme pensée pour les professionnels du pressing.", image: "/xpressgroup/pro.webp", bg: "bg-[#edf3ff]", accent: "text-[#1558cf]", button: "bg-[#1558cf]" },
     consulting: { name: "Xpress Consulting", label: "Conseil · Formation · Accompagnement", title: "Passez d’une idée de pressing à une activité bien organisée.", intro: "Des conseils concrets, une formation métier et un suivi adapté à chaque étape de votre projet.", image: "/xpressgroup/consulting.webp", bg: "bg-[#fff5e5]", accent: "text-[#895717]", button: "bg-[#895717]" },
@@ -43,6 +52,7 @@ export default function XpressBranchPage({ branch }: { branch: Branch }) {
     <main>
       <section className={`${config.bg} overflow-hidden`}><div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24"><div><p className={`text-xs font-extrabold uppercase tracking-[.22em] ${config.accent}`}>{config.label}</p><h1 className="mt-5 text-4xl font-black leading-[1.08] tracking-[-.04em] sm:text-6xl">{config.title}</h1><p className="mt-6 max-w-xl text-lg leading-8 text-slate-700">{config.intro}</p><a href="#details" className={`mt-8 inline-flex min-h-12 items-center gap-2 rounded-full px-6 py-3 font-bold text-white ${config.button}`}>Découvrir <ArrowRight className="h-4 w-4" /></a></div><img src={config.image} alt={config.name} className="h-72 w-full rounded-3xl object-cover shadow-xl sm:h-[440px]" width="640" height="440" /></div></section>
       {branch === "pro" && <>
+        <section className="border-y border-blue-100 bg-white px-4 py-12" aria-label="Statistiques XpressPro"><div className="mx-auto max-w-7xl">{metrics.length > 0 && <><p className="mb-8 text-center text-xs font-extrabold uppercase tracking-[.2em] text-blue-700">XpressPro en chiffres</p><div className="grid grid-cols-2 gap-7 md:grid-cols-4">{metrics.map(metric => <div key={metric.label} className="text-center"><p className="text-3xl font-black text-[#0d1b4b] sm:text-4xl">{Number(metric.value).toLocaleString("fr-FR")}+</p><p className="mt-1 text-sm text-slate-600">{metric.label}</p></div>)}</div></>}</div></section>
         <section id="details" className="mx-auto max-w-7xl px-4 py-20"><SectionTitle eyebrow="La plateforme" title="Tout suivre depuis un seul endroit" description="XpressPro accompagne le travail quotidien, de la réception de l’article jusqu’au suivi de l’activité." /><div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{["Gestion des clients et historique", "Enregistrement et suivi des commandes", "Suivi des paiements", "Statistiques et tableau de bord", "Gestion de plusieurs points de collecte", "Traçabilité des articles et des étapes"].map(item => <div key={item} className="rounded-2xl border border-blue-100 bg-[#f5f8ff] p-6"><Check className="mb-4 h-6 w-6 text-blue-600" /><h3 className="font-bold">{item}</h3></div>)}</div></section>
         <section className="bg-[#0d1b4b] px-4 py-20 text-white"><div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-2"><div><SectionTitle eyebrow="Pilotage" title="Des décisions appuyées par vos données" description="Suivez les commandes, les encaissements et les performances de votre pressing depuis le téléphone ou la tablette." /><Link href="/auth?tab=register" className="mt-7 inline-flex min-h-12 items-center rounded-full bg-white px-6 py-3 font-bold text-[#0d1b4b]">Essayer la plateforme <ArrowRight className="ml-2 h-4 w-4" /></Link></div><img src="/xpressgroup/field.webp" alt="Responsable de pressing utilisant une tablette" className="h-72 w-full rounded-2xl object-cover" loading="lazy" /></div></section>
       </>}

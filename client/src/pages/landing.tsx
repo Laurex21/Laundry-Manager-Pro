@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import XpressGroupGateway from "./xpressgroup-gateway";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight, BarChart3, Calculator, Check, CheckCircle2,
   ClipboardCheck, Droplets, FileText,
@@ -10,7 +9,6 @@ import {
   TrendingUp, Truck, UserRound, Wind, X, XCircle,
 } from "lucide-react";
 
-type PublicStats = { totalOrders: number; totalCustomers: number; totalLaundries: number; totalCountries: number };
 const NAVY = "#0D1B4B";
 const BLUE = "#1E63F0";
 
@@ -148,12 +146,6 @@ export default function LandingPage() {
   const demoUrl = demoEmbedUrl(i18n.language);
   useLandingReveal(); useLandingMeta();
   useEffect(() => { const fn = () => setScrolled(window.scrollY > 20); window.addEventListener("scroll", fn, { passive: true }); return () => window.removeEventListener("scroll", fn); }, []);
-  const { data: stats } = useQuery<PublicStats>({ queryKey: ["/api/public/stats"], staleTime: 60_000 });
-  const metrics = useMemo(() => [
-    [stats?.totalLaundries, t("landing_v3.active_laundries")], [stats?.totalOrders, t("landing_v3.orders_processed")],
-    [stats?.totalCustomers, t("landing_v3.customers_registered")],
-    [stats?.totalCountries, t("landing_v3.countries")],
-  ].filter(([value]) => Number(value) > 0), [stats, t]);
   const pains = ["garments", "payments", "notebooks", "profit", "customers", "data"];
   const workflow = [[UserRound,"client"],[FileText,"order"],[Layers3,"sorting"],[Droplets,"washing"],[Wind,"drying"],[Shirt,"ironing"],[Package,"packing"],[CheckCircle2,"ready"],[Truck,"delivery"],[BarChart3,"reports"]] as const;
   const pillars = [[Settings,"run","border-blue-500"],[TrendingUp,"grow","border-emerald-500"],[School,"learn","border-violet-500"]] as const;
@@ -186,7 +178,6 @@ export default function LandingPage() {
     <main id="main-content">
       <XpressGroupGateway language={i18n.language} />
 
-      <section className="border-y bg-white py-10" aria-label={t("landing_v3.proof")}><div className="mx-auto max-w-6xl px-4">{metrics.length ? <div className="grid grid-cols-2 gap-6 md:grid-cols-4">{metrics.map(([value,label]) => <div key={String(label)} className="text-center"><p className="text-3xl font-black text-[#0D1B4B]">{Number(value).toLocaleString(i18n.language)}+</p><p className="text-sm text-slate-600">{label}</p></div>)}</div> : <p className="text-center font-medium text-slate-600">{t("landing_v3.trusted_across_africa")}</p>}</div></section>
 
       <section id="about" className="scroll-mt-20 border-b border-slate-200 bg-slate-50 py-14"><div className="mx-auto max-w-6xl px-4"><h2 className="text-2xl font-bold text-[#0D1B4B]">{t("landing_v3.about_company_title")}</h2><p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">{t("landing_v3.about_company_statement")}</p></div></section>
 
