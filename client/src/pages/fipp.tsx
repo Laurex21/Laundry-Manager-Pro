@@ -15,6 +15,21 @@ const schedule = [
   { time: "12h40 – 13h00", title: "Clôture officielle", detail: "Synthèse et remerciements" },
   { time: "13h00 – 14h00", title: "Cocktail & networking", detail: "Rencontres et opportunités d’affaires" },
 ];
+const ticketOffers = [
+  {
+    name: "Standard",
+    price: "10 000",
+    benefits: ["Toutes les conférences et le panel d’échanges", "Accès aux démonstrations et à l’exposition", "Pause, cocktail et networking général"],
+    featured: false,
+  },
+  {
+    name: "VIP",
+    price: "15 000",
+    benefits: ["Tout le contenu de l’offre Standard", "Accueil prioritaire et place réservée devant", "Échange en petit groupe avec les intervenants et partenaires", "Kit numérique pratique : supports et checklist pressing"],
+    featured: true,
+  },
+];
+const registrationUrl = (offer: string) => `https://wa.me/237651638889?text=${encodeURIComponent(`Bonjour, je souhaite réserver une place ${offer} pour FIPP Africa le 19 décembre 2026.`)}`;
 export default function FippPage() {
   useEffect(() => { document.title = "FIPP Africa · Forum international des professionnels du pressing"; }, []);
   return <div className="min-h-screen bg-[#fffaf0] text-[#082550]">
@@ -36,6 +51,7 @@ export default function FippPage() {
         </div>
       </section>
       <section className="bg-[#082550] px-4 py-14 text-center text-white"><div className="mx-auto max-w-4xl"><p className="text-xs font-bold uppercase tracking-[.24em] text-[#e5c566]">Notre rendez-vous</p><h2 className="mt-4 font-serif text-3xl font-bold sm:text-4xl">Une matinée de conférences, démonstrations et rencontres</h2><p className="mt-4 leading-7 text-blue-100">Des échanges concrets pour moderniser, digitaliser, développer et professionnaliser le pressing africain.</p></div></section>
+      <section id="billets" className="px-4 py-20" aria-labelledby="billets-title"><div className="mx-auto max-w-5xl"><div className="text-center"><p className="text-xs font-bold uppercase tracking-[.2em] text-[#a57d1b]">Billetterie · 2ᵉ édition</p><h2 id="billets-title" className="mt-3 font-serif text-4xl font-bold">Choisissez votre expérience</h2><p className="mt-4 text-slate-600">Les deux offres donnent accès au programme complet de la rencontre.</p></div><div className="mt-10 grid gap-6 md:grid-cols-2">{ticketOffers.map(offer => <article key={offer.name} className={`flex flex-col rounded-2xl border p-7 sm:p-9 ${offer.featured ? "border-[#cba52a] bg-[#082550] text-white shadow-xl" : "border-[#cba52a]/40 bg-white"}`}><div className="flex items-start justify-between gap-4"><div><p className={`text-xs font-extrabold uppercase tracking-[.2em] ${offer.featured ? "text-[#e5c566]" : "text-[#a57d1b]"}`}>{offer.featured ? "Expérience privilégiée" : "L’essentiel"}</p><h3 className="mt-2 font-serif text-3xl font-bold">{offer.name}</h3></div><div className="text-right"><p className={`text-3xl font-black tabular-nums ${offer.featured ? "text-[#e5c566]" : "text-[#082550]"}`}>{offer.price}</p><p className="text-xs font-bold uppercase tracking-wide">FCFA / personne</p></div></div><ul className="mt-7 flex-1 space-y-4">{offer.benefits.map(benefit => <li key={benefit} className="flex gap-3 leading-6"><span aria-hidden="true" className={`mt-1 font-bold ${offer.featured ? "text-[#e5c566]" : "text-[#a57d1b]"}`}>✓</span><span>{benefit}</span></li>)}</ul><a href={registrationUrl(offer.name)} target="_blank" rel="noopener noreferrer" className={`mt-9 inline-flex min-h-12 items-center justify-center rounded-full px-6 py-3 text-center font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${offer.featured ? "bg-[#cba52a] text-[#082550] hover:bg-[#e2bd48]" : "bg-[#082550] text-white hover:bg-[#12396d]"}`}>Réserver ma place {offer.name} sur WhatsApp</a></article>)}</div><p className="mt-6 text-center text-sm text-slate-600">Places VIP limitées. Les modalités de l’échange privilégié seront confirmées lors de la réservation.</p></div></section>
       <section id="programme" className="scroll-mt-12 px-4 py-20"><div className="mx-auto max-w-5xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#a57d1b]">19 décembre 2026</p><h2 className="mt-3 font-serif text-4xl font-bold">Programme provisoire</h2></div><p className="text-sm text-slate-600">Horaires et intervenants susceptibles d’évoluer</p></div><div className="mt-10 divide-y divide-[#cba52a]/30 border-y border-[#cba52a]/30">{schedule.map(item => <article key={item.time} className="grid gap-3 py-5 sm:grid-cols-[150px_1fr]"><time className="font-bold text-[#a57d1b]">{item.time}</time><div><h3 className="text-lg font-bold">{item.title}</h3><p className="mt-1 text-sm text-slate-600">{item.detail}</p></div></article>)}</div></div></section>
       <section className="bg-[#f1ead9] px-4 py-16 text-center"><div className="mx-auto max-w-3xl"><h2 className="font-serif text-3xl font-bold">Rejoignez la 2ᵉ édition</h2><p className="mt-4 leading-7 text-slate-700">Le lieu sera annoncé prochainement. Les préinscriptions sont ouvertes par WhatsApp.</p><a href="https://wa.me/237651638889?text=Bonjour%2C%20je%20souhaite%20m%27inscrire%20au%20FIPP%20Africa%20du%2019%20d%C3%A9cembre%202026." target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex min-h-12 items-center rounded-full bg-[#082550] px-6 py-3 font-bold text-white">Demander mon inscription sur WhatsApp</a><p className="mt-5 text-sm font-bold uppercase tracking-widest text-[#a57d1b]">Excellence · Innovation · Collaboration · Impact</p></div></section>
     </main><footer className="bg-[#082550] px-4 py-8 text-center text-sm text-blue-100">FIPP Africa · Une initiative de XpressGroup · 2026</footer>
