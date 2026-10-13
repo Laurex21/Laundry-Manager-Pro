@@ -3,10 +3,8 @@ import XpressGroupGateway from "./xpressgroup-gateway";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowRight, BarChart3, Calculator, Check, CheckCircle2,
-  ClipboardCheck, Droplets, FileText,
-  Layers3, Menu, Package, Play, School, Settings, Shirt, Sparkles,
-  TrendingUp, Truck, UserRound, Wind, X, XCircle,
+  ArrowRight, Calculator, CheckCircle2,
+  ClipboardCheck, Menu, Play, Sparkles, X, XCircle,
 } from "lucide-react";
 
 const NAVY = "#0D1B4B";
@@ -85,35 +83,6 @@ function useLandingMeta() {
   }, []);
 }
 
-function DashboardMockup({ detailed = false }: { detailed?: boolean }) {
-  const { t } = useTranslation();
-  const bars = [34, 58, 43, 72, 66, 88, 78];
-  return (
-    <div className="rounded-2xl border border-white/15 bg-[#101f50] p-4 shadow-2xl sm:p-6">
-      <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
-        <div><p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-300">XpressPro HQ</p><p className="text-sm text-slate-300">{t("landing_v3.live_control")}</p></div>
-        <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-300">● {t("landing_v3.live")}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          [t("landing_v3.orders_today"), "24", "text-blue-300"],
-          [t("landing_v3.revenue_today"), "186 400", "text-emerald-300"],
-          [t("landing_v3.cost_kg"), "412", "text-amber-300"],
-          [t("landing_v3.profit"), "+23%", "text-emerald-300"],
-        ].map(([label, value, color]) => <div key={label} className="landing-card rounded-xl bg-white/7 p-3"><p className="text-[11px] text-slate-400">{label}</p><p className={`mt-1 text-xl font-bold ${color}`}>{value}</p></div>)}
-      </div>
-      <div className={`mt-4 grid gap-4 ${detailed ? "lg:grid-cols-[1.4fr_.8fr]" : ""}`}>
-        <div className="rounded-xl bg-white/7 p-4">
-          <div className="mb-4 flex justify-between text-xs text-slate-300"><span>{t("landing_v3.revenue_7_days")}</span><span className="text-emerald-300">+12.4%</span></div>
-          <div className="flex h-28 items-end gap-2">{bars.map((height, i) => <div key={i} className="flex-1 rounded-t bg-blue-500/80" style={{ height: `${height}%` }} />)}</div>
-        </div>
-        {detailed && <div className="flex flex-col items-center justify-center rounded-xl bg-white/7 p-4"><div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: "conic-gradient(#34d399 74%, rgba(255,255,255,.1) 0)" }}><div className="grid h-20 w-20 place-items-center rounded-full bg-[#101f50] text-xl font-bold text-white">74%</div></div><p className="mt-3 text-xs text-slate-300">{t("landing_v3.break_even")}</p></div>}
-      </div>
-      {detailed && <div className="mt-4 grid gap-2 sm:grid-cols-3">{[["#128", t("landing_v3.washing")], ["#129", t("landing_v3.drying")], ["#130", t("landing_v3.ready")]].map(([id, status], i) => <div key={id} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm text-white"><span>{id}</span><span className={i === 2 ? "text-emerald-300" : "text-blue-300"}>{status}</span></div>)}</div>}
-    </div>
-  );
-}
-
 function demoEmbedUrl(language: string) {
   const lang = language.split("-")[0];
   const configured = (lang === "fr" ? import.meta.env.VITE_DEMO_VIDEO_URL_FR : import.meta.env.VITE_DEMO_VIDEO_URL_EN)
@@ -146,13 +115,9 @@ export default function LandingPage() {
   const demoUrl = demoEmbedUrl(i18n.language);
   useLandingReveal(); useLandingMeta();
   useEffect(() => { const fn = () => setScrolled(window.scrollY > 20); window.addEventListener("scroll", fn, { passive: true }); return () => window.removeEventListener("scroll", fn); }, []);
-  const pains = ["garments", "payments", "notebooks", "profit", "customers", "data"];
-  const workflow = [[UserRound,"client"],[FileText,"order"],[Layers3,"sorting"],[Droplets,"washing"],[Wind,"drying"],[Shirt,"ironing"],[Package,"packing"],[CheckCircle2,"ready"],[Truck,"delivery"],[BarChart3,"reports"]] as const;
-  const pillars = [[Settings,"run","border-blue-500"],[TrendingUp,"grow","border-emerald-500"],[School,"learn","border-violet-500"]] as const;
   const comparisons = ["notebook","receipts","profitability","garments","analytics","multisite","balances"];
-  const plans = ["discover","starter","professional","business","enterprise"];
   const footerLinks: Record<string, Array<{ href: string; label: string }>> = {
-    product: ["#features", "#pricing", "/rentabilite", "/diagnostic", "#tools"].map((href, index) => ({ href, label: `footer_product_${index + 1}` })),
+    product: ["/xpresspro", "/xpresspro#pricing", "/rentabilite", "/diagnostic", "#tools"].map((href, index) => ({ href, label: `footer_product_${index + 1}` })),
     resources: [
       { href: "/diagnostic", label: "footer_resources_1" },
       { href: "/calculateur", label: "footer_resources_2" },
@@ -168,11 +133,11 @@ export default function LandingPage() {
     <header className={`fixed inset-x-0 top-0 z-50 border-b border-slate-200 bg-white/95 text-[#0D1B4B] backdrop-blur ${scrolled ? "shadow-sm" : ""}`}>
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4" aria-label={t("landing_v3.main_nav")}>
         <Link href="/" className="text-2xl font-black tracking-tight">Xpress<span className="text-blue-600">Group</span></Link>
-        <div className="hidden items-center gap-6 md:flex"><a href="#branches" className="text-sm font-semibold hover:text-blue-600">{i18n.language.startsWith("fr") ? "Nos branches" : "Our businesses"}</a><a href="#group-approach" className="text-sm font-semibold hover:text-blue-600">{i18n.language.startsWith("fr") ? "Notre approche" : "Our approach"}</a><a href="#features" className="text-sm font-semibold hover:text-blue-600">XpressPro</a><a href="#pricing" className="text-sm font-semibold hover:text-blue-600">{t("landing_nav_pricing")}</a></div>
+        <div className="hidden items-center gap-6 md:flex"><a href="#branches" className="text-sm font-semibold hover:text-blue-600">{i18n.language.startsWith("fr") ? "Nos branches" : "Our businesses"}</a><a href="#group-approach" className="text-sm font-semibold hover:text-blue-600">{i18n.language.startsWith("fr") ? "Notre approche" : "Our approach"}</a><a href="/xpresspro" className="text-sm font-semibold hover:text-blue-600">XpressPro</a><a href="/xpresspro#pricing" className="text-sm font-semibold hover:text-blue-600">{t("landing_nav_pricing")}</a></div>
         <div className="hidden items-center gap-2 md:flex"><button className="min-h-11 rounded-lg px-3 text-sm font-bold" onClick={() => i18n.changeLanguage(i18n.language.startsWith("fr") ? "en" : "fr")}>{i18n.language.startsWith("fr") ? "EN" : "FR"}</button><Link href="/auth" className="min-h-11 rounded-lg px-4 py-3 text-sm font-semibold">{t("landing_login")}</Link><Link href="/auth?tab=register" className="min-h-11 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white">{t("landing_v3.start_free")}</Link></div>
         <button className="grid min-h-11 min-w-11 place-items-center md:hidden" aria-label={t("landing_v3.menu")} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button>
       </nav>
-      {menu && <div className="border-t bg-white p-4 text-[#0D1B4B] md:hidden">{[["branches", i18n.language.startsWith("fr") ? "Nos branches" : "Our businesses"],["group-approach", i18n.language.startsWith("fr") ? "Notre approche" : "Our approach"],["features", "XpressPro"],["consulting", "Xpress Consulting"],["clean", "Xpress Clean"],["pricing", t("landing_nav_pricing")]].map(([id,label]) => <a key={id} href={`#${id}`} onClick={() => setMenu(false)} className="block min-h-11 py-3 font-medium">{label}</a>)}<Link href="/auth?tab=register" onClick={() => setMenu(false)} className="block min-h-11 py-3 font-bold text-blue-600">{t("landing_v3.start_free")}</Link></div>}
+      {menu && <div className="border-t bg-white p-4 text-[#0D1B4B] md:hidden">{[["branches", i18n.language.startsWith("fr") ? "Nos branches" : "Our businesses"],["group-approach", i18n.language.startsWith("fr") ? "Notre approche" : "Our approach"],["/xpresspro", "XpressPro"],["/xpress-consulting", "Xpress Consulting"],["/xpress-clean", "Xpress Clean"],["/xpresspro#pricing", t("landing_nav_pricing")]].map(([id,label]) => <a key={id} href={id.startsWith("/") ? id : `#${id}`} onClick={() => setMenu(false)} className="block min-h-11 py-3 font-medium">{label}</a>)}<Link href="/auth?tab=register" onClick={() => setMenu(false)} className="block min-h-11 py-3 font-bold text-blue-600">{t("landing_v3.start_free")}</Link></div>}
     </header>
 
     <main id="main-content">
@@ -181,21 +146,16 @@ export default function LandingPage() {
 
       <section id="about" className="scroll-mt-20 border-b border-slate-200 bg-slate-50 py-14"><div className="mx-auto max-w-6xl px-4"><h2 className="text-2xl font-bold text-[#0D1B4B]">{t("landing_v3.about_company_title")}</h2><p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">{t("landing_v3.about_company_statement")}</p></div></section>
 
-      <section className="py-24"><div className="mx-auto max-w-6xl px-4"><SectionHead eyebrow={t("landing_v3.problem_eyebrow")} title={t("landing_v3.problem_title")} /><div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{pains.map(key => <article key={key} className="landing-card rounded-xl border border-red-100 bg-red-50 p-6"><XCircle className="h-6 w-6 text-red-500" /><h3 className="mt-4 font-bold">{t(`landing_v3.pain_${key}`)}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{t(`landing_v3.pain_${key}_desc`)}</p></article>)}</div><div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center font-semibold text-emerald-800">✓ {t("landing_v3.problem_solution")}</div></div></section>
 
-      <section className="bg-slate-50 py-24"><div className="mx-auto max-w-7xl px-4"><SectionHead eyebrow={t("landing_v3.workflow_eyebrow")} title={t("landing_v3.workflow_title")} /><ol className="mt-14 grid gap-0 md:grid-cols-10">{workflow.map(([Icon,key],i) => <li key={key} className="relative flex gap-4 pb-6 md:block md:text-center"><div className={`relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-full ${key === "ready" ? "bg-emerald-500" : "bg-blue-600"} text-white`}><Icon className="h-5 w-5" /></div>{i < workflow.length - 1 && <span className="absolute left-[21px] top-11 h-full w-px bg-blue-200 md:left-1/2 md:top-[21px] md:h-px md:w-full" />}<div className="pt-2 md:pt-3"><span className="text-xs font-bold text-slate-400">{i+1}</span><p className="text-sm font-semibold">{t(`landing_v3.${key}`)}</p></div></li>)}</ol><p className="mt-8 text-center text-slate-600">{t("landing_v3.workflow_sub")}</p></div></section>
 
       <section id="tools" className="bg-[#0D1B4B] py-24 text-white"><div className="mx-auto max-w-7xl px-4"><SectionHead dark eyebrow={t("landing_v3.tools_eyebrow")} title={t("landing_v3.tools_title")} sub={t("landing_v3.tools_sub")} /><div className="mt-12 grid gap-5 lg:grid-cols-[.8fr_1.4fr] lg:items-center"><div className="space-y-5"><Tool icon={ClipboardCheck} title={t("landing_v3.diagnostic")} desc={t("landing_v3.diagnostic_desc")} href="/diagnostic" /><Tool icon={Calculator} title={t("landing_v3.startup_calc")} desc={t("landing_v3.startup_calc_desc")} href="/calculateur" /></div><article className="landing-card rounded-2xl border-2 border-blue-400 bg-white p-8 text-slate-900 shadow-2xl"><span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{t("landing_v3.most_used")}</span><Sparkles className="mt-6 h-9 w-9 text-blue-600" /><h3 className="mt-4 text-2xl font-black">{t("landing_v3.profit_calc")}</h3><p className="mt-3 leading-7 text-slate-600">{t("landing_v3.profit_calc_desc")}</p><div className="my-5 flex flex-wrap gap-2 text-xs">{["2 minutes",t("landing_v3.no_signup"),t("landing_v3.whatsapp_report")].map(x => <span key={x} className="rounded-full bg-slate-100 px-3 py-1">{x}</span>)}</div><Link href="/rentabilite" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-bold text-white">{t("landing_v3.calculate_profit")}<ArrowRight className="h-4 w-4" /></Link></article></div></div></section>
 
-      <section id="features" className="py-24"><div className="mx-auto max-w-7xl px-4"><SectionHead eyebrow={t("landing_v3.product_eyebrow")} title={t("landing_v3.product_title")} /><div className="mt-12 grid gap-6 lg:grid-cols-3">{pillars.map(([Icon,key,border]) => <article key={key} className={`landing-card rounded-xl border border-slate-200 border-t-4 ${border} p-7`}><Icon className="h-8 w-8 text-blue-600" /><h3 className="mt-4 text-xl font-bold">{t(`landing_v3.pillar_${key}`)}</h3><ul className="mt-5 space-y-3">{Array.from({length:6},(_,i)=><li key={i} className="flex gap-2 text-sm text-slate-600"><Check className="h-4 w-4 shrink-0 text-emerald-500" />{t(`landing_v3.${key}_${i+1}`)}</li>)}</ul></article>)}</div><p className="mt-8 text-center text-sm text-slate-500">{t("landing_v3.product_note")}</p></div></section>
 
-      <section className="bg-[#0D1B4B] py-24 text-white"><div className="mx-auto max-w-6xl px-4"><SectionHead dark eyebrow={t("landing_v3.dashboard_eyebrow")} title={t("landing_v3.dashboard_title")} /><div className="landing-reveal mt-12"><DashboardMockup detailed /></div><p className="mt-8 text-center text-blue-100">{t("landing_v3.dashboard_sub")}</p></div></section>
 
       {demoUrl && <section className="bg-slate-50 py-24"><div className="mx-auto max-w-5xl px-4 text-center"><SectionHead eyebrow={t("landing_v3.demo_eyebrow")} title={t("landing_v3.demo_title")} sub={t("landing_v3.demo_sub")} /><div className="mt-10 aspect-video overflow-hidden rounded-2xl bg-[#0D1B4B] shadow-xl"><LazyDemoVideo url={demoUrl} /></div><p className="mt-8">{t("landing_v3.demo_question")} <Link href="/auth?tab=register" className="font-bold text-blue-600">{t("landing_v3.start_free_arrow")}</Link></p></div></section>}
 
       <section className="py-24"><div className="mx-auto max-w-6xl px-4"><SectionHead eyebrow={t("landing_v3.comparison_eyebrow")} title={t("landing_v3.comparison_title")} /><div className="mt-12 grid gap-5 md:grid-cols-2"><article className="rounded-2xl bg-red-50 p-7"><h3 className="text-xl font-bold text-red-800">{t("landing_v3.without")}</h3><ul className="mt-6 space-y-4">{comparisons.map(key=><li key={key} className="flex gap-3 text-slate-700"><XCircle className="h-5 w-5 shrink-0 text-red-500" />{t(`landing_v3.before_${key}`)}</li>)}</ul></article><article className="rounded-2xl bg-emerald-50 p-7"><h3 className="text-xl font-bold text-emerald-800">{t("landing_v3.with")}</h3><ul className="mt-6 space-y-4">{comparisons.map(key=><li key={key} className="flex gap-3 text-slate-700"><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />{t(`landing_v3.after_${key}`)}</li>)}</ul></article></div></div></section>
 
-      <section id="pricing" className="py-24"><div className="mx-auto max-w-7xl px-4"><SectionHead eyebrow={t("landing_v3.pricing_eyebrow")} title={t("landing_v3.pricing_title")} sub={t("landing_v3.pricing_sub")} /><div className="mt-12 flex snap-x gap-4 overflow-x-auto pb-5 xl:grid xl:grid-cols-5 xl:overflow-visible">{plans.map(key=><article key={key} className={`relative flex min-w-[280px] snap-start flex-col rounded-2xl border p-5 xl:min-w-0 ${key === "business" ? "border-2 border-blue-600 shadow-xl" : "border-slate-200"}`}>{key === "business" && <span className="absolute -top-3 left-4 rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white">{t("landing_v3.most_popular")}</span>}<h3 className="text-xl font-bold capitalize">{key}</h3><p className="mt-4 whitespace-nowrap text-[clamp(1.25rem,1.7vw,1.65rem)] font-black tracking-tight">{t(`landing_v3.price_${key}`)}{key !== "discover" && <span className="ml-1 text-sm font-semibold text-slate-500">{t("landing_v3.price_period")}</span>}</p><p className="mt-2 text-sm text-slate-500">{t(`landing_v3.limit_${key}`)}</p><p className="mt-5 text-sm">{t(`landing_v3.capacity_${key}`)}</p><Link href="/auth?tab=register" className={`mt-auto block min-h-11 rounded-lg px-3 py-3 text-center text-sm font-bold ${key === "business" ? "bg-blue-600 text-white" : "bg-slate-100"}`}>{t(`landing_v3.cta_${key}`)}</Link></article>)}</div><p className="mt-7 text-center font-semibold text-slate-600">{t("landing_v3.pricing_trial")}</p></div></section>
 
       <section className="bg-[#0D1B4B] py-24 text-center text-white"><div className="mx-auto max-w-4xl px-4"><h2 className="text-3xl font-black sm:text-5xl">{t("landing_v3.final_title")}</h2><p className="mx-auto mt-5 max-w-2xl text-blue-100">{t("landing_v3.final_sub")}</p><div className="mx-auto mt-8 max-w-2xl rounded-2xl bg-white/10 p-6"><p className="text-xl font-bold">🎁 {t("landing_v3.final_offer")}</p><p className="mt-2 text-sm text-blue-200">{t("landing_v3.final_offer_sub")}</p><div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">{["no_card","no_commitment","cancel_anytime"].map(k=><span key={k}>✓ {t(`landing_v3.${k}`)}</span>)}</div></div><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/auth?tab=register" className="min-h-12 rounded-xl bg-white px-6 py-3 font-bold text-blue-700">{t("landing_v3.create_account")}</Link><Link href="/rentabilite" className="min-h-12 rounded-xl border border-white px-6 py-3 font-bold">{t("landing_v3.calculate_profit_plain")}</Link></div><Link href="/auth" className="mt-6 inline-block text-sm text-blue-200 underline">{t("landing_v3.already")}</Link><br/><a href="https://wa.me/237651638889" className="mt-3 inline-block text-sm text-blue-200 underline">{t("landing_v3.questions")}</a></div></section>
     </main>

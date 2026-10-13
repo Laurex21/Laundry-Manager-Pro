@@ -27,6 +27,13 @@ const consultingOffers = [
   { title: "Formation complète", price: "100 000 FCFA", description: "Apprenez à créer, gérer et développer un pressing avec des procédures opérationnelles." },
   { title: "Accompagnement personnalisé", price: "50 000 FCFA / mois", description: "Analyse du projet, conseils stratégiques, développement commercial et suivi personnalisé." },
 ];
+const platformPlans = [
+  { name: "Discover", price: "Gratuit", orders: "50 commandes à vie", capacity: "1 site · 1 utilisateur" },
+  { name: "Starter", price: "3 900 FCFA/mois", orders: "100 commandes/mois", capacity: "1 site · 1 utilisateur" },
+  { name: "Professional", price: "12 900 FCFA/mois", orders: "600 commandes/mois", capacity: "1 site · 3 utilisateurs" },
+  { name: "Business", price: "24 900 FCFA/mois", orders: "3 000 commandes/mois", capacity: "3 sites · 20 utilisateurs" },
+  { name: "Enterprise", price: "49 900 FCFA/mois", orders: "Commandes illimitées", capacity: "Sites & utilisateurs illimités" },
+];
 function SectionTitle({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {
   return <div className="max-w-3xl"><p className="text-xs font-extrabold uppercase tracking-[.22em] text-current opacity-65">{eyebrow}</p><h2 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">{title}</h2>{description && <p className="mt-4 text-base leading-7 opacity-75">{description}</p>}</div>;
 }
@@ -46,7 +53,14 @@ export default function XpressBranchPage({ branch }: { branch: Branch }) {
     consulting: { name: "Xpress Consulting", label: "Conseil · Formation · Accompagnement", title: "Passez d’une idée de pressing à une activité bien organisée.", intro: "Des conseils concrets, une formation métier et un suivi adapté à chaque étape de votre projet.", image: "/xpressgroup/consulting.webp", bg: "bg-[#fff5e5]", accent: "text-[#895717]", button: "bg-[#895717]" },
     clean: { name: "Xpress Clean", label: "Pressing & blanchisserie à Douala", title: "Le soin du linge, simplement et avec méthode.", intro: "Vêtements, linge de maison, lavage au kilo et abonnements pour vous simplifier le quotidien.", image: "/xpressgroup/clean.webp", bg: "bg-[#e6f8fa]", accent: "text-[#087b8b]", button: "bg-[#087b8b]" },
   }[branch];
-  useEffect(() => { document.title = `${config.name} | XpressGroup`; window.scrollTo(0, 0); }, [config.name]);
+  useEffect(() => {
+    document.title = `${config.name} | XpressGroup`;
+    if (window.location.hash === "#pricing" && branch === "pro") {
+      requestAnimationFrame(() => document.getElementById("pricing")?.scrollIntoView());
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [branch, config.name]);
   return <div className="min-h-screen bg-white text-[#0d1b4b]">
     <header className="border-b border-[#0d1b4b]/10 bg-white"><nav className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4" aria-label="Navigation XpressGroup"><Link href="/" className="text-xl font-black">Xpress<span className="text-blue-600">Group</span></Link><div className="hidden gap-5 text-sm font-semibold sm:flex"><Link href="/xpresspro" className="hover:underline">XpressPro</Link><Link href="/xpress-consulting" className="hover:underline">Consulting</Link><Link href="/xpress-clean" className="hover:underline">Clean</Link></div><Link href="/" className="inline-flex items-center gap-2 text-sm font-bold"><ArrowLeft className="h-4 w-4" />Accueil</Link></nav></header>
     <main>
@@ -55,6 +69,7 @@ export default function XpressBranchPage({ branch }: { branch: Branch }) {
         <section className="border-y border-blue-100 bg-white px-4 py-12" aria-label="Statistiques XpressPro"><div className="mx-auto max-w-7xl">{metrics.length > 0 && <><p className="mb-8 text-center text-xs font-extrabold uppercase tracking-[.2em] text-blue-700">XpressPro en chiffres</p><div className="grid grid-cols-2 gap-7 md:grid-cols-4">{metrics.map(metric => <div key={metric.label} className="text-center"><p className="text-3xl font-black text-[#0d1b4b] sm:text-4xl">{Number(metric.value).toLocaleString("fr-FR")}+</p><p className="mt-1 text-sm text-slate-600">{metric.label}</p></div>)}</div></>}</div></section>
         <section id="details" className="mx-auto max-w-7xl px-4 py-20"><SectionTitle eyebrow="La plateforme" title="Tout suivre depuis un seul endroit" description="XpressPro accompagne le travail quotidien, de la réception de l’article jusqu’au suivi de l’activité." /><div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{["Gestion des clients et historique", "Enregistrement et suivi des commandes", "Suivi des paiements", "Statistiques et tableau de bord", "Gestion de plusieurs points de collecte", "Traçabilité des articles et des étapes"].map(item => <div key={item} className="rounded-2xl border border-blue-100 bg-[#f5f8ff] p-6"><Check className="mb-4 h-6 w-6 text-blue-600" /><h3 className="font-bold">{item}</h3></div>)}</div></section>
         <section className="bg-[#0d1b4b] px-4 py-20 text-white"><div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-2"><div><SectionTitle eyebrow="Pilotage" title="Des décisions appuyées par vos données" description="Suivez les commandes, les encaissements et les performances de votre pressing depuis le téléphone ou la tablette." /><Link href="/auth?tab=register" className="mt-7 inline-flex min-h-12 items-center rounded-full bg-white px-6 py-3 font-bold text-[#0d1b4b]">Essayer la plateforme <ArrowRight className="ml-2 h-4 w-4" /></Link></div><img src="/xpressgroup/field.webp" alt="Responsable de pressing utilisant une tablette" className="h-72 w-full rounded-2xl object-cover" loading="lazy" /></div></section>
+        <section id="pricing" className="scroll-mt-20 bg-[#f5f8ff] px-4 py-20"><div className="mx-auto max-w-7xl"><SectionTitle eyebrow="Tarifs XpressPro" title="Un plan pour chaque pressing" description="Choisissez votre capacité selon votre volume de commandes et le nombre de sites à gérer." /><div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{platformPlans.map(plan => <article key={plan.name} className="flex flex-col rounded-2xl border border-blue-100 bg-white p-5"><h3 className="text-xl font-black">{plan.name}</h3><p className="mt-4 text-xl font-black text-blue-700">{plan.price}</p><p className="mt-4 text-sm text-slate-700">{plan.orders}</p><p className="mt-2 flex-1 text-sm text-slate-700">{plan.capacity}</p><Link href="/auth?tab=register" className="mt-6 inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white">Choisir ce plan</Link></article>)}</div><p className="mt-6 text-sm text-slate-600">Essai gratuit de 30 jours ou 50 premières commandes, selon ce qui dure le plus longtemps. Sans carte bancaire.</p></div></section>
       </>}
       {branch === "consulting" && <>
         <section id="details" className="mx-auto max-w-7xl px-4 py-20"><SectionTitle eyebrow="Nos offres" title="Le bon appui, au bon moment" description="Un parcours qui va de la première consultation au développement de votre pressing." /><div className="mt-10 grid gap-5 md:grid-cols-2">{consultingOffers.map(offer => <article key={offer.title} className="flex flex-col rounded-2xl border border-amber-200 bg-[#fffaf1] p-7"><h3 className="text-2xl font-black">{offer.title}</h3><p className="mt-3 flex-1 leading-7 text-slate-700">{offer.description}</p><p className="mt-6 text-xl font-black text-[#895717]">{offer.price}</p></article>)}</div></section>
