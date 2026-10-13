@@ -4,8 +4,6 @@ type Copy = {
   eyebrow: string; first: string; second: string; subtitle: string; explore: string; approach: string;
   branches: { category: string; name: string; description: string; action: string; image: string; alt: string; href: string; tone: string; accent: string }[];
   methodEyebrow: string; methodTitle: string; methodBody: string;
-  consultingEyebrow: string; consultingTitle: string; consultingBody: string; consultingAction: string;
-  cleanEyebrow: string; cleanTitle: string; cleanBody: string; cleanAction: string;
 };
 
 const french: Copy = {
@@ -19,10 +17,6 @@ const french: Copy = {
   ],
   methodEyebrow: "Notre logique", methodTitle: "Du terrain à la technologie. Et toujours dans cet ordre.",
   methodBody: "Xpress Clean vit la réalité des opérations. Xpress Consulting transmet les méthodes. XpressPro aide à les suivre au quotidien. Chaque branche a sa mission ; ensemble, elles forment un écosystème cohérent.",
-  consultingEyebrow: "Xpress Consulting · Conseil & formation", consultingTitle: "Apprendre le métier. Structurer l’entreprise.",
-  consultingBody: "Consultation, plan de lancement, formation et accompagnement : des réponses adaptées au niveau de votre projet.", consultingAction: "Parler de mon projet",
-  cleanEyebrow: "Xpress Clean · Pressing & blanchisserie", cleanTitle: "Un pressing qui simplifie le quotidien.",
-  cleanBody: "Vêtements, linge de maison, lavage au kilo et formules mensuelles : découvrez nos services à Douala.", cleanAction: "Demander nos services et tarifs",
 };
 
 const english: Copy = {
@@ -36,18 +30,10 @@ const english: Copy = {
   ],
   methodEyebrow: "Our approach", methodTitle: "From real operations to technology. In that order.",
   methodBody: "Xpress Clean experiences daily operations. Xpress Consulting teaches the methods. XpressPro helps teams track them. Each business has a clear job; together they form one connected ecosystem.",
-  consultingEyebrow: "Xpress Consulting · Consulting & training", consultingTitle: "Learn the trade. Build the business.",
-  consultingBody: "Consultations, launch planning, training and support tailored to the stage of your project.", consultingAction: "Discuss my project",
-  cleanEyebrow: "Xpress Clean · Laundry services", cleanTitle: "Laundry that makes everyday life easier.",
-  cleanBody: "Clothing, household linen, wash-by-weight and monthly plans: explore our services in Douala.", cleanAction: "Ask about services and prices",
 };
-
-const whatsapp = (number: string, message: string) => `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 
 export default function XpressGroupGateway({ language }: { language: string }) {
   const copy = language.startsWith("fr") ? french : english;
-  const consultingHref = whatsapp("237651638889", language.startsWith("fr") ? "Bonjour, je souhaite en savoir plus sur Xpress Consulting." : "Hello, I would like to learn more about Xpress Consulting.");
-  const cleanHref = whatsapp("237655615806", language.startsWith("fr") ? "Bonjour, je souhaite connaître les services et tarifs Xpress Clean." : "Hello, I would like to know the Xpress Clean services and prices.");
   return <>
     <section id="branches" className="scroll-mt-20 bg-[#fafaf5] bg-[linear-gradient(#dfe8e84d_1px,transparent_1px),linear-gradient(90deg,#dfe8e84d_1px,transparent_1px)] bg-[size:60px_60px] pb-20 pt-32 text-[#0D1B4B]">
       <div className="mx-auto max-w-7xl px-4">
@@ -56,8 +42,8 @@ export default function XpressGroupGateway({ language }: { language: string }) {
           <h1 className="mt-6 text-4xl font-black leading-[1.06] tracking-[-.055em] sm:text-6xl lg:text-7xl"><span className="text-blue-600">{copy.first}</span><br />{copy.second}</h1>
           <p className="mx-auto mt-7 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">{copy.subtitle}</p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <a href="#branch-cards" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 font-bold text-white hover:bg-blue-700">{copy.explore}<ArrowRight className="h-4 w-4" /></a>
-            <a href="/xpresspro" className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#0D1B4B] px-6 py-3 font-bold hover:bg-white">{copy.approach}</a>
+            <a href="/xpresspro" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 font-bold text-white hover:bg-blue-700">{copy.approach}<ArrowRight className="h-4 w-4" /></a>
+            <a href="#branch-cards" className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#0D1B4B] px-6 py-3 font-bold hover:bg-white sm:hidden">{copy.explore}</a>
           </div>
         </div>
         <div id="branch-cards" className="mt-16 grid scroll-mt-24 gap-5 md:grid-cols-3">
@@ -74,7 +60,5 @@ export default function XpressGroupGateway({ language }: { language: string }) {
       </div>
     </section>
     <section id="group-approach" className="scroll-mt-20 border-y border-slate-200 bg-[#f5f4ef] py-14 text-[#0D1B4B]"><div className="mx-auto grid max-w-7xl items-center gap-8 px-4 lg:grid-cols-[.7fr_1.3fr]"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-slate-600">{copy.methodEyebrow}</p><h2 className="mt-3 text-2xl font-black leading-tight tracking-tight sm:text-3xl">{copy.methodTitle}</h2></div><div><p className="max-w-2xl leading-7 text-slate-700">{copy.methodBody}</p><div className="mt-5 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-[#e7efff] px-3 py-2 text-[#145dda]">XpressPro</span><span className="rounded-full bg-[#fff0d9] px-3 py-2 text-[#9b621b]">Xpress Consulting</span><span className="rounded-full bg-[#def4f6] px-3 py-2 text-[#008da8]">Xpress Clean</span></div></div></div></section>
-    <section id="consulting" className="scroll-mt-20 bg-[#fffaf2] py-20"><div className="mx-auto grid max-w-7xl items-center gap-10 px-4 lg:grid-cols-2 lg:gap-20"><img src="/xpressgroup/consulting.webp" alt={language.startsWith("fr") ? "Formation pratique dans un pressing" : "Practical laundry training"} width="640" height="420" loading="lazy" className="h-72 w-full rounded-2xl object-cover sm:h-96" /><div><p className="text-xs font-bold uppercase tracking-[.2em] text-amber-700">{copy.consultingEyebrow}</p><h2 className="mt-4 text-3xl font-black tracking-tight text-[#0D1B4B] sm:text-5xl">{copy.consultingTitle}</h2><p className="mt-5 leading-8 text-slate-700">{copy.consultingBody}</p><a href={consultingHref} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex min-h-12 items-center rounded-full border border-[#0D1B4B] px-6 py-3 font-bold text-[#0D1B4B] hover:bg-white">{copy.consultingAction}</a></div></div></section>
-    <section id="clean" className="scroll-mt-20 bg-[#eaf8fa] py-20"><div className="mx-auto grid max-w-7xl items-center gap-10 px-4 lg:grid-cols-2 lg:gap-20"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-cyan-800">{copy.cleanEyebrow}</p><h2 className="mt-4 text-3xl font-black tracking-tight text-[#0D1B4B] sm:text-5xl">{copy.cleanTitle}</h2><p className="mt-5 leading-8 text-slate-700">{copy.cleanBody}</p><a href={cleanHref} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex min-h-12 items-center rounded-full bg-[#0D1B4B] px-6 py-3 font-bold text-white hover:bg-[#18356b]">{copy.cleanAction}</a></div><img src="/xpressgroup/clean.webp" alt={language.startsWith("fr") ? "Accueil d’une cliente chez Xpress Clean" : "Customer welcomed at Xpress Clean"} width="640" height="420" loading="lazy" className="h-72 w-full rounded-2xl object-cover sm:h-96" /></div></section>
   </>;
 }
