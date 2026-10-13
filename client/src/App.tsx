@@ -16,6 +16,7 @@ import Dashboard from "@/pages/dashboard";
 const NotFound          = lazy(() => import("@/pages/not-found"));
 const LandingPage       = lazy(() => import("@/pages/landing"));
 const XpressBranchPage  = lazy(() => import("@/pages/xpress-branch"));
+const FippPage          = lazy(() => import("@/pages/fipp"));
 const AuthPage          = lazy(() => import("@/pages/auth-page"));
 const StaffLogin        = lazy(() => import("@/pages/staff-login"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
@@ -168,6 +169,7 @@ function Router() {
   return (
     <Suspense fallback={<PageSkeleton />}>
       <Switch>
+        <Route path="/rencontre" component={FippPage} />
         <Route path="/xpresspro"><XpressBranchPage branch="pro" /></Route>
         <Route path="/xpress-consulting"><XpressBranchPage branch="consulting" /></Route>
         <Route path="/xpress-clean"><XpressBranchPage branch="clean" /></Route>
