@@ -3,8 +3,8 @@ import XpressGroupGateway from "./xpressgroup-gateway";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowRight, Calculator, CheckCircle2,
-  ClipboardCheck, Menu, Play, Sparkles, X, XCircle,
+  ArrowRight, Calculator,
+  ClipboardCheck, Menu, Play, Sparkles, X,
 } from "lucide-react";
 
 const NAVY = "#0D1B4B";
@@ -115,16 +115,13 @@ export default function LandingPage() {
   const demoUrl = demoEmbedUrl(i18n.language);
   useLandingReveal(); useLandingMeta();
   useEffect(() => { const fn = () => setScrolled(window.scrollY > 20); window.addEventListener("scroll", fn, { passive: true }); return () => window.removeEventListener("scroll", fn); }, []);
-  const comparisons = ["notebook","receipts","profitability","garments","analytics","multisite","balances"];
   const footerLinks: Record<string, Array<{ href: string; label: string }>> = {
-    product: ["/xpresspro", "/xpresspro#pricing", "/rentabilite", "/diagnostic", "#tools"].map((href, index) => ({ href, label: `footer_product_${index + 1}` })),
     resources: [
       { href: "/diagnostic", label: "footer_resources_1" },
       { href: "/calculateur", label: "footer_resources_2" },
       { href: "/rentabilite", label: "footer_resources_3" },
     ],
     company: ["#about", "/terms", "/privacy", "#contact"].map((href, index) => ({ href, label: `footer_company_${index + 1}` })),
-    social: [{ href: "https://wa.me/237651638889", label: "footer_social_1" }],
   };
 
   return <div className="min-h-screen overflow-x-hidden bg-white text-slate-950">
@@ -154,13 +151,33 @@ export default function LandingPage() {
 
       {demoUrl && <section className="bg-slate-50 py-24"><div className="mx-auto max-w-5xl px-4 text-center"><SectionHead eyebrow={t("landing_v3.demo_eyebrow")} title={t("landing_v3.demo_title")} sub={t("landing_v3.demo_sub")} /><div className="mt-10 aspect-video overflow-hidden rounded-2xl bg-[#0D1B4B] shadow-xl"><LazyDemoVideo url={demoUrl} /></div><p className="mt-8">{t("landing_v3.demo_question")} <Link href="/auth?tab=register" className="font-bold text-blue-600">{t("landing_v3.start_free_arrow")}</Link></p></div></section>}
 
-      <section className="py-24"><div className="mx-auto max-w-6xl px-4"><SectionHead eyebrow={t("landing_v3.comparison_eyebrow")} title={t("landing_v3.comparison_title")} /><div className="mt-12 grid gap-5 md:grid-cols-2"><article className="rounded-2xl bg-red-50 p-7"><h3 className="text-xl font-bold text-red-800">{t("landing_v3.without")}</h3><ul className="mt-6 space-y-4">{comparisons.map(key=><li key={key} className="flex gap-3 text-slate-700"><XCircle className="h-5 w-5 shrink-0 text-red-500" />{t(`landing_v3.before_${key}`)}</li>)}</ul></article><article className="rounded-2xl bg-emerald-50 p-7"><h3 className="text-xl font-bold text-emerald-800">{t("landing_v3.with")}</h3><ul className="mt-6 space-y-4">{comparisons.map(key=><li key={key} className="flex gap-3 text-slate-700"><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />{t(`landing_v3.after_${key}`)}</li>)}</ul></article></div></div></section>
 
 
       <section className="bg-[#0D1B4B] py-24 text-center text-white"><div className="mx-auto max-w-4xl px-4"><h2 className="text-3xl font-black sm:text-5xl">{t("landing_v3.final_title")}</h2><p className="mx-auto mt-5 max-w-2xl text-blue-100">{t("landing_v3.final_sub")}</p><div className="mx-auto mt-8 max-w-2xl rounded-2xl bg-white/10 p-6"><p className="text-xl font-bold">🎁 {t("landing_v3.final_offer")}</p><p className="mt-2 text-sm text-blue-200">{t("landing_v3.final_offer_sub")}</p><div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">{["no_card","no_commitment","cancel_anytime"].map(k=><span key={k}>✓ {t(`landing_v3.${k}`)}</span>)}</div></div><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/auth?tab=register" className="min-h-12 rounded-xl bg-white px-6 py-3 font-bold text-blue-700">{t("landing_v3.create_account")}</Link><Link href="/rentabilite" className="min-h-12 rounded-xl border border-white px-6 py-3 font-bold">{t("landing_v3.calculate_profit_plain")}</Link></div><Link href="/auth" className="mt-6 inline-block text-sm text-blue-200 underline">{t("landing_v3.already")}</Link><br/><a href="https://wa.me/237651638889" className="mt-3 inline-block text-sm text-blue-200 underline">{t("landing_v3.questions")}</a></div></section>
     </main>
 
-    <footer id="contact" className="bg-[#081337] py-16 text-slate-300"><div className="mx-auto grid max-w-7xl gap-10 px-4 sm:grid-cols-2 lg:grid-cols-5"><div><div className="flex items-center gap-2 text-xl font-bold text-white"><img src="/xpresspro-mark-white.svg" alt="" className="h-9 w-9" />XpressPro</div><p className="mt-3 text-sm leading-6">{t("landing_v3.footer_tagline")}</p><p className="mt-4 text-sm">xpressclean23@gmail.com<br/>+237 651 638 889</p></div>{["product","resources","company","social"].map(group=><div key={group}><h3 className="font-bold text-white">{t(`landing_v3.footer_${group}`)}</h3><ul className="mt-4 space-y-3 text-sm">{footerLinks[group].map(({ href, label })=><li key={`${group}-${label}`}><a href={href} className="hover:text-white" {...(href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{t(`landing_v3.${label}`)}</a></li>)}</ul></div>)}</div><div className="mx-auto mt-12 flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-4 pt-6 text-xs sm:flex-row"><span>© 2026 XpressPro · Une solution XpressGroup</span><button className="min-h-11 px-3 font-bold" onClick={() => i18n.changeLanguage(i18n.language.startsWith("fr") ? "en" : "fr")}>FR / EN</button></div></footer>
+    <footer id="contact" className="bg-[#081337] py-16 text-slate-300">
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <Link href="/" className="text-2xl font-black tracking-tight text-white">Xpress<span className="text-blue-400">Group</span></Link>
+          <p className="mt-4 max-w-xs text-sm leading-6">{i18n.language.startsWith("fr") ? "XpressGroup réunit une plateforme de gestion, la formation et le conseil, et des services de pressing pour faire avancer l’entretien textile en Afrique." : "XpressGroup brings together management software, training and consulting, and laundry services to advance textile care across Africa."}</p>
+          <p className="mt-4 text-sm">xpressclean23@gmail.com<br/>+237 651 638 889</p>
+        </div>
+        {["resources","company"].map(group => <div key={group}>
+          <h3 className="font-bold text-white">{t(`landing_v3.footer_${group}`)}</h3>
+          <ul className="mt-4 space-y-3 text-sm">{footerLinks[group].map(({ href, label }) => <li key={label}><a href={href} className="hover:text-white">{t(`landing_v3.${label}`)}</a></li>)}</ul>
+        </div>)}
+        <div>
+          <h3 className="font-bold text-white">{i18n.language.startsWith("fr") ? "Réseaux sociaux" : "Social media"}</h3>
+          <ul className="mt-4 space-y-3 text-sm">
+            <li><a href="https://www.tiktok.com/@xpressclean6" target="_blank" rel="noopener noreferrer" className="hover:text-white">TikTok · @xpressclean6</a></li>
+            <li><a href="https://www.youtube.com/@xpressclean6" target="_blank" rel="noopener noreferrer" className="hover:text-white">YouTube · @xpressclean6</a></li>
+            <li><a href="https://wa.me/237651638889" target="_blank" rel="noopener noreferrer" className="hover:text-white">WhatsApp</a></li>
+          </ul>
+        </div>
+      </div>
+      <div className="mx-auto mt-12 flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-4 pt-6 text-xs sm:flex-row"><span>© 2026 XpressGroup</span><button className="min-h-11 px-3 font-bold" onClick={() => i18n.changeLanguage(i18n.language.startsWith("fr") ? "en" : "fr")}>FR / EN</button></div>
+    </footer>
   </div>;
 }
 
