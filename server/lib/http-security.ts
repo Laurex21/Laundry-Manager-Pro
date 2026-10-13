@@ -5,6 +5,7 @@ const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
+  "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
   "form-action 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",

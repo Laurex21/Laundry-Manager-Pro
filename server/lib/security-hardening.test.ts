@@ -103,6 +103,7 @@ assert.equal(verifyPublicAccessToken("calculator", 42, `${token}x`), false);
 const headers = new Map<string, string>();
 securityHeaders({} as any, { setHeader: (name: string, value: string) => headers.set(name, value) } as any, () => {});
 assert.match(headers.get("Content-Security-Policy") || "", /frame-ancestors 'none'/);
+assert.match(headers.get("Content-Security-Policy") || "", /frame-src https:\/\/www\.youtube\.com https:\/\/www\.youtube-nocookie\.com/);
 assert.equal(headers.get("X-Frame-Options"), "DENY");
 assert.equal(boundedJsonObject.safeParse({ inputs: { orders: 10 }, mode: "existing" }).success, true);
 assert.equal(boundedJsonObject.safeParse({ a: { b: { c: { d: { e: { f: { g: 1 } } } } } } }).success, false);
