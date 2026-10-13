@@ -15,6 +15,7 @@ import Dashboard from "@/pages/dashboard";
 // ─── Lazy-loaded routes (code-split into separate chunks) ─────────────────────
 const NotFound          = lazy(() => import("@/pages/not-found"));
 const LandingPage       = lazy(() => import("@/pages/landing"));
+const XpressBranchPage  = lazy(() => import("@/pages/xpress-branch"));
 const AuthPage          = lazy(() => import("@/pages/auth-page"));
 const StaffLogin        = lazy(() => import("@/pages/staff-login"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
@@ -167,6 +168,9 @@ function Router() {
   return (
     <Suspense fallback={<PageSkeleton />}>
       <Switch>
+        <Route path="/xpresspro"><XpressBranchPage branch="pro" /></Route>
+        <Route path="/xpress-consulting"><XpressBranchPage branch="consulting" /></Route>
+        <Route path="/xpress-clean"><XpressBranchPage branch="clean" /></Route>
         <Route path="/calculateur" component={CalculatorPage} />
         <Route path="/diagnostic" component={DiagnosticPage} />
         <Route path="/rentabilite" component={RentabilitePage} />
