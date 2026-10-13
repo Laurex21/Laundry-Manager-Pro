@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import XpressGroupGateway from "./xpressgroup-gateway";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
@@ -65,11 +66,11 @@ function useLandingReveal() {
 
 function useLandingMeta() {
   useEffect(() => {
-    document.title = "XpressPro — The Operating System for Laundry Businesses in Africa";
+    document.title = "XpressGroup — Logiciel, conseil et pressing en Afrique";
     const values: Record<string, string> = {
-      description: "Manage orders, customers, payments, garment tracking, profitability and business performance from one intelligent platform built for Africa. Free 30-day trial.",
-      "og:title": "XpressPro — Gestion de pressing pour l'Afrique",
-      "og:description": "Commandes, clients, paiements, rentabilité depuis une plateforme conçue pour l'Afrique. Essai gratuit 30 jours.",
+      description: "XpressGroup réunit XpressPro, Xpress Consulting et Xpress Clean : logiciel de gestion, conseil et services de pressing en Afrique.",
+      "og:title": "XpressGroup — Logiciel, conseil et pressing en Afrique",
+      "og:description": "Trois branches complémentaires pour gérer, développer et vivre le pressing : XpressPro, Xpress Consulting et Xpress Clean.",
       "og:type": "website",
       "theme-color": NAVY,
     };
@@ -172,25 +173,18 @@ export default function LandingPage() {
   return <div className="min-h-screen overflow-x-hidden bg-white text-slate-950">
     <style>{`.landing-reveal{opacity:0;transform:translateY(24px);transition:opacity .4s ease,transform .4s ease}.landing-reveal.is-visible{opacity:1;transform:none}.landing-card{transition:transform .2s ease,box-shadow .2s ease}.landing-card:hover{transform:translateY(-2px)}@media(prefers-reduced-motion:reduce){.landing-reveal,.landing-card{opacity:1;transform:none;transition:none!important}}`}</style>
     <a href="#main-content" className="fixed left-3 top-3 z-[100] -translate-y-20 rounded bg-white px-4 py-2 font-semibold text-blue-700 focus:translate-y-0">{t("landing_v3.skip")}</a>
-    <header className={`fixed inset-x-0 top-0 z-50 transition-colors ${scrolled ? "border-b bg-white/95 text-slate-900 shadow-sm backdrop-blur" : "bg-transparent text-white"}`}>
+    <header className={`fixed inset-x-0 top-0 z-50 border-b border-slate-200 bg-white/95 text-[#0D1B4B] backdrop-blur ${scrolled ? "shadow-sm" : ""}`}>
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4" aria-label={t("landing_v3.main_nav")}>
-        <Link href="/" className="flex items-center gap-2 font-bold"><img src="/xpresspro-mark-white.svg" alt="" className="h-9 w-9" />XpressPro</Link>
-        <div className="hidden items-center gap-6 md:flex">{[["features","landing_nav_features"],["tools","landing_nav_tools"],["pricing","landing_nav_pricing"],["contact","landing_v3.contact"]].map(([id,key]) => <a key={id} href={`#${id}`} className="text-sm font-medium hover:text-blue-400">{t(key)}</a>)}</div>
-        <div className="hidden items-center gap-2 md:flex"><button className="min-h-11 rounded-lg px-3 text-sm font-bold" onClick={() => i18n.changeLanguage(i18n.language.startsWith("fr") ? "en" : "fr")}>{i18n.language.startsWith("fr") ? "EN" : "FR"}</button><Link href="/auth" className="min-h-11 rounded-lg px-4 py-3 text-sm font-semibold">{t("landing_login")}</Link><Link href="/auth?tab=register" className="min-h-11 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white">{t("landing_v3.start_free")}</Link></div>
+        <Link href="/" className="text-2xl font-black tracking-tight">Xpress<span className="text-blue-600">Group</span></Link>
+        <div className="hidden items-center gap-6 md:flex"><a href="#branches" className="text-sm font-semibold hover:text-blue-600">{i18n.language.startsWith("fr") ? "Nos branches" : "Our businesses"}</a><a href="#group-approach" className="text-sm font-semibold hover:text-blue-600">{i18n.language.startsWith("fr") ? "Notre approche" : "Our approach"}</a><a href="#features" className="text-sm font-semibold hover:text-blue-600">XpressPro</a><a href="#pricing" className="text-sm font-semibold hover:text-blue-600">{t("landing_nav_pricing")}</a></div>
+        <div className="hidden items-center gap-2 md:flex"><button className="min-h-11 rounded-lg px-3 text-sm font-bold" onClick={() => i18n.changeLanguage(i18n.language.startsWith("fr") ? "en" : "fr")}>{i18n.language.startsWith("fr") ? "EN" : "FR"}</button><Link href="/auth" className="min-h-11 rounded-lg px-4 py-3 text-sm font-semibold">{t("landing_login")}</Link><Link href="/auth?tab=register" className="min-h-11 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white">{t("landing_v3.start_free")}</Link></div>
         <button className="grid min-h-11 min-w-11 place-items-center md:hidden" aria-label={t("landing_v3.menu")} aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button>
       </nav>
-      {menu && <div className="border-t bg-white p-4 text-slate-900 md:hidden">{[["features","landing_nav_features"],["tools","landing_nav_tools"],["pricing","landing_nav_pricing"],["contact","landing_v3.contact"]].map(([id,key]) => <a key={id} href={`#${id}`} onClick={() => setMenu(false)} className="block min-h-11 py-3 font-medium">{t(key)}</a>)}</div>}
+      {menu && <div className="border-t bg-white p-4 text-[#0D1B4B] md:hidden">{[["branches", i18n.language.startsWith("fr") ? "Nos branches" : "Our businesses"],["group-approach", i18n.language.startsWith("fr") ? "Notre approche" : "Our approach"],["features", "XpressPro"],["consulting", "Xpress Consulting"],["clean", "Xpress Clean"],["pricing", t("landing_nav_pricing")]].map(([id,label]) => <a key={id} href={`#${id}`} onClick={() => setMenu(false)} className="block min-h-11 py-3 font-medium">{label}</a>)}<Link href="/auth?tab=register" onClick={() => setMenu(false)} className="block min-h-11 py-3 font-bold text-blue-600">{t("landing_v3.start_free")}</Link></div>}
     </header>
 
     <main id="main-content">
-      <section className="relative min-h-[90vh] overflow-hidden bg-[#0D1B4B] pb-24 pt-28 text-white">
-        <div className="absolute -right-40 top-10 h-[520px] w-[520px] rounded-full bg-blue-600/20 blur-3xl" />
-        <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-4 lg:grid-cols-[1.1fr_.9fr]">
-          <div className="landing-reveal"><span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm"><span className="h-2 w-2 rounded-full bg-emerald-400" />{t("landing_v3.hero_badge")}</span><h1 className="mt-6 max-w-3xl text-4xl font-black leading-[1.04] tracking-tight sm:text-6xl">{t("landing_v3.hero_title")}</h1><p className="mt-6 max-w-2xl text-lg leading-8 text-blue-100">{t("landing_v3.hero_sub")}</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/auth?tab=register" className="min-h-12 rounded-xl bg-blue-600 px-6 py-3 text-center font-bold text-white hover:bg-blue-500">{t("landing_v3.start_trial")}</Link><Link href="/rentabilite" className="min-h-12 rounded-xl border border-white/35 px-6 py-3 text-center font-bold hover:bg-white/10">{t("landing_v3.calculate_profit")}</Link></div><p className="mt-4 text-sm text-blue-200">{t("landing_v3.hero_trust")}</p></div>
-          <div className="landing-reveal relative"><DashboardMockup /><div className="absolute -right-2 -top-5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-xl">✓ {t("landing_v3.receipt_generated")}</div><div className="absolute -bottom-5 -left-2 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700 shadow-xl">↗ {t("landing_v3.profit_up")}</div></div>
-        </div>
-        <svg className="absolute bottom-0 h-14 w-full" viewBox="0 0 1440 80" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30C340 90 890-10 1440 40V80H0Z" fill="white" /></svg>
-      </section>
+      <XpressGroupGateway language={i18n.language} />
 
       <section className="border-y bg-white py-10" aria-label={t("landing_v3.proof")}><div className="mx-auto max-w-6xl px-4">{metrics.length ? <div className="grid grid-cols-2 gap-6 md:grid-cols-4">{metrics.map(([value,label]) => <div key={String(label)} className="text-center"><p className="text-3xl font-black text-[#0D1B4B]">{Number(value).toLocaleString(i18n.language)}+</p><p className="text-sm text-slate-600">{label}</p></div>)}</div> : <p className="text-center font-medium text-slate-600">{t("landing_v3.trusted_across_africa")}</p>}</div></section>
 
