@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import XpressGroupGateway from "./xpressgroup-gateway";
+import FippCountdown from "@/components/fipp-countdown";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
@@ -139,6 +140,8 @@ export default function LandingPage() {
 
     <main id="main-content">
       <XpressGroupGateway language={i18n.language} />
+
+      <section className="bg-[#fffaf0] px-4 py-20 text-[#082550]" aria-labelledby="fipp-home-title"><div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[.8fr_1.2fr]"><div><p className="text-xs font-extrabold uppercase tracking-[.22em] text-[#a57d1b]">{i18n.language.startsWith("fr") ? "Rencontre · 2ᵉ édition" : "Event · 2nd edition"}</p><h2 id="fipp-home-title" className="mt-4 font-serif text-3xl font-bold leading-tight sm:text-5xl">FIPP <span className="text-[#cba52a]">AFRICA</span></h2><p className="mt-3 font-bold uppercase tracking-[.1em]">Forum international des professionnels du pressing</p><p className="mt-5 leading-7 text-slate-700">19 décembre 2026 · Une matinée de conférences, démonstrations et rencontres.</p><Link href="/rencontre" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#cba52a] px-6 py-3 font-bold text-[#082550]">{i18n.language.startsWith("fr") ? "Découvrir la rencontre" : "Explore the event"}<ArrowRight className="h-4 w-4" /></Link></div><FippCountdown compact /></div></section>
 
 
       <section id="about" className="scroll-mt-20 border-b border-slate-200 bg-slate-50 py-14"><div className="mx-auto max-w-6xl px-4"><h2 className="text-2xl font-bold text-[#0D1B4B]">{t("landing_v3.about_company_title")}</h2><p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">{t("landing_v3.about_company_statement")}</p></div></section>
