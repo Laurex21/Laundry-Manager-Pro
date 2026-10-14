@@ -567,7 +567,7 @@ export default function Orders() {
       </Dialog>
 
       {/* Summary chips */}
-      <div className="rounded-2xl border border-primary/10 bg-card p-3 shadow-sm">
+      <div className="rounded-2xl border border-primary/10 bg-card p-3 shadow-sm" data-testid="onboarding-order-status">
         <div className="flex flex-wrap gap-2">
         {chips.map(chip => (
           <button
@@ -631,7 +631,7 @@ export default function Orders() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="h-10 rounded-xl px-4 shadow-sm shadow-primary/20 transition-all hover:-translate-y-px">
+            <Button size="sm" className="h-10 rounded-xl px-4 shadow-sm shadow-primary/20 transition-all hover:-translate-y-px" data-testid="onboarding-new-order">
               <Plus className="w-3.5 h-3.5 mr-1.5" /> {t('new_order')}
             </Button>
           </DialogTrigger>
