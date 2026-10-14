@@ -88,6 +88,8 @@ const LANGUAGES = [
 
 const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
 const PWA_DISMISS_STORAGE_KEY = "xpresspro-install-dismissed-at";
+const guideProgressKey = (userId: string) => `xpresspro-getting-started-v1:${userId}`;
+const guideActiveKey = (userId: string) => `xpresspro-getting-started-active-v1:${userId}`;
 const PWA_DISMISS_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 
 const PAGE_TITLES: Record<string, string> = {
@@ -354,7 +356,12 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!user?.id || (user as any).role !== "owner" || user.legalAcceptance?.required) return;
-    if (!window.localStorage.getItem(`xpresspro-getting-started-v1:${user.id}`)) setGuideOpen(true);
+    const progress = window.localStorage.getItem(guideProgressKey(user.id));
+    const active = window.localStorage.getItem(guideActiveKey(user.id));
+    if (active !== "0" && progress !== "done" && (progress === null || /^[0-4]$/.test(progress))) {
+      window.localStorage.setItem(guideActiveKey(user.id), "1");
+      setGuideOpen(true);
+    }
   }, [user?.id, (user as any)?.role, user?.legalAcceptance?.required]);
 
   useEffect(() => {
@@ -533,7 +540,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
-                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { setGuideRestartToken(value => value + 1); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
+                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { if (user?.id) window.localStorage.setItem(guideActiveKey(user.id), "1"); setGuideRestartToken(value => value + 1); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}
                 </DropdownMenuItem>}
@@ -561,7 +568,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           {children}
         </div>
       </main>
-      {guideOpen && user?.id && <GettingStartedGuide userId={user.id} restartToken={guideRestartToken} onClose={() => setGuideOpen(false)} />}
+      {guideOpen && user?.id && <GettingStartedGuide userId={user.id} restartToken={guideRestartToken} onClose={() => { window.localStorage.setItem(guideActiveKey(user.id), "0"); setGuideOpen(false); }} />}
       <LegalAcceptanceGate />
       <PwaInstallDialog open={installOpen} onOpenChange={handleInstallOpenChange} installer={pwaInstaller} />
 
