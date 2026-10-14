@@ -14,6 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
 import { useAuth } from "@/hooks/use-auth";
 import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
+import { GettingStartedGuide } from "@/components/getting-started-guide";
 import { PwaInstallDialog } from "@/components/pwa-install-dialog";
 import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
@@ -346,16 +347,23 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const { user, logout, planSlug, canAccess } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideRestartToken, setGuideRestartToken] = useState(0);
   const pwaInstaller = usePwaInstall();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
-    if (pwaInstaller.installed || (!pwaInstaller.canInstall && !pwaInstaller.isIosSafari)) return;
+    if (!user?.id || (user as any).role !== "owner" || user.legalAcceptance?.required) return;
+    if (!window.localStorage.getItem(`xpresspro-getting-started-v1:${user.id}`)) setGuideOpen(true);
+  }, [user?.id, (user as any)?.role, user?.legalAcceptance?.required]);
+
+  useEffect(() => {
+    if (guideOpen || pwaInstaller.installed || (!pwaInstaller.canInstall && !pwaInstaller.isIosSafari)) return;
     const dismissedAt = Number(window.localStorage.getItem(PWA_DISMISS_STORAGE_KEY) || 0);
     if (Date.now() - dismissedAt < PWA_DISMISS_DURATION_MS) return;
     const timer = window.setTimeout(() => setInstallOpen(true), 5000);
     return () => window.clearTimeout(timer);
-  }, [pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIosSafari]);
+  }, [guideOpen, pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIosSafari]);
 
   const handleInstallOpenChange = (open: boolean) => {
     setInstallOpen(open);
@@ -525,6 +533,10 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
+                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { setGuideRestartToken(value => value + 1); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
+                  <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
+                  {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}
+                </DropdownMenuItem>}
                 {!pwaInstaller.installed && (
                   <DropdownMenuItem onClick={() => setInstallOpen(true)} data-testid="menu-item-install-xpresspro">
                     <Download className="mr-2 h-4 w-4 text-[#6B5CFF]" aria-hidden="true" />
@@ -549,6 +561,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           {children}
         </div>
       </main>
+      {guideOpen && user?.id && <GettingStartedGuide userId={user.id} restartToken={guideRestartToken} onClose={() => setGuideOpen(false)} />}
       <LegalAcceptanceGate />
       <PwaInstallDialog open={installOpen} onOpenChange={handleInstallOpenChange} installer={pwaInstaller} />
 

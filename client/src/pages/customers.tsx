@@ -102,7 +102,7 @@ export default function Customers() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="h-10 shrink-0 rounded-xl px-4 shadow-sm shadow-primary/20">
+            <Button size="sm" className="h-10 shrink-0 rounded-xl px-4 shadow-sm shadow-primary/20" data-testid="onboarding-add-customer">
               <Plus className="w-4 h-4 mr-1.5" /> {t("add_customer")}
             </Button>
           </DialogTrigger>
