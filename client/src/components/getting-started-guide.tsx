@@ -40,15 +40,24 @@ export function GettingStartedGuide({ userId, restartToken, onClose }: Props) {
   }, [restartToken, userId]);
 
   useEffect(() => {
-    if (location !== current.path) { setRect(null); return; }
-    const update = () => {
-      const target = document.querySelector(current.target);
-      setRect(target?.getBoundingClientRect() ?? null);
+    const routeNav = current.path === "/" ? "dashboard" : current.path.slice(1);
+    const visible = (selector: string) => Array.from(document.querySelectorAll(selector)).find((node) => node.getClientRects().length > 0);
+    const findTarget = () => {
+      if (location === current.path) return visible(current.target);
+      const desktopNav = `[data-testid="nav-${routeNav}"]`;
+      const mobileNav = current.path === "/settings"
+        ? '[data-testid="nav-settings"], [data-testid="bottom-nav-more"]'
+        : `[data-testid="bottom-nav-${routeNav}"]`;
+      return window.matchMedia("(min-width: 1024px)").matches
+        ? visible(desktopNav)
+        : visible(mobileNav);
     };
+    const update = () => setRect(findTarget()?.getBoundingClientRect() ?? null);
     const timer = window.setTimeout(() => {
-      document.querySelector(current.target)?.scrollIntoView({ block: "center", behavior: "smooth" });
+      findTarget()?.scrollIntoView({ block: "center", behavior: "smooth" });
       update();
     }, 350);
+    update();
     window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);
     const observer = new MutationObserver(update);
@@ -77,7 +86,7 @@ export function GettingStartedGuide({ userId, restartToken, onClose }: Props) {
       <div className="flex items-start justify-between gap-2"><p className="text-xs font-bold uppercase tracking-widest text-blue-600">{fr ? "Prise en main" : "Getting started"} · {stepIndex + 1}/{steps.length}</p><button type="button" onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label={fr ? "Fermer le guide" : "Close guide"}><X className="h-4 w-4" /></button></div>
       <div className="mt-3 flex gap-1.5" aria-hidden="true">{steps.map((_, index) => <span key={index} className={`h-1.5 flex-1 rounded-full ${index <= stepIndex ? "bg-blue-600" : "bg-slate-200"}`} />)}</div>
       <h2 className="mt-3 text-lg font-bold sm:mt-5">{current.title}</h2><p className="mt-1 text-sm leading-5 text-slate-600 sm:mt-2 sm:leading-6">{current.description}</p>
-      <p className="mt-3 text-xs font-semibold text-blue-700">{fr ? "Où appuyer :" : "Where to tap:"} <span className="lg:hidden">{current.mobilePath}</span><span className="hidden lg:inline">{current.desktopPath}</span></p>
+      <p className="mt-3 text-xs font-semibold text-blue-700">{fr ? "Cliquez sur l’élément encadré :" : "Tap the highlighted item:"} <span className="lg:hidden">{current.mobilePath}</span><span className="hidden lg:inline">{current.desktopPath}</span></p>
       {location !== current.path && <button type="button" onClick={() => navigate(current.path)} className="mt-3 flex min-h-10 w-full items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">{fr ? `Ouvrir ${current.destination}` : `Open ${current.destination}`}<ChevronRight className="h-4 w-4" /></button>}
       <div className="mt-3 flex items-center justify-between gap-3 sm:mt-5"><button type="button" onClick={finish} className="text-xs font-medium text-slate-500 underline underline-offset-2">{fr ? "Passer le guide" : "Skip guide"}</button><button type="button" onClick={next} className="flex min-h-10 items-center gap-2 rounded-lg border border-blue-200 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Check className="h-4 w-4" />{stepIndex === steps.length - 1 ? (fr ? "Terminer" : "Finish") : (fr ? "J’ai terminé · suite" : "Done · next")}</button></div>
     </aside>
