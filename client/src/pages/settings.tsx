@@ -24,7 +24,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Building2, Receipt, FileText, Users, Save, Plus, Trash2, Copy,
   Link as LinkIcon, Shield, Clock, Upload, X, Globe2, MoreVertical,
-  MessageCircle, QrCode,
+  MessageCircle, QrCode, Download,
   Gift,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -1106,6 +1106,16 @@ export default function Settings() {
         <h1 className="text-2xl font-display font-bold text-[#082D5B] sm:text-3xl">{t("settings")}</h1>
         <p className="text-muted-foreground mt-1">{t("settings_subtitle")}</p>
       </div>
+
+      <Card className="rounded-2xl border-[#082D5B]/15 bg-card shadow-sm" data-testid="settings-install-xpresspro">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#082D5B] text-white"><Download className="h-5 w-5" aria-hidden="true" /></div>
+            <div><h2 className="font-semibold text-[#082D5B]">{t("install_xpresspro", "Installer XpressPro")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("install_xpresspro_settings_desc", "Accédez à l’application depuis l’écran d’accueil de votre téléphone ou le bureau de votre ordinateur.")}</p></div>
+          </div>
+          <Button type="button" variant="outline" className="shrink-0" onClick={() => window.dispatchEvent(new Event("xpresspro:open-install-help"))} data-testid="button-settings-install-help">{t("install_xpresspro_guide", "Voir le guide")}</Button>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="identity">
         <TabsList className="flex h-auto w-full max-w-full gap-1 overflow-x-auto rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm sm:grid sm:max-w-2xl sm:grid-cols-5" data-testid="settings-tabs">
