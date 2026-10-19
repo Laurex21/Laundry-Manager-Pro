@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
 import { useTranslation } from "react-i18next";
 
 const LANGUAGES = [
@@ -82,6 +83,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         return;
       }
 
+      if (tab === "register") trackEvent("signup_completed");
       queryClient.setQueryData(["/api/auth/user"], data);
       setLocation("/");
     } catch {
