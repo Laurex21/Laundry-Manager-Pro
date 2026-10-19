@@ -39,8 +39,8 @@ const LEGAL_META = {
     sections: [
       "Essential cookies support login, authentication, account security, session management, fraud prevention, and core Platform functionality.",
       "Security, preference, performance, analytics, and functionality cookies may support safer access, saved settings, error diagnosis, and product improvement.",
-      "Marketing cookies may be used in the future only where permitted by Applicable Law and, where required, after appropriate consent.",
-      "Users may manage cookies through browser settings or Platform controls where available, but blocking essential cookies may prevent secure Platform access.",
+      "On public marketing pages, the Meta Pixel is loaded only after your explicit consent. It measures page views and selected lead/contact actions without customer, order, or payment details.",
+      "You can accept, refuse, or withdraw marketing consent using the Cookies marketing control on public pages. Previously placed third-party cookies may also be cleared in your browser settings.",
     ],
   },
 } as const;

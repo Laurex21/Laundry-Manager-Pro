@@ -11,6 +11,8 @@ import { useEffect, lazy, Suspense } from "react";
 import LayoutShell from "@/components/layout-shell";
 import { WhatsAppLauncherProvider } from "@/components/whatsapp-launcher";
 import Dashboard from "@/pages/dashboard";
+import MetaConsent from "@/components/meta-consent";
+import { isMetaPixelLoaded } from "@/lib/meta-pixel";
 
 // ─── Lazy-loaded routes (code-split into separate chunks) ─────────────────────
 const NotFound          = lazy(() => import("@/pages/not-found"));
@@ -151,6 +153,12 @@ function ProtectedRoute({ component: Component, page }: { component: React.Compo
     );
   }
 
+  // Never mount private content while a marketing Pixel script is still in this document.
+  if (isMetaPixelLoaded()) {
+    window.location.replace(window.location.pathname + window.location.search);
+    return <PageSkeleton />;
+  }
+
   const hasAccess = !page || canAccess(page);
   return (
     <LayoutShell>
@@ -265,6 +273,7 @@ function App() {
       <TooltipProvider>
         <WhatsAppLauncherProvider>
           <Router />
+          <MetaConsent />
         </WhatsAppLauncherProvider>
         <Toaster />
       </TooltipProvider>

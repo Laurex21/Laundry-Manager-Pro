@@ -1,3 +1,4 @@
+import { trackMetaEvent } from "@/lib/meta-pixel";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -315,7 +316,7 @@ export default function DiagnosticPage() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (data.id) setLeadId(data.id);
+      if (res.ok && data.id) { setLeadId(data.id); trackMetaEvent("Lead", "/diagnostic"); }
       if (data.leadAccessToken) setLeadAccessToken(data.leadAccessToken);
     } catch { /* continue even if save fails */ }
     setSaving(false);

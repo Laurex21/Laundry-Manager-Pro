@@ -1,3 +1,4 @@
+import { trackMetaEvent } from "@/lib/meta-pixel";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -288,6 +289,7 @@ export default function CalculatorPage() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.message);
       setLeadId(d.leadId);
+      trackMetaEvent("Lead", "/calculateur");
       setLeadAccessToken(d.leadAccessToken);
       if (form.email) setUnlocked(true);
       return true;

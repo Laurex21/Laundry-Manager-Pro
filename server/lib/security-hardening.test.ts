@@ -35,7 +35,7 @@ assert.match(tokenSource, /TOKEN_TTL_SECONDS/);
 assert.match(httpSecuritySource, /Content-Security-Policy/);
 assert.match(httpSecuritySource, /Strict-Transport-Security/);
 assert.match(httpSecuritySource, /sec-fetch-site/);
-assert.match(httpSecuritySource, /"connect-src 'self'"/);
+assert.match(httpSecuritySource, /"connect-src 'self' https:\/\/www\.facebook\.com https:\/\/connect\.facebook\.net"/);
 assert.doesNotMatch(httpSecuritySource, /connect-src 'self' https: wss:/);
 assert.match(httpSecuritySource, /originUrl\.host !== req\.get\("host"\)/);
 assert.doesNotMatch(routesSource, /fall back to first authorized site/);

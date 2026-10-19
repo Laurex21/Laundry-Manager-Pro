@@ -7,11 +7,11 @@ const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
   "form-action 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://connect.facebook.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self'",
+  "connect-src 'self' https://www.facebook.com https://connect.facebook.net",
 ].join("; ");
 
 export const securityHeaders: RequestHandler = (_req, res, next) => {
@@ -21,8 +21,8 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
   const contentSecurityPolicy = process.env.NODE_ENV === "production"
     ? PRODUCTION_CONTENT_SECURITY_POLICY
     : PRODUCTION_CONTENT_SECURITY_POLICY
-      .replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
-      .replace("connect-src 'self'", "connect-src 'self' ws: wss:");
+      .replace("script-src 'self' https://connect.facebook.net", "script-src 'self' 'unsafe-inline' https://connect.facebook.net")
+      .replace("connect-src 'self' https://www.facebook.com https://connect.facebook.net", "connect-src 'self' https://www.facebook.com https://connect.facebook.net ws: wss:");
 
   res.setHeader("Content-Security-Policy", contentSecurityPolicy);
   res.setHeader("X-Content-Type-Options", "nosniff");
