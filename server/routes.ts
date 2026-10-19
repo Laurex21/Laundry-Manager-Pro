@@ -41,6 +41,7 @@ import { registerPawapaySandboxCheckoutRoutes } from "./lib/pawapay-sandbox-chec
 import { rateLimit } from "./lib/rate-limit";
 import { and, desc, eq } from "drizzle-orm";
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
+import { GarmentVerificationError } from "./lib/garment-verification";
 
 function sanitizeNumeric(obj: Record<string, any>, fields: string[]): Record<string, any> {
   const out = { ...obj };
@@ -707,7 +708,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const userId = (req.session as any)?.userId || null;
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-    const updated = await storage.updateOrderStatus(Number(req.params.id), input.status, input.paymentStatus, userId);
+    let updated;
+    try {
+      updated = await storage.updateOrderStatus(Number(req.params.id), input.status, input.paymentStatus, userId);
+    } catch (error) {
+      if (error instanceof GarmentVerificationError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
     if (!updated) return res.status(404).json({ message: "Order not found" });
     if (updated.siteId != null) {
       const actionType = input.status === "delivered"
@@ -752,6 +759,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
     const history = await storage.getOrderStatusHistory(Number(req.params.id));
     res.json(history);
+  });
+
+  app.patch("/api/garment-items/:id/verification", isAuthenticated, async (req, res) => {
+    const parsed = z.object({ phase: z.enum(["quality", "handover"]), quantity: z.number().int().min(0) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid garment verification" });
+    const item = await storage.getGarmentItem(Number(req.params.id));
+    if (!item) return res.status(404).json({ message: "Garment not found" });
+    if (!(await canAccessOrder(req, item.orderId))) return res.status(403).json({ message: "Forbidden" });
+    try {
+      const updated = await storage.updateGarmentVerification(item.id, parsed.data.phase, parsed.data.quantity, String((req.session as any)?.userId || "unknown"));
+      const order = await storage.getOrder(item.orderId);
+      if (order?.siteId != null) await trackEmployeeActivity(req, {
+        siteId: order.siteId,
+        actionType: parsed.data.phase === "quality" ? "garment_quality_checked" : "garment_handover_checked",
+        orderId: item.orderId,
+        metadata: { garmentItemId: item.id, previousQuantity: parsed.data.phase === "quality" ? item.qualityCheckedQuantity : item.handedOverQuantity, verifiedQuantity: parsed.data.quantity },
+      });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof GarmentVerificationError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
   });
 
   app.patch("/api/garment-items/:id/return", isAuthenticated, async (req, res) => {
@@ -847,7 +876,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/orders/:id/deliver", isAuthenticated, async (req, res) => {
     if (!(await canAccessOrder(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
-    const updated = await storage.markDelivered(Number(req.params.id), new Date());
+    let updated;
+    try {
+      updated = await storage.markDelivered(Number(req.params.id), new Date());
+    } catch (error) {
+      if (error instanceof GarmentVerificationError) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
     if (!updated) return res.status(404).json({ message: "Order not found" });
     if (updated.siteId != null) {
       await trackEmployeeActivity(req, {

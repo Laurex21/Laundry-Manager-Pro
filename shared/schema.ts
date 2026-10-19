@@ -66,6 +66,7 @@ export const orders = pgTable("orders", {
   customerId: integer("customer_id").notNull().references(() => customers.id),
   createdByEmployeeId: integer("created_by_employee_id"),
   status: text("status").notNull().default("received"),
+  requiresGarmentVerification: boolean("requires_garment_verification").notNull().default(false),
   totalAmount: decimal("total_amount", { precision: 18, scale: 6 }).notNull().default("0"),
   paymentStatus: text("payment_status").notNull().default("unpaid"),
   entryDate: timestamp("entry_date").defaultNow(),
@@ -164,6 +165,12 @@ export const garmentItems = pgTable("garment_items", {
   color: varchar("color", { length: 40 }),
   textileReserve: text("textile_reserve"),
   quantity: integer("quantity").notNull().default(1),
+  qualityCheckedQuantity: integer("quality_checked_quantity").notNull().default(0),
+  handedOverQuantity: integer("handed_over_quantity").notNull().default(0),
+  qualityCheckedAt: timestamp("quality_checked_at"),
+  qualityCheckedBy: varchar("quality_checked_by"),
+  handedOverAt: timestamp("handed_over_at"),
+  handedOverBy: varchar("handed_over_by"),
   returnedForTreatment: boolean("returned_for_treatment").default(false),
   returnStage: text("return_stage"),
   returnNotes: text("return_notes"),
@@ -957,7 +964,7 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: t
 export const insertPaymentSchema = createInsertSchema(payments)
   .omit({ id: true })
   .extend({ date: z.coerce.date().optional() });
-export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true, returnedForTreatment: true, returnStage: true, returnNotes: true, returnedAt: true, resolvedAt: true });
+export const insertGarmentItemSchema = createInsertSchema(garmentItems).omit({ id: true, returnedForTreatment: true, returnStage: true, returnNotes: true, returnedAt: true, resolvedAt: true, qualityCheckedQuantity: true, handedOverQuantity: true, qualityCheckedAt: true, qualityCheckedBy: true, handedOverAt: true, handedOverBy: true });
 export const insertExpenditureSchema = createInsertSchema(expenditures).omit({ id: true });
 export const insertMachineSchema = createInsertSchema(machines).omit({ id: true, createdAt: true, cycleCount: true, totalKgProcessed: true, utilizationRate: true });
 export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true, createdAt: true, productivityScore: true });

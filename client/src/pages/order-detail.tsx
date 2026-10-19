@@ -104,6 +104,7 @@ export default function OrderDetail() {
   const isManager = userRole === "manager" || isOwner;
 
   const [returnGarmentId, setReturnGarmentId] = useState<number | null>(null);
+  const [checkingGarment, setCheckingGarment] = useState<string | null>(null);
   const [returnStage, setReturnStage] = useState("washing");
   const [returnNotes, setReturnNotes] = useState("");
 
@@ -148,6 +149,11 @@ export default function OrderDetail() {
   const totalRegisteredGarments = (order.garmentItems || []).reduce((sum: number, garment: any) => {
     return sum + Math.max(0, Number(garment.quantity) || 0);
   }, 0);
+  const qualityCheckedCount = (order.garmentItems || []).reduce((sum: number, g: any) => sum + Number(g.qualityCheckedQuantity || 0), 0);
+  const handedOverCount = (order.garmentItems || []).reduce((sum: number, g: any) => sum + Number(g.handedOverQuantity || 0), 0);
+  const customerHandoverComplete = !order.requiresGarmentVerification || (totalRegisteredGarments > 0 && handedOverCount === totalRegisteredGarments && qualityCheckedCount === totalRegisteredGarments && !hasReturnedItems);
+  const qualityCheckOpen = currentStageIndex >= getStageIndex("ironing") && !["delivered", "cancelled", "cancellation_requested"].includes(order.status);
+  const customerHandoverOpen = order.status === "ready";
   const totalPaid = (order.payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
   const balanceDue = Math.max(0, Number(order.totalAmount) - totalPaid);
   const readyWhatsAppPhone = normalizeWhatsAppPhone(order.customer?.phone);
@@ -167,6 +173,26 @@ export default function OrderDetail() {
 
   function handleSetStatus(status: string) {
     updateStatus({ id: orderId, status });
+  }
+
+  async function handleGarmentVerification(garmentId: number, phase: "quality" | "handover", quantity: number) {
+    const key = `${garmentId}-${phase}`;
+    setCheckingGarment(key);
+    try {
+      const res = await fetch(`/api/garment-items/${garmentId}/verification`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ phase, quantity }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || t("verification_failed", "Verification could not be saved"));
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
+    } catch (error: any) {
+      toast({ title: t("error"), description: error?.message, variant: "destructive" });
+    } finally {
+      setCheckingGarment(null);
+    }
   }
 
   async function handleMarkReturned() {
@@ -402,6 +428,10 @@ export default function OrderDetail() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || t("verification_failed", "Verification could not be saved"));
+      }
       if (res.ok) {
         toast({ title: t("mark_as_delivered"), description: t("order_delivered_on", { date: formatBusinessDateTime(new Date()) }) });
         queryClient.invalidateQueries({ queryKey: ["/api/orders/:id", orderId] });
@@ -409,7 +439,7 @@ export default function OrderDetail() {
         queryClient.invalidateQueries({ queryKey: ["/api/analytics/storage-occupancy"] });
         setDeliverDialogOpen(false);
       }
-    } catch { toast({ title: t("error"), variant: "destructive" }); }
+    } catch (error: any) { toast({ title: t("error"), description: error?.message, variant: "destructive" }); }
   }
 
   return (
@@ -609,7 +639,7 @@ export default function OrderDetail() {
               </>
             ) : order.status === "ready" ? (
               <>
-                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} data-testid="button-mark-delivered">
+                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} disabled={!customerHandoverComplete} data-testid="button-mark-delivered">
                   <CalendarCheck className="w-4 h-4 mr-1" /> {t("mark_as_delivered")}
                 </Button>
               </>
@@ -808,9 +838,16 @@ export default function OrderDetail() {
               <p className="text-sm text-muted-foreground italic">{t("no_garment_items")}</p>
             ) : (
               <div className="space-y-2">
+                {order.requiresGarmentVerification && (
+                  <div className="rounded-lg border bg-primary/5 p-3 text-sm" data-testid="garment-verification-summary">
+                    <p className="font-semibold">{t("garment_internal_qc", "Internal quality and quantity control")}: {qualityCheckedCount}/{totalRegisteredGarments}</p>
+                    <p>{t("garment_customer_handover", "Counted with customer")}: {handedOverCount}/{totalRegisteredGarments}</p>
+                    {!qualityCheckOpen && <p className="text-muted-foreground">{t("garment_qc_wait", "Checks open at the ironing stage")}</p>}
+                  </div>
+                )}
                 {order.garmentItems?.map((g: any) => (
                   <div key={g.id} className={cn(
-                    "flex items-center justify-between p-2 rounded-lg text-sm",
+                    "flex flex-col gap-2 p-2 rounded-lg text-sm lg:flex-row lg:items-center lg:justify-between",
                     g.returnedForTreatment && !g.resolvedAt ? "bg-orange-50 dark:bg-orange-950/10 border border-orange-200" : "bg-muted/30"
                   )} data-testid={`garment-item-${g.id}`}>
                     <div className="flex items-center gap-2">
@@ -825,6 +862,21 @@ export default function OrderDetail() {
                         <Badge variant="outline" className="text-[10px] border-green-300 text-green-600">{t("resolved")}</Badge>
                       )}
                     </div>
+                    {order.requiresGarmentVerification && (
+                      <div className="flex flex-wrap gap-3" data-testid={`garment-verification-${g.id}`}>
+                        {(["quality", "handover"] as const).map((phase) => {
+                          const value = Number(phase === "quality" ? g.qualityCheckedQuantity : g.handedOverQuantity) || 0;
+                          const enabled = phase === "quality" ? qualityCheckOpen : customerHandoverOpen && Number(g.qualityCheckedQuantity) === Number(g.quantity);
+                          const blocked = !enabled || checkingGarment !== null || (g.returnedForTreatment && !g.resolvedAt);
+                          return <div key={phase} className="rounded-md border bg-background px-2 py-1" aria-label={phase === "quality" ? t("garment_internal_qc", "Internal QC") : t("garment_customer_handover", "With customer")}>
+                            <span className="mr-2 text-xs font-medium">{phase === "quality" ? t("garment_internal_qc_short", "Internal QC") : t("garment_customer_handover_short", "With customer")}</span>
+                            <Button size="icon" variant="outline" className="h-7 w-7" disabled={blocked || value === 0} onClick={() => handleGarmentVerification(g.id, phase, value - 1)} aria-label={`${phase} ${g.itemName}: -1`}>−</Button>
+                            <span className="inline-block min-w-12 text-center font-mono">{value}/{g.quantity}</span>
+                            <Button size="icon" variant="outline" className="h-7 w-7" disabled={blocked || value >= Number(g.quantity)} onClick={() => handleGarmentVerification(g.id, phase, value + 1)} aria-label={`${phase} ${g.itemName}: +1`}>+</Button>
+                          </div>;
+                        })}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1">
                       {g.returnedForTreatment && !g.resolvedAt ? (
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleResolveReturn(g.id)} data-testid={`button-resolve-${g.id}`}>
@@ -1052,7 +1104,7 @@ export default function OrderDetail() {
 
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>{t("cancel")}</Button>
-              <Button onClick={handleMarkDelivered} data-testid="button-confirm-deliver">
+              <Button onClick={handleMarkDelivered} disabled={!customerHandoverComplete} data-testid="button-confirm-deliver">
                 <CalendarCheck className="w-4 h-4 mr-1" /> {t("confirm_delivery")}
               </Button>
             </div>

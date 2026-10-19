@@ -29,6 +29,7 @@ import { formatReportingDay, reportingDateRange, reportingDateString, reportingW
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
+import { canCheckQuality, canCheckHandover, handoverComplete, GarmentVerificationError } from "./lib/garment-verification";
 
 let businessSettingsSchemaReady = false;
 
@@ -77,6 +78,7 @@ export interface IStorage {
   getCustomerOrders(customerId: number): Promise<any[]>;
 
   getGarmentItem(id: number): Promise<GarmentItem | undefined>;
+  updateGarmentVerification(id: number, phase: "quality" | "handover", quantity: number, actor: string): Promise<GarmentItem>;
   markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined>;
   resolveGarmentReturn(id: number): Promise<GarmentItem | undefined>;
 
@@ -347,7 +349,7 @@ export class DatabaseStorage implements IStorage {
   async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order> {
     await ensureOrderItemQuantitySupportsDecimals();
     const created = await db.transaction(async (tx) => {
-      const [order] = await tx.insert(orders).values(insertOrder).returning();
+      const [order] = await tx.insert(orders).values({ ...insertOrder, requiresGarmentVerification: !!garments?.length }).returning();
       let orderWithNumber = { ...order, orderNumber: order.id };
       if (typeof order.siteId === "number") {
         const siteRows = await tx.select({ id: orders.id })
@@ -385,6 +387,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined> {
+    if (status === "delivered") {
+      return db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`);
+        const [order] = await tx.select().from(orders).where(eq(orders.id, id)).limit(1);
+        if (!order) return undefined;
+        if (order.status === "delivered") return order;
+        if (order.requiresGarmentVerification) {
+          const garments = await tx.select().from(garmentItems).where(eq(garmentItems.orderId, id));
+          if (!handoverComplete(garments)) throw new GarmentVerificationError("Complete all garment checks with the customer before delivery");
+        }
+        const [updated] = await tx.update(orders).set({ status, paymentStatus: paymentStatus || order.paymentStatus, deliveredAt: order.deliveredAt ?? new Date(), updatedAt: new Date() }).where(eq(orders.id, id)).returning();
+        if (updated) await tx.insert(orderStatusHistory).values({ orderId: id, status, changedBy: changedBy || null });
+        return updated;
+      });
+    }
     const [existing] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!existing) return undefined;
     const now = new Date();
@@ -463,18 +480,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markDelivered(id: number, deliveredAt: Date): Promise<Order | undefined> {
-    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM orders WHERE id = ${id} FOR UPDATE`);
+    const [order] = await tx.select().from(orders).where(eq(orders.id, id));
     if (!order) return undefined;
+    if (order.status === "delivered") return order;
+    if (order.requiresGarmentVerification) {
+      const garments = await tx.select().from(garmentItems).where(eq(garmentItems.orderId, id));
+      if (!handoverComplete(garments)) throw new GarmentVerificationError("Complete all garment checks with the customer before delivery");
+    }
     const serverDeliveredAt = new Date();
 
-    const [updated] = await db.update(orders).set({
+    const [updated] = await tx.update(orders).set({
       status: "delivered",
       deliveredAt: order.deliveredAt ?? serverDeliveredAt,
       updatedAt: new Date(),
     }).where(eq(orders.id, id)).returning();
 
     if (updated) {
-      await db.insert(orderStatusHistory).values({
+      await tx.insert(orderStatusHistory).values({
         orderId: id,
         status: "delivered",
         notes: `Delivered on ${deliveredAt.toISOString().split('T')[0]}`,
@@ -482,7 +506,7 @@ export class DatabaseStorage implements IStorage {
 
       const effectiveDeliveredAt = updated.deliveredAt ? new Date(updated.deliveredAt) : serverDeliveredAt;
       const isOnTime = !order.pickupDate || effectiveDeliveredAt <= new Date(order.pickupDate);
-      await db.update(customers)
+      await tx.update(customers)
         .set({
           totalDeliveries: sql`${customers.totalDeliveries} + 1`,
           onTimeDeliveries: isOnTime
@@ -495,6 +519,7 @@ export class DatabaseStorage implements IStorage {
         .where(eq(customers.id, order.customerId));
     }
     return updated;
+    });
   }
 
   async getProductionDelays(siteId: number | number[] | null): Promise<any[]> {
@@ -701,9 +726,39 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
+  async updateGarmentVerification(id: number, phase: "quality" | "handover", quantity: number, actor: string): Promise<GarmentItem> {
+    return db.transaction(async (tx) => {
+      const [lookup] = await tx.select({ orderId: garmentItems.orderId }).from(garmentItems).where(eq(garmentItems.id, id));
+      if (!lookup) throw new GarmentVerificationError("Garment not found", 404);
+      await tx.execute(sql`SELECT id FROM orders WHERE id = ${lookup.orderId} FOR UPDATE`);
+      const [order] = await tx.select().from(orders).where(eq(orders.id, lookup.orderId));
+      const [item] = await tx.select().from(garmentItems).where(eq(garmentItems.id, id));
+      if (!order || !item) throw new GarmentVerificationError("Garment not found", 404);
+      if (!order.requiresGarmentVerification) throw new GarmentVerificationError("This order predates garment verification");
+      if (!Number.isInteger(quantity) || quantity < 0 || quantity > item.quantity) throw new GarmentVerificationError("Invalid verified quantity", 400);
+      if (item.returnedForTreatment && !item.resolvedAt) throw new GarmentVerificationError("Resolve the garment return before verification");
+      if (phase === "quality") {
+        if (!canCheckQuality(order.status)) throw new GarmentVerificationError("Quality checks open at the ironing stage");
+        if (quantity < item.handedOverQuantity) throw new GarmentVerificationError("Quality count cannot be below handed-over count");
+        const [updated] = await tx.update(garmentItems).set({
+          qualityCheckedQuantity: quantity, qualityCheckedAt: new Date(), qualityCheckedBy: actor,
+        }).where(eq(garmentItems.id, id)).returning();
+        return updated;
+      }
+      if (!canCheckHandover(order.status)) throw new GarmentVerificationError("Customer handover opens when the order is ready");
+      if (item.qualityCheckedQuantity !== item.quantity) throw new GarmentVerificationError("Complete internal quality and quantity control first");
+      const [updated] = await tx.update(garmentItems).set({
+        handedOverQuantity: quantity, handedOverAt: new Date(), handedOverBy: actor,
+      }).where(eq(garmentItems.id, id)).returning();
+      return updated;
+    });
+  }
+
   async markGarmentReturned(id: number, returnStage: string, returnNotes?: string): Promise<GarmentItem | undefined> {
     const [updated] = await db.update(garmentItems).set({
       returnedForTreatment: true,
+      qualityCheckedQuantity: 0, handedOverQuantity: 0,
+      qualityCheckedAt: null, qualityCheckedBy: null, handedOverAt: null, handedOverBy: null,
       returnStage,
       returnNotes: returnNotes || null,
       returnedAt: new Date(),
