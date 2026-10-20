@@ -9,8 +9,11 @@ export function usePwaInstall() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
-  const isIos = useMemo(() => /iphone|ipad|ipod/i.test(userAgent), [userAgent]);
-  const isSafari = useMemo(() => /^((?!chrome|android|crios|fxios).)*safari/i.test(userAgent), [userAgent]);
+  const isIos = useMemo(() => /iphone|ipad|ipod/i.test(userAgent)
+    || (typeof navigator !== "undefined" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1), [userAgent]);
+  const isAndroid = useMemo(() => /android/i.test(userAgent), [userAgent]);
+  const isSafari = useMemo(() => /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(userAgent), [userAgent]);
+  const isMacSafari = useMemo(() => /macintosh/i.test(userAgent) && isSafari && !isIos, [userAgent, isSafari, isIos]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -34,5 +37,5 @@ export function usePwaInstall() {
     return choice.outcome === "accepted";
   };
 
-  return { canInstall: Boolean(installPrompt), install, installed, isIosSafari: isIos && isSafari };
+  return { canInstall: Boolean(installPrompt), install, installed, isIos, isAndroid, isMacSafari, isIosSafari: isIos && isSafari };
 }

@@ -87,10 +87,10 @@ const LANGUAGES = [
 ];
 
 const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
-const PWA_DISMISS_STORAGE_KEY = "xpresspro-install-dismissed-at";
+const PWA_LEGACY_DISMISS_STORAGE_KEY = "xpresspro-install-dismissed-at";
+const pwaSuggestionKey = (userId: string) => `xpresspro-install-suggested-v1:${userId}`;
 const guideProgressKey = (userId: string) => `xpresspro-getting-started-v1:${userId}`;
 const guideActiveKey = (userId: string) => `xpresspro-getting-started-active-v1:${userId}`;
-const PWA_DISMISS_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "dashboard",
@@ -365,17 +365,29 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   }, [user?.id, (user as any)?.role, user?.legalAcceptance?.required]);
 
   useEffect(() => {
-    if (guideOpen || pwaInstaller.installed || (!pwaInstaller.canInstall && !pwaInstaller.isIosSafari)) return;
-    const dismissedAt = Number(window.localStorage.getItem(PWA_DISMISS_STORAGE_KEY) || 0);
-    if (Date.now() - dismissedAt < PWA_DISMISS_DURATION_MS) return;
-    const timer = window.setTimeout(() => setInstallOpen(true), 5000);
+    if (!user?.id || location !== "/dashboard" || user.legalAcceptance?.required || guideOpen || pwaInstaller.installed
+      || (!pwaInstaller.canInstall && !pwaInstaller.isIos && !pwaInstaller.isAndroid && !pwaInstaller.isMacSafari)) return;
+    try {
+      // Existing users who dismissed the old prompt should not be interrupted again.
+      if (window.localStorage.getItem(pwaSuggestionKey(user.id)) || window.localStorage.getItem(PWA_LEGACY_DISMISS_STORAGE_KEY)) return;
+    } catch { return; }
+    const timer = window.setTimeout(() => {
+      try { window.localStorage.setItem(pwaSuggestionKey(user.id), "shown"); } catch { return; }
+      setInstallOpen(true);
+    }, 5000);
     return () => window.clearTimeout(timer);
-  }, [guideOpen, pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIosSafari]);
+  }, [location, user?.id, user?.legalAcceptance?.required, guideOpen, pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIos, pwaInstaller.isAndroid, pwaInstaller.isMacSafari]);
+
+  useEffect(() => {
+    const openInstallHelp = () => setInstallOpen(true);
+    window.addEventListener("xpresspro:open-install-help", openInstallHelp);
+    return () => window.removeEventListener("xpresspro:open-install-help", openInstallHelp);
+  }, []);
 
   const handleInstallOpenChange = (open: boolean) => {
     setInstallOpen(open);
-    if (!open && !pwaInstaller.installed) {
-      window.localStorage.setItem(PWA_DISMISS_STORAGE_KEY, String(Date.now()));
+    if (!open && user?.id) {
+      try { window.localStorage.setItem(pwaSuggestionKey(user.id), "shown"); } catch { /* Storage may be disabled. */ }
     }
   };
 

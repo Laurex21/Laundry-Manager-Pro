@@ -28,9 +28,14 @@ test("authenticated shell exposes the install entry and branded dialog", () => {
   const dialog = read("client/src/components/pwa-install-dialog.tsx");
   const html = read("client/index.html");
   assert.match(shell, /menu-item-install-xpresspro/);
-  assert.match(shell, /PWA_DISMISS_DURATION_MS/);
+  assert.match(shell, /pwaSuggestionKey/);
+  assert.match(shell, /location !== "\/dashboard"/);
+  assert.match(shell, /PWA_LEGACY_DISMISS_STORAGE_KEY/);
+  assert.match(read("client/src/pages/settings.tsx"), /button-settings-install-help/);
   assert.match(dialog, /Installer XpressPro/);
   assert.match(dialog, /Sur l’écran d’accueil/);
+  assert.match(dialog, /androidText/);
+  assert.match(dialog, /macText/);
   assert.match(html, /manifest\.webmanifest/);
   assert.match(html, /apple-touch-icon\.png/);
 });
