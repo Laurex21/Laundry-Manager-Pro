@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { generateSubscriberReceiptHTML, generateSubscriberThermalReceiptHTML, generateSubscriptionPaymentReceiptHTML } from "./subscription-receipt";
 import { buildMembershipCard } from "./membership-card-generator";
+import { buildLoyaltyCard } from "./loyalty-card-generator";
 import { createPendingSubscriptionNotification } from "./subscription-notifications";
 import { usageThresholdCrossed } from "./subscription-formulas";
 import { awardRenewalPoints, LoyaltyRedemptionError, redeemLoyaltyReward } from "./loyalty";
@@ -351,6 +352,25 @@ export function registerMembershipRoutes(app: Express) {
       rewardValue: program?.program.rewardValue ?? "500",
       canRedeem: Boolean(program && customer.loyaltyPoints >= program.program.rewardPointsRequired),
     });
+  });
+
+  app.get("/api/customers/:id/loyalty/card", isAuthenticated, async (req: any, res) => {
+    const organisationId = await organisationIdFor(req);
+    const customerId = Number(req.params.id);
+    if (!organisationId || !Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ message: "Invalid customer" });
+    const customer = await customerInOrganisation(customerId, organisationId, siteScope(req));
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    const [branding] = await db.select({ businessName: businessSettings.businessName })
+      .from(organisations)
+      .innerJoin(businessSettings, and(eq(businessSettings.userId, organisations.ownerId), eq(businessSettings.loyaltyProgramEnabled, true)))
+      .innerJoin(loyaltyProgram, and(eq(loyaltyProgram.organisationId, organisations.id), eq(loyaltyProgram.isActive, true)))
+      .where(eq(organisations.id, organisationId)).limit(1);
+    if (!branding) return res.status(404).json({ message: "Loyalty program unavailable" });
+    const png = await buildLoyaltyCard(customer, organisationId, branding.businessName);
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "private, no-store");
+    if (req.query.download === "1") res.setHeader("Content-Disposition", `attachment; filename="loyalty-${customerId}.png"`);
+    res.send(png);
   });
 
   app.post("/api/customers/:id/loyalty/redeem", isAuthenticated, subscriptionWriteLimiter, async (req: any, res) => {
