@@ -8,12 +8,12 @@ type Copy = {
 
 const french: Copy = {
   eyebrow: "Un groupe · trois métiers complémentaires", first: "Former. Gérer. Servir.", second: "Faire avancer le pressing.",
-  subtitle: "XpressGroup relie l’expertise terrain, les services de blanchisserie et les outils numériques pour faire progresser l’entretien textile en Afrique.",
+  subtitle: "Vous gérez un pressing, souhaitez vous former ou cherchez un service pour votre linge ? Choisissez le parcours qui correspond à votre besoin.",
   explore: "Explorer les 3 activités", approach: "Découvrir XpressPro",
   branches: [
-    { category: "Logiciel de gestion", name: "XpressPro", description: "Commandes, clients, paiements et activité de votre pressing dans une même plateforme.", action: "Découvrir la plateforme", image: "/xpressgroup/pro.webp", alt: "Responsable suivant l’activité d’un pressing", href: "/xpresspro", tone: "bg-[#edf3ff]", accent: "text-[#145dda]" },
-    { category: "Conseil & formation", name: "Xpress Consulting", description: "Se former, lancer son pressing et structurer l’exploitation avec un accompagnement concret.", action: "Voir l’accompagnement", image: "/xpressgroup/consulting.webp", alt: "Formation pratique en blanchisserie", href: "/xpress-consulting", tone: "bg-[#fff6e8]", accent: "text-[#9b621b]" },
-    { category: "Pressing & blanchisserie", name: "Xpress Clean", description: "Un service de soin du linge pour les particuliers et les professionnels à Douala.", action: "Voir les services", image: "/xpressgroup/clean.webp", alt: "Accueil d’une cliente dans un pressing", href: "/xpress-clean", tone: "bg-[#e8f8fa]", accent: "text-[#008da8]" },
+    { category: "Logiciel de gestion", name: "XpressPro", description: "Commandes, clients, paiements et activité de votre pressing dans une même plateforme.", action: "Gérer mon pressing", image: "/xpressgroup/pro.webp", alt: "Responsable suivant l’activité d’un pressing", href: "/xpresspro", tone: "bg-[#edf3ff]", accent: "text-[#145dda]" },
+    { category: "Conseil & formation", name: "Xpress Consulting", description: "Se former, lancer son pressing et structurer l’exploitation avec un accompagnement concret.", action: "Me former et développer mon activité", image: "/xpressgroup/consulting.webp", alt: "Formation pratique en blanchisserie", href: "/xpress-consulting", tone: "bg-[#fff6e8]", accent: "text-[#9b621b]" },
+    { category: "Pressing & blanchisserie", name: "Xpress Clean", description: "Un service de soin du linge pour les particuliers et les professionnels à Douala.", action: "Faire entretenir mon linge", image: "/xpressgroup/clean.webp", alt: "Accueil d’une cliente dans un pressing", href: "/xpress-clean", tone: "bg-[#e8f8fa]", accent: "text-[#008da8]" },
   ],
   methodEyebrow: "Notre logique", methodTitle: "Du terrain à la technologie. Et toujours dans cet ordre.",
   methodBody: "Xpress Clean vit la réalité des opérations. Xpress Consulting transmet les méthodes. XpressPro aide à les suivre au quotidien. Chaque branche a sa mission ; ensemble, elles forment un écosystème cohérent.",
@@ -21,12 +21,12 @@ const french: Copy = {
 
 const english: Copy = {
   eyebrow: "One group · three complementary businesses", first: "Train. Manage. Serve.", second: "Move laundry forward.",
-  subtitle: "XpressGroup connects hands-on expertise, laundry services and digital tools to advance textile care across Africa.",
+  subtitle: "Do you run a laundry business, want professional training or need your laundry cared for? Choose the path that matches your needs.",
   explore: "Explore the 3 businesses", approach: "Discover XpressPro",
   branches: [
-    { category: "Management software", name: "XpressPro", description: "Orders, customers, payments and operations in one platform for your laundry business.", action: "Explore the platform", image: "/xpressgroup/pro.webp", alt: "Manager overseeing laundry operations", href: "/xpresspro", tone: "bg-[#edf3ff]", accent: "text-[#145dda]" },
-    { category: "Consulting & training", name: "Xpress Consulting", description: "Learn the trade, launch your laundry and organise operations with practical support.", action: "Explore consulting", image: "/xpressgroup/consulting.webp", alt: "Practical laundry training", href: "/xpress-consulting", tone: "bg-[#fff6e8]", accent: "text-[#9b621b]" },
-    { category: "Laundry services", name: "Xpress Clean", description: "Professional garment care for households and businesses in Douala.", action: "Explore services", image: "/xpressgroup/clean.webp", alt: "Customer welcomed at a laundry", href: "/xpress-clean", tone: "bg-[#e8f8fa]", accent: "text-[#008da8]" },
+    { category: "Management software", name: "XpressPro", description: "Orders, customers, payments and operations in one platform for your laundry business.", action: "Manage my laundry business", image: "/xpressgroup/pro.webp", alt: "Manager overseeing laundry operations", href: "/xpresspro", tone: "bg-[#edf3ff]", accent: "text-[#145dda]" },
+    { category: "Consulting & training", name: "Xpress Consulting", description: "Learn the trade, launch your laundry and organise operations with practical support.", action: "Get training and grow my business", image: "/xpressgroup/consulting.webp", alt: "Practical laundry training", href: "/xpress-consulting", tone: "bg-[#fff6e8]", accent: "text-[#9b621b]" },
+    { category: "Laundry services", name: "Xpress Clean", description: "Professional garment care for households and businesses in Douala.", action: "Have my laundry cared for", image: "/xpressgroup/clean.webp", alt: "Customer welcomed at a laundry", href: "/xpress-clean", tone: "bg-[#e8f8fa]", accent: "text-[#008da8]" },
   ],
   methodEyebrow: "Our approach", methodTitle: "From real operations to technology. In that order.",
   methodBody: "Xpress Clean experiences daily operations. Xpress Consulting teaches the methods. XpressPro helps teams track them. Each business has a clear job; together they form one connected ecosystem.",
@@ -41,9 +41,8 @@ export default function XpressGroupGateway({ language }: { language: string }) {
           <p className="text-xs font-extrabold uppercase tracking-[.2em] text-blue-700">{copy.eyebrow}</p>
           <h1 className="mt-6 text-4xl font-black leading-[1.06] tracking-[-.055em] sm:text-6xl lg:text-7xl"><span className="text-blue-600">{copy.first}</span><br />{copy.second}</h1>
           <p className="mx-auto mt-7 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">{copy.subtitle}</p>
-          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <a href="/xpresspro" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 font-bold text-white hover:bg-blue-700">{copy.approach}<ArrowRight className="h-4 w-4" /></a>
-            <a href="#branch-cards" className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#0D1B4B] px-6 py-3 font-bold hover:bg-white sm:hidden">{copy.explore}</a>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
+            {copy.branches.map(branch => <a key={branch.href} href={branch.href} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-blue-600 bg-white px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-50">{branch.action}<ArrowRight className="h-4 w-4 shrink-0" /></a>)}
           </div>
         </div>
         <div id="branch-cards" className="mt-16 grid scroll-mt-24 gap-5 md:grid-cols-3">
