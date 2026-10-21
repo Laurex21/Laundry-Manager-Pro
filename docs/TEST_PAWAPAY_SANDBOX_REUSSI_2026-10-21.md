@@ -48,3 +48,7 @@ Des signatures périmées ont été rejetées lors du diagnostic, conformément 
 ## Fin de session
 
 Les quatre URL Sandbox temporaires ont été retirées, puis leur absence vérifiée après rechargement du tableau de bord. Les processus de test (PID 2627 et 2164) sont arrêtés. Replit avait ajouté automatiquement deux blocs de ports dans `.replit` : le diff ne contenait que ces deux blocs ; ils ont été retirés. Les paiements fictifs restent dans l’historique Sandbox du marchand pour traçabilité. Les données commerciales réelles restent inchangées.
+
+## Complément : première notification Checkout sans rapprochement
+
+La limite décrite pour le premier contrôle a ensuite été levée par un **nouveau** paiement fictif Pro de 10 999 XAF : checkout `50fc7531-8f9b-484f-8f93-63862f786395`, facture `3eb8c0d8-972b-4fee-8ae4-4c342129eb61`. Première notification Checkout signée acceptée HTTP 200 à 21:11:09.635 UTC (22:11:09 à Douala), activation Pro et facture payée sans tâche de secours. Voir le résultat et le nettoyage dans [la préparation production](PAWAPAY_PREPARATION_PRODUCTION_2026-10-21.md). Les refus/annulations/expirations et doublons supplémentaires ont été vérifiés sur les véritables routes en DB mémoire avec signatures générées localement ; ne pas les présenter comme de nouveaux paiements marchands réels.

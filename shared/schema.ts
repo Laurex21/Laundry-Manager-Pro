@@ -1150,6 +1150,7 @@ export const saasAccounts = pgTable("saas_accounts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export const saasInvoices = pgTable("saas_invoices", {
+  providerEnvironment: text("provider_environment").notNull().default("sandbox"),
   id: uuid("id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
   quote: jsonb("quote").notNull(),

@@ -2,9 +2,11 @@ import { sql } from "drizzle-orm";
 import { pool } from "../db";
 import { SaasError, SaasStore, type SaasExecutor, type SaasDatabase } from "./saas-store";
 
-// No live mode exists in this implementation. Production is never enabled by default.
+import { saasEnvironment } from "./saas-environment";
+
+// Live requires explicit approval, production-only credentials and a permanent origin.
 export function saasEnabled() {
-  return process.env.SAAS_BILLING_MODE === "sandbox" && process.env.NODE_ENV !== "production";
+  return saasEnvironment() !== null;
 }
 export function drizzleSaasExecutor(tx: any): SaasExecutor {
   return { query: async (text, params = []) => {
@@ -23,7 +25,7 @@ const database: SaasDatabase = {
     finally { client.release(); }
   },
 };
-export const saasStore = new SaasStore(database);
+export const saasStore = new SaasStore(database, undefined, process.env.SAAS_BILLING_MODE === "live" ? "live" : "sandbox");
 export async function saasForOrganisation(org: number) {
   if (!saasEnabled()) return null;
   try { return await saasStore.current(org); } catch (error) {

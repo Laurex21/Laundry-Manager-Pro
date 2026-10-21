@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS saas_accounts (
 );
 CREATE TABLE IF NOT EXISTS saas_invoices (
  id uuid PRIMARY KEY, organisation_id integer NOT NULL REFERENCES organisations(id),
+ provider_environment text NOT NULL DEFAULT 'sandbox',
  quote jsonb NOT NULL, total_xaf integer NOT NULL CHECK(total_xaf >= 0),
  status varchar(20) NOT NULL DEFAULT 'quoted', checkout_id uuid UNIQUE, checkout_code text,
  redirect_url text, provider_status varchar(20), payment_source text, paid_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()

@@ -1,13 +1,15 @@
 import { SaasError, SaasStore, type SaasInvoice } from "./saas-store";
 
-const API = "https://api.sandbox.pawapay.io/v2/checkouts";
-/** No live URL or live-token fallback. Provider is replaceable in isolated tests only. */
-export class SaasPawapaySandbox {
-  constructor(readonly store: SaasStore, readonly token: () => string | undefined, readonly request: typeof fetch = fetch) {}
+import { PAWAPAY_ENDPOINTS, saasEnvironment, type SaasMode } from "./saas-environment";
+/** Fixed provider origins; credentials never fall back between environments. */
+export class SaasPawapay {
+  constructor(readonly store: SaasStore, readonly token: () => string | undefined, readonly request: typeof fetch = fetch, readonly mode: SaasMode = "sandbox") {
+    if (store.environment !== mode) throw new SaasError("PROVIDER_ENVIRONMENT_MISMATCH");
+  }
   private async call(path: string, body?: unknown) {
     const token = this.token();
     if (!token) throw new SaasError("SANDBOX_TOKEN_NOT_CONFIGURED", 503);
-    const response = await this.request(API + path, { method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(10_000),
+    const response = await this.request(PAWAPAY_ENDPOINTS[this.mode].api + "/v2/checkouts" + path, { method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(10_000),
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (!response.ok) throw new SaasError("SANDBOX_PROVIDER_UNAVAILABLE", 503);
     return response.json();
@@ -15,7 +17,7 @@ export class SaasPawapaySandbox {
   private redirect(value: any, invoice: SaasInvoice) {
     let url: URL;
     try { url = new URL(value.redirectUrl); } catch { throw new SaasError("INVALID_CHECKOUT_RESPONSE", 502); }
-    if (url.origin !== "https://checkout.sandbox.pawapay.io" || value.checkoutId !== invoice.checkout_id || typeof value.checkoutCode !== "string" || !value.checkoutCode) throw new SaasError("INVALID_CHECKOUT_RESPONSE", 502);
+    if (url.origin !== PAWAPAY_ENDPOINTS[this.mode].checkout || value.checkoutId !== invoice.checkout_id || typeof value.checkoutCode !== "string" || !value.checkoutCode) throw new SaasError("INVALID_CHECKOUT_RESPONSE", 502);
     return url.toString();
   }
   async start(org: number, id: string, returnUrl: string) {
@@ -54,7 +56,7 @@ export class SaasPawapaySandbox {
     if (event.clientReferenceId !== invoice.id) throw new SaasError("INVOICE_REFERENCE_MISMATCH");
     const redirect = this.redirect(event, invoice);
     if (!invoice.checkout_code) await this.store.recordCheckout(org, id, event.checkoutCode, redirect);
-    await this.store.applyProviderResult(invoice.checkout_id, event);
+    await this.store.applyProviderResult(invoice.checkout_id, event, this.mode === "live" ? "pawapay_live" : "pawapay_sandbox");
     return this.store.invoice(this.store.db, org, id);
   }
 }
@@ -69,3 +71,13 @@ export function saasCallbackAuthority(requestHost: string, configuredOrigin = pr
   if (![url.host, url.hostname].includes(requestHost.toLowerCase())) throw new SaasError("CALLBACK_HOST_MISMATCH", 400);
   return url.host;
 }
+
+/** Call only after validating the explicit billing configuration. */
+export function configuredSaasProvider(store: SaasStore) {
+  const config = saasEnvironment();
+  if (!config) throw new SaasError("SAAS_DISABLED", 503);
+  return new SaasPawapay(store, () => saasEnvironment()?.token, fetch, config.mode);
+}
+
+// Backwards-compatible name for isolated Sandbox fixtures.
+export { SaasPawapay as SaasPawapaySandbox };

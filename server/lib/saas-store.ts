@@ -7,7 +7,7 @@ export class SaasError extends Error { constructor(readonly code: string, readon
 export type SaasInvoice = { id: string; organisation_id: number; quote: SaasQuote; status: string; total_xaf: number; provider_status: string | null; checkout_id: string | null; redirect_url: string | null; checkout_code: string | null; paid_at: string | null; created_at: string; newlyReserved?: boolean; };
 
 export class SaasStore {
-  constructor(readonly db: SaasDatabase, readonly clock: () => Date = () => new Date()) {}
+  constructor(readonly db: SaasDatabase, readonly clock: () => Date = () => new Date(), readonly environment: "sandbox" | "live" = "sandbox") {}
   private async log(tx: SaasExecutor, org: number, action: string, data: unknown = {}) {
     await tx.query("INSERT INTO saas_events (organisation_id, action, details) VALUES ($1,$2,$3::jsonb)", [org, action, JSON.stringify(data)]);
   }
@@ -65,7 +65,7 @@ export class SaasStore {
       const state = await this.read(tx, org);
       const quote = quoteSaas(state, selection, this.clock());
       // One outstanding invoice prevents two different checkouts consuming the same credit.
-      const open = (await tx.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND status IN ('quoted','pending','review') FOR UPDATE", [org])).rows as SaasInvoice[];
+      const open = (await tx.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND status IN ('quoted','pending','review') FOR UPDATE", [org, this.environment])).rows as SaasInvoice[];
       for (const invoice of open) {
         if (invoice.status !== "quoted" || (new Date(invoice.quote.expiresAt) > this.clock() && invoice.quote.version === state.version)) {
           if (sameSaasSelection(invoice.quote.selection, quote.selection) && invoice.status !== "review") return invoice;
@@ -75,7 +75,7 @@ export class SaasStore {
       }
 
       const id = crypto.randomUUID();
-      const invoice = (await tx.query(`INSERT INTO saas_invoices (id,organisation_id,quote,total_xaf) VALUES ($1,$2,$3::jsonb,$4) RETURNING *`, [id, org, JSON.stringify(quote), quote.totalXaf])).rows[0];
+      const invoice = (await tx.query(`INSERT INTO saas_invoices (id,organisation_id,quote,total_xaf,provider_environment) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING *`, [id, org, JSON.stringify(quote), quote.totalXaf, this.environment])).rows[0];
       await this.log(tx, org, "quote_created", { invoiceId: id, totalXaf: quote.totalXaf });
       return invoice;
     });
@@ -91,15 +91,16 @@ export class SaasStore {
     });
   }
   async recordCheckout(org: number, id: string, code: string, url: string) {
-    await this.db.query("UPDATE saas_invoices SET checkout_code=$3,redirect_url=$4 WHERE id=$1 AND organisation_id=$2 AND status IN ('pending','paid')", [id, org, code, url]);
+    await this.db.query("UPDATE saas_invoices SET checkout_code=$3,redirect_url=$4 WHERE id=$1 AND organisation_id=$2 AND provider_environment=$5 AND status IN ('pending','paid')", [id, org, code, url, this.environment]);
   }
   async invoice(tx: SaasExecutor, org: number, id: string, lock = false): Promise<SaasInvoice> {
-    const row = (await tx.query(`SELECT * FROM saas_invoices WHERE id=$1 AND organisation_id=$2${lock ? " FOR UPDATE" : ""}`, [id, org])).rows[0];
+    const row = (await tx.query(`SELECT * FROM saas_invoices WHERE id=$1 AND organisation_id=$2 AND provider_environment=$3${lock ? " FOR UPDATE" : ""}`, [id, org, this.environment])).rows[0];
     if (!row) throw new SaasError("INVOICE_NOT_FOUND", 404);
     return row;
   }
-  async applyProviderResult(checkoutId: string, event: any, source: "pawapay_sandbox" | "credit" = "pawapay_sandbox"): Promise<void> {
-    const found = (await this.db.query("SELECT organisation_id FROM saas_invoices WHERE checkout_id=$1", [checkoutId])).rows[0];
+  async applyProviderResult(checkoutId: string, event: any, source: "pawapay_sandbox" | "pawapay_live" | "credit" = "pawapay_sandbox"): Promise<void> {
+    if (source !== "credit" && source !== (this.environment === "live" ? "pawapay_live" : "pawapay_sandbox")) throw new SaasError("PROVIDER_ENVIRONMENT_MISMATCH");
+    const found = (await this.db.query("SELECT organisation_id FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [checkoutId, this.environment])).rows[0];
     if (!found) throw new SaasError("CHECKOUT_NOT_FOUND", 404);
     await this.db.transaction(async tx => {
       const org = Number(found.organisation_id);
@@ -113,11 +114,14 @@ export class SaasStore {
       // Verify the successful deposit itself, not just the configured checkout amount.
       const deposit = event.deposit;
       if (status === "COMPLETED" && (!deposit || deposit.status !== "COMPLETED" || deposit.currency !== "XAF" || deposit.country !== "CMR" || !/^\d+(?:\.0+)?$/.test(String(deposit.amount)) || Number(deposit.amount) !== Number(invoice.total_xaf))) throw new SaasError("PAYMENT_MISMATCH");
-      // Status lookups contain amounts[]; genuine checkout callbacks instead
-      // contain amount/currency/country at the root. Validate both wire shapes.
+      // The real Checkout callback can omit both amounts[] and root monetary
+      // fields. A successful deposit above is still mandatory and checked in
+      // full. Validate optional configured amounts whenever they are supplied;
+      // failed/expired/cancelled checkouts never grant paid access.
+      const hasRootAmount = [event.amount, event.currency, event.country].some(value => value !== undefined);
       const configured = Array.isArray(event.amounts)
-        ? event.amounts.some((a: any) => a.currency === "XAF" && a.country === "CMR" && Number(a.amount) === Number(invoice.total_xaf))
-        : event.currency === "XAF" && event.country === "CMR" && /^\d+(?:\.0+)?$/.test(String(event.amount)) && Number(event.amount) === Number(invoice.total_xaf);
+        ? event.amounts.some((a: any) => a.currency === "XAF" && a.country === "CMR" && /^\d+(?:\.0+)?$/.test(String(a.amount)) && Number(a.amount) === Number(invoice.total_xaf))
+        : !hasRootAmount || (event.currency === "XAF" && event.country === "CMR" && /^\d+(?:\.0+)?$/.test(String(event.amount)) && Number(event.amount) === Number(invoice.total_xaf));
       if (!configured) throw new SaasError("AMOUNT_MISMATCH");
       if (invoice.provider_status) {
         if (invoice.provider_status !== status) throw new SaasError("CONFLICTING_FINAL_STATUS");

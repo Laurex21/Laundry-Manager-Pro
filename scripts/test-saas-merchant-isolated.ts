@@ -3,7 +3,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { generateDrizzleJson,generateMigration } from 'drizzle-kit/api';
 import express from 'express';
-import {readFile} from 'node:fs/promises';
+import {readFile, appendFile} from 'node:fs/promises';
 import * as schema from '../shared/schema';
 process.env.DATABASE_URL='postgresql://unused:unused@127.0.0.1:1/isolated_saas_preview';
 process.env.NODE_ENV='development';process.env.SAAS_BILLING_MODE='sandbox';
@@ -26,8 +26,23 @@ const {recordCurrentLegalAcceptance}=await import('../server/lib/legal');
 await recordCurrentLegalAcceptance({userId:'qa-owner',organisationId:1,siteId:10,source:'registration',ipAddress:'127.0.0.1',userAgent:'isolated-QA'});
 const {registerSaasRoutes}=await import('../server/lib/saas-routes');const {saasStore}=await import('../server/lib/saas-runtime');
 const app=express();app.use(express.json({verify:(req:any,_res,buf)=>{req.rawBody=buf;}}));
+app.use((req:any,res,next)=>{
+ let responseBody:unknown;
+ if(req.path==='/api/saas/sandbox/callback'){const json=res.json.bind(res);res.json=(body:unknown)=>{responseBody=body;return json(body);};}
+ if(req.path==='/api/saas/sandbox/callback')res.on('finish',()=>{
+  void (async()=>{
+   const account=(await pg.query('SELECT state FROM saas_accounts WHERE organisation_id=1')).rows;
+   const invoices=(await pg.query('SELECT id,status,provider_status,paid_at FROM saas_invoices ORDER BY created_at')).rows;
+   const audit={receivedAt:new Date().toISOString(),status:res.statusCode,responseBody,event:{checkoutId:req.body?.checkoutId,depositId:req.body?.depositId,status:req.body?.status,checkoutCode:req.body?.checkoutCode,clientReferenceId:req.body?.clientReferenceId,metadata:req.body?.metadata,amount:req.body?.amount,currency:req.body?.currency,country:req.body?.country,deposit:req.body?.deposit&&{status:req.body.deposit.status,amount:req.body.deposit.amount,currency:req.body.deposit.currency,country:req.body.deposit.country}},account,invoices};
+   await appendFile('/tmp/xpresspro-saas-isolated-20261021/callback-only-audit.jsonl',JSON.stringify(audit)+'\n');
+   console.log('CALLBACK_ONLY_RESULT',JSON.stringify(audit));
+  })().catch(()=>console.error('CALLBACK_AUDIT_FAILED'));
+ });
+ next();
+});
 app.use((req:any,_res,next)=>{req.session={userId:'qa-owner',currentSiteId:10,save:(cb:any)=>cb?.()};next();});
-registerSaasRoutes(app);
+registerSaasRoutes(app, { backgroundJobs: false });
+console.log("CALLBACK_ONLY_TEST: background reconciliation and subscription jobs disabled");
 // Only the signed callback route can be reached from outside the container.
 const {createServer}=await import('node:http');
 const callbackServer=createServer((req,res)=>{

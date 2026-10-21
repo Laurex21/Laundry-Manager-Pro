@@ -3,28 +3,29 @@ import { z } from "zod";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { saasEnabled, saasStore, startSaasJobs } from "./saas-runtime";
 import { saasFailure } from "./saas-access";
-import { SaasPawapaySandbox, saasCallbackAuthority } from "./saas-pawapay";
+import { configuredSaasProvider, saasCallbackAuthority } from "./saas-pawapay";
 import { SaasError } from "./saas-store";
-import { sandboxPublicKeys, verifyPawapaySandboxCallback } from "./pawapay-sandbox-callback";
+import { pawapayPublicKeys, verifyPawapaySandboxCallback } from "./pawapay-sandbox-callback";
 import { SAAS_PLANS, saasQuotas, saasMonthly, saasSelection, SAAS_CATALOGUE_VERSION } from "../../shared/saas-plans";
+import { saasEnvironment } from "./saas-environment";
 import { rateLimit } from "./rate-limit";
 
 const selectionSchema = z.object({ plan: z.enum(["starter", "pro", "business"]), extraSites: z.number().int().min(0).max(1000).default(0), extraStaff: z.number().int().min(0).max(1000).default(0) }).strict();
-const provider = new SaasPawapaySandbox(saasStore, () => process.env.PAWAPAY_SANDBOX_API_TOKEN);
+const provider = () => configuredSaasProvider(saasStore);
 const limited = rateLimit({ name: "saas-billing", windowMs: 60_000, max: 30, key: req => String(req.session?.userId), keyOnly: true });
-export function registerSaasRoutes(app: Express) {
-  startSaasJobs();
+export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { backgroundJobs?: boolean } = {}) {
+  if (backgroundJobs) startSaasJobs();
   let reconciling = false;
-  if (saasEnabled()) {
+  if (backgroundJobs && saasEnabled()) {
     const timer = setInterval(async () => {
-      if (reconciling || !process.env.PAWAPAY_SANDBOX_API_TOKEN) return; reconciling = true;
+      if (reconciling || !saasEnvironment()?.token) return; reconciling = true;
       try {
-        const pending = await saasStore.db.query("SELECT id,organisation_id FROM saas_invoices WHERE status='pending' ORDER BY created_at LIMIT 100");
-        for (const row of pending.rows) { try { await provider.refresh(row.organisation_id, row.id); } catch { /* Keep pending; never invent a failure on timeout. */ } }
+        const pending = await saasStore.db.query("SELECT id,organisation_id FROM saas_invoices WHERE status='pending' AND provider_environment=$1 ORDER BY created_at LIMIT 100", [saasStore.environment]);
+        for (const row of pending.rows) { try { await provider().refresh(row.organisation_id, row.id); } catch { /* Keep pending; never invent a failure on timeout. */ } }
       } catch { console.warn("SaaS sandbox reconciliation unavailable"); } finally { reconciling = false; }
     }, 60_000); timer.unref();
   }
-  app.get("/api/saas/config", (_req, res) => res.json({ enabled: saasEnabled(), mode: "sandbox", manualRenewal: true, catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) }));
+  app.get("/api/saas/config", (_req, res) => res.json({ enabled: saasEnabled(), mode: saasEnvironment()?.mode ?? "disabled", manualRenewal: true, catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) }));
   async function owner(req: any, res: any) {
     if (!saasEnabled()) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
     if (!req.organisationId) { res.status(403).json({ code: "ORGANISATION_REQUIRED" }); return null; }
@@ -44,7 +45,7 @@ export function registerSaasRoutes(app: Express) {
     const staff = (await saasStore.db.query(`SELECT DISTINCT u.id,u.first_name,u.last_name,u.email FROM users u
       JOIN site_members sm ON sm.user_id=u.id JOIN sites s ON s.id=sm.site_id JOIN organisations o ON o.id=s.organisation_id
       WHERE u.organisation_id=$1 AND s.organisation_id=$1 AND s.is_active=true AND u.id<>o.owner_id ORDER BY u.id`, [org])).rows;
-    res.json({ state, quotas: saasQuotas(state), monthlyXaf: saasMonthly(state), sites, staff, sandboxConfigured: !!process.env.PAWAPAY_SANDBOX_API_TOKEN });
+    res.json({ state, quotas: saasQuotas(state), monthlyXaf: saasMonthly(state), sites, staff, sandboxConfigured: !!saasEnvironment()?.token });
   });
   route("get", "/api/saas/notices", async (org, req, res) => {
     await saasStore.tick(org, req.get("X-Client-Timezone") || "Africa/Douala");
@@ -53,7 +54,7 @@ export function registerSaasRoutes(app: Express) {
       RETURNING *`, [org]);
     res.json(notices.rows.sort((a,b) => Number(b.id)-Number(a.id)).slice(0,1));
   });
-  route("get", "/api/saas/invoices", async (org, _req, res) => res.json((await saasStore.db.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 ORDER BY created_at DESC LIMIT 100", [org])).rows));
+  route("get", "/api/saas/invoices", async (org, _req, res) => res.json((await saasStore.db.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 ORDER BY created_at DESC LIMIT 100", [org, saasStore.environment])).rows));
   route("post", "/api/saas/quote", async (org, req, res) => {
     const target = selectionSchema.parse(req.body);
     res.status(201).json(await saasStore.createQuote(org, saasSelection(target.plan, target.extraSites, target.extraStaff)));
@@ -71,14 +72,14 @@ export function registerSaasRoutes(app: Express) {
     const invoice = await saasStore.invoice(saasStore.db, org, req.params.id);
     if (invoice.total_xaf === 0) { res.json(await saasStore.settleZeroInvoice(org, req.params.id)); return; }
     // Server-owned URL; client cannot redirect payer details to an arbitrary origin.
-    const origin = process.env.SAAS_SANDBOX_RETURN_ORIGIN;
+    const origin = saasEnvironment()?.returnOrigin;
     if (!origin) throw new SaasError("SANDBOX_RETURN_URL_NOT_CONFIGURED", 503);
     const url = new URL("/subscriptions", origin);
     if (!(url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname)))) throw new SaasError("INVALID_RETURN_URL", 503);
-    res.json(await provider.start(org, req.params.id, url.toString()));
+    res.json(await provider().start(org, req.params.id, url.toString()));
   });
   route("post", "/api/saas/invoices/:id/refresh", async (org, req, res) => {
-    z.string().uuid().parse(req.params.id); res.json(await provider.refresh(org, req.params.id));
+    z.string().uuid().parse(req.params.id); res.json(await provider().refresh(org, req.params.id));
   });
   app.post("/api/receipt-snapshots", isAuthenticated, limited, async (req: any, res) => {
     if (!saasEnabled() || !req.saas) return res.status(404).json({ code: "SAAS_DISABLED" });
@@ -97,12 +98,13 @@ export function registerSaasRoutes(app: Express) {
       res.json({ html: saved.html });
     } catch(error) { saasFailure(res,error); }
   });
-  app.post("/api/saas/sandbox/callback", async (req: any, res) => {
-    if (!saasEnabled()) return res.sendStatus(404);
+  async function paymentCallback(req: any, res: any) {
+    const config = saasEnvironment();
+    if (!config || req.path !== `/api/saas/${config.mode}/callback`) return res.sendStatus(404);
     try {
       if (!Buffer.isBuffer(req.rawBody) || !req.is("application/json")) return res.sendStatus(400);
       const headers = Object.fromEntries(Object.entries(req.headers).map(([key, value]) => [key, typeof value === "string" ? value : undefined]));
-      const valid = verifyPawapaySandboxCallback({ method: req.method, authority: saasCallbackAuthority(req.get("host") || ""), path: req.path, headers, rawBody: req.rawBody, keys: await sandboxPublicKeys() });
+      const valid = verifyPawapaySandboxCallback({ method: req.method, authority: saasCallbackAuthority(req.get("host") || "", config.callbackOrigin), path: req.path, headers, rawBody: req.rawBody, keys: await pawapayPublicKeys(config.mode) });
       if (!valid) return res.sendStatus(401);
       const event = req.body;
       // A signed deposit notification may accompany a hosted checkout. Reconcile
@@ -110,18 +112,20 @@ export function registerSaasRoutes(app: Express) {
       if (!event?.checkoutId && event?.depositId) {
         z.string().uuid().parse(event.depositId);
         const invoiceId = z.string().uuid().parse(event.clientReferenceId || event.metadata?.invoiceId);
-        const invoice = (await saasStore.db.query("SELECT id,organisation_id,total_xaf FROM saas_invoices WHERE id=$1 AND checkout_id IS NOT NULL", [invoiceId])).rows[0];
+        const invoice = (await saasStore.db.query("SELECT id,organisation_id,total_xaf FROM saas_invoices WHERE id=$1 AND checkout_id IS NOT NULL AND provider_environment=$2", [invoiceId, config.mode])).rows[0];
         if (!invoice) return res.sendStatus(404);
         if (event.currency !== "XAF" || event.country !== "CMR" || !/^\d+(?:\.0+)?$/.test(String(event.amount)) || Number(event.amount) !== Number(invoice.total_xaf)) throw new SaasError("PAYMENT_MISMATCH");
-        await provider.refresh(Number(invoice.organisation_id), invoice.id);
+        await provider().refresh(Number(invoice.organisation_id), invoice.id);
         return res.json({ received: true });
       }
       z.string().uuid().parse(event?.checkoutId);
-      const invoice = (await saasStore.db.query("SELECT id FROM saas_invoices WHERE checkout_id=$1", [event.checkoutId])).rows[0];
+      const invoice = (await saasStore.db.query("SELECT id FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [event.checkoutId, config.mode])).rows[0];
       if (!invoice) return res.sendStatus(404);
       if (event.clientReferenceId !== invoice.id) throw new SaasError("INVOICE_REFERENCE_MISMATCH");
-      await saasStore.applyProviderResult(event.checkoutId, event);
+      await saasStore.applyProviderResult(event.checkoutId, event, config.mode === "live" ? "pawapay_live" : "pawapay_sandbox");
       res.json({ received: true });
     } catch (error) { saasFailure(res, error); }
-  });
+  }
+  app.post("/api/saas/sandbox/callback", paymentCallback);
+  app.post("/api/saas/live/callback", paymentCallback);
 }

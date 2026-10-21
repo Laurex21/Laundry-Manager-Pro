@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 
 const CALLBACK_PATH = "/api/payments/pawapay/sandbox/callback";
-const PUBLIC_KEYS_URL = "https://api.sandbox.pawapay.io/v2/public-key/http";
+import { PAWAPAY_ENDPOINTS, type SaasMode } from "./saas-environment";
 const REQUIRED_COMPONENTS = ["@method", "@authority", "@path", "signature-date", "content-digest", "content-type"];
 
 type PublicKey = { id: string; key: string };
@@ -16,22 +16,23 @@ type CallbackInput = {
   now?: number;
 };
 
-let cachedKeys: PublicKey[] = [];
-let keysExpiresAt = 0;
+const keyCache = new Map<SaasMode, { keys: PublicKey[]; expires: number }>();
 
-export async function sandboxPublicKeys(): Promise<PublicKey[]> {
-  if (cachedKeys.length && Date.now() < keysExpiresAt) return cachedKeys;
-  const response = await fetch(PUBLIC_KEYS_URL, { signal: AbortSignal.timeout(5000) });
+export async function pawapayPublicKeys(mode: SaasMode): Promise<PublicKey[]> {
+  const cached = keyCache.get(mode);
+  if (cached && Date.now() < cached.expires) return cached.keys;
+  const response = await fetch(PAWAPAY_ENDPOINTS[mode].api + "/v2/public-key/http", { redirect: "error", signal: AbortSignal.timeout(5000) });
   if (!response.ok) throw new Error(`PawaPay public key request failed: ${response.status}`);
   const value: unknown = await response.json();
   if (!Array.isArray(value) || !value.length || !value.every((item) =>
     item && typeof item.id === "string" && typeof item.key === "string" && item.key.includes("BEGIN PUBLIC KEY"))) {
     throw new Error("PawaPay public keys response invalid");
   }
-  cachedKeys = value as PublicKey[];
-  keysExpiresAt = Date.now() + 60 * 1000;
-  return cachedKeys;
+  keyCache.set(mode, { keys: value as PublicKey[], expires: Date.now() + 60 * 1000 });
+  return value as PublicKey[];
 }
+
+export const sandboxPublicKeys = () => pawapayPublicKeys("sandbox");
 
 export function verifyPawapaySandboxCallback(input: CallbackInput): boolean {
   const { method, authority, path, headers, rawBody, keys } = input;

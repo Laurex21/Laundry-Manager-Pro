@@ -1,5 +1,7 @@
 # Abonnements v5 — livraison locale du 21 octobre 2026
 
+> Document historique de la livraison Sandbox. La préparation locale ultérieure du mode réel, désactivé par défaut, est décrite dans [PAWAPAY_PREPARATION_PRODUCTION_2026-10-21.md](PAWAPAY_PREPARATION_PRODUCTION_2026-10-21.md). Les 7 anciens échecs ont depuis été corrigés (commit `a60ec41`).
+
 ## État et limites
 
 Implémentation sur `codex/saas-subscription-audit`, sans publication, modification du Replit actuel, ni accès à une base de production. Les tests DB utilisent PGlite en mémoire. La clé Sandbox n’est pas disponible dans l’environnement local. Un contrôle marchand réel a été exécuté depuis le Shell Replit sans base de données : clés publiques disponibles, checkout `ACCEPTED`, statut `FOUND / WAITING_PAYMENT`, puis expiration `EXPIRED`. Référence de test : `8d2a64e4-361c-4595-ad47-7e2acd1666a3`. Aucun portefeuille ni paiement Mobile Money sollicité. La présence de `PAWAPAY_SANDBOX_API_TOKEN` dans les Secrets du Replit actuel a été confirmée sans afficher sa valeur.
