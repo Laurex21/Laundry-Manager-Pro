@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   Clock,
   Gift,
+  Download,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -309,6 +310,14 @@ export default function CustomerDetail() {
             {loyalty?.enabled && (
               <div className="mt-3 border-t pt-3">
                 <p className="text-xs text-muted-foreground">{t("loyalty_points_to_reward", { points: loyalty.rewardPointsRequired, amount: `${symbol}${Number(loyalty.rewardValue).toFixed(2)}` })}</p>
+                <div className="mt-3 space-y-2">
+                  <img src={`/api/customers/${customerId}/loyalty/card`} alt={t("loyalty_card")} className="w-full max-w-[324px] rounded-xl shadow-sm" loading="lazy" />
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={`/api/customers/${customerId}/loyalty/card?download=1`} download={`loyalty-${customerId}.png`}>
+                      <Download className="mr-2 h-4 w-4" aria-hidden="true" />{t("download_loyalty_card")}
+                    </a>
+                  </Button>
+                </div>
                 {(userRole === "owner" || userRole === "manager") && loyalty.canRedeem && (
                   <Button type="button" size="sm" className="mt-2 min-h-10 w-full" onClick={() => setRedemptionOpen(true)} data-testid="button-redeem-loyalty">
                     <Gift className="mr-2 h-4 w-4" aria-hidden="true" />{t("redeem_loyalty_reward")}
