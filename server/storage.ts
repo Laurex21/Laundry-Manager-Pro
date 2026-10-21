@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { insertOrderRecords, type OrderCreationRecords } from "./lib/order-creation";
 import { 
   customers, services, orders, orderItems, payments, expenditures, garmentItems,
   machines, employees, employeeActivities, employeeAttendance, machineUsage,
@@ -68,7 +69,7 @@ export interface IStorage {
 
   getOrders(): Promise<any[]>;
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order>;
+  createOrder(order: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[], records?: OrderCreationRecords): Promise<Order>;
   updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined>;
   getOrderStatusHistory(orderId: number): Promise<OrderStatusHistoryEntry[]>;
   
@@ -346,44 +347,13 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[]): Promise<Order> {
+  async createOrder(insertOrder: InsertOrder, items: { serviceId: number; quantity: string | number }[], garments?: { itemName: string; quantity: number; color?: string | null; textileReserve?: string | null }[], records: OrderCreationRecords = {}): Promise<Order> {
     await ensureOrderItemQuantitySupportsDecimals();
-    const created = await db.transaction(async (tx) => {
-      const [order] = await tx.insert(orders).values({ ...insertOrder, requiresGarmentVerification: !!garments?.length }).returning();
-      let orderWithNumber = { ...order, orderNumber: order.id };
-      if (typeof order.siteId === "number") {
-        const siteRows = await tx.select({ id: orders.id })
-          .from(orders)
-          .where(eq(orders.siteId, order.siteId))
-          .orderBy(asc(orders.createdAt), asc(orders.id));
-        const index = siteRows.findIndex((row) => row.id === order.id);
-        orderWithNumber = { ...order, orderNumber: index >= 0 ? index + 1 : order.id };
-      }
-
-      await tx.insert(orderStatusHistory).values({
-        orderId: order.id,
-        status: order.status,
-        notes: "Order created",
-      });
-
-      for (const item of items) {
-        const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));
-        if (!service) throw new Error(`Service ${item.serviceId} not found`);
-        await tx.insert(orderItems).values({
-          orderId: order.id, serviceId: item.serviceId, quantity: String(item.quantity), priceAtOrder: service.price,
-        });
-      }
-
-      if (garments && garments.length > 0) {
-        for (const garment of garments) {
-          await tx.insert(garmentItems).values({ orderId: order.id, itemName: garment.itemName, quantity: garment.quantity, color: garment.color || null, textileReserve: garment.textileReserve || null });
-        }
-      }
-
-      return orderWithNumber;
+    return db.transaction(async (tx) => {
+      const created = await insertOrderRecords(tx, insertOrder, items, garments, records);
+      await refreshCustomerAnalyticsFromHistory(created.customerId, tx);
+      return created;
     });
-    await refreshCustomerAnalyticsFromHistory(created.customerId);
-    return created;
   }
 
   async updateOrderStatus(id: number, status: string, paymentStatus?: string, changedBy?: string | null): Promise<Order | undefined> {

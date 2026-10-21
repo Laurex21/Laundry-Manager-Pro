@@ -527,7 +527,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const totalAmount = compareDecimals(calculatedTotal, "0") < 0 ? "0" : calculatedTotal;
       const initialPaymentStatus = compareDecimals(advanceAmount, totalAmount) >= 0 ? "paid" : compareDecimals(advanceAmount, "0") > 0 ? "partial" : "unpaid";
       const employee = await actorEmployee(req, siteId);
-      const order = await storage.createOrder({
+      const orderDataToSave = {
         ...orderData,
         createdByEmployeeId: employee?.id ?? null,
         status: "received",
@@ -541,52 +541,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         entryDate: orderData.entryDate ? new Date(orderData.entryDate) : new Date(),
         pickupDate: orderData.pickupDate ? new Date(orderData.pickupDate) : null,
         siteId,
-      } as any, items, garments);
-      await trackEmployeeActivity(req, {
-        siteId,
+      };
+      const activities = [{
         actionType: "order_created",
-        orderId: order.id,
         amount: totalAmount,
         weightKg: items.reduce((sum, item) => addDecimals(sum, item.quantity), "0"),
         metadata: { itemCount: items.length, garmentCount: garments?.length ?? 0 },
-      });
-      if (compareDecimals(discountAmount, "0") > 0) {
-        await trackEmployeeActivity(req, {
-          siteId,
-          actionType: "discount_applied",
-          orderId: order.id,
-          amount: discountAmount,
-          metadata: { subtotal, totalAmount },
-        });
-      }
-      for (const usage of machineUsages ?? []) {
-        const machine = await storage.getMachine(usage.machineId);
-        if (!machine || machine.siteId !== siteId) continue;
-        await storage.createMachineUsage({
-          machineId: usage.machineId,
-          orderId: order.id,
-          siteId,
-          weightProcessed: usage.weightProcessed || "0",
-          cycleDurationMinutes: usage.cycleDurationMinutes || 0,
-        } as any);
-      }
-      if (compareDecimals(advanceAmount, "0") > 0) {
-        await storage.createPayment({
-          orderId: order.id,
+      }, ...(compareDecimals(discountAmount, "0") > 0 ? [{
+        actionType: "discount_applied",
+        amount: discountAmount,
+        metadata: { subtotal, totalAmount },
+      }] : []), ...(compareDecimals(advanceAmount, "0") > 0 ? [{
+        actionType: "payment_collected",
+        amount: advanceAmount,
+        metadata: { method: orderData.advancePaymentMethod || "Cash", isAdvance: true },
+      }] : [])];
+      const order = await storage.createOrder(orderDataToSave, items, garments, {
+        actorUserId: (req.session as any).userId,
+        employeeId: employee?.id ?? null,
+        activities,
+        machineUsages,
+        initialPayment: compareDecimals(advanceAmount, "0") > 0 ? {
           collectedByEmployeeId: employee?.id ?? null,
           amount: advanceAmount.toString(),
           method: orderData.advancePaymentMethod || "Cash",
-          date: order.entryDate || new Date(),
+          date: orderDataToSave.entryDate,
           isAdvance: true,
-        } as any);
-        await trackEmployeeActivity(req, {
-          siteId,
-          actionType: "payment_collected",
-          orderId: order.id,
-          amount: advanceAmount,
-          metadata: { method: orderData.advancePaymentMethod || "Cash", isAdvance: true },
-        });
-      }
+        } : undefined,
+      });
       res.status(201).json(order);
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
