@@ -239,7 +239,7 @@ export default function OrderDetail() {
       const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=a4`, { credentials: "include" });
       if (subscriberReceipt.ok) {
         const html = await subscriberReceipt.text();
-        await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`, format);
+        await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`, format, { orderId: order.id, kind: "subscriber" });
         return;
       }
       const mergedSettings = {

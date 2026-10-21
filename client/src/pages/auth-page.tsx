@@ -1,3 +1,4 @@
+import { SaasTrialInfo } from "@/components/saas-public-plans";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -422,6 +423,7 @@ export default function AuthPage() {
                 <h1 className="font-display font-bold text-2xl text-foreground leading-tight">
                   {tab === "login" ? t("welcome") : t("create_account")}
                 </h1>
+            <SaasTrialInfo />
                 <p className="text-muted-foreground text-sm mt-1">
                   {tab === "login" ? t("auth_dashboard_subtitle") : t("auth_setup_subtitle")}
                 </p>

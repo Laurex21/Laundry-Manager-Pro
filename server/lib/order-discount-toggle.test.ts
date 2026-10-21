@@ -15,7 +15,13 @@ assert.match(ordersPage, /max="100"/);
 assert.match(ordersPage, /value=\{watchedDiscountPct \?\? ""\}/);
 assert.match(ordersPage, /const percentage = event\.currentTarget\.value/);
 assert.match(ordersPage, /field\.onChange\(percentage\)/);
-assert.doesNotMatch(ordersPage, /value=\{field\.value \?\? ""\}/);
+// This restriction belongs to the percentage-discount control. Other fields,
+// such as optional dates, legitimately use an empty string as their DOM value.
+const percentageStart = ordersPage.indexOf('name="discountPct"');
+assert.ok(percentageStart >= 0, "percentage discount field must exist");
+const percentageField = ordersPage.slice(percentageStart, ordersPage.indexOf("</FormItem>", percentageStart));
+assert.match(percentageField, /value=\{watchedDiscountPct \?\? ""\}/);
+assert.doesNotMatch(percentageField, /value=\{field\.value \?\? ""\}/);
 assert.match(ordersPage, /formatExactMoney\(discountAmount, symbol, i18n\.language\)/);
 assert.match(contract, /discountPct: z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
 assert.match(routes, /multiplyDecimal\(subtotal, String\(discountPct \/ 100\)\)/);

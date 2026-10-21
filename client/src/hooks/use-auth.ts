@@ -1,3 +1,4 @@
+import { hasSaasFeature, type SaasState } from "@shared/saas-plans";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
 
@@ -17,6 +18,8 @@ export interface LegalAcceptanceState {
 
 export type AuthUser = User & {
   planSlug?: string;
+  saas?: SaasState;
+  saasSuspended?: boolean;
   currentSite?: any;
   allSites?: any[];
   legalAcceptance?: LegalAcceptanceState;
@@ -51,6 +54,7 @@ export function useAuth() {
   const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
+    refetchInterval: query => query.state.data?.saas ? 30_000 : false,
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
@@ -87,6 +91,11 @@ export function useAuth() {
   const isPlatformAdmin = user?.isPlatformAdmin === true;
 
   const hasFeature = (feature: string): boolean => {
+    const state = (user as AuthUser)?.saas;
+    if (state) {
+      const mapped: Record<string,string> = {employeeAnalytics:"analytics",machineAnalytics:"analytics",advancedAnalytics:"analytics",predictiveMaintenance:"machines",multiSiteBenchmarking:"multiSite",waste:"analytics",performance:"analytics",employees:"team",api:"multiSite"};
+      return hasSaasFeature(state.plan, (mapped[feature] || feature) as any);
+    }
     const featureMap: Record<string, string[]> = {
       analytics:   ["pro", "business", "enterprise"],
       employeeAnalytics: ["pro", "business", "enterprise"],
@@ -105,6 +114,9 @@ export function useAuth() {
   };
 
   const canAccess = (page: string): boolean => {
+    const state = (user as AuthUser)?.saas;
+    if ((user as AuthUser)?.saasSuspended) return false;
+    if (state && state.plan === "starter" && ["reports","analytics","team","machines","employees"].includes(page)) return false;
     const ownerPages = ["settings", "subscriptions", "pilotage", "reports", "dailyReports", "analytics", "team", "dashboard", "orders", "qualityOperations", "customers", "payments", "services", "expenses", "inventory", "machines", "employees"];
     const managerPages = ["orders", "pilotage", "reports", "qualityOperations", "dailyReports", "customers", "payments", "services", "expenses", "inventory", "machines", "employees", "analytics", "dashboard"];
     const operatorPages = ["orders", "pilotage", "qualityOperations", "dailyReports", "customers", "payments", "inventory", "dashboard"];

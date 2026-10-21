@@ -1,3 +1,4 @@
+import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -1068,7 +1069,8 @@ export default function Settings() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      if ("businessName" in variables) recordOnboardingAction("identity");
       qc.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: t("settings_saved") });
     },

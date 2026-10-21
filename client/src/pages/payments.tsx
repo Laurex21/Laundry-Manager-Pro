@@ -70,9 +70,9 @@ function PaymentLedger() {
   const query = new URLSearchParams({ from, to }); if (siteId) query.set("siteId", siteId); if (method) query.set("method", method); if (search.trim()) query.set("search", search.trim());
   const { data, isLoading, isError } = useQuery<any>({ queryKey: ["/api/payments/ledger", from, to, siteId, method, search], queryFn: async () => { const r = await fetch(`/api/payments/ledger?${query}`, { credentials: "include" }); if (!r.ok) throw new Error(); return r.json(); } });
   const rows = data?.payments || [];
-  function exportCsv() { const cells = [["Date", "Order", "Customer", "Site", "Method", "Transaction reference", "Current payment status", "Employee", "Amount"], ...rows.map((p: any) => [p.date, p.orderNumber, p.customerName, p.siteName, p.method, p.reference || "", p.paymentStatus, p.employeeName || "", p.amount])]; const csv = cells.map((row: any[]) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `payments-${from}-${to}.csv`; a.click(); URL.revokeObjectURL(a.href); }
+  function exportCsv() { const cells = [[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")], ...rows.map((p: any) => [p.date, p.orderNumber, p.customerName, p.siteName, t(p.method, { defaultValue: p.method }), p.reference || "", paymentStatusLabel(p.paymentStatus), p.employeeName || "", p.amount])]; const csv = cells.map((row: any[]) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `payments-${from}-${to}.csv`; a.click(); URL.revokeObjectURL(a.href); }
   const paymentStatusLabel = (status: string) => status === "paid" ? t("paid") : status === "partial" ? t("partial") : t("unpaid");
-  return <div className="space-y-5" data-testid="payment-ledger-redesign"><div className="grid gap-4 rounded-2xl border border-primary/10 bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5"><div><label className="text-xs font-medium">{t("start_date")}</label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div><div><label className="text-xs font-medium">{t("end_date")}</label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>{(isOwner || allSites.length > 1) && <div><label className="text-xs font-medium">{t("site")}</label><Select value={siteId || "all"} onValueChange={(v) => setSiteId(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all_sites")}</SelectItem>{allSites.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent></Select></div>}<div><label className="text-xs font-medium">{t("payment_method")}</label><Select value={method || "all"} onValueChange={(v) => setMethod(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all")}</SelectItem>{PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div><div><label className="text-xs font-medium">{t("search")}</label><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("search_order_placeholder")} /></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("total")}</p><p className="text-xl font-bold">{symbol}{Number(data?.totals?.amount || 0).toLocaleString()}</p></div><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("payments")}</p><p className="text-xl font-bold">{data?.totals?.count || 0}</p></div><Button variant="outline" className="h-full min-h-14" onClick={exportCsv} disabled={!rows.length}><Download className="mr-2 h-4 w-4" />CSV</Button></div>{data?.totals?.byMethod && <div className="flex flex-wrap gap-2">{Object.entries(data.totals.byMethod).map(([key, value]) => <Badge key={key} variant="secondary">{key}: {symbol}{Number(value).toLocaleString()}</Badge>)}</div>}{isLoading ? <p>{t("loading")}</p> : isError ? <p className="text-destructive">{t("error")}</p> : <div className="overflow-x-auto rounded-2xl border border-primary/10 bg-card shadow-sm"><table className="w-full min-w-[1000px] text-sm"><thead className="bg-[#082D5B] text-white"><tr>{[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")].map((h) => <th key={h} className="p-3 text-left text-xs">{h}</th>)}</tr></thead><tbody>{rows.map((p: any) => <tr key={p.id} className="border-t"><td className="p-3">{new Date(p.date).toLocaleString()}</td><td className="p-3">#{p.orderNumber}</td><td className="p-3">{p.customerName}</td><td className="p-3">{p.siteName}</td><td className="p-3">{p.method}</td><td className="p-3">{p.reference || "—"}</td><td className="p-3"><Badge variant={p.paymentStatus === "paid" ? "default" : "secondary"}>{paymentStatusLabel(p.paymentStatus)}</Badge></td><td className="p-3">{p.employeeName || "—"}</td><td className="p-3 font-mono font-semibold">{symbol}{Number(p.amount).toLocaleString()}</td></tr>)}</tbody></table>{!rows.length && <p className="p-8 text-center text-muted-foreground">{t("no_payments")}</p>}</div>}</div>;
+  return <div className="space-y-5" data-testid="payment-ledger-redesign"><div className="grid gap-4 rounded-2xl border border-primary/10 bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5"><div><label className="text-xs font-medium">{t("start_date")}</label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div><div><label className="text-xs font-medium">{t("end_date")}</label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>{(isOwner || allSites.length > 1) && <div><label className="text-xs font-medium">{t("site")}</label><Select value={siteId || "all"} onValueChange={(v) => setSiteId(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all_sites")}</SelectItem>{allSites.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent></Select></div>}<div><label className="text-xs font-medium">{t("payment_method")}</label><Select value={method || "all"} onValueChange={(v) => setMethod(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all")}</SelectItem>{PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{t(m.label, { defaultValue: m.label })}</SelectItem>)}</SelectContent></Select></div><div><label className="text-xs font-medium">{t("search")}</label><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("search_order_placeholder")} /></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("total")}</p><p className="text-xl font-bold">{symbol}{Number(data?.totals?.amount || 0).toLocaleString()}</p></div><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("payments")}</p><p className="text-xl font-bold">{data?.totals?.count || 0}</p></div><Button variant="outline" className="h-full min-h-14" onClick={exportCsv} disabled={!rows.length}><Download className="mr-2 h-4 w-4" />CSV</Button></div>{data?.totals?.byMethod && <div className="flex flex-wrap gap-2">{Object.entries(data.totals.byMethod).map(([key, value]) => <Badge key={key} variant="secondary">{t(key, { defaultValue: key })}: {symbol}{Number(value).toLocaleString()}</Badge>)}</div>}{isLoading ? <p>{t("loading")}</p> : isError ? <p className="text-destructive">{t("error")}</p> : <div className="overflow-x-auto rounded-2xl border border-primary/10 bg-card shadow-sm"><table className="w-full min-w-[1000px] text-sm"><thead className="bg-[#082D5B] text-white"><tr>{[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")].map((h) => <th key={h} className="p-3 text-left text-xs">{h}</th>)}</tr></thead><tbody>{rows.map((p: any) => <tr key={p.id} className="border-t"><td className="p-3">{new Date(p.date).toLocaleString()}</td><td className="p-3">#{p.orderNumber}</td><td className="p-3">{p.customerName}</td><td className="p-3">{p.siteName}</td><td className="p-3">{t(p.method, { defaultValue: p.method })}</td><td className="p-3">{p.reference || "—"}</td><td className="p-3"><Badge variant={p.paymentStatus === "paid" ? "default" : "secondary"}>{paymentStatusLabel(p.paymentStatus)}</Badge></td><td className="p-3">{p.employeeName || "—"}</td><td className="p-3 font-mono font-semibold">{symbol}{Number(p.amount).toLocaleString()}</td></tr>)}</tbody></table>{!rows.length && <p className="p-8 text-center text-muted-foreground">{t("no_payments")}</p>}</div>}</div>;
 }
 
 export default function Payments() {
@@ -94,6 +94,7 @@ export default function Payments() {
   const paymentSubmissionLock = useRef(false);
   const [successPayment, setSuccessPayment] = useState<{
     orderId: number;
+    orderNumber: number | string;
     paymentId?: number;
     amount: string;
     method: string;
@@ -213,6 +214,7 @@ export default function Payments() {
           paymentSubmissionLock.current = false;
           setSuccessPayment({
             orderId: selectedOrderId,
+            orderNumber: orderDisplayId(selectedOrder as any) || selectedOrderId,
             paymentId: createdPayment?.id,
             amount: createdPayment?.cashApplied ?? paidAmount.toFixed(2),
             method,
@@ -329,7 +331,8 @@ export default function Payments() {
           symbol,
           mergedSettings,
           pickupCost,
-          action === "download" ? "html" : action
+          action === "download" ? "html" : action,
+          successPayment.paymentId ? { orderId: successPayment.orderId, paymentId: successPayment.paymentId } : undefined
         );
       }
     } catch (error) {
@@ -358,7 +361,7 @@ export default function Payments() {
         <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
       </div>
       <div className="grid grid-cols-2 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm">
-        <Button className="min-w-0 px-2 sm:px-4" variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>
+        <Button data-testid="onboarding-register-payment" className="min-w-0 px-2 sm:px-4" variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>
           <span className="sm:hidden">{t("collect_payment_short")}</span><span className="hidden sm:inline">{t("register_payment")}</span>
         </Button>
         <Button className="min-w-0 px-2 sm:px-4" variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>
@@ -378,7 +381,7 @@ export default function Payments() {
               {t("payment_recorded_success")}
             </p>
             <p className="text-green-700 dark:text-green-400 text-xs mt-0.5">
-              {symbol}{successPayment.amount} {t("paid_for_order")} #{successPayment.orderId} {t("via")} {successPayment.method}.{" "}
+              {symbol}{successPayment.amount} {t("paid_for_order")} #{successPayment.orderNumber} {t("via")} {t(successPayment.method, { defaultValue: successPayment.method })}.{" "}
               <Badge
                 variant="outline"
                 className={
@@ -595,7 +598,7 @@ export default function Payments() {
                               {region}
                             </div>
                             {PAYMENT_METHODS.filter((m) => m.region === region).map((m) => (
-                              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                              <SelectItem key={m.value} value={m.value}>{t(m.label, { defaultValue: m.label })}</SelectItem>
                             ))}
                           </div>
                         ))}
@@ -725,7 +728,7 @@ export default function Payments() {
                       >
                         <div className="flex items-center gap-2">
                           <Banknote className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-muted-foreground">{p.method}</span>
+                          <span className="text-muted-foreground">{t(p.method, { defaultValue: p.method })}</span>
                           {p.reference && (
                             <span className="text-muted-foreground/60">
                               {t("ref_label")} {p.reference}

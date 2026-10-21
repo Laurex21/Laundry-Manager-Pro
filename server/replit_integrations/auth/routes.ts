@@ -1,3 +1,4 @@
+import { saasEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
 import type { Express } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
@@ -35,7 +36,8 @@ async function buildUserResponse(userId: string) {
   const isOrgOwner = user.userType !== "staff" && (!orgOwnerId || orgOwnerId === userId);
   const subscriptionOwnerId = isOrgOwner ? userId : orgOwnerId;
   const sub = subscriptionOwnerId ? await storage.getUserSubscription(subscriptionOwnerId) : null;
-  const planSlug = sub?.plan?.slug ?? "starter";
+  const saas = saasEnabled() && user.organisationId ? await saasForOrganisation(user.organisationId) : null;
+  const planSlug = saas?.plan ?? sub?.plan?.slug ?? "starter";
 
   // Determine effective role: check if user is the org owner or a site member
   let effectiveRole = user.role ?? "owner";
@@ -81,7 +83,7 @@ async function buildUserResponse(userId: string) {
   const legalAcceptance = await getCurrentLegalAcceptanceStatus(userId);
   const isPlatformAdmin = await isActivePlatformAdmin(userId);
 
-  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, passwordHash: undefined, currentSite, allSites, legalAcceptance, isPlatformAdmin };
+  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, saas, saasSuspended: !!saas && !isOrgOwner && !saas.activeStaffIds.includes(user.id), passwordHash: undefined, currentSite, allSites, legalAcceptance, isPlatformAdmin };
 }
 
 async function ensureUserOrganisation(userId: string) {
@@ -345,6 +347,10 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
+      if (saasEnabled()) {
+        const created = await authStorage.getUser(user.id);
+        if (created?.organisationId) await saasStore.ensure(created.organisationId);
+      }
 
       const userAfterOrg = await authStorage.getUser(user.id);
       await recordCurrentLegalAcceptance({
@@ -405,6 +411,10 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
+      if (saasEnabled()) {
+        const created = await authStorage.getUser(user.id);
+        if (created?.organisationId) await saasStore.ensure(created.organisationId);
+      }
 
       const response = await buildUserResponse(user.id);
 

@@ -1,3 +1,5 @@
+import { recordOnboardingAction } from "./onboarding-events";
+import { archiveReceiptHtml, type ReceiptArchiveContext } from "./receipt-archive";
 export type ReceiptFormat = "html" | "pdf" | "png";
 
 // Keep the same desktop layout on phones; only the output resolution changes.
@@ -73,10 +75,12 @@ export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasEleme
   }
 }
 
-export async function downloadReceiptDocument(html: string, filename: string, format: ReceiptFormat) {
+export async function downloadReceiptDocument(html: string, filename: string, format: ReceiptFormat, context?: ReceiptArchiveContext) {
+  html = await archiveReceiptHtml(html, context);
   const basename = filename.replace(/\.(html?|pdf|png)$/i, "");
   if (format === "html") {
     saveReceiptBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `${basename}.html`);
+    recordOnboardingAction("receipt");
     return;
   }
   const canvas = await renderReceiptCanvas(html);
@@ -93,6 +97,7 @@ export async function downloadReceiptDocument(html: string, filename: string, fo
       pdf.addImage(canvas, "PNG", 0, 0, width, height, undefined, "FAST");
       saveReceiptBlob(pdf.output("blob"), `${basename}.pdf`);
     }
+    recordOnboardingAction("receipt");
   } finally {
     canvas.width = canvas.height = 0;
   }

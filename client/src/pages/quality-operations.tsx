@@ -14,7 +14,8 @@ const STATUSES = ["all", "pending_review", "approved", "in_rework", "quality_che
 
 export default function QualityOperations({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
-  const { currentSite } = useAuth();
+  const { currentSite, user } = useAuth();
+  const basicSaas = user?.saas?.plan === "starter";
   const currencySymbol = useCurrency((state) => state.getSymbol());
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("all");
   const { data = [], isLoading, isError } = useQuery<any[]>({
@@ -55,9 +56,9 @@ export default function QualityOperations({ embedded = false }: { embedded?: boo
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="quality-management-summary">
       <QualityMetric icon={<RotateCcw />} label={t("quality_open_cases", "Dossiers ouverts")} value={summary?.openCases ?? 0} />
-      <QualityMetric icon={<Clock3 />} label={t("quality_resolution_time", "Délai moyen de résolution")} value={summary?.averageResolutionHours == null ? "—" : `${Number(summary.averageResolutionHours).toFixed(1)} h`} />
-      <QualityMetric icon={<Wallet />} label={t("quality_estimated_cost", "Coût estimé")} value={`${Number(summary?.estimatedCost || 0).toLocaleString()} ${currencySymbol}`} />
-      <QualityMetric icon={<AlertTriangle />} label={t("quality_overdue_actions", "Actions en retard")} value={summary?.overdueActions ?? 0} danger={Number(summary?.overdueActions || 0) > 0} />
+      {!basicSaas && <QualityMetric icon={<Clock3 />} label={t("quality_resolution_time", "Délai moyen de résolution")} value={summary?.averageResolutionHours == null ? "—" : `${Number(summary.averageResolutionHours).toFixed(1)} h`} />}
+      {!basicSaas && <QualityMetric icon={<Wallet />} label={t("quality_estimated_cost", "Coût estimé")} value={`${Number(summary?.estimatedCost || 0).toLocaleString()} ${currencySymbol}`} />}
+      {!basicSaas && <QualityMetric icon={<AlertTriangle />} label={t("quality_overdue_actions", "Actions en retard")} value={summary?.overdueActions ?? 0} danger={Number(summary?.overdueActions || 0) > 0} />}
     </div>
 
     {isLoading ? <div className="space-y-2"><Skeleton className="h-28" /><Skeleton className="h-28" /></div> : null}

@@ -1,3 +1,5 @@
+import { saasEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
+import { standardSaasSettings } from "./lib/saas-access";
 import { db } from "./db";
 import { insertOrderRecords, type OrderCreationRecords } from "./lib/order-creation";
 import { 
@@ -1657,13 +1659,19 @@ export class DatabaseStorage implements IStorage {
   async getSettings(userId: string): Promise<BusinessSettings> {
     await ensureBusinessSettingsSchema();
     const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
-    if (existing) return existing;
+    const effective = async (value: BusinessSettings) => {
+      if (!saasEnabled()) return value;
+      const org = await this.getOrganisationByOwner(userId);
+      const state = org ? await saasForOrganisation(org.id) : null;
+      return state ? standardSaasSettings(value, state.plan) : value;
+    };
+    if (existing) return effective(existing);
     const [userRow] = await db.select().from(users).where(eq(users.id, userId));
     const [created] = await db.insert(businessSettings).values({
       userId,
       businessName: userRow?.businessName || "My Laundry",
     }).returning();
-    return created;
+    return effective(created);
   }
 
   async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>, executor: any = db): Promise<BusinessSettings> {
@@ -1719,7 +1727,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
+    if (saasEnabled()) await saasStore.ensure(organisationId);
     return await db.transaction(async (tx) => {
+      const create = async () => {
       const [site] = await tx.insert(sites).values({
         organisationId,
         name: data.name,
@@ -1732,6 +1742,11 @@ export class DatabaseStorage implements IStorage {
         await tx.insert(siteMembers).values({ siteId: site.id, userId: org.ownerId, role: "owner" });
       }
       return site;
+      };
+      if (!saasEnabled()) return create();
+      let created: Site | undefined;
+      await saasStore.allocateSite(drizzleSaasExecutor(tx), organisationId, async () => { created = await create(); return created.id; });
+      return created!;
     });
   }
 
@@ -1844,6 +1859,7 @@ export class DatabaseStorage implements IStorage {
       return null;
     }
 
+    if (saasEnabled()) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
       const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
       if (!site || site.organisationId !== inv.organisationId) return null;
@@ -1860,6 +1876,7 @@ export class DatabaseStorage implements IStorage {
         currentSiteId: inv.siteId,
       }).returning();
 
+      if (saasEnabled()) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, staffUser.id, inv.siteId);
       await tx.insert(siteMembers).values({ siteId: inv.siteId, userId: staffUser.id, role: inv.role });
       await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id));
       return staffUser;
@@ -1883,7 +1900,9 @@ export class DatabaseStorage implements IStorage {
     if (!userIdentifiers.includes(invitedIdentifier)) {
       throw new Error("INVITATION_IDENTIFIER_MISMATCH");
     }
+    if (saasEnabled()) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
+      if (saasEnabled()) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, userId, inv.siteId);
       const [site] = await tx.select().from(sites).where(and(
         eq(sites.id, inv.siteId),
         eq(sites.organisationId, inv.organisationId),

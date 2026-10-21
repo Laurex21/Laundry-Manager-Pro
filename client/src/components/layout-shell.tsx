@@ -1,3 +1,4 @@
+import { SaasNotice } from "./saas-notice";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -350,7 +351,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const [mobileOpen, setMobileOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [guideRestartToken, setGuideRestartToken] = useState(0);
+  const guideRestartToken = 0;
   const pwaInstaller = usePwaInstall();
   const { t, i18n } = useTranslation();
 
@@ -358,7 +359,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     if (!user?.id || (user as any).role !== "owner" || user.legalAcceptance?.required) return;
     const progress = window.localStorage.getItem(guideProgressKey(user.id));
     const active = window.localStorage.getItem(guideActiveKey(user.id));
-    if (active !== "0" && progress !== "done" && (progress === null || /^[0-4]$/.test(progress))) {
+    if (active !== "0" && progress !== "done" && (progress === null || /^[0-6]$/.test(progress))) {
       window.localStorage.setItem(guideActiveKey(user.id), "1");
       setGuideOpen(true);
     }
@@ -552,7 +553,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
-                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { if (user?.id) window.localStorage.setItem(guideActiveKey(user.id), "1"); setGuideRestartToken(value => value + 1); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
+                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { if (user?.id) window.localStorage.setItem(guideActiveKey(user.id), "1"); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}
                 </DropdownMenuItem>}
@@ -574,6 +575,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
         {/* Demo banner */}
         <DemoBanner />
+        <SaasNotice />
 
         {/* Page content */}
         <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] mx-auto w-full pb-24 lg:pb-8 min-w-0 overflow-x-hidden">

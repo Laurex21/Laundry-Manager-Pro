@@ -1,3 +1,7 @@
+import { registerSaasRoutes } from "./lib/saas-routes";
+import { saasEnabled, saasStore, saasForOrganisation } from "./lib/saas-runtime";
+import { SAAS_CUSTOM_FIELDS, standardSaasSettings } from "./lib/saas-access";
+import { SAAS_PLANS } from "@shared/saas-plans";
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
@@ -245,6 +249,7 @@ async function trackEmployeeActivity(req: any, data: {
 
 async function canManageSite(req: any, siteId: number): Promise<boolean> {
   const userId = (req.session as any).userId;
+  if ((req as any).saas && !["GET", "HEAD"].includes(req.method) && !(req as any).saas.activeSiteIds.includes(siteId)) return false;
   const org = await storage.getOrganisationByOwner(userId);
   const site = await storage.getSite(siteId);
   return !!org && !!site && site.organisationId === org.id;
@@ -286,6 +291,11 @@ async function effectivePlanSlug(req: any): Promise<string> {
     const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId)).limit(1);
     subscriptionOwnerId = org?.ownerId || userId;
   }
+  if (saasEnabled()) {
+    const orgId = Number((req as any).organisationId);
+    const state = orgId ? await saasForOrganisation(orgId) : null;
+    if (state) return state.plan;
+  }
   const sub = await storage.getUserSubscription(subscriptionOwnerId);
   return sub?.plan?.slug || "starter";
 }
@@ -293,6 +303,7 @@ async function effectivePlanSlug(req: any): Promise<string> {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerSaasRoutes(app);
   registerLegalRoutes(app);
   registerCalculatorRoutes(app);
   registerDiagnosticRoutes(app);
@@ -968,16 +979,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const params: any[] = [siteIds, from, to];
     let where = `o.site_id = ANY($1::int[]) AND p.date BETWEEN $2 AND $3`;
     if (parsed.data.method) { params.push(parsed.data.method); where += ` AND p.method = $${params.length}`; }
-    if (parsed.data.search) { params.push(`%${parsed.data.search}%`); where += ` AND (c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length} OR CAST(o.id AS text) ILIKE $${params.length} OR COALESCE(p.reference, '') ILIKE $${params.length})`; }
+    if (parsed.data.search) { params.push(`%${parsed.data.search}%`); where += ` AND (c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length} OR CAST(o."orderNumber" AS text) ILIKE $${params.length} OR COALESCE(p.reference, '') ILIKE $${params.length})`; }
     if (!managerOrOwner) { params.push(userId); where += ` AND e.user_id = $${params.length}`; }
     const result = await pool.query(
-      `SELECT p.id, p.order_id AS "orderId", p.amount, p.method, p.reference, p.date,
+      `WITH numbered_orders AS (
+         SELECT o.*, ROW_NUMBER() OVER (PARTITION BY o.site_id ORDER BY o.created_at, o.id) AS "orderNumber"
+         FROM orders o WHERE o.site_id = ANY($1::int[])
+       )
+       SELECT p.id, p.order_id AS "orderId", p.amount, p.method, p.reference, p.date,
               o.site_id AS "siteId", o.payment_status AS "paymentStatus",
-              ROW_NUMBER() OVER (PARTITION BY o.site_id ORDER BY o.created_at, o.id) AS "orderNumber",
+              o."orderNumber",
               c.name AS "customerName", c.phone AS "customerPhone",
               e.name AS "employeeName", s.name AS "siteName"
        FROM payments p
-       JOIN orders o ON o.id = p.order_id
+       JOIN numbered_orders o ON o.id = p.order_id
        JOIN customers c ON c.id = o.customer_id
        JOIN sites s ON s.id = o.site_id
        LEFT JOIN employees e ON e.id = p.collected_by_employee_id
@@ -1771,17 +1786,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/plans", async (req, res) => {
     const plans = await storage.getPlans();
-    res.json(plans);
+    res.json(saasEnabled() ? Object.values(SAAS_PLANS).map(p => ({ ...p, id: p.slug, price: String(p.priceXaf), maxOrders: null, maxUsers: p.staff + 1, active: true, features: [] })) : plans);
   });
 
   app.get("/api/subscriptions/current", isAuthenticated, async (req, res) => {
     if (!(await requireOwnerOrganisation(req, res))) return;
+    if (saasEnabled()) return res.status(410).json({ code: "USE_SAAS_CURRENT" });
     const sub = await storage.getUserSubscription((req.session as any).userId);
     res.json(sub);
   });
 
   app.post("/api/subscriptions/activate", isAuthenticated, rateLimit({ name: "subscription-activate", windowMs: 60 * 60 * 1000, max: 10, key: (req) => String(req.session?.userId || ""), keyOnly: true }), async (req, res) => {
     if (!(await requireOwnerOrganisation(req, res))) return;
+    if (saasEnabled()) return res.status(410).json({ code: "PAYMENT_CONFIRMATION_REQUIRED", message: "Use the SaaS invoice checkout; free activation is disabled." });
     const planId = Number(req.body?.planId);
     if (!Number.isSafeInteger(planId) || planId < 1) return res.status(400).json({ message: "Valid planId required" });
     try {
@@ -2329,7 +2346,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/analytics/advanced", isAuthenticated, async (req: any, res) => {
     const planSlug = await effectivePlanSlug(req);
-    if (!["business", "enterprise"].includes(planSlug)) {
+    if (!(saasEnabled() ? ["pro", "business"] : ["business", "enterprise"]).includes(planSlug)) {
       return res.status(403).json({ message: "Business plan required for advanced analytics" });
     }
     const period = (req.query.period as string) || "month";
@@ -2343,7 +2360,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const settingsOwnerId = await effectiveSettingsOwnerId(req);
       const settings = await storage.getSettings(settingsOwnerId);
-      res.json(settings);
+      const state = (req as any).saas;
+      res.json(state ? standardSaasSettings(settings, state.plan) : settings);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch settings" });
     }
@@ -2357,6 +2375,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const parsed = insertBusinessSettingsSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
+      }
+      if ((req as any).saas?.plan === "starter") {
+        const visible = standardSaasSettings(await storage.getSettings(userId), "starter");
+        for (const field of SAAS_CUSTOM_FIELDS) {
+          if (!Object.hasOwn(parsed.data, field)) continue;
+          if (JSON.stringify((parsed.data as any)[field]) !== JSON.stringify((visible as any)[field])) {
+            return res.status(403).json({ code: "SAAS_CUSTOMIZATION_REQUIRED", message: "Receipt customization requires Pro or Business." });
+          }
+          delete (parsed.data as any)[field]; // Preserve stored Pro settings, including masked defaults.
+        }
       }
       if (parsed.data.receiptQrCodeBase64) {
         const allowedQrImage = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -2453,6 +2481,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/sites/:id", isAuthenticated, async (req, res) => {
     try {
+      if (saasEnabled()) return res.status(409).json({ code: "USE_SCHEDULED_CHANGE", message: "Schedule site removal in the subscription page; historical sites are preserved." });
       const userId = (req.session as any).userId;
       const org = await storage.getOrganisationByOwner(userId);
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });

@@ -13,7 +13,9 @@ test("subscription dashboard localizes money and user-facing copy", () => {
   assert.match(source, /copy\.outstanding/);
   assert.match(source, /copy\.advance/);
   assert.match(source, /copy\.health/);
-  assert.match(source, /placeholder=\{copy\.search\}/);
+  assert.match(source, /searchLabel=\{copy\.search\}/);
+  assert.match(source, /placeholder=\{searchLabel\}/);
+  assert.match(source, /<span className="sr-only">\{searchLabel\}<\/span>/);
   assert.doesNotMatch(source, /label="Collected this period"/);
   assert.doesNotMatch(source, /label="Outstanding"/);
   assert.doesNotMatch(source, /label="Advance credit held"/);

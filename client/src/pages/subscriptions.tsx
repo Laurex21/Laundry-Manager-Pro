@@ -1,3 +1,5 @@
+import SaasSubscriptions from "./saas-subscriptions";
+import { labelForPlanFeature } from "@/lib/display-labels";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -25,6 +27,12 @@ function dateLocaleFor(language: string) {
 }
 
 export default function Subscriptions() {
+  const config = useQuery<{enabled:boolean}>({ queryKey:["/api/saas/config"] });
+  if (config.isLoading) return <Skeleton className="h-48 w-full" />;
+  return config.data?.enabled ? <SaasSubscriptions /> : <LegacySubscriptions />;
+}
+
+function LegacySubscriptions() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
@@ -118,7 +126,7 @@ export default function Subscriptions() {
                   {features.map((feature, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
                       <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      <span>{feature}</span>
+                      <span>{labelForPlanFeature(feature, t)}</span>
                     </div>
                   ))}
                 </div>

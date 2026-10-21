@@ -215,7 +215,7 @@ export function registerGarmentReturnRoutes(app: Express) {
         inArray(garmentReturnCases.siteId, siteIds),
         sql`${garmentReturnCases.rootCause} IS NOT NULL`,
       )).groupBy(garmentReturnCases.rootCause).orderBy(desc(sql`COUNT(*)`)).limit(5);
-    res.json({ ...rows[0], topCauses: causes });
+    res.json(req.saas?.plan === "starter" ? { openCases: rows[0]?.openCases || 0 } : { ...rows[0], topCauses: causes });
   });
 
   app.post("/api/garment-returns/:id/decision", isAuthenticated, async (req: any, res) => {
@@ -229,6 +229,9 @@ export function registerGarmentReturnRoutes(app: Express) {
     if (!(await requireManagerOrOwner(req, res, organisationId, current.siteId))) return;
     if (current.status !== "pending_review") return res.status(409).json({ message: "This return has already been reviewed" });
     if (requiresDecisionJustification(parsed.data.decision) && parsed.data.notes.length < 3) return res.status(400).json({ message: "A justification is required for this decision" });
+    if (req.saas?.plan === "starter" && ((parsed.data.rootCause && parsed.data.rootCause !== "unknown") || (parsed.data.responsibility && parsed.data.responsibility !== "undetermined") || parsed.data.estimatedCost > 0 || parsed.data.correctiveAction || parsed.data.correctiveActionDueAt)) {
+      return res.status(403).json({ code: "SAAS_FEATURE_REQUIRED", feature: "qualityAdvanced" });
+    }
     if (["high", "critical"].includes(parsed.data.severity) && parsed.data.notes.length < 8) return res.status(400).json({ message: "A detailed justification is required for a high-severity case" });
     if (parsed.data.correctiveAction && !parsed.data.correctiveActionDueAt) return res.status(400).json({ message: "A corrective action requires a due date" });
     const toStatus = parsed.data.decision === "reject" ? "rejected" : "approved";

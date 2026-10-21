@@ -1,3 +1,4 @@
+import { applySaasAccess } from "../../lib/saas-access";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
@@ -630,6 +631,8 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     req.organisationSiteIds = isOrganisationOwner ? organisationSiteIds : authorizedSiteIds;
     req.siteScope = currentSiteId === null ? authorizedSiteIds : [Number(currentSiteId)].filter((siteId) => authorizedSiteIds.includes(siteId));
     req.organisationSiteScope = req.organisationSiteIds;
+
+    if (!(await applySaasAccess(req, res))) return;
 
     const legalBypassPaths = new Set([
       "/api/auth/user",

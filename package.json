@@ -48,7 +48,8 @@
     "db:migrate:reviewed": "tsx scripts/run-reviewed-migrations.ts",
     "db:seed:plans": "tsx scripts/seed-plans.ts",
     "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts",
-    "test:receipt-export": "tsx server/lib/receipt-export.test.ts"
+    "test:receipt-export": "tsx server/lib/receipt-export.test.ts",
+    "test:saas-billing": "tsx server/lib/saas-billing.test.ts && tsx server/lib/saas-access.integration.test.ts && tsx server/lib/saas-callback-proxy.test.ts && tsx server/lib/saas-launch-verification.integration.test.ts && tsx server/lib/saas-production-config.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

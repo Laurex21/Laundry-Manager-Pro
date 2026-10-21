@@ -1,3 +1,4 @@
+import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
@@ -27,6 +28,7 @@ async function toEvidenceImage(file: File): Promise<EvidenceImage> {
 }
 
 function ReturnCaseCard({ row, isManager, invalidate }: { row: any; isManager: boolean; invalidate: () => void }) {
+  const basicSaas = useAuth().user?.saas?.plan === "starter";
   const { t } = useTranslation();
   const { toast } = useToast();
   const [decision, setDecision] = useState("rewash");
@@ -78,7 +80,7 @@ function ReturnCaseCard({ row, isManager, invalidate }: { row: any; isManager: b
               <SelectContent>{DECISIONS.map((value) => <SelectItem key={value} value={value}>{t(`customer_return_decision_${value}`)}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          {!basicSaas && <><div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5"><Label>{t("quality_severity", "Gravité")}</Label><Select value={severity} onValueChange={setSeverity}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["low", "medium", "high", "critical"].map((value) => <SelectItem key={value} value={value}>{t(`quality_severity_${value}`, value)}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>{t("quality_root_cause", "Cause racine")}</Label><Select value={rootCause} onValueChange={setRootCause}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["process", "machine", "product", "human", "customer", "unknown"].map((value) => <SelectItem key={value} value={value}>{t(`quality_root_cause_${value}`, value)}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>{t("quality_responsibility", "Responsabilité")}</Label><Select value={responsibility} onValueChange={setResponsibility}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["company", "customer", "shared", "supplier", "undetermined"].map((value) => <SelectItem key={value} value={value}>{t(`quality_responsibility_${value}`, value)}</SelectItem>)}</SelectContent></Select></div>
@@ -88,6 +90,7 @@ function ReturnCaseCard({ row, isManager, invalidate }: { row: any; isManager: b
             <div className="space-y-1.5"><Label htmlFor={`quality-due-${row.returnCase.id}`}>{t("quality_corrective_due", "Échéance corrective")}</Label><Input id={`quality-due-${row.returnCase.id}`} type="datetime-local" value={correctiveDueAt} onChange={(event) => setCorrectiveDueAt(event.target.value)} /></div>
           </div>
           <div className="space-y-1.5"><Label htmlFor={`quality-action-${row.returnCase.id}`}>{t("quality_corrective_action", "Action corrective")}</Label><Textarea id={`quality-action-${row.returnCase.id}`} value={correctiveAction} onChange={(event) => setCorrectiveAction(event.target.value)} /></div>
+</>}
           <div className="space-y-1.5">
             <Label htmlFor={`decision-notes-${row.returnCase.id}`}>{t("customer_return_decision_notes")}</Label>
             <Textarea id={`decision-notes-${row.returnCase.id}`} value={notes} onChange={(event) => setNotes(event.target.value)} />
