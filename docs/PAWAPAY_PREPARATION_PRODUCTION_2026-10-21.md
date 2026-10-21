@@ -54,8 +54,8 @@ Activer les notifications signées côté pawaPay. Conserver les protections de 
 
 ## Ordre de déploiement proposé — NON EXÉCUTÉ
 
-1. Sauvegarder le code dans GitHub et revoir le diff de la branche. L'authentification Git locale reste à rétablir ; aucun envoi n'est annoncé ici.
-2. Confirmer l'activation commerciale du compte pawaPay réel, les encaissements CMR/XAF, les frais marchands et la destination des règlements. L'écran Sandbox d'onboarding indique encore une configuration du compte réel en cours ; cela ne prouve pas son état réel actuel.
+1. Sauvegarder le code dans GitHub et revoir le diff de la branche. L'authentification Git locale est rétablie et le code validé a été envoyé sur `codex/saas-subscription-audit` ; aucun merge dans `main` n'est réalisé ici.
+2. Confirmer l'activation commerciale du compte pawaPay réel, les encaissements CMR/XAF, les frais marchands et la destination des règlements. Le compte Production a depuis été consulté en lecture seule : portefeuille Cameroun/XAF et MTN/Orange indiqués actifs, trois clés actives listées, URL de notification vides et signature des callbacks désactivée. Aucune valeur de clé consultée ni capacité d'encaissement réelle testée ; les frais et limites restent à confirmer.
 3. Choisir le domaine permanent et vérifier son certificat HTTPS. Fixer la politique commerciale des crédits excédentaires (actuellement bloqués pour revue) et examiner les anciens abonnements déjà payés, qui ne sont pas convertis automatiquement.
 4. Avec autorisation distincte, sauvegarder la base réelle et effectuer une restauration de contrôle dans une base séparée. Aucun fichier de sauvegarde réel n'est créé pendant cette préparation. Relever le commit et les variables du déploiement précédent.
 5. Pendant une fenêtre contrôlée, garder `SAAS_BILLING_MODE=disabled`, vérifier la destination de la base, puis appliquer **uniquement les migrations revues** `20261021_saas_billing_v5.sql` et `20261021_saas_provider_environment.sql` dans cet ordre. Ces migrations n'ont été exécutées ici que sur PGlite. Ne pas lancer `db:push` en production, ni un rattrapage général des migrations non examinées.
@@ -89,3 +89,16 @@ Après le test : les quatre URL temporaires Sandbox (Checkout, Deposit, Payout, 
 Vérifications locales : **93 fichiers de tests sur 93 passent**, TypeScript validé. La compilation du commit final est vérifiée séparément avant livraison. Les tests du mode réel utilisent une clé factice et un transport simulé ; aucun appel réel de production.
 
 Preuves locales dans `../saas-implementation-checks/production-preparation/` : `first-checkout-callback-200.png`, `sandbox-final-completed.png`, `sandbox-callbacks-cleared-final.png` et `cleanup-verified-final.png`.
+
+## Préparation de l'intégration Replit, sans installation
+
+- Replit utilise `main` au commit `5ef5a28601cc77a07a9f513554c6fe87c09f398c`, également présent sur GitHub. La page de déploiement indique une publication antérieure ; aucun bouton de publication n'a été utilisé.
+- Domaines relevés dans le panneau Replit : `laundry-manager-pro.replit.app`, `superadmin.xpressclean.cm`, `app.xpressclean.cm`. Origine proposée pour les clients : **`https://app.xpressclean.cm`**. Une requête HEAD publique a renvoyé HTTP 200, sans redirection et avec validation TLS réussie. Aucune connexion utilisateur ni consultation de données métier.
+- Callback réel préparé : **`https://app.xpressclean.cm/api/saas/live/callback`**. Cette adresse n'a pas été installée chez pawaPay ; le nouveau chemin n'a pas été appelé sur le déploiement actuel.
+- Modèle de configuration : [`../deploy/pawapay-production.env.example`](../deploy/pawapay-production.env.example). Il garde `SAAS_BILLING_MODE=disabled` et `SAAS_LIVE_ENABLED=false`, sans clé ni URL de base. Il n'est chargé automatiquement par aucun script ni par Replit.
+- Répétition locale de fusion : sept conflits dus aux historiques distincts ont été résolus sur la branche de préparation. Le commit de fusion `6776444` conserve **exactement le même arbre de fichiers** que le commit validé `6b2bb1e` (`d78ee58c1b9bb8a6c1e4f326d8e3b3e3090fb254`). Les corrections de reçus HTML/PDF/PNG et de l'accueil sont conservées. `main` distant et le checkout Replit ne sont pas fusionnés pendant cette préparation.
+- Un port de test résiduel `3001 → 3002` avait été réinscrit dans `.replit` après le premier nettoyage. Il a été retiré de nouveau après vérification qu'aucun processus du programme de test n'était actif. Seul ce diff a été annulé ; aucune source métier Replit n'a été remplacée.
+
+**Point à traiter avant tout pull dans le Replit actuel :** le serveur existant exécute déjà des contrôles/migrations de schéma au démarrage (`ensureAuthSchema`, contrôle de précision des quantités). Désactiver le nouveau moteur SaaS n'empêche pas ces opérations historiques. Un changement de sources peut redémarrer automatiquement le serveur de développement. Il faut donc vérifier la séparation entre base de développement et base de production, et disposer d'une sauvegarde restaurable autorisée, avant d'y installer le code. Cette préparation n'a ni interrogé ni modifié ces bases et n'a pas changé les Secrets.
+
+Prochaine opération proposée : vérifier la destination des bases sans exposer les identifiants, puis réaliser une sauvegarde/restauration de contrôle dans un environnement séparé avec l'autorisation correspondante. La migration réelle et la publication restent exclues du périmètre actuel.
