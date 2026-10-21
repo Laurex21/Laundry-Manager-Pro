@@ -47,7 +47,8 @@
     "db:push": "drizzle-kit push",
     "db:migrate:reviewed": "tsx scripts/run-reviewed-migrations.ts",
     "db:seed:plans": "tsx scripts/seed-plans.ts",
-    "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts"
+    "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts",
+    "test:receipt-export": "tsx server/lib/receipt-export.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
@@ -97,9 +98,11 @@
     "express": "^5.0.1",
     "express-session": "^1.19.0",
     "framer-motion": "^11.18.2",
+    "html2canvas": "^1.4.1",
     "i18next": "^25.8.4",
     "i18next-browser-languagedetector": "^8.2.0",
     "input-otp": "^1.4.2",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.453.0",
     "memoizee": "^0.4.17",
     "memorystore": "^1.6.7",
