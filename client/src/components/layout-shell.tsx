@@ -359,7 +359,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     if (!user?.id || (user as any).role !== "owner" || user.legalAcceptance?.required) return;
     const progress = window.localStorage.getItem(guideProgressKey(user.id));
     const active = window.localStorage.getItem(guideActiveKey(user.id));
-    if (active !== "0" && progress !== "done" && (progress === null || /^[0-4]$/.test(progress))) {
+    if (active !== "0" && progress !== "done" && (progress === null || /^[0-6]$/.test(progress))) {
       window.localStorage.setItem(guideActiveKey(user.id), "1");
       setGuideOpen(true);
     }

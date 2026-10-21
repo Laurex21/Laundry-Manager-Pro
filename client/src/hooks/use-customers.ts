@@ -1,3 +1,4 @@
+import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertCustomer, type Customer } from "@shared/schema";
@@ -48,6 +49,7 @@ export function useCreateCustomer() {
       return api.customers.create.responses[201].parse(await res.json());
     },
     onSuccess: () => {
+      recordOnboardingAction("customer");
       queryClient.invalidateQueries({ queryKey: [api.customers.list.path] });
       toast({ title: "Success", description: "Customer created successfully" });
     },

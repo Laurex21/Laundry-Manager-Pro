@@ -361,7 +361,7 @@ export default function Payments() {
         <p className="text-muted-foreground text-sm mt-0.5">{t("payments_subtitle")}</p>
       </div>
       <div className="grid grid-cols-2 rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm">
-        <Button className="min-w-0 px-2 sm:px-4" variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>
+        <Button data-testid="onboarding-register-payment" className="min-w-0 px-2 sm:px-4" variant={view === "register" ? "default" : "ghost"} onClick={() => setView("register")}>
           <span className="sm:hidden">{t("collect_payment_short")}</span><span className="hidden sm:inline">{t("register_payment")}</span>
         </Button>
         <Button className="min-w-0 px-2 sm:px-4" variant={view === "history" ? "default" : "ghost"} onClick={() => setView("history")}>

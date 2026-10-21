@@ -1,3 +1,4 @@
+import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type createOrderWithItemsSchema } from "@shared/routes";
 import { z } from "zod";
@@ -49,6 +50,7 @@ export function useCreateOrder() {
       return api.orders.create.responses[201].parse(await res.json());
     },
     onSuccess: () => {
+      recordOnboardingAction("order");
       queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Success", description: "Order created successfully" });
@@ -91,6 +93,7 @@ export function useUpdateOrderStatus() {
       return api.orders.updateStatus.responses[200].parse(await res.json());
     },
     onSuccess: (data) => {
+      recordOnboardingAction("status");
       queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.orders.get.path, data.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });

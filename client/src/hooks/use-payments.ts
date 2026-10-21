@@ -1,3 +1,4 @@
+import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import type { InsertPayment } from "@shared/schema";
@@ -41,6 +42,7 @@ export function useCreatePayment() {
       return res.json();
     },
     onSuccess: (_data, variables) => {
+      recordOnboardingAction("payment");
       queryClient.invalidateQueries({ queryKey: ['/api/orders', variables.orderId, 'payments'] });
       queryClient.invalidateQueries({ queryKey: [api.orders.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.orders.get.path, variables.orderId] });

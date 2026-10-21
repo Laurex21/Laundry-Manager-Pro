@@ -1,3 +1,4 @@
+import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertService } from "@shared/schema";
@@ -31,6 +32,7 @@ export function useCreateService() {
       return api.services.create.responses[201].parse(await res.json());
     },
     onSuccess: () => {
+      recordOnboardingAction("service");
       queryClient.invalidateQueries({ queryKey: [api.services.list.path] });
       toast({ title: "Success", description: "Service added to catalog" });
     },
@@ -57,6 +59,7 @@ export function useUpdateService() {
       return api.services.update.responses[200].parse(await res.json());
     },
     onSuccess: () => {
+      recordOnboardingAction("service");
       queryClient.invalidateQueries({ queryKey: [api.services.list.path] });
       toast({ title: "Success", description: "Service updated successfully" });
     },
