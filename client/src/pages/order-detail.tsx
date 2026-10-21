@@ -1,3 +1,5 @@
+import { ReceiptDownloadMenu } from "@/components/receipt-download-menu";
+import { downloadReceiptDocument, type ReceiptFormat } from "@/lib/receipt-export";
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
@@ -8,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, CheckCircle2, Clock,
-  AlertTriangle, RotateCcw, Download, Printer, XCircle, CalendarCheck, MessageCircle, Loader2
+  AlertTriangle, RotateCcw, Printer, XCircle, CalendarCheck, MessageCircle, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +32,7 @@ import { enUS, fr, pt } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { queryClient } from "@/lib/queryClient";
-import { downloadReceiptHtml, generateDepositReceipt, generateThermalDepositReceipt, renderReceiptInPrintWindow, reserveReceiptPrintWindow } from "@/lib/receipt";
+import { generateDepositReceipt, generateThermalDepositReceipt, renderReceiptInPrintWindow, reserveReceiptPrintWindow } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
@@ -230,14 +232,14 @@ export default function OrderDetail() {
     }
   }
 
-  async function handleDownloadReceipt() {
+  async function handleDownloadReceipt(format: ReceiptFormat = "html") {
     if (isDownloadingReceipt) return;
     setIsDownloadingReceipt(true);
     try {
       const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=a4`, { credentials: "include" });
       if (subscriberReceipt.ok) {
         const html = await subscriberReceipt.text();
-        downloadReceiptHtml(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`);
+        await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`, format);
         return;
       }
       const mergedSettings = {
@@ -245,10 +247,10 @@ export default function OrderDetail() {
         ...(settings || {}),
         receiptLanguage: settings?.receiptLanguage || i18n.language,
       };
-      await generateDepositReceipt(order, symbol, mergedSettings, "download");
+      await generateDepositReceipt(order, symbol, mergedSettings, format);
     } catch (err) {
       console.error("Receipt download error:", err);
-      toast({ title: t("error"), description: "Could not download receipt.", variant: "destructive" });
+      throw err;
     } finally {
       setIsDownloadingReceipt(false);
     }
@@ -457,13 +459,10 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap md:items-center md:justify-end" data-testid="order-mobile-actions-grid">
-          <Button className="w-full min-w-0 md:w-auto" variant="outline" size="sm" onClick={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
-            {isDownloadingReceipt
-              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              : <Download className="w-4 h-4 mr-2" />}
-            <span className="md:hidden">{isDownloadingReceipt ? t("generating", "Generating…") : t("receipt_short")}</span>
-            <span className="hidden md:inline">{isDownloadingReceipt ? t("generating", "Generating…") : t("download_receipt")}</span>
-          </Button>
+          <ReceiptDownloadMenu className="w-full min-w-0 md:w-auto" variant="outline" size="sm" onDownload={handleDownloadReceipt} disabled={isDownloadingReceipt} data-testid="button-download-deposit-receipt">
+            <span className="md:hidden">{t("receipt_short")}</span>
+            <span className="hidden md:inline">{t("download_receipt")}</span>
+          </ReceiptDownloadMenu>
           <Button className="w-full min-w-0 md:w-auto" variant="outline" size="sm" onClick={handlePrintThermalReceipt} data-testid="button-print-thermal-receipt">
             <Printer className="w-4 h-4 mr-2" />
             <span className="md:hidden">{t("thermal_ticket_short")}</span>

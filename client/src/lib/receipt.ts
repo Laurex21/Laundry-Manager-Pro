@@ -1,3 +1,4 @@
+import { downloadReceiptDocument, type ReceiptFormat } from "./receipt-export";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
@@ -223,7 +224,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function receiptPrintCss(): string {
@@ -526,7 +527,7 @@ function openReceiptPrintWindow(html: string): void {
   window.setTimeout(() => win.print(), 250);
 }
 
-type ReceiptAction = "download" | "print";
+type ReceiptAction = "download" | "print" | ReceiptFormat;
 
 export function generateDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, action: ReceiptAction = "download") {
   const lang = settings.receiptLanguage || "en";
@@ -725,7 +726,8 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
+  if (action === "download" || action === "html") downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
+  else return downloadReceiptDocument(html, `deposit-receipt-order-${displayOrderId}.html`, action);
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, reservedWindow?: ReceiptPrintWindow | null) {
@@ -1034,5 +1036,6 @@ export function generatePaymentReceipt(
     return;
   }
 
-  downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
+  if (action === "download" || action === "html") downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
+  else return downloadReceiptDocument(html, `payment-receipt-order-${orderId}.html`, action);
 }

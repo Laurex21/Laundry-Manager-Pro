@@ -1,3 +1,5 @@
+import { ReceiptDownloadMenu } from "@/components/receipt-download-menu";
+import type { ReceiptFormat } from "@/lib/receipt-export";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useOrders } from "@/hooks/use-orders";
@@ -249,7 +251,7 @@ export default function Payments() {
 
   const [receiptLoading, setReceiptLoading] = useState(false);
 
-  async function handleReceipt(action: "download" | "thermal") {
+  async function handleReceipt(action: "download" | "thermal" | ReceiptFormat) {
     if (!successPayment) return;
     const receiptWindow = action === "thermal" ? reserveReceiptPrintWindow() : null;
     if (action === "thermal" && !receiptWindow) {
@@ -327,7 +329,7 @@ export default function Payments() {
           symbol,
           mergedSettings,
           pickupCost,
-          "download"
+          action === "download" ? "html" : action
         );
       }
     } catch (error) {
@@ -390,17 +392,12 @@ export default function Payments() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => handleReceipt("download")}
-              variant="outline"
-              size="sm"
+            <ReceiptDownloadMenu
+              onDownload={handleReceipt} variant="outline" size="sm"
               className="shrink-0 gap-1.5 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20"
-              disabled={receiptLoading}
-              data-testid="button-download-receipt"
-            >
-              <Download className="w-3.5 h-3.5" />
+              disabled={receiptLoading} data-testid="button-download-receipt">
               {receiptLoading ? t("preparing") : t("download_receipt")}
-            </Button>
+            </ReceiptDownloadMenu>
             <Button
               onClick={() => handleReceipt("thermal")}
               variant="outline"
