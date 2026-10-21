@@ -1459,7 +1459,22 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 <p className="text-sm text-muted-foreground">{t("deadlines_delivery_hint", "Confirmez la date promise et les éventuels frais de collecte ou livraison.")}</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField control={form.control} name="pickupDate" render={({ field }) => <FormItem><FormLabel>{t("pickup_date")}</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} data-testid="input-order-pickup-date" /></FormControl><FormMessage /></FormItem>} />
+                <FormField control={form.control} name="pickupDate" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("pickup_date")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value ?? ""}
+                        // Capture date input immediately, including browsers that defer change until blur.
+                        onInput={(event) => field.onChange(event.currentTarget.value)}
+                        data-testid="input-order-pickup-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="pickupCost" render={({ field }) => <FormItem><FormLabel>{t("pickup_cost")} ({symbol})</FormLabel><FormControl><Input type="number" step="0.01" min="0" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>} />
               </div>
             </section>}
