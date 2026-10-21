@@ -23,7 +23,7 @@ assert.match(paymentDate, /now\.getHours\(\)/);
 assert.match(paymentDate, /now\.getMinutes\(\)/);
 assert.doesNotMatch(paymentDate, /T00:00:00/);
 
-assert.match(routes, /date: order\.entryDate \|\| new Date\(\)/);
+assert.match(routes, /date: orderDataToSave\.entryDate/);
 
 assert.match(storage, /sql`\$\{payments\.date\} >= \$\{start\}`/);
 assert.match(storage, /sql`\$\{payments\.date\} <= \$\{end\}`/);

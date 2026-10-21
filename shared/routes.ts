@@ -35,7 +35,7 @@ export const createOrderWithItemsSchema = z.object({
   discount: z.string().optional(),
   discountPct: z.coerce.number().min(0).max(100).optional().default(0),
   pickupCost: z.string().optional().default("0"),
-  advancePayment: z.string().optional().default("0"),
+  advancePayment: z.string().regex(/^[0-9]+(?:[.,][0-9]{1,6})?$/, "Advance payment must be a non-negative amount").optional().default("0"),
   advancePaymentMethod: z.string().optional().default("Cash"),
   items: z.array(z.object({
     serviceId: z.number().min(1, "Please select a service"),
