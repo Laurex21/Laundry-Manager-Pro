@@ -99,6 +99,40 @@ Preuves locales dans `../saas-implementation-checks/production-preparation/` : `
 - Répétition locale de fusion : sept conflits dus aux historiques distincts ont été résolus sur la branche de préparation. Le commit de fusion `6776444` conserve **exactement le même arbre de fichiers** que le commit validé `6b2bb1e` (`d78ee58c1b9bb8a6c1e4f326d8e3b3e3090fb254`). Les corrections de reçus HTML/PDF/PNG et de l'accueil sont conservées. `main` distant et le checkout Replit ne sont pas fusionnés pendant cette préparation.
 - Un port de test résiduel `3001 → 3002` avait été réinscrit dans `.replit` après le premier nettoyage. Il a été retiré de nouveau après vérification qu'aucun processus du programme de test n'était actif. Seul ce diff a été annulé ; aucune source métier Replit n'a été remplacée.
 
-**Point à traiter avant tout pull dans le Replit actuel :** le serveur existant exécute déjà des contrôles/migrations de schéma au démarrage (`ensureAuthSchema`, contrôle de précision des quantités). Désactiver le nouveau moteur SaaS n'empêche pas ces opérations historiques. Un changement de sources peut redémarrer automatiquement le serveur de développement. Il faut donc vérifier la séparation entre base de développement et base de production, et disposer d'une sauvegarde restaurable autorisée, avant d'y installer le code. Cette préparation n'a ni interrogé ni modifié ces bases et n'a pas changé les Secrets.
+**Point à traiter avant tout pull dans le Replit actuel :** le serveur existant exécute déjà des contrôles/migrations de schéma au démarrage (`ensureAuthSchema`, contrôle de précision des quantités). Désactiver le nouveau moteur SaaS n'empêche pas ces opérations historiques. Un changement de sources peut redémarrer automatiquement le serveur de développement. Il faut donc vérifier la séparation entre base de développement et base de production, et disposer d'une sauvegarde restaurable autorisée, avant d'y installer le code. Cette première préparation n'avait ni interrogé ni modifié ces bases et n'avait pas changé les Secrets. La vérification et la sauvegarde autorisées ensuite sont consignées ci-dessous.
+
+## Séparation des bases et sauvegarde vérifiée
+
+Vérification effectuée sans lancer l'application, modifier les Secrets, publier ou appliquer de migration :
+
+- Replit présente une Development Database (34,88 MB) et une Production Database (environ 74,87 MB).
+- L'empreinte SHA-256 de `hostname normalisé|nom de base` du `DATABASE_URL` effectif du Shell de développement diffère de celle de la base Production. Aucun mot de passe n'entre dans cette empreinte.
+- La destination du `DATABASE_URL` des Deployment secrets correspond à celle de la Production Database. Cette comparaison vérifie la configuration présentée par Replit ; elle n'instrumente pas le processus déjà publié.
+- La copie du développement vers la production est décochée dans les paramètres de publication. La laisser décochée.
+- Production : récupération à un instant précis activée sur 7 jours et sauvegardes quotidiennes conservées 7 jours. Sept sauvegardes sont visibles du 15 au 21 octobre 2026 ; aucune restauration de la production n'a été déclenchée.
+
+### Export supplémentaire et essai de restauration
+
+Un export `pg_dump` personnalisé a été créé avec TLS et `default_transaction_read_only=on`, avec une attente de verrou limitée à 5 secondes. La connexion a été saisie masquée, sans être enregistrée dans l'historique du Shell, les sources ou ce document. Les paramètres PostgreSQL ont été fournis explicitement depuis la connexion Production pour éviter tout mélange avec les variables du développement. Une première tentative utilisant des variables héritées a échoué à l'authentification ; l'export réussi et vérifié est celui indiqué ci-dessous.
+
+Emplacement **dans le conteneur Replit**, hors du dépôt et des répertoires publics :
+
+`/home/runner/.xpresspro-private-backups/2026-10-21T22-10-55-045Z/production.dump`
+
+- Répertoire privé (0700), archive privée (0600).
+- Taille : 14 843 119 octets.
+- SHA-256 : `09caae780560a0494750a8b2de9d1720baba042220b84769f06b764e748f1a95`.
+- Manifeste et liste du contenu de l'archive conservés à côté de l'export.
+- Export terminé : 21 octobre 2026, 22:11:12 UTC.
+- Restauration réelle réussie avec `pg_restore --exit-on-error --single-transaction --no-owner --no-acl` dans un nouveau cluster PostgreSQL temporaire, **56 tables restaurées**. Vérification terminée à 22:11:50 UTC.
+- Cluster accessible uniquement par un socket Unix dans un répertoire privé ; aucune écoute TCP. Aucun démarrage de l'application, appel pawaPay ou envoi de notification depuis cette copie.
+- Serveur de restauration arrêté, absence de `postmaster.pid` vérifiée. Les fichiers de la copie restent privés à côté de l'archive.
+- Replit reste au commit `5ef5a28`, avec un état Git propre.
+
+L'essai confirme la restauration du schéma et des données SQL, pas celle des rôles/permissions d'origine ni des fichiers stockés hors PostgreSQL. L'archive supplémentaire reste dans le conteneur Replit : ce n'est pas une copie indépendante hors de cet environnement. Elle ne doit jamais être ajoutée à GitHub. Les sauvegardes gérées par Replit restent une protection distincte.
+
+### Suite avant installation
+
+La séparation de configuration et la restauration de l'export SQL sont vérifiées. Installer d'abord sur le développement, avec les paiements désactivés, puis vérifier ses migrations et fonctionnalités. Ne pas publier, recopier le développement sur la production ou activer pawaPay Live sans autorisation distincte. Avant une modification ultérieure de production, refaire un export frais ; celui-ci ne contient pas les écritures arrivées après son instantané.
 
 Prochaine opération proposée : vérifier la destination des bases sans exposer les identifiants, puis réaliser une sauvegarde/restauration de contrôle dans un environnement séparé avec l'autorisation correspondante. La migration réelle et la publication restent exclues du périmètre actuel.
