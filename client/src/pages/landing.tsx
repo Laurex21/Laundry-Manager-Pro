@@ -4,7 +4,7 @@ import FippCountdown from "@/components/fipp-countdown";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowRight, Calculator,
+  ArrowRight, Calculator, CalendarDays, MapPin,
   ClipboardCheck, Menu, Play, Sparkles, X,
 } from "lucide-react";
 
@@ -46,6 +46,29 @@ Object.assign(LANDING_EN, {
   footer_resources_1: "Professional diagnostic", footer_resources_2: "Startup calculator", footer_resources_3: "Profitability calculator",
   footer_company_1: "About", footer_company_2: "Terms of use", footer_company_3: "Privacy policy", footer_company_4: "Contact",
 });
+
+const FIPP_HOME = {
+  fr: {
+    banner: "Le rendez-vous des professionnels du pressing",
+    date: "19 décembre 2026", discover: "Découvrir l’événement", edition: "Rencontre · 2ᵉ édition",
+    name: "Forum international des professionnels du pressing",
+    title: "Une matinée pour faire grandir votre activité.",
+    description: "Professionnels du pressing, entrepreneurs et partenaires : échangez sur les méthodes, les outils numériques et les opportunités qui font évoluer le métier en Afrique.",
+    topics: ["Digitalisation & rentabilité", "Marketing & innovation", "Démonstrations & rencontres"],
+    location: "Lieu annoncé prochainement", details: "Programme provisoire, offres et modalités de participation sur la page de l’événement.",
+    accessible: "FIPP Africa · Événement à venir",
+  },
+  en: {
+    banner: "The meeting place for laundry professionals",
+    date: "19 December 2026", discover: "Discover the event", edition: "Event · 2nd edition",
+    name: "International Forum for Laundry Professionals",
+    title: "A morning to help your business grow.",
+    description: "Laundry professionals, entrepreneurs and partners: explore practical methods, digital tools and opportunities shaping the industry across Africa.",
+    topics: ["Digital tools & profitability", "Marketing & innovation", "Demonstrations & networking"],
+    location: "Venue to be announced", details: "Find the provisional programme, ticket options and participation details on the event page.",
+    accessible: "FIPP Africa · Upcoming event",
+  },
+};
 
 function useLandingReveal() {
   useEffect(() => {
@@ -124,6 +147,7 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [menu, setMenu] = useState(false);
   const demoUrl = demoEmbedUrl(i18n.language);
+  const fipp = FIPP_HOME[i18n.language.startsWith("fr") ? "fr" : "en"];
   useLandingReveal(); useLandingMeta(i18n.language);
   useEffect(() => { const fn = () => setScrolled(window.scrollY > 20); window.addEventListener("scroll", fn, { passive: true }); return () => window.removeEventListener("scroll", fn); }, []);
   const footerLinks: Record<string, Array<{ href: string; label: string }>> = {
@@ -149,9 +173,36 @@ export default function LandingPage() {
     </header>
 
     <main id="main-content">
+      <aside aria-label={fipp.accessible} className="mt-16 border-b border-[#cba52a]/40 bg-[#082550] text-white" data-testid="fipp-home-banner">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 px-4 py-4 sm:flex-row sm:items-center sm:gap-6">
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold"><span className="text-[#f3d574]">FIPP AFRICA</span><time dateTime="2026-12-19">{fipp.date}</time></p>
+            <p className="mt-1 text-sm text-blue-100">{fipp.banner}</p>
+          </div>
+          <Link href="/rencontre" className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-[#f3d574] px-5 py-2 text-sm font-bold text-[#082550] hover:bg-[#ffe49a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white sm:w-auto">{fipp.discover}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+        </div>
+      </aside>
       <XpressGroupGateway language={i18n.language} />
 
-      <section className="bg-[#fffaf0] px-4 py-20 text-[#082550]" aria-labelledby="fipp-home-title"><div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[.8fr_1.2fr]"><div><p className="text-xs font-extrabold uppercase tracking-[.22em] text-[#a57d1b]">{i18n.language.startsWith("fr") ? "Rencontre · 2ᵉ édition" : "Event · 2nd edition"}</p><h2 id="fipp-home-title" className="mt-4 font-serif text-3xl font-bold leading-tight sm:text-5xl">FIPP <span className="text-[#cba52a]">AFRICA</span></h2><p className="mt-3 font-bold uppercase tracking-[.1em]">{i18n.language.startsWith("fr") ? "Forum international des professionnels du pressing" : "International Forum for Laundry Professionals"}</p><p className="mt-5 leading-7 text-slate-700">{i18n.language.startsWith("fr") ? "19 décembre 2026 · Une matinée de conférences, démonstrations et rencontres." : "19 December 2026 · A morning of talks, demonstrations and networking."}</p><Link href="/rencontre" className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#cba52a] px-6 py-3 font-bold text-[#082550]">{i18n.language.startsWith("fr") ? "Découvrir la rencontre" : "Explore the event"}<ArrowRight className="h-4 w-4" /></Link></div><FippCountdown compact language={i18n.language} /></div></section>
+      <section id="fipp-africa" className="scroll-mt-20 border-y border-[#cba52a]/25 bg-[#fffaf0] px-4 py-16 text-[#082550] sm:py-20" aria-labelledby="fipp-home-title">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-[.2em] text-[#805f12]">{fipp.edition}</p>
+            <h2 id="fipp-home-title" className="mt-4 font-serif text-4xl font-bold leading-tight sm:text-6xl">FIPP <span className="text-[#946c0a]">AFRICA</span></h2>
+            <p className="mt-3 text-sm font-bold uppercase tracking-[.08em] sm:text-base">{fipp.name}</p>
+            <p className="mt-6 text-2xl font-bold leading-tight sm:text-3xl">{fipp.title}</p>
+            <p className="mt-4 max-w-2xl leading-7 text-slate-700">{fipp.description}</p>
+            <div className="mt-6 flex flex-col gap-3 text-sm font-semibold sm:flex-row sm:flex-wrap">
+              <p className="inline-flex items-center gap-2"><CalendarDays className="h-5 w-5 shrink-0 text-[#805f12]" aria-hidden="true" /><time dateTime="2026-12-19">{fipp.date}</time></p>
+              <p className="inline-flex items-center gap-2"><MapPin className="h-5 w-5 shrink-0 text-[#805f12]" aria-hidden="true" />{fipp.location}</p>
+            </div>
+            <ul className="mt-6 flex flex-wrap gap-2">{fipp.topics.map(topic => <li key={topic} className="rounded-full border border-[#cba52a]/35 bg-white px-3 py-2 text-xs font-semibold text-[#614b17]">{topic}</li>)}</ul>
+            <Link href="/rencontre" className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#082550] px-6 py-3 text-center font-bold text-white hover:bg-[#123b70] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#082550] sm:w-auto">{fipp.discover}<ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" /></Link>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">{fipp.details}</p>
+          </div>
+          <FippCountdown compact language={i18n.language} />
+        </div>
+      </section>
 
 
       <section id="about" className="scroll-mt-20 border-b border-slate-200 bg-slate-50 py-14"><div className="mx-auto max-w-6xl px-4"><h2 className="text-2xl font-bold text-[#0D1B4B]">{t("landing_v3.about_company_title")}</h2><p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">{t("landing_v3.about_company_statement")}</p></div></section>
