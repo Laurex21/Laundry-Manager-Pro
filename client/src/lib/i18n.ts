@@ -4047,7 +4047,8 @@ const billingUiTranslations = {
     "plan_feature_18": "Advanced Intelligence",
     "plan_feature_19": "Custom API access",
     "Cash": "Cash",
-    "Bank Transfer": "Bank transfer"
+    "Bank Transfer": "Bank transfer",
+    "success": "Success"
   },
   "fr": {
     "start_date": "Date de début",
@@ -4079,7 +4080,8 @@ const billingUiTranslations = {
     "plan_feature_18": "Analyse intelligente avancée",
     "plan_feature_19": "Accès à l’API personnalisée",
     "Cash": "Espèces",
-    "Bank Transfer": "Virement bancaire"
+    "Bank Transfer": "Virement bancaire",
+    "success": "Succès"
   },
   "pt": {
     "start_date": "Data de início",
@@ -4111,7 +4113,8 @@ const billingUiTranslations = {
     "plan_feature_18": "Análise inteligente avançada",
     "plan_feature_19": "Acesso à API personalizada",
     "Cash": "Numerário",
-    "Bank Transfer": "Transferência bancária"
+    "Bank Transfer": "Transferência bancária",
+    "success": "Sucesso"
   }
 };
 Object.entries(billingUiTranslations).forEach(([lang, translation]) => {

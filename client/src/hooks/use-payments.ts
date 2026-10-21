@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import type { InsertPayment } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 export function usePaymentsByOrder(orderId: number) {
   return useQuery({
@@ -19,6 +20,7 @@ export function usePaymentsByOrder(orderId: number) {
 export function useCreatePayment() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: async (data: InsertPayment & {
@@ -48,10 +50,11 @@ export function useCreatePayment() {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/credit-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Success", description: "Payment recorded successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+      toast({ title: t("success"), description: t("payment_recorded_success") });
     },
     onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t("error"), description: error.message, variant: "destructive" });
     },
   });
 }
