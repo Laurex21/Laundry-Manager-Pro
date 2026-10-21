@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
@@ -43,6 +44,8 @@ try{
  assert.equal((await query('SELECT * FROM sites WHERE organisation_id=1')).rows.length,2);
  await testDb.insert(schema.customers).values({id:1,siteId:11,name:'Demo',phone:'000',address:'Test'});
  await testDb.insert(schema.orders).values({id:1,customerId:1,siteId:11});
+ const {privateKey,publicKey}=crypto.generateKeyPairSync('ec',{namedCurve:'P-256'});
+ globalThis.fetch=async(input:any)=>{if(String(input)==='https://api.sandbox.pawapay.io/v2/public-key/http')return new Response(JSON.stringify([{id:'route-test',key:publicKey.export({type:'spki',format:'pem'}).toString()}]));throw Error('Unexpected external request in isolated test');};
  const {registerSaasRoutes}=await import('./saas-routes');
  const handlers=new Map<string,Function>();
  const app:any={get:(path:string,...fn:Function[])=>handlers.set('GET '+path,fn[fn.length-1]),post:(path:string,...fn:Function[])=>handlers.set('POST '+path,fn[fn.length-1])};registerSaasRoutes(app);
@@ -53,6 +56,30 @@ try{
  assert.equal((await snapshot('<html><body>Changed settings</body></html>')).result.html,original,'First issued receipt remains immutable');
  assert.equal((await snapshot(original,2)).status,404,'Receipt archive cannot cross organisation boundaries');
  assert.equal((await access('/api/receipt-snapshots','POST','owner',11)).passed,true,'Historical receipt download remains available');
+ // Real signed deposit callbacks identify the invoice through metadata. They
+ // reconcile the checkout, never create a second paid entitlement from a body.
+ const quoted=await saasStore.createQuote(1,saasSelection('pro'));
+ const pending=await saasStore.reserveCheckout(1,quoted.id);
+ await saasStore.recordCheckout(1,quoted.id,'route-code','https://checkout.sandbox.pawapay.io/route-code');
+ await saasStore.applyProviderResult(pending.checkout_id!,{checkoutId:pending.checkout_id,checkoutCode:'route-code',status:'COMPLETED',amount:String(pending.total_xaf),currency:'XAF',country:'CMR',deposit:{status:'COMPLETED',amount:String(pending.total_xaf),currency:'XAF',country:'CMR'}});
+ const paidState=await saasStore.current(1);
+ process.env.SAAS_SANDBOX_CALLBACK_ORIGIN='https://isolated-test.replit.dev:3003';
+ async function signedDeposit(amount:string){
+  const body={depositId:crypto.randomUUID(),status:'COMPLETED',amount,currency:'XAF',country:'CMR',metadata:{invoiceId:quoted.id}};
+  const rawBody=Buffer.from(JSON.stringify(body));const created=Math.floor(Date.now()/1000);
+  const params=`("@method" "@authority" "@path" "signature-date" "content-digest" "content-type");alg="ecdsa-p256-sha256";keyid="route-test";created=${created};expires=${created+60}`;
+  const headers:any={'content-type':'application/json','signature-date':new Date().toISOString(),'content-digest':`sha-512=:${crypto.createHash('sha512').update(rawBody).digest('base64')}:`,'signature-input':`sig-pp=${params}`};
+  const base=`"@method": POST\n"@authority": isolated-test.replit.dev:3003\n"@path": /api/saas/sandbox/callback\n"signature-date": ${headers['signature-date']}\n"content-digest": ${headers['content-digest']}\n"content-type": application/json\n"@signature-params": ${params}`;
+  headers.signature=`sig-pp=:${crypto.sign('sha256',Buffer.from(base),privateKey).toString('base64')}:`;
+  let status=200;let result:any;const res:any={status:(code:number)=>{status=code;return res;},sendStatus:(code:number)=>{status=code;return res;},json:(value:any)=>{result=value;return res;}};
+  await handlers.get('POST /api/saas/sandbox/callback')!({method:'POST',path:'/api/saas/sandbox/callback',headers,rawBody,body,is:()=>true,get:()=> 'isolated-test.replit.dev'},res);
+  return{status,result};
+ }
+ assert.equal((await signedDeposit(String(pending.total_xaf)+'.00')).status,200);
+ assert.equal((await signedDeposit(String(pending.total_xaf)+'.00')).status,200);
+ assert.deepEqual(await saasStore.current(1),paidState,'Duplicate signed deposit notifications never extend the cycle twice');
+ assert.equal((await signedDeposit('1.00')).status,409,'Mismatched deposit amount cannot reconcile another invoice');
+ delete process.env.SAAS_SANDBOX_CALLBACK_ORIGIN;
  // The compatibility flag does not activate the new schema or provider in production.
  process.env.NODE_ENV='production';assert.equal(saasEnabled(),false);process.env.NODE_ENV='test';
  assert.equal(saasSelection('business',1,0).extraSites,1);

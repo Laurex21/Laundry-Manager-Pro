@@ -58,3 +58,14 @@ export class SaasPawapaySandbox {
     return this.store.invoice(this.store.db, org, id);
   }
 }
+
+/** Replit's preview proxy strips a nondefault public port from Host. Verify the
+ * server-configured public authority, never an arbitrary forwarded header. */
+export function saasCallbackAuthority(requestHost: string, configuredOrigin = process.env.SAAS_SANDBOX_CALLBACK_ORIGIN): string {
+  if (!configuredOrigin) return requestHost;
+  let url: URL;
+  try { url = new URL(configuredOrigin); } catch { throw new SaasError("INVALID_CALLBACK_ORIGIN", 503); }
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new SaasError("INVALID_CALLBACK_ORIGIN", 503);
+  if (![url.host, url.hostname].includes(requestHost.toLowerCase())) throw new SaasError("CALLBACK_HOST_MISMATCH", 400);
+  return url.host;
+}

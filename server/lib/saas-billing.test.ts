@@ -57,7 +57,10 @@ try {
  assert.equal((await store.current(1)).phase,'trialing');
  await store.recordCheckout(1,invoice.id,'code','https://checkout.sandbox.pawapay.io/code');
  const wrong=event(pending);wrong.deposit.amount='1';await assert.rejects(store.applyProviderResult(pending.checkout_id!,wrong),/PAYMENT_MISMATCH/);
- await store.applyProviderResult(pending.checkout_id!,event(pending));
+ const {amounts: _configuredAmounts, ...callbackBase}=event(pending);
+ const callback={...callbackBase,amount:`${pending.total_xaf}.00`,currency:'XAF',country:'CMR'};
+ await assert.rejects(store.applyProviderResult(pending.checkout_id!,{...callback,amount:'1.00'}),/AMOUNT_MISMATCH/);
+ await store.applyProviderResult(pending.checkout_id!,callback);
  const active=await store.current(1);assert.equal(active.plan,'pro');assert.equal(active.phase,'active');assert.equal(active.cycleEnd,'2026-02-28T12:00:00.000Z');
  await store.applyProviderResult(pending.checkout_id!,event(pending));assert.deepEqual(await store.current(1),active);
  await assert.rejects(store.applyProviderResult(pending.checkout_id!,event(pending,'FAILED')),/CONFLICTING_FINAL_STATUS/);

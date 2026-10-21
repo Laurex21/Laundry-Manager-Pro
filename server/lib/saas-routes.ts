@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { saasEnabled, saasStore, startSaasJobs } from "./saas-runtime";
 import { saasFailure } from "./saas-access";
-import { SaasPawapaySandbox } from "./saas-pawapay";
+import { SaasPawapaySandbox, saasCallbackAuthority } from "./saas-pawapay";
 import { SaasError } from "./saas-store";
 import { sandboxPublicKeys, verifyPawapaySandboxCallback } from "./pawapay-sandbox-callback";
 import { SAAS_PLANS, saasQuotas, saasMonthly, saasSelection, SAAS_CATALOGUE_VERSION } from "../../shared/saas-plans";
@@ -102,9 +102,21 @@ export function registerSaasRoutes(app: Express) {
     try {
       if (!Buffer.isBuffer(req.rawBody) || !req.is("application/json")) return res.sendStatus(400);
       const headers = Object.fromEntries(Object.entries(req.headers).map(([key, value]) => [key, typeof value === "string" ? value : undefined]));
-      const valid = verifyPawapaySandboxCallback({ method: req.method, authority: req.get("host") || "", path: req.path, headers, rawBody: req.rawBody, keys: await sandboxPublicKeys() });
+      const valid = verifyPawapaySandboxCallback({ method: req.method, authority: saasCallbackAuthority(req.get("host") || ""), path: req.path, headers, rawBody: req.rawBody, keys: await sandboxPublicKeys() });
       if (!valid) return res.sendStatus(401);
-      const event = req.body; z.string().uuid().parse(event?.checkoutId);
+      const event = req.body;
+      // A signed deposit notification may accompany a hosted checkout. Reconcile
+      // its invoice against the checkout API; never grant access from this body.
+      if (!event?.checkoutId && event?.depositId) {
+        z.string().uuid().parse(event.depositId);
+        const invoiceId = z.string().uuid().parse(event.clientReferenceId || event.metadata?.invoiceId);
+        const invoice = (await saasStore.db.query("SELECT id,organisation_id,total_xaf FROM saas_invoices WHERE id=$1 AND checkout_id IS NOT NULL", [invoiceId])).rows[0];
+        if (!invoice) return res.sendStatus(404);
+        if (event.currency !== "XAF" || event.country !== "CMR" || !/^\d+(?:\.0+)?$/.test(String(event.amount)) || Number(event.amount) !== Number(invoice.total_xaf)) throw new SaasError("PAYMENT_MISMATCH");
+        await provider.refresh(Number(invoice.organisation_id), invoice.id);
+        return res.json({ received: true });
+      }
+      z.string().uuid().parse(event?.checkoutId);
       const invoice = (await saasStore.db.query("SELECT id FROM saas_invoices WHERE checkout_id=$1", [event.checkoutId])).rows[0];
       if (!invoice) return res.sendStatus(404);
       if (event.clientReferenceId !== invoice.id) throw new SaasError("INVOICE_REFERENCE_MISMATCH");

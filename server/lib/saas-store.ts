@@ -113,7 +113,11 @@ export class SaasStore {
       // Verify the successful deposit itself, not just the configured checkout amount.
       const deposit = event.deposit;
       if (status === "COMPLETED" && (!deposit || deposit.status !== "COMPLETED" || deposit.currency !== "XAF" || deposit.country !== "CMR" || !/^\d+(?:\.0+)?$/.test(String(deposit.amount)) || Number(deposit.amount) !== Number(invoice.total_xaf))) throw new SaasError("PAYMENT_MISMATCH");
-      const configured = event.amounts?.some((a: any) => a.currency === "XAF" && a.country === "CMR" && Number(a.amount) === Number(invoice.total_xaf));
+      // Status lookups contain amounts[]; genuine checkout callbacks instead
+      // contain amount/currency/country at the root. Validate both wire shapes.
+      const configured = Array.isArray(event.amounts)
+        ? event.amounts.some((a: any) => a.currency === "XAF" && a.country === "CMR" && Number(a.amount) === Number(invoice.total_xaf))
+        : event.currency === "XAF" && event.country === "CMR" && /^\d+(?:\.0+)?$/.test(String(event.amount)) && Number(event.amount) === Number(invoice.total_xaf);
       if (!configured) throw new SaasError("AMOUNT_MISMATCH");
       if (invoice.provider_status) {
         if (invoice.provider_status !== status) throw new SaasError("CONFLICTING_FINAL_STATUS");

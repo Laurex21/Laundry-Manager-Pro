@@ -4,7 +4,7 @@
 
 Implémentation sur `codex/saas-subscription-audit`, sans publication, modification du Replit actuel, ni accès à une base de production. Les tests DB utilisent PGlite en mémoire. La clé Sandbox n’est pas disponible dans l’environnement local. Un contrôle marchand réel a été exécuté depuis le Shell Replit sans base de données : clés publiques disponibles, checkout `ACCEPTED`, statut `FOUND / WAITING_PAYMENT`, puis expiration `EXPIRED`. Référence de test : `8d2a64e4-361c-4595-ad47-7e2acd1666a3`. Aucun portefeuille ni paiement Mobile Money sollicité. La présence de `PAWAPAY_SANDBOX_API_TOKEN` dans les Secrets du Replit actuel a été confirmée sans afficher sa valeur.
 
-Le raccordement API Sandbox est codé. Une simulation locale a vérifié l’intégralité devis → checkout en attente → callback cryptographiquement signé → activation → facture confirmée, via les véritables routes serveur. Cette simulation ne constitue pas un paiement réalisé auprès de pawaPay. Le contrôle marchand confirme séparément l’authentification et le contrat de création/lecture/expiration, pas encore le callback d’un paiement réussi chez le fournisseur.
+Le raccordement API Sandbox est codé. Une simulation locale a vérifié l’intégralité devis → checkout en attente → callback cryptographiquement signé → activation → facture confirmée, via les véritables routes serveur. Cette simulation ne constitue pas un paiement réalisé auprès de pawaPay. Le contrôle initial confirmait séparément l’authentification et la création/lecture/expiration. Un test marchand complet supplémentaire a ensuite été réalisé ; voir `TEST_PAWAPAY_SANDBOX_REUSSI_2026-10-21.md`.
 
 ## Règles livrées
 
@@ -30,10 +30,10 @@ Références : [Checkouts](https://docs.pawapay.io/v2/docs/checkouts), [créatio
 ## Installation sur environnement de test séparé — non exécutée
 
 1. Créer une base de test isolée et y appliquer les migrations existantes, puis la migration additive `migrations/20261021_saas_billing_v5.sql`. Aucun DDL nouveau au démarrage et aucun backfill massif.
-2. Configurer `SAAS_BILLING_MODE=sandbox`, `PAWAPAY_SANDBOX_API_TOKEN`, `SAAS_SANDBOX_RETURN_ORIGIN` (origine HTTPS de ce test), `NODE_ENV=development` ou `test`. Ne jamais réutiliser l’URL de base de production.
+2. Configurer `SAAS_BILLING_MODE=sandbox`, `PAWAPAY_SANDBOX_API_TOKEN`, `SAAS_SANDBOX_RETURN_ORIGIN` (origine HTTPS de ce test), `SAAS_SANDBOX_CALLBACK_ORIGIN` (origine publique exacte du callback, port compris si le proxy le retire), `NODE_ENV=development` ou `test`. Ne jamais réutiliser l’URL de base de production.
 3. Enregistrer l’URL HTTPS de test `/api/saas/sandbox/callback` dans le compte marchand Sandbox ; la réconciliation reste disponible si un callback est retardé.
 4. Vérifier les clés avec `node --import tsx scripts/check-saas-pawapay-sandbox.ts`. Avec `--create-and-expire`, ce script crée puis expire un checkout Sandbox sans DB et sans payer un portefeuille. Il refuse NODE_ENV=production et ne journalise aucun secret.
-5. Tester depuis la copie isolée de l’application un vrai paiement de démonstration Sandbox et son callback, puis annulation, échec, timeout et renouvellement. Le contrôle sans DB de création/lecture/expiration a réussi ; ce parcours complet fournisseur reste à faire.
+5. Tester depuis la copie isolée de l’application un vrai paiement de démonstration Sandbox et son callback, puis annulation, échec, timeout et renouvellement. Le contrôle sans DB de création/lecture/expiration et les paiements de démonstration ont réussi ; voir le compte rendu du test marchand complet.
 6. Avant production, revoir les anciens abonnements actifs, les éventuels frais marchands, le crédit excédentaire, la conservation des reçus et l’activation explicite du mode réel. Aucun mode réel n’est fourni ici.
 
 Rollback du test : désactiver `SAAS_BILLING_MODE`, conserver tables/factures/événements pour audit ; ne pas supprimer l’historique et ne pas revenir à un checkout non réconcilié. Les anciens parcours restent disponibles lorsque le nouveau mode est désactivé.
