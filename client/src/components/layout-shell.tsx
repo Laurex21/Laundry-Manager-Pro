@@ -553,7 +553,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
-                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { if (user?.id) window.localStorage.setItem(guideActiveKey(user.id), "1"); setGuideRestartToken(value => value + 1); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
+                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { if (user?.id) window.localStorage.setItem(guideActiveKey(user.id), "1"); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}
                 </DropdownMenuItem>}

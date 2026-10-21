@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
+import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertCustomerSchema, type InsertCustomer } from "@shared/schema";
@@ -319,7 +320,7 @@ function CustomerForm({ onSuccess }: { onSuccess: () => void }) {
   const { data: existingCustomers = [] } = useCustomers();
 
   const form = useForm<InsertCustomer>({
-    resolver: zodResolver(insertCustomerSchema),
+    resolver: zodResolver(insertCustomerSchema.extend({ name: z.string().trim().min(1, t("customer_name_required", { defaultValue: "Customer name is required" })) })),
     defaultValues: { name: "", phone: "", email: "", address: "", notes: "", referredByCustomerId: null },
   });
 
