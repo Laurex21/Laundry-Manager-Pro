@@ -899,6 +899,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
       status: "pending",
       paymentStatus: "unpaid",
       entryDate: format(new Date(), "yyyy-MM-dd"),
+      pickupDate: "",
       discount: "0",
       discountPct: 0,
       pickupCost: "0",
@@ -1384,7 +1385,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      {customerSearchOpen && wizardStep === 1 && <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                         <Command>
                           <CommandInput placeholder={t("search_customers")} />
                           <CommandList>
@@ -1412,7 +1413,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                             </CommandGroup>
                           </CommandList>
                         </Command>
-                      </PopoverContent>
+                      </PopoverContent>}
                     </Popover>
                     <FormMessage />
                   </FormItem>
@@ -1458,7 +1459,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
                 <p className="text-sm text-muted-foreground">{t("deadlines_delivery_hint", "Confirmez la date promise et les éventuels frais de collecte ou livraison.")}</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField control={form.control} name="pickupDate" render={({ field }) => <FormItem><FormLabel>{t("pickup_date")}</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>} />
+                <FormField control={form.control} name="pickupDate" render={({ field }) => <FormItem><FormLabel>{t("pickup_date")}</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} data-testid="input-order-pickup-date" /></FormControl><FormMessage /></FormItem>} />
                 <FormField control={form.control} name="pickupCost" render={({ field }) => <FormItem><FormLabel>{t("pickup_cost")} ({symbol})</FormLabel><FormControl><Input type="number" step="0.01" min="0" placeholder="0.00" {...field} /></FormControl><FormMessage /></FormItem>} />
               </div>
             </section>}
