@@ -12,7 +12,13 @@ const routes = readFileSync(join(root, "server/routes.ts"), "utf8");
 assert.match(auth, /requestedTab === "register" \? "register" : "login"/);
 assert.doesNotMatch(landing, /href="#"/);
 assert.match(landing, /id="about"/);
-assert.match(landing, /product: \["#features", "#pricing", "\/rentabilite", "\/diagnostic", "#tools"\]/);
+for (const [href, label] of [["/diagnostic", "footer_resources_1"], ["/calculateur", "footer_resources_2"], ["/rentabilite", "footer_resources_3"]]) {
+  assert.ok(landing.includes(`{ href: "${href}", label: "${label}" }`), `resource ${label} must retain its working destination`);
+}
+assert.match(landing, /company: \["#about", "\/terms", "\/privacy", "#contact"\]/);
+assert.match(landing, /id="contact"/);
+assert.match(landing, /footerLinks\[group\]\.map/);
+assert.match(landing, /<a href=\{href\}/, "footer links must use their configured destinations");
 assert.match(routes, /href: "\/payments\?view=history"/);
 assert.match(payments, /requestedView === "history" \? "history" : "register"/);
 assert.match(routes, /href: "\/pilotage\?view=quality"/);
