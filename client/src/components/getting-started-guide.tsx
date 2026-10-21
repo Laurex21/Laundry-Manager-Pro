@@ -12,8 +12,8 @@ const STEPS_FR: Step[] = [
   { action: "customer", path: "/customers", target: '[data-testid="onboarding-add-customer"]', title: "Ajoutez un client", description: "Créez une fiche client pour retrouver facilement ses commandes.", mobilePath: "Clients (barre du bas)", desktopPath: "Opérations → Clients", destination: "Clients" },
   { action: "order", path: "/orders", target: '[data-testid="onboarding-new-order"]', title: "Créez votre première commande", description: "Dans Commandes, cliquez sur Nouvelle commande puis renseignez les articles, le prix et la date de retrait.", mobilePath: "Commandes (barre du bas)", desktopPath: "Opérations → Commandes", destination: "Commandes" },
   { action: "status", path: "/orders", target: '[data-testid^="select-inline-status-"]', title: "Suivez la production", description: "Retrouvez vos commandes et mettez à jour leur état à chaque étape.", mobilePath: "Commandes (barre du bas)", desktopPath: "Opérations → Commandes", destination: "Commandes" },
-  { action: "payment", path: "/payments", target: '[data-testid="onboarding-register-payment"]', title: "Enregistrez un paiement", description: "Dans l’onglet Enregistrer un paiement, sélectionnez une commande avec un solde, saisissez le montant et confirmez le paiement.", mobilePath: "Paiements (barre du bas)", desktopPath: "Opérations → Paiements", destination: "Paiements" },
-  { action: "receipt", path: "/payments", target: '[data-testid="button-download-receipt"]', title: "Téléchargez votre premier reçu", description: "Après l’encaissement, ouvrez Télécharger le reçu et choisissez HTML, PDF ou image HD. Vous pouvez aussi télécharger le reçu depuis le détail d’une commande.", mobilePath: "Paiements → Enregistrer un paiement", desktopPath: "Opérations → Paiements → Enregistrer un paiement", destination: "Paiements" },
+  { action: "payment", path: "/payments", target: '[data-testid="onboarding-register-payment"]', title: "Enregistrez un paiement", description: "Dans Paiements, sélectionnez une commande avec un solde, saisissez le montant et confirmez le paiement.", mobilePath: "Paiements → Encaisser", desktopPath: "Opérations → Paiements", destination: "Paiements" },
+  { action: "receipt", path: "/payments", target: '[data-testid="button-download-receipt"]', title: "Téléchargez votre premier reçu", description: "Après l’encaissement, ouvrez Télécharger le reçu et choisissez HTML, PDF ou image HD. Vous pouvez aussi télécharger le reçu depuis le détail d’une commande.", mobilePath: "Paiements → Encaisser", desktopPath: "Opérations → Paiements → Enregistrer un paiement", destination: "Paiements" },
 ];
 const STEPS_EN: Step[] = [
   { action: "identity", path: "/settings", target: '[data-testid="button-save-identity"]', title: "Set up your laundry", description: "Check your business name and contact details, then save them.", mobilePath: "More → Settings", desktopPath: "Administration → Settings", destination: "Settings" },
@@ -21,8 +21,8 @@ const STEPS_EN: Step[] = [
   { action: "customer", path: "/customers", target: '[data-testid="onboarding-add-customer"]', title: "Add a customer", description: "Create a customer profile to find their orders easily.", mobilePath: "Customers (bottom bar)", desktopPath: "Operations → Customers", destination: "Customers" },
   { action: "order", path: "/orders", target: '[data-testid="onboarding-new-order"]', title: "Create your first order", description: "In Orders, tap New Order, then enter the items, price, and pickup date.", mobilePath: "Orders (bottom bar)", desktopPath: "Operations → Orders", destination: "Orders" },
   { action: "status", path: "/orders", target: '[data-testid^="select-inline-status-"]', title: "Track production", description: "Find your orders and update their status at each stage.", mobilePath: "Orders (bottom bar)", desktopPath: "Operations → Orders", destination: "Orders" },
-  { action: "payment", path: "/payments", target: '[data-testid="onboarding-register-payment"]', title: "Record a payment", description: "In Register Payment, select an order with a balance, enter the amount, and confirm the payment.", mobilePath: "Payments (bottom bar)", desktopPath: "Operations → Payments", destination: "Payments" },
-  { action: "receipt", path: "/payments", target: '[data-testid="button-download-receipt"]', title: "Download your first receipt", description: "After recording payment, open Download receipt and choose HTML, PDF, or HD image. You can also download a receipt from an order’s details.", mobilePath: "Payments → Register Payment", desktopPath: "Operations → Payments → Register Payment", destination: "Payments" },
+  { action: "payment", path: "/payments", target: '[data-testid="onboarding-register-payment"]', title: "Record a payment", description: "In Payments, select an order with a balance, enter the amount, and confirm the payment.", mobilePath: "Payments → Collect", desktopPath: "Operations → Payments", destination: "Payments" },
+  { action: "receipt", path: "/payments", target: '[data-testid="button-download-receipt"]', title: "Download your first receipt", description: "After recording payment, open Download receipt and choose HTML, PDF, or HD image. You can also download a receipt from an order’s details.", mobilePath: "Payments → Collect", desktopPath: "Operations → Payments → Register Payment", destination: "Payments" },
 ];
 
 
@@ -93,6 +93,13 @@ export function GettingStartedGuide({ userId, restartToken, onClose }: Props) {
     };
   }, [location, current.path, current.target]);
 
+  const openDestination = () => {
+    // The payment view may have changed without changing the URL.
+    if (location === "/payments" && current.path === "/payments") {
+      document.querySelector<HTMLButtonElement>('[data-testid="onboarding-register-payment"]')?.click();
+    }
+    navigate(current.path === "/payments" ? "/payments?view=register" : current.path);
+  };
   const finish = () => {
     window.localStorage.setItem(guideKey(userId), "done");
     onClose();
@@ -146,7 +153,7 @@ export function GettingStartedGuide({ userId, restartToken, onClose }: Props) {
       <h2 className="mt-3 text-lg font-bold sm:mt-5">{current.title}</h2><p className="mt-1 text-sm leading-5 text-slate-600 sm:mt-2 sm:leading-6">{current.description}</p>
       <p role="status" data-testid="onboarding-action-status" className={`mt-3 text-xs font-semibold ${currentCompleted ? "text-green-700" : "text-slate-600"}`}>{currentCompleted ? (fr ? "✓ Action enregistrée" : "✓ Action saved") : (fr ? "Réalisez et enregistrez cette action pour continuer." : "Complete and save this action to continue.")}</p>
       <p className="mt-3 text-xs font-semibold text-blue-700">{fr ? "Cliquez sur l’élément encadré :" : "Tap the highlighted item:"} <span className="lg:hidden">{current.mobilePath}</span><span className="hidden lg:inline">{current.desktopPath}</span></p>
-      {(location !== current.path || current.path === "/payments") && <button type="button" onClick={() => navigate(current.path === "/payments" ? "/payments?view=register" : current.path)} className="mt-3 flex min-h-10 w-full items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">{fr ? `Ouvrir ${current.destination}` : `Open ${current.destination}`}<ChevronRight className="h-4 w-4" /></button>}
+      {(location !== current.path || current.path === "/payments") && <button type="button" onClick={openDestination} className="mt-3 flex min-h-10 w-full items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">{fr ? `Ouvrir ${current.destination}` : `Open ${current.destination}`}<ChevronRight className="h-4 w-4" /></button>}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 sm:mt-5"><button type="button" onClick={onClose} className="text-xs font-medium text-slate-500 underline underline-offset-2">{fr ? "Reprendre plus tard" : "Continue later"}</button><div className="flex items-center gap-2"><button type="button" onClick={previous} disabled={stepIndex === 0} className="flex min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" />{fr ? "Précédent" : "Back"}</button><button type="button" onClick={next} disabled={!currentCompleted} data-testid="onboarding-next" className="disabled:opacity-40 disabled:cursor-not-allowed flex min-h-10 items-center gap-1 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">{stepIndex === steps.length - 1 ? <Check className="h-4 w-4" /> : null}{stepIndex === steps.length - 1 ? (fr ? "Terminer" : "Finish") : (fr ? "Suivant" : "Next")}{stepIndex < steps.length - 1 ? <ChevronRight className="h-4 w-4" /> : null}</button></div></div>
     </aside>
   </>;
