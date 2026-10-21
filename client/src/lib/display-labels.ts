@@ -50,3 +50,31 @@ export function labelForStatus(value: string | null | undefined, t: TFunction): 
   const key = STATUS_KEYS[value.trim().toLowerCase()];
   return key ? t(key) : value;
 }
+
+const PLAN_FEATURE_KEYS: Record<string, string> = {
+  "Client management": "plan_feature_0",
+  "Order tracking": "plan_feature_1",
+  "Basic dashboard": "plan_feature_2",
+  "Basic Employee Module": "plan_feature_3",
+  "Basic Machine Module": "plan_feature_4",
+  "Everything in Starter": "plan_feature_5",
+  "Employee Analytics": "plan_feature_6",
+  "Machine Analytics": "plan_feature_7",
+  "Reports": "plan_feature_8",
+  "Everything in Pro": "plan_feature_9",
+  "Advanced Analytics": "plan_feature_10",
+  "Smart Recommendations": "plan_feature_11",
+  "Performance Scores": "plan_feature_12",
+  "Waste detection": "plan_feature_13",
+  "Everything in Business": "plan_feature_14",
+  "Full Analytics": "plan_feature_15",
+  "Predictive Maintenance": "plan_feature_16",
+  "Multi-Site Benchmarking": "plan_feature_17",
+  "Advanced Intelligence": "plan_feature_18",
+  "Custom API access": "plan_feature_19"
+};
+
+export function labelForPlanFeature(value: string, t: TFunction): string {
+  const key = PLAN_FEATURE_KEYS[value];
+  return key ? t(key) : value;
+}
