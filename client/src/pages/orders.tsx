@@ -1,3 +1,4 @@
+import { downloadReceiptDocument } from "@/lib/receipt-export";
 import { useState, useMemo, useEffect } from "react";
 import { useOrders, useCreateOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
 import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
@@ -12,7 +13,7 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
-import { downloadReceiptHtml, generateDepositReceipt } from "@/lib/receipt";
+import { generateDepositReceipt } from "@/lib/receipt";
 import { useQuery, useQuery as useSettingsQuery } from "@tanstack/react-query";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
@@ -1242,7 +1243,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
               const subscriberReceipt = await fetch(`/api/orders/${newOrder.id}/subscriber-receipt?format=a4`, { credentials: "include" });
               if (!subscriberReceipt.ok) throw new Error("Subscriber receipt could not be generated");
               const html = await subscriberReceipt.text();
-              downloadReceiptHtml(html, `subscriber-receipt-order-${orderDisplayId(orderDetails)}.html`);
+              await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(orderDetails)}.html`, "html", { orderId: newOrder.id, kind: "subscriber" });
             } else {
               await generateDepositReceipt(orderDetails, symbol, {
                 ...DEFAULT_SETTINGS,

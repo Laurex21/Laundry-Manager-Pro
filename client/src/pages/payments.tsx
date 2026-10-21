@@ -329,7 +329,8 @@ export default function Payments() {
           symbol,
           mergedSettings,
           pickupCost,
-          action === "download" ? "html" : action
+          action === "download" ? "html" : action,
+          successPayment.paymentId ? { orderId: successPayment.orderId, paymentId: successPayment.paymentId } : undefined
         );
       }
     } catch (error) {

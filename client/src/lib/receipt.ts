@@ -726,8 +726,10 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     return;
   }
 
-  if (action === "download" || action === "html") downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`);
-  else return downloadReceiptDocument(html, `deposit-receipt-order-${displayOrderId}.html`, action);
+  if (typeof (globalThis as any).__captureReceiptHtml === "function" && (action === "download" || action === "html")) {
+    downloadReceiptHtml(html, `deposit-receipt-order-${displayOrderId}.html`); return;
+  }
+  return downloadReceiptDocument(html, `deposit-receipt-order-${displayOrderId}.html`, action === "download" ? "html" : action, { orderId: order.id, kind: "deposit" });
 }
 
 export function generateThermalDepositReceipt(order: any, symbol: string, settings: ReceiptSettings = DEFAULT_SETTINGS, reservedWindow?: ReceiptPrintWindow | null) {
@@ -849,7 +851,8 @@ export function generatePaymentReceipt(
   symbol: string,
   settings: ReceiptSettings = DEFAULT_SETTINGS,
   pickupCost: number = 0,
-  action: ReceiptAction = "download"
+  action: ReceiptAction = "download",
+  archiveIdentity?: { orderId: number; paymentId: number }
 ) {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = dateOnlyParts(entryDate) ? formatReceiptDateOnly(entryDate, lang) : formatReceiptDateTime(entryDate, lang);
@@ -1036,6 +1039,8 @@ export function generatePaymentReceipt(
     return;
   }
 
-  if (action === "download" || action === "html") downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`);
-  else return downloadReceiptDocument(html, `payment-receipt-order-${orderId}.html`, action);
+  if (typeof (globalThis as any).__captureReceiptHtml === "function" && (action === "download" || action === "html")) {
+    downloadReceiptHtml(html, `payment-receipt-order-${orderId}.html`); return;
+  }
+  return downloadReceiptDocument(html, `payment-receipt-order-${orderId}.html`, action === "download" ? "html" : action, archiveIdentity ? { ...archiveIdentity, kind: "payment" } : undefined);
 }

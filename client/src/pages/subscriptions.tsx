@@ -1,3 +1,4 @@
+import SaasSubscriptions from "./saas-subscriptions";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -25,6 +26,12 @@ function dateLocaleFor(language: string) {
 }
 
 export default function Subscriptions() {
+  const config = useQuery<{enabled:boolean}>({ queryKey:["/api/saas/config"] });
+  if (config.isLoading) return <Skeleton className="h-48 w-full" />;
+  return config.data?.enabled ? <SaasSubscriptions /> : <LegacySubscriptions />;
+}
+
+function LegacySubscriptions() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();

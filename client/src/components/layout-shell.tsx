@@ -1,3 +1,4 @@
+import { SaasNotice } from "./saas-notice";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -574,6 +575,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
         {/* Demo banner */}
         <DemoBanner />
+        <SaasNotice />
 
         {/* Page content */}
         <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1440px] mx-auto w-full pb-24 lg:pb-8 min-w-0 overflow-x-hidden">

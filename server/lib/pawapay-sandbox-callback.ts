@@ -19,7 +19,7 @@ type CallbackInput = {
 let cachedKeys: PublicKey[] = [];
 let keysExpiresAt = 0;
 
-async function sandboxPublicKeys(): Promise<PublicKey[]> {
+export async function sandboxPublicKeys(): Promise<PublicKey[]> {
   if (cachedKeys.length && Date.now() < keysExpiresAt) return cachedKeys;
   const response = await fetch(PUBLIC_KEYS_URL, { signal: AbortSignal.timeout(5000) });
   if (!response.ok) throw new Error(`PawaPay public key request failed: ${response.status}`);

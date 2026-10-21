@@ -1,3 +1,4 @@
+import { useSaasConfig } from "@/components/saas-public-plans";
 import { useEffect, useState } from "react";
 import XpressGroupGateway from "./xpressgroup-gateway";
 import FippCountdown from "@/components/fipp-countdown";
@@ -139,6 +140,7 @@ function LazyDemoVideo({ url, label }: { url: string; label: string }) {
 }
 
 export default function LandingPage() {
+  const saasConfig = useSaasConfig();
   const { t, i18n } = useTranslation();
   if (!i18n.exists("landing_v3.play_demo", { lng: "fr" })) {
     i18n.addResourceBundle("fr", "translation", { landing_v3: LANDING_FR }, true, true);
@@ -217,7 +219,7 @@ export default function LandingPage() {
 
 
 
-      <section className="bg-[#0D1B4B] py-24 text-center text-white"><div className="mx-auto max-w-4xl px-4"><p className="mb-4 text-sm font-bold uppercase tracking-widest">XpressPro · {i18n.language.startsWith("fr") ? "Gérer mon pressing" : "Manage my laundry business"}</p><h2 className="text-3xl font-black sm:text-5xl">{t("landing_v3.final_title")}</h2><p className="mx-auto mt-5 max-w-2xl text-blue-100">{t("landing_v3.final_sub")}</p><div className="mx-auto mt-8 max-w-2xl rounded-2xl bg-white/10 p-6"><p className="text-xl font-bold">🎁 {t("landing_v3.final_offer")}</p><p className="mt-2 text-sm text-blue-200">{t("landing_v3.final_offer_sub")}</p><div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">{["no_card","no_commitment","cancel_anytime"].map(k=><span key={k}>✓ {t(`landing_v3.${k}`)}</span>)}</div></div><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/auth?tab=register" className="min-h-12 rounded-xl bg-white px-6 py-3 font-bold text-blue-700">{t("landing_v3.create_account")}</Link><Link href="/rentabilite" className="min-h-12 rounded-xl border border-white px-6 py-3 font-bold">{t("landing_v3.calculate_profit_plain")}</Link></div><Link href="/auth" className="mt-6 inline-block text-sm text-blue-200 underline">{t("landing_v3.already")}</Link><br/><a href="https://wa.me/237651638889" className="mt-3 inline-block text-sm text-blue-200 underline">{t("landing_v3.questions")}</a></div></section>
+      <section className="bg-[#0D1B4B] py-24 text-center text-white"><div className="mx-auto max-w-4xl px-4"><p className="mb-4 text-sm font-bold uppercase tracking-widest">XpressPro · {i18n.language.startsWith("fr") ? "Gérer mon pressing" : "Manage my laundry business"}</p><h2 className="text-3xl font-black sm:text-5xl">{t("landing_v3.final_title")}</h2><p className="mx-auto mt-5 max-w-2xl text-blue-100">{t("landing_v3.final_sub")}</p><div className="mx-auto mt-8 max-w-2xl rounded-2xl bg-white/10 p-6"><p className="text-xl font-bold">🎁 {saasConfig.data?.enabled ? (i18n.language.startsWith("fr") ? "30 jours de Pro gratuits" : "30 days of free Pro") : t("landing_v3.final_offer")}</p><p className="mt-2 text-sm text-blue-200">{saasConfig.data?.enabled ? (i18n.language.startsWith("fr") ? "Puis Starter gratuit si vous ne vous abonnez pas · Renouvellement manuel" : "Then free Starter if you do not subscribe · Manual renewal") : t("landing_v3.final_offer_sub")}</p><div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">{["no_card","no_commitment","cancel_anytime"].map(k=><span key={k}>✓ {t(`landing_v3.${k}`)}</span>)}</div></div><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/auth?tab=register" className="min-h-12 rounded-xl bg-white px-6 py-3 font-bold text-blue-700">{t("landing_v3.create_account")}</Link><Link href="/rentabilite" className="min-h-12 rounded-xl border border-white px-6 py-3 font-bold">{t("landing_v3.calculate_profit_plain")}</Link></div><Link href="/auth" className="mt-6 inline-block text-sm text-blue-200 underline">{t("landing_v3.already")}</Link><br/><a href="https://wa.me/237651638889" className="mt-3 inline-block text-sm text-blue-200 underline">{t("landing_v3.questions")}</a></div></section>
     </main>
 
     <footer id="contact" className="bg-[#081337] py-16 text-slate-300">

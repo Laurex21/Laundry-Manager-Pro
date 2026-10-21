@@ -66,12 +66,13 @@ function Overview({ onSelect }: { onSelect: (view: PilotageView) => void }) {
 }
 
 export default function Pilotage() {
-  const { t } = useTranslation(); const { canAccess } = useAuth(); const [, setLocation] = useLocation();
+  const { t } = useTranslation(); const { canAccess, user } = useAuth(); const [, setLocation] = useLocation();
+  const basicSaas = (user as any)?.saas?.plan === "starter";
   const requested = new URLSearchParams(useSearch()).get("view") as PilotageView | null;
-  const allowed: PilotageView[] = ["overview", ...(canAccess("reports") ? ["reports" as const] : []), "quality", "daily"];
-  const active = requested && allowed.includes(requested) ? requested : "overview";
+  const allowed: PilotageView[] = [...(!basicSaas ? ["overview" as const] : []), ...(canAccess("reports") ? ["reports" as const] : []), "quality", "daily"];
+  const active = requested && allowed.includes(requested) ? requested : basicSaas ? "quality" : "overview";
   const tabs = [
-    { value: "overview" as const, label: t("pilotage_overview"), icon: ClipboardList },
+    ...(!basicSaas ? [{ value: "overview" as const, label: t("pilotage_overview"), icon: ClipboardList }] : []),
     ...(canAccess("reports") ? [{ value: "reports" as const, label: t("reports"), icon: BarChart3 }] : []),
     { value: "quality" as const, label: t("quality_operations"), icon: RotateCcw },
     { value: "daily" as const, label: t("daily_reports"), icon: FileText },

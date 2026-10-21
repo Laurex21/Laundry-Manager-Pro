@@ -1142,3 +1142,46 @@ export const leadsCalculateurRentabilite = pgTable("leads_calculateur_rentabilit
 });
 
 export type LeadCalculateurRentabilite = typeof leadsCalculateurRentabilite.$inferSelect;
+
+// SaaS billing v5: additive schema, provisioned by a reviewed migration only.
+export const saasAccounts = pgTable("saas_accounts", {
+  organisationId: integer("organisation_id").primaryKey().references(() => organisations.id),
+  state: jsonb("state").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const saasInvoices = pgTable("saas_invoices", {
+  id: uuid("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  quote: jsonb("quote").notNull(),
+  totalXaf: integer("total_xaf").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("quoted"),
+  checkoutId: uuid("checkout_id").unique(),
+  checkoutCode: text("checkout_code"),
+  redirectUrl: text("redirect_url"),
+  providerStatus: varchar("provider_status", { length: 20 }),
+  paymentSource: text("payment_source"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [check("saas_invoice_positive", sql`${table.totalXaf} >= 0`), index("saas_invoice_organisation").on(table.organisationId, table.createdAt)]);
+export const saasEvents = pgTable("saas_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  action: text("action").notNull(), details: jsonb("details").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const saasNotices = pgTable("saas_notices", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  noticeKey: text("notice_key").notNull(), kind: text("kind").notNull(),
+  details: jsonb("details").notNull().default({}),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex("saas_notice_unique").on(table.organisationId, table.noticeKey)]);
+export const saasReceiptSnapshots = pgTable("saas_receipt_snapshots", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  receiptKey: text("receipt_key").notNull(),
+  html: text("html").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex("saas_receipt_unique").on(table.organisationId, table.receiptKey)]);
