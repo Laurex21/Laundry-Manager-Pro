@@ -14,12 +14,12 @@ async function migrateOrderItemQuantityToDecimal() {
           AND column_name = 'quantity'
           AND (
             data_type <> 'numeric'
-            OR numeric_precision IS DISTINCT FROM 10
-            OR numeric_scale IS DISTINCT FROM 2
+            OR numeric_precision IS DISTINCT FROM 16
+            OR numeric_scale IS DISTINCT FROM 6
           )
       ) THEN
         ALTER TABLE order_items
-        ALTER COLUMN quantity TYPE numeric(10, 2)
+        ALTER COLUMN quantity TYPE numeric(16, 6)
         USING quantity::numeric;
       END IF;
     END $$;
@@ -42,10 +42,10 @@ async function migrateOrderItemQuantityToDecimal() {
   if (
     !column ||
     column.data_type !== "numeric" ||
-    column.numeric_precision !== 10 ||
-    column.numeric_scale !== 2
+    column.numeric_precision !== 16 ||
+    column.numeric_scale !== 6
   ) {
-    throw new Error("order_items.quantity must be numeric(10,2) before decimal order quantities can be saved");
+    throw new Error("order_items.quantity must be numeric(16,6) before decimal order quantities can be saved");
   }
 }
 

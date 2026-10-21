@@ -15,6 +15,6 @@ assert.match(auth, /back_to_public_site/, "authentication must provide a localiz
 
 assert.doesNotMatch(landing, /href="#"/, "the public landing must not contain empty footer links");
 assert.doesNotMatch(landing, /testimonials_placeholder/, "the public landing must not expose internal testimonial placeholders");
-assert.match(landing, /Une solution XpressGroup/, "the public footer must use the approved parent brand");
+assert.match(landing, /© 2026 XpressGroup/, "the public footer must use the approved parent brand");
 
 console.log("auth conversion regression passed");
