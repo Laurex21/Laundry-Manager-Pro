@@ -351,7 +351,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const [mobileOpen, setMobileOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [guideRestartToken, setGuideRestartToken] = useState(0);
+  const guideRestartToken = 0;
   const pwaInstaller = usePwaInstall();
   const { t, i18n } = useTranslation();
 
