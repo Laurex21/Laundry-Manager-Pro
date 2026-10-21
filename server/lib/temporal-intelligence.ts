@@ -10,11 +10,11 @@ function nextVisitDate(lastVisitAt: Date | null, avgDaysBetweenVisits: number | 
   return new Date(lastVisitAt.getTime() + avgDaysBetweenVisits * DAY_MS);
 }
 
-export async function refreshCustomerAnalyticsFromHistory(customerId: number): Promise<void> {
-  const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+export async function refreshCustomerAnalyticsFromHistory(customerId: number, executor: Pick<typeof db, "select" | "update"> = db): Promise<void> {
+  const [customer] = await executor.select().from(customers).where(eq(customers.id, customerId)).limit(1);
   if (!customer) return;
 
-  const customerOrders = await db.select().from(orders)
+  const customerOrders = await executor.select().from(orders)
     .where(and(eq(orders.customerId, customerId), ne(orders.status, "cancelled")))
     .orderBy(orders.createdAt);
   const visitDates = customerOrders
@@ -51,7 +51,7 @@ export async function refreshCustomerAnalyticsFromHistory(customerId: number): P
     totalOrders: customerOrders.length,
   });
 
-  await db.update(customers).set({
+  await executor.update(customers).set({
     lastVisitAt,
     avgDaysBetweenVisits: avgDaysBetweenVisits == null ? null : avgDaysBetweenVisits.toFixed(2),
     visitCount,
