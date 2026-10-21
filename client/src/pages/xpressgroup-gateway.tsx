@@ -35,7 +35,7 @@ const english: Copy = {
 export default function XpressGroupGateway({ language }: { language: string }) {
   const copy = language.startsWith("fr") ? french : english;
   return <>
-    <section id="branches" className="scroll-mt-20 bg-[#fafaf5] bg-[linear-gradient(#dfe8e84d_1px,transparent_1px),linear-gradient(90deg,#dfe8e84d_1px,transparent_1px)] bg-[size:60px_60px] pb-20 pt-32 text-[#0D1B4B]">
+    <section id="branches" className="scroll-mt-20 bg-[#fafaf5] bg-[linear-gradient(#dfe8e84d_1px,transparent_1px),linear-gradient(90deg,#dfe8e84d_1px,transparent_1px)] bg-[size:60px_60px] pb-20 pt-16 text-[#0D1B4B]">
       <div className="mx-auto max-w-7xl px-4">
         <div className="mx-auto max-w-5xl text-center">
           <p className="text-xs font-extrabold uppercase tracking-[.2em] text-blue-700">{copy.eyebrow}</p>
