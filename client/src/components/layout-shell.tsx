@@ -20,7 +20,7 @@ import { PwaInstallDialog } from "@/components/pwa-install-dialog";
 import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -516,7 +516,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
       {/* Mobile sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border">
+        <SheetContent side="left" aria-describedby={undefined} className="p-0 w-64 bg-sidebar text-sidebar-foreground border-sidebar-border">
+          <SheetTitle className="sr-only">{t("ui_sidebar")}</SheetTitle>
           <NavContent />
         </SheetContent>
       </Sheet>
