@@ -4,7 +4,7 @@ const VISIT_TIMEOUT_MS = 30 * 60 * 1000;
 declare global {
   interface Window {
     umami?: {
-      track(name: string): void;
+      track(name: string, properties?: Record<string, string>): void;
     };
   }
 }

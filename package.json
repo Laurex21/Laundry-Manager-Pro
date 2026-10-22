@@ -49,7 +49,8 @@
     "db:seed:plans": "tsx scripts/seed-plans.ts",
     "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts",
     "test:receipt-export": "tsx server/lib/receipt-export.test.ts",
-    "test:saas-billing": "tsx server/lib/saas-billing.test.ts && tsx server/lib/saas-access.integration.test.ts && tsx server/lib/saas-callback-proxy.test.ts && tsx server/lib/saas-launch-verification.integration.test.ts && tsx server/lib/saas-production-config.test.ts"
+    "test:saas-billing": "tsx server/lib/saas-billing.test.ts && tsx server/lib/saas-access.integration.test.ts && tsx server/lib/saas-callback-proxy.test.ts && tsx server/lib/saas-launch-verification.integration.test.ts && tsx server/lib/saas-production-config.test.ts",
+    "test:marketing": "tsx client/src/lib/analytics.test.ts && tsx client/src/lib/marketing.test.ts && tsx client/src/lib/marketing-pixel.test.ts && tsx server/lib/auth-conversion-regression.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

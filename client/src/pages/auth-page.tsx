@@ -11,6 +11,7 @@ import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
+import { trackMarketingEvent, pixelWasLoaded, waitForMarketingDispatch } from "@/lib/marketing";
 import { useTranslation } from "react-i18next";
 
 const LANGUAGES = [
@@ -84,9 +85,15 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         return;
       }
 
-      if (tab === "register") trackEvent("signup_completed");
+      if (tab === "register") {
+        trackEvent("signup_completed");
+        trackMarketingEvent("signup_completed");
+        await waitForMarketingDispatch();
+      }
       queryClient.setQueryData(["/api/auth/user"], data);
-      setLocation("/");
+      // Leave the document containing the marketing SDK before entering the app.
+      if (pixelWasLoaded()) window.location.assign("/");
+      else setLocation("/");
     } catch {
       toast({ title: t("error"), description: t("network_error_retry"), variant: "destructive" });
     } finally {
