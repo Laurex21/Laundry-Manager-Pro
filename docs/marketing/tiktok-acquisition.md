@@ -7,7 +7,7 @@ La création du pixel ne signifie pas que le site envoie déjà des événements
 
 La correspondance automatique avancée, les cookies propriétaires et la collecte enrichie ont été désactivés lors de la configuration dans TikTok. Ne pas réactiver l’identification automatique ni installer le code générique dans tout le site.
 
-Le code est désactivé par défaut. Pour une activation contrôlée, définir `VITE_TIKTOK_PIXEL_ENABLED=true` **au moment de la compilation et à l’exécution du serveur**. Sans ce drapeau le SDK TikTok n’est pas chargé et la politique de sécurité du serveur n’est pas élargie. Les modifications doivent être intégrées et publiées avant de pouvoir vérifier de vrais événements dans TikTok.
+La bibliothèque est désactivée par défaut ; la configuration Replit du projet active explicitement le drapeau pour la publication autorisée le 22 octobre 2026. Pour une activation contrôlée, définir `VITE_TIKTOK_PIXEL_ENABLED=true` **au moment de la compilation et à l’exécution du serveur**. Sans ce drapeau le SDK TikTok n’est pas chargé et la politique de sécurité du serveur n’est pas élargie. Les modifications doivent être intégrées et publiées avant de pouvoir vérifier de vrais événements dans TikTok.
 
 ## Consentement et périmètre
 

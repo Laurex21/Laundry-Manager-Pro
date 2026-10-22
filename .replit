@@ -19,6 +19,7 @@ externalPort = 3000
 
 [env]
 PORT = "5000"
+VITE_TIKTOK_PIXEL_ENABLED = "true"
 
 [deployment]
 deploymentTarget = "autoscale"
