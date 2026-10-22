@@ -1,4 +1,5 @@
 import { registerSaasRoutes } from "./lib/saas-routes";
+import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
 import { saasEnabled, saasStore, saasForOrganisation } from "./lib/saas-runtime";
 import { SAAS_CUSTOM_FIELDS, standardSaasSettings } from "./lib/saas-access";
 import { SAAS_PLANS } from "@shared/saas-plans";
@@ -304,6 +305,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await setupAuth(app);
   registerAuthRoutes(app);
   registerSaasRoutes(app);
+  registerPawapayNotificationReceivers(app);
   registerLegalRoutes(app);
   registerCalculatorRoutes(app);
   registerDiagnosticRoutes(app);
