@@ -1,4 +1,5 @@
 import { useSaasConfig } from "@/components/saas-public-plans";
+import { trackMarketingEvent } from "@/lib/marketing";
 import { useEffect, useState } from "react";
 import XpressGroupGateway from "./xpressgroup-gateway";
 import FippCountdown from "@/components/fipp-countdown";
@@ -136,7 +137,7 @@ function demoEmbedUrl(language: string) {
 function LazyDemoVideo({ url, label }: { url: string; label: string }) {
   const [playing, setPlaying] = useState(false);
   if (playing) return <iframe className="h-full w-full" src={url} title={label} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />;
-  return <div className="grid h-full place-items-center text-white"><button type="button" onClick={() => setPlaying(true)} className="grid h-16 w-16 place-items-center rounded-full border-2 border-white bg-blue-600" aria-label={label}><Play className="ml-1 h-7 w-7 fill-white" /></button></div>;
+  return <div className="grid h-full place-items-center text-white"><button type="button" onClick={() => { trackMarketingEvent("demo_started"); setPlaying(true); }} className="grid h-16 w-16 place-items-center rounded-full border-2 border-white bg-blue-600" aria-label={label}><Play className="ml-1 h-7 w-7 fill-white" /></button></div>;
 }
 
 export default function LandingPage() {

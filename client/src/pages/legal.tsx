@@ -105,6 +105,15 @@ export default function LegalPage() {
           </ul>
         </section>
 
+        {legalType !== "terms" && (
+          <section className="rounded-lg border bg-card p-5 text-sm leading-6 text-muted-foreground">
+            <h2 className="text-lg font-semibold text-foreground">Mesure TikTok — 22 octobre 2026</h2>
+            <p className="mt-3">Sur les pages publiques, après votre accord, le pixel TikTok mesure les visites, clics de contact et inscriptions réussies. TikTok reçoit les informations techniques de connexion, notamment l’adresse IP, ainsi que la catégorie de page, l’action et les codes de campagne autorisés. Aucune donnée saisie dans les formulaires, donnée client, commande, adresse e-mail ou numéro de téléphone n’est transmis par notre intégration. Les pages privées sont exclues.</p>
+            <p className="mt-3">La correspondance avancée automatique, la collecte enrichie et les cookies propriétaires TikTok sont désactivés. Votre choix est conservé dans le stockage local du navigateur ; les codes de campagne sont conservés dans la session de l’onglet après accord. Vous pouvez refuser ou retirer votre accord via « Choix de mesure » sur les pages publiques, sans bloquer l’accès au site. Le retrait efface les codes de campagne mémorisés et arrête les nouveaux envois.</p>
+            <a className="mt-3 inline-block underline" href="https://www.tiktok.com/legal/page/row/privacy-policy/en" target="_blank" rel="noopener noreferrer">Politique de confidentialité TikTok</a>
+          </section>
+        )}
+
         <section className="rounded-lg border bg-muted/30 p-5 text-sm leading-6 text-muted-foreground">
           The full legal package is the XpressPro Terms of Service document approved for this version,
           including the Privacy Policy and standalone Cookie Policy. Acceptance records are stored with

@@ -11,6 +11,7 @@ import { useEffect, lazy, Suspense } from "react";
 import LayoutShell from "@/components/layout-shell";
 import { WhatsAppLauncherProvider } from "@/components/whatsapp-launcher";
 import Dashboard from "@/pages/dashboard";
+import MarketingMeasurement from "@/components/marketing-measurement";
 
 // ─── Lazy-loaded routes (code-split into separate chunks) ─────────────────────
 const NotFound          = lazy(() => import("@/pages/not-found"));
@@ -262,6 +263,7 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <MarketingMeasurement />
       <TooltipProvider>
         <WhatsAppLauncherProvider>
           <Router />

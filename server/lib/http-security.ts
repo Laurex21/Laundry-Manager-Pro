@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { marketingPage } from "../../shared/marketing";
 
 const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -18,11 +19,18 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
   // Vite injects inline HMR and React-refresh bootstrap modules in development.
   // Keep the deployed application's CSP strict while allowing the development
   // server to run those local-only scripts.
-  const contentSecurityPolicy = process.env.NODE_ENV === "production"
+  let contentSecurityPolicy = process.env.NODE_ENV === "production"
     ? PRODUCTION_CONTENT_SECURITY_POLICY
     : PRODUCTION_CONTENT_SECURITY_POLICY
       .replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
       .replace("connect-src 'self'", "connect-src 'self' ws: wss:");
+
+  const search = _req.path === "/auth" && _req.query.tab === "register" ? "?tab=register" : "";
+  if (process.env.VITE_TIKTOK_PIXEL_ENABLED === "true" && marketingPage(_req.path, search)) {
+    contentSecurityPolicy = contentSecurityPolicy
+      .replace("script-src 'self'", "script-src 'self' https://analytics.tiktok.com")
+      .replace("connect-src 'self'", "connect-src 'self' https://analytics.tiktok.com https://analytics-sg.tiktok.com https://analytics.us.tiktok.com");
+  }
 
   res.setHeader("Content-Security-Policy", contentSecurityPolicy);
   res.setHeader("X-Content-Type-Options", "nosniff");
