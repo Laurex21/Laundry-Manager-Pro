@@ -146,6 +146,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
     { key: "expenses", label: t("business_evolution_expenses"), kind: "money" },
     { key: "profit", label: t("business_evolution_profit"), kind: "money" },
   ];
+  const displayedEvolutionMetrics = evolutionMetrics.filter(metric => visibleMetrics[metric.key]);
   const periodLabel = (period: string) => {
     const date = new Date(`${period}T12:00:00Z`);
     if (granularity === "month") return format(date, "MMM yyyy", { locale: activeDateLocale });
@@ -256,7 +257,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
   const monthChartBottomMargin = formattedMonthlyComparison.length > 4 ? 36 : 12;
 
   return (
-    <div className="space-y-8 page-fade-in" data-testid="reports-page-redesign">
+    <div className="min-w-0 space-y-8 page-fade-in" data-testid="reports-page-redesign">
       <div className={`${embedded ? "flex justify-end" : "rounded-2xl border border-primary/10 bg-card p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between"}`}>
         {!embedded && <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary"><Activity className="h-4 w-4" aria-hidden="true" />{t("reports")}</div>
@@ -367,21 +368,30 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                 {!evolutionMetrics.some(metric => visibleMetrics[metric.key]) && <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">{t("business_evolution_select_indicator")}</p>}
               </div>
               <p className="text-xs text-muted-foreground">{t("business_evolution_definition")}</p>
-              <div className="max-h-[440px] overflow-auto rounded-xl border border-border" data-testid="business-evolution-table">
-                <Table className="min-w-[720px]">
-                  <TableHeader><TableRow>
-                    <TableHead className="sticky left-0 top-0 z-20 bg-background">{t("period")}</TableHead>
-                    {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableHead key={metric.key} className="sticky top-0 z-10 bg-background text-right whitespace-nowrap">{metric.label}</TableHead>)}
-                  </TableRow></TableHeader>
-                  <TableBody>
-                    {evolutionRows.map(item => <TableRow key={item.period}>
-                      <TableCell className="sticky left-0 bg-background font-medium whitespace-nowrap">{periodLabel(item.period)}</TableCell>
-                      {evolutionMetrics.filter(metric => visibleMetrics[metric.key]).map(metric => <TableCell key={metric.key} className="text-right tabular-nums whitespace-nowrap">{Number(item[metric.key]).toLocaleString(i18n.language)}{metric.kind === "money" ? ` ${symbol}` : ""}</TableCell>)}
-                    </TableRow>)}
-                    {evolutionRows.length === 0 && <TableRow><TableCell colSpan={6}>{t("business_evolution_empty")}</TableCell></TableRow>}
-                  </TableBody>
-                </Table>
-              </div>
+              {displayedEvolutionMetrics.length > 0 && <div
+                className="relative isolate max-h-[440px] w-full overflow-auto rounded-xl border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                role="region" aria-label={t("business_evolution_title")} tabIndex={0}
+                data-testid="business-evolution-table">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 140 + displayedEvolutionMetrics.length * 145 }}>
+                  <caption className="sr-only">{t("business_evolution_title")}</caption>
+                  <thead><tr>
+                    <th scope="col" className="sticky left-0 top-0 z-30 w-[140px] border-b border-r border-white/15 bg-[#082D5B] px-4 py-3 text-left font-semibold text-white">{t("period")}</th>
+                    {displayedEvolutionMetrics.map(metric => <th scope="col" key={metric.key} className="sticky top-0 z-20 border-b border-white/15 bg-[#082D5B] px-4 py-3 text-right align-middle font-semibold leading-snug text-white">
+                      {metric.label}{metric.kind === "money" && <span className="mt-1 block text-xs font-normal text-white/75">{symbol}</span>}
+                    </th>)}
+                  </tr></thead>
+                  <tbody>
+                    {evolutionRows.map((item, index) => <tr key={item.period} className={index % 2 ? "bg-muted/30" : "bg-background"}>
+                      <th scope="row" className={cn("sticky left-0 z-10 border-b border-r border-border px-4 py-3 text-left font-medium whitespace-nowrap", index % 2 ? "bg-muted" : "bg-background")}>{periodLabel(item.period)}</th>
+                      {displayedEvolutionMetrics.map(metric => <td key={metric.key} className={cn("border-b border-border px-4 py-3 text-right tabular-nums whitespace-nowrap", metric.key === "profit" && (Number(item.profit) < 0 ? "font-semibold text-destructive" : "font-semibold"))}>
+                        {Number(item[metric.key]).toLocaleString(i18n.language)}
+                      </td>)}
+                    </tr>)}
+                    {evolutionRows.length === 0 && <tr><td className="px-4 py-10 text-center text-muted-foreground" colSpan={displayedEvolutionMetrics.length + 1}>{t("business_evolution_empty")}</td></tr>}
+                  </tbody>
+                </table>
+              </div>}
+
             </>
           )}
         </CardContent>
@@ -679,9 +689,9 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
               {t("no_data_for_period")}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+            <div className="min-w-0 rounded-xl border border-border">
+              <Table className="min-w-[760px]">
+                <TableHeader className="bg-[#082D5B] [&_th]:font-semibold [&_th]:text-white">
                   <TableRow>
                     <TableHead>{t("name")}</TableHead>
                     <TableHead className="text-center">{t("order_count")}</TableHead>
@@ -693,19 +703,19 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                 <TableBody>
                   {data.topCustomers.map((c, idx) => (
                     <TableRow key={idx} data-testid={`row-top-customer-${idx}`}>
-                      <TableCell className="font-medium" data-testid={`text-customer-name-${idx}`}>
+                      <TableCell className="min-w-[160px] max-w-[240px] break-words font-medium" data-testid={`text-customer-name-${idx}`}>
                         {c.name}
                       </TableCell>
                       <TableCell className="text-center" data-testid={`text-customer-orders-${idx}`}>
                         {c.orderCount}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-customer-order-value-${idx}`}>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap" data-testid={`text-customer-order-value-${idx}`}>
                         {symbol}{c.orderValue.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-customer-collected-${idx}`}>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap" data-testid={`text-customer-collected-${idx}`}>
                         {symbol}{c.amountCollected.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-customer-balance-${idx}`}>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap" data-testid={`text-customer-balance-${idx}`}>
                         {symbol}{c.outstandingBalance.toFixed(2)}
                       </TableCell>
                     </TableRow>
@@ -736,9 +746,9 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
               {t("no_data_for_period")}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+            <div className="min-w-0 rounded-xl border border-border">
+              <Table className="min-w-[760px]">
+                <TableHeader className="bg-[#082D5B] [&_th]:font-semibold [&_th]:text-white">
                   <TableRow>
                     <TableHead>{t("area")}</TableHead>
                     <TableHead className="text-center">{t("customers")}</TableHead>
@@ -751,7 +761,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                 <TableBody>
                   {data.customerAreas.map((area, idx) => (
                     <TableRow key={area.area} data-testid={`row-customer-area-${idx}`}>
-                      <TableCell className="font-medium max-w-[280px] truncate" title={area.area} data-testid={`text-customer-area-${idx}`}>
+                      <TableCell className="min-w-[160px] max-w-[280px] break-words font-medium" title={area.area} data-testid={`text-customer-area-${idx}`}>
                         {area.area}
                       </TableCell>
                       <TableCell className="text-center" data-testid={`text-area-customers-${idx}`}>
@@ -760,13 +770,13 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
                       <TableCell className="text-center" data-testid={`text-area-orders-${idx}`}>
                         {area.orderCount}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-area-order-value-${idx}`}>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap" data-testid={`text-area-order-value-${idx}`}>
                         {symbol}{area.orderValue.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-area-collected-${idx}`}>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap" data-testid={`text-area-collected-${idx}`}>
                         {symbol}{area.amountCollected.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right font-mono" data-testid={`text-area-balance-${idx}`}>
+                      <TableCell className="text-right tabular-nums whitespace-nowrap" data-testid={`text-area-balance-${idx}`}>
                         {symbol}{area.outstandingBalance.toFixed(2)}
                       </TableCell>
                     </TableRow>
