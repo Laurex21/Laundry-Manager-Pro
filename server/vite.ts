@@ -1,3 +1,5 @@
+import { collectionQaAllowed, mountCollectionQaProxy } from "./lib/collection-pilot-qa-proxy";
+import { isAuthenticated } from "./replit_integrations/auth";
 import { type Express } from "express";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
@@ -29,6 +31,20 @@ export async function setupVite(server: Server, app: Express) {
     appType: "custom",
   });
 
+  mountCollectionQaProxy(app,isAuthenticated);
+  app.get('/__qa/laurepressing50',isAuthenticated,async(req,res,next)=>{
+    if(!collectionQaAllowed())return res.sendStatus(404);
+    try {
+      const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Laurepressing · copie de test isolée</title></head><body><div id="root"></div><script type="module" src="/@fs/'+path.resolve('scripts/fixtures/laurepressing50-qa.tsx')+'"></script></body></html>';
+      const preamble=(await import('@vitejs/plugin-react')).default.preambleCode.replace('__BASE__','/');
+      const page=html.replace('</head>','<script type="module">'+preamble+'</script><script type="module" src="/@vite/client"></script></head>');
+      res.set('Cache-Control','private, no-store').type('html').send(page);
+    }catch(error){next(error);}
+  });
+  app.get('/__qa/laurepressing50-mobile',isAuthenticated,(_req,res)=>{
+    if(!collectionQaAllowed())return res.sendStatus(404);
+    res.redirect('/__qa/laurepressing50?mobile=1');
+  });
   app.use(vite.middlewares);
 
   app.use("/{*path}", async (req, res, next) => {

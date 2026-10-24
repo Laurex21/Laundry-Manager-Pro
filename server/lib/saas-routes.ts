@@ -1,7 +1,9 @@
+import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import type { Express } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { saasEnabled, saasStore, startSaasJobs } from "./saas-runtime";
+import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, collectionPilotRequestEnabled, saasStore, startSaasJobs } from "./saas-runtime";
+import { livePilotConfigured, pilotSelectionAllowed, collectionPilotConfigured, collectionPilotAllowed, isCollectionPilotInvoice, COLLECTION_PILOT_XAF } from "./saas-pilot";
 import { saasFailure } from "./saas-access";
 import { configuredSaasProvider, saasCallbackAuthority } from "./saas-pawapay";
 import { SaasError } from "./saas-store";
@@ -16,18 +18,24 @@ const limited = rateLimit({ name: "saas-billing", windowMs: 60_000, max: 30, key
 export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { backgroundJobs?: boolean } = {}) {
   if (backgroundJobs) startSaasJobs();
   let reconciling = false;
-  if (backgroundJobs && saasEnabled()) {
+  if (backgroundJobs && !automaticMaintenanceSuspended() && !collectionPilotConfigured() && !livePilotConfigured() && saasEnabled()) {
     const timer = setInterval(async () => {
-      if (reconciling || !saasEnvironment()?.token) return; reconciling = true;
+      if (automaticMaintenanceSuspended() || collectionPilotConfigured() || livePilotConfigured() || reconciling || !saasEnvironment()?.token) return; reconciling = true;
       try {
         const pending = await saasStore.db.query("SELECT id,organisation_id FROM saas_invoices WHERE status='pending' AND provider_environment=$1 ORDER BY created_at LIMIT 100", [saasStore.environment]);
         for (const row of pending.rows) { try { await provider().refresh(row.organisation_id, row.id); } catch { /* Keep pending; never invent a failure on timeout. */ } }
       } catch { console.warn("SaaS sandbox reconciliation unavailable"); } finally { reconciling = false; }
     }, 60_000); timer.unref();
   }
-  app.get("/api/saas/config", (_req, res) => res.json({ enabled: saasEnabled(), mode: saasEnvironment()?.mode ?? "disabled", manualRenewal: true, catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) }));
+  app.get("/api/saas/config", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    try {
+      const enabled = await saasRequestEnabled(req);
+      res.json({ enabled, mode: enabled ? saasEnvironment()?.mode : "disabled", collectionPilot: await collectionPilotRequestEnabled(req), manualRenewal: true, businessLaunch: process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true", catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) });
+    } catch { res.status(503).json({ enabled: false, mode: "disabled" }); }
+  });
   async function owner(req: any, res: any) {
-    if (!saasEnabled()) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
+    if (!saasOrganisationEnabled(req.organisationId)) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
     if (!req.organisationId) { res.status(403).json({ code: "ORGANISATION_REQUIRED" }); return null; }
     const row = (await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1", [req.organisationId])).rows[0];
     if (row?.owner_id !== req.userId) { res.status(403).json({ code: "OWNER_REQUIRED" }); return null; }
@@ -39,13 +47,48 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
       catch (error) { saasFailure(res, error); }
     });
   }
+  function collectionRoute(method: "get" | "post", path: string, fn: (org: number, req: any, res: any) => Promise<void>) {
+    app[method](path,isAuthenticated,limited,async(req:any,res:any)=>{
+      res.set("Cache-Control","private, no-store");
+      try {
+        if (!collectionPilotConfigured() || !saasEnabled() || !collectionPilotAllowed(req.organisationId)) return res.status(404).json({code:"COLLECTION_PILOT_DISABLED"});
+        const row=(await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1",[req.organisationId])).rows[0];
+        if (row?.owner_id !== req.userId) return res.status(403).json({code:"OWNER_REQUIRED"});
+        await fn(Number(req.organisationId),req,res);
+      } catch(error) {saasFailure(res,error);}
+    });
+  }
+  collectionRoute("get","/api/saas/collection-pilot",async(org,_req,res)=>{
+    const result=await saasStore.db.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND quote->>'purpose'='collection_pilot' ORDER BY (quote ? 'retryOf') DESC, created_at DESC LIMIT 1",[org,saasStore.environment]);
+    const invoice=result.rows[0]||null;
+    res.json({amountXaf:COLLECTION_PILOT_XAF,subscriptionChanged:false,invoice,retryAllowed:!!invoice&&invoice.id===process.env.SAAS_LIVE_PILOT_RETRY_INVOICE_ID&&invoice.status==="failed"&&invoice.provider_status==="FAILED"&&!invoice.paid_at&&!invoice.quote.retryOf});
+  });
+  collectionRoute("post","/api/saas/collection-pilot/:id/retry",async(org,req,res)=>{
+    z.object({}).strict().parse(req.body);z.string().uuid().parse(req.params.id);
+    if(process.env.SAAS_LIVE_PILOT_RETRY_INVOICE_ID!==req.params.id)throw new SaasError("COLLECTION_RETRY_NOT_AUTHORISED",404);
+    await provider().verifyFailedCollection(org,req.params.id);
+    res.status(201).json(await saasStore.retryCollectionPilotQuote(org,req.params.id));
+  });
+  collectionRoute("post","/api/saas/collection-pilot/quote",async(org,req,res)=>{
+    z.object({}).strict().parse(req.body);
+    res.status(201).json(await saasStore.createCollectionPilotQuote(org));
+  });
+  for (const action of ["checkout","refresh"] as const) collectionRoute("post",`/api/saas/collection-pilot/:id/${action}`,async(org,req,res)=>{
+    z.object({}).strict().parse(req.body); z.string().uuid().parse(req.params.id);
+    const invoice=await saasStore.invoice(saasStore.db,org,req.params.id);
+    if (!isCollectionPilotInvoice(invoice)) throw new SaasError("INVOICE_NOT_FOUND",404);
+    if (action === "refresh") {res.json(await provider().refresh(org,invoice.id));return;}
+    const origin=saasEnvironment()?.returnOrigin;
+    if (!origin) throw new SaasError("LIVE_HTTPS_ORIGIN_REQUIRED",503);
+    res.json(await provider().start(org,invoice.id,new URL("/subscriptions",origin).toString()));
+  });
   route("get", "/api/saas/current", async (org, _req, res) => {
     const state = await saasStore.current(org);
     const sites = (await saasStore.db.query("SELECT id,name FROM sites WHERE organisation_id=$1 AND is_active=true ORDER BY id", [org])).rows;
     const staff = (await saasStore.db.query(`SELECT DISTINCT u.id,u.first_name,u.last_name,u.email FROM users u
       JOIN site_members sm ON sm.user_id=u.id JOIN sites s ON s.id=sm.site_id JOIN organisations o ON o.id=s.organisation_id
       WHERE u.organisation_id=$1 AND s.organisation_id=$1 AND s.is_active=true AND u.id<>o.owner_id ORDER BY u.id`, [org])).rows;
-    res.json({ state, quotas: saasQuotas(state), monthlyXaf: saasMonthly(state), sites, staff, sandboxConfigured: !!saasEnvironment()?.token });
+    res.json({ state, quotas: saasQuotas(state), monthlyXaf: saasMonthly(state), sites, staff, sandboxConfigured: !!saasEnvironment()?.token, paymentConfigured: !!saasEnvironment()?.token, mode: saasEnvironment()?.mode });
   });
   route("get", "/api/saas/notices", async (org, req, res) => {
     await saasStore.tick(org, req.get("X-Client-Timezone") || "Africa/Douala");
@@ -54,22 +97,34 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
       RETURNING *`, [org]);
     res.json(notices.rows.sort((a,b) => Number(b.id)-Number(a.id)).slice(0,1));
   });
-  route("get", "/api/saas/invoices", async (org, _req, res) => res.json((await saasStore.db.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 ORDER BY created_at DESC LIMIT 100", [org, saasStore.environment])).rows));
+  route("get", "/api/saas/invoices", async (org, _req, res) => res.json((await saasStore.db.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND COALESCE(quote->>'purpose','subscription')<>'collection_pilot' ORDER BY created_at DESC LIMIT 100", [org, saasStore.environment])).rows));
   route("post", "/api/saas/quote", async (org, req, res) => {
     const target = selectionSchema.parse(req.body);
+    if (livePilotConfigured()) {
+      if (!pilotSelectionAllowed(target)) throw new SaasError("PILOT_PRO_ONLY", 403);
+      const paid = await saasStore.db.query("SELECT id FROM saas_invoices WHERE organisation_id=$1 AND provider_environment='live' AND status='paid' LIMIT 1", [org]);
+      if (paid.rows.length) throw new SaasError("PILOT_ALREADY_PAID", 409);
+    }
     res.status(201).json(await saasStore.createQuote(org, saasSelection(target.plan, target.extraSites, target.extraStaff)));
   });
   route("post", "/api/saas/schedule", async (org, req, res) => {
+    if (livePilotConfigured()) throw new SaasError("PILOT_CHANGE_NOT_ALLOWED", 403);
     const target = selectionSchema.parse(req.body);
     res.json(await saasStore.schedule(org, target));
   });
   route("post", "/api/saas/access", async (org, req, res) => {
+    if (livePilotConfigured()) throw new SaasError("PILOT_CHANGE_NOT_ALLOWED", 403);
     const selection = z.object({ sites: z.array(z.number().int().positive()), staff: z.array(z.string().min(1).max(200)) }).strict().parse(req.body);
     res.json(await saasStore.selectAccess(org, selection.sites, selection.staff));
   });
   route("post", "/api/saas/invoices/:id/checkout", async (org, req, res) => {
     z.string().uuid().parse(req.params.id);
     const invoice = await saasStore.invoice(saasStore.db, org, req.params.id);
+    if (livePilotConfigured()) {
+      if (!pilotSelectionAllowed(invoice.quote.selection) || Number(invoice.total_xaf) !== 10999) throw new SaasError("PILOT_AMOUNT_REQUIRES_REVIEW", 409);
+      const paid = await saasStore.db.query("SELECT id FROM saas_invoices WHERE organisation_id=$1 AND provider_environment='live' AND status='paid' LIMIT 1", [org]);
+      if (paid.rows.length) throw new SaasError("PILOT_ALREADY_PAID", 409);
+    }
     if (invoice.total_xaf === 0) { res.json(await saasStore.settleZeroInvoice(org, req.params.id)); return; }
     // Server-owned URL; client cannot redirect payer details to an arbitrary origin.
     const origin = saasEnvironment()?.returnOrigin;
@@ -82,7 +137,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
     z.string().uuid().parse(req.params.id); res.json(await provider().refresh(org, req.params.id));
   });
   app.post("/api/receipt-snapshots", isAuthenticated, limited, async (req: any, res) => {
-    if (!saasEnabled() || !req.saas) return res.status(404).json({ code: "SAAS_DISABLED" });
+    if (!saasOrganisationEnabled(req.organisationId) || !req.saas) return res.status(404).json({ code: "SAAS_DISABLED" });
     try {
       const data = z.object({ orderId: z.number().int().positive(), paymentId: z.number().int().positive().optional(), kind: z.enum(["deposit","payment","subscriber"]), html: z.string().min(20).max(2_000_000) }).strict().parse(req.body);
       const row = (await saasStore.db.query(`SELECT o.site_id FROM orders o JOIN sites s ON s.id=o.site_id WHERE o.id=$1 AND s.organisation_id=$2`, [data.orderId, req.organisationId])).rows[0];
@@ -119,9 +174,13 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
         return res.json({ received: true });
       }
       z.string().uuid().parse(event?.checkoutId);
-      const invoice = (await saasStore.db.query("SELECT id FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [event.checkoutId, config.mode])).rows[0];
+      const invoice = (await saasStore.db.query("SELECT id,organisation_id,checkout_code,quote FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [event.checkoutId, config.mode])).rows[0];
       if (!invoice) return res.sendStatus(404);
       if (event.clientReferenceId !== invoice.id) throw new SaasError("INVOICE_REFERENCE_MISMATCH");
+      if (isCollectionPilotInvoice(invoice) && !invoice.checkout_code) {
+        await provider().refresh(Number(invoice.organisation_id),invoice.id);
+        return res.json({received:true});
+      }
       await saasStore.applyProviderResult(event.checkoutId, event, config.mode === "live" ? "pawapay_live" : "pawapay_sandbox");
       res.json({ received: true });
     } catch (error) { saasFailure(res, error); }

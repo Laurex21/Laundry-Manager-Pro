@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createOrderWithItemsSchema } from "../../shared/routes";
 
 const ordersPage = fs.readFileSync("client/src/pages/orders.tsx", "utf8");
 const routes = fs.readFileSync("server/routes.ts", "utf8");
-const contract = fs.readFileSync("shared/routes.ts", "utf8");
 const i18n = fs.readFileSync("client/src/lib/i18n.ts", "utf8");
 
 assert.match(ordersPage, /button-discount-fixed/);
@@ -23,7 +23,14 @@ const percentageField = ordersPage.slice(percentageStart, ordersPage.indexOf("</
 assert.match(percentageField, /value=\{watchedDiscountPct \?\? ""\}/);
 assert.doesNotMatch(percentageField, /value=\{field\.value \?\? ""\}/);
 assert.match(ordersPage, /formatExactMoney\(discountAmount, symbol, i18n\.language\)/);
-assert.match(contract, /discountPct: z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
+const discountSchema = createOrderWithItemsSchema.shape.discountPct;
+assert.equal(discountSchema.parse("12.5"), 12.5);
+assert.equal(discountSchema.parse(undefined), 0);
+assert.equal(discountSchema.parse(0), 0);
+assert.equal(discountSchema.parse(100), 100);
+for (const value of [-1, 101, "invalid"]) {
+  assert.equal(discountSchema.safeParse(value).success, false);
+}
 assert.match(routes, /multiplyDecimal\(subtotal, String\(discountPct \/ 100\)\)/);
 assert.match(routes, /compareDecimals\(discountAmount, subtotal\) > 0/);
 assert.match(routes, /discountPct: discountPct\.toString\(\)/);

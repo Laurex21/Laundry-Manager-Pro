@@ -305,7 +305,7 @@ export function registerMembershipRoutes(app: Express) {
       pointExpireDays: z.coerce.number().int().positive().max(3650).nullish(),
       isActive: z.boolean(),
     }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid loyalty settings" });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid loyalty settings" });
     const input = parsed.data;
     const { enabled, ...programInput } = input;
     const values = {
@@ -598,7 +598,7 @@ export function registerMembershipRoutes(app: Express) {
     if (!organisationId) return res.status(403).json({ message: "Organisation required" });
     if (!(await requirePlanManager(req, res, organisationId))) return;
     const parsed = planInput.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid input", field: parsed.error.errors[0]?.path.join(".") });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input", field: parsed.error.issues[0]?.path.join(".") });
     const input = parsed.data;
     if (!(await servicesBelongToOrganisation(input.serviceIds, organisationId))) return res.status(400).json({ message: "Invalid service selection" });
     const created = await db.transaction(async (tx) => {
@@ -624,7 +624,7 @@ export function registerMembershipRoutes(app: Express) {
     const organisationId = await organisationIdFor(req); const id = Number(req.params.id);
     if (!organisationId || !(await requirePlanManager(req, res, organisationId))) return;
     const parsed = planInput.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid input", field: parsed.error.errors[0]?.path.join(".") });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid input", field: parsed.error.issues[0]?.path.join(".") });
     const input = parsed.data;
     const [existing] = await db.select({ id: subscriptionPlans.id }).from(subscriptionPlans).where(and(eq(subscriptionPlans.id, id), eq(subscriptionPlans.organisationId, organisationId ?? -1), isNull(subscriptionPlans.deletedAt))).limit(1);
     if (!existing) return res.status(404).json({ message: "Plan not found" });

@@ -94,7 +94,7 @@ export function registerInventoryRoutes(app: Express) {
   app.post("/api/inventory/products", isAuthenticated, async (req: any, res) => {
     const parsed = productSchema.safeParse(req.body);
     const siteId = writeSiteId(req);
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid product" });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid product" });
     if (siteId === null) return res.status(400).json({ message: "Select a specific site before saving" });
     if (!(await requireManager(req, res, siteId))) return;
     const organisationId = Number(req.organisationId);
@@ -110,7 +110,7 @@ export function registerInventoryRoutes(app: Express) {
   app.post("/api/inventory/products/:id/movements", isAuthenticated, async (req: any, res) => {
     const productId = Number(req.params.id);
     const parsed = movementSchema.safeParse(req.body);
-    if (!Number.isInteger(productId) || !parsed.success) return res.status(400).json({ message: parsed.success ? "Invalid product" : parsed.error.errors[0]?.message });
+    if (!Number.isInteger(productId) || !parsed.success) return res.status(400).json({ message: parsed.success ? "Invalid product" : parsed.error.issues[0]?.message });
     const client = await pool.connect();
     try {
       await client.query("BEGIN");

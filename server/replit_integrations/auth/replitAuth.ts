@@ -1,3 +1,4 @@
+import { automaticMaintenanceSuspended } from "../../lib/automatic-maintenance";
 import { applySaasAccess } from "../../lib/saas-access";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
@@ -505,6 +506,7 @@ export async function ensureAuthSchema() {
  * its own organisation/site, so its users row should point there.
  */
 export async function repairKnownAccountOrganisationLinks() {
+  if (automaticMaintenanceSuspended()) return;
   await pool.query(`
     WITH owner_site AS (
       SELECT

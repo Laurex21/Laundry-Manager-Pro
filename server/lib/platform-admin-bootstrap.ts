@@ -1,3 +1,4 @@
+import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import { pool } from "../db";
 
 function configuredPlatformAdminEmails(): string[] {
@@ -10,6 +11,7 @@ function configuredPlatformAdminEmails(): string[] {
 }
 
 export async function syncConfiguredPlatformAdmins(): Promise<void> {
+  if (automaticMaintenanceSuspended()) return;
   const emails = configuredPlatformAdminEmails();
   if (emails.length === 0) {
     console.warn("PLATFORM_ADMIN_EMAILS is empty; existing platform administrator access was left unchanged.");

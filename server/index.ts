@@ -1,3 +1,5 @@
+import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
+import { pawapayPrivateDiagnostic } from "./lib/pawapay-private-diagnostic";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { runDailyJobsWithLock } from "./lib/daily-jobs";
@@ -86,11 +88,15 @@ app.use((req, res, next) => {
   await syncConfiguredPlatformAdmins();
   await ensureGarmentVerificationSchema();
   await registerRoutes(httpServer, app);
-  runDailyJobsWithLock().catch((error) => console.error("[Daily Job] Execution failed", error));
-  const subscriptionNotificationTimer = setInterval(() => {
+  if (automaticMaintenanceSuspended()) {
+    console.log("[maintenance] Automatic maintenance suspended for release verification.");
+  } else {
     runDailyJobsWithLock().catch((error) => console.error("[Daily Job] Execution failed", error));
-  }, 24 * 60 * 60 * 1000);
-  subscriptionNotificationTimer.unref();
+    const subscriptionNotificationTimer = setInterval(() => {
+      runDailyJobsWithLock().catch((error) => console.error("[Daily Job] Execution failed", error));
+    }, 24 * 60 * 60 * 1000);
+    subscriptionNotificationTimer.unref();
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -128,6 +134,9 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      void pawapayPrivateDiagnostic().then((result) => {
+        if (result) console.log("[private-pawapay-diagnostic]", JSON.stringify(result));
+      }).catch(() => console.warn("[private-pawapay-diagnostic] DIAGNOSTIC_FAILED"));
     },
   );
 })();

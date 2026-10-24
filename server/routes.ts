@@ -1,6 +1,6 @@
 import { registerSaasRoutes } from "./lib/saas-routes";
 import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
-import { saasEnabled, saasStore, saasForOrganisation } from "./lib/saas-runtime";
+import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, saasStore, saasForOrganisation } from "./lib/saas-runtime";
 import { SAAS_CUSTOM_FIELDS, standardSaasSettings } from "./lib/saas-access";
 import { SAAS_PLANS } from "@shared/saas-plans";
 import type { Express } from "express";
@@ -340,7 +340,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const cancellationRejectionSchema = z.object({ note: z.string().trim().max(500).optional().default("") }).strict();
   const orderDraftSchema = z.object({
     currentStep: z.number().int().min(1).max(5),
-    payload: z.record(z.unknown()),
+    payload: z.record(z.string(), z.unknown()),
   }).strict();
 
   app.get("/api/order-drafts/current", isAuthenticated, async (req: any, res) => {
@@ -403,7 +403,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const customer = await storage.createCustomer({ ...input, siteId });
       res.status(201).json(customer);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join('.') });
       throw err;
     }
   });
@@ -584,7 +584,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.status(201).json(order);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join('.') });
       throw err;
     }
   });
@@ -653,7 +653,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.json(result);
     } catch (error) {
-      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.issues[0].message });
       if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
       throw error;
     }
@@ -690,7 +690,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.status(201).json(result);
     } catch (error) {
-      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.issues[0].message });
       if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
       throw error;
     }
@@ -1140,7 +1140,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!updated) return res.status(404).json({ message: "Expenditure not found" });
       res.json(updated);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message });
       throw err;
     }
   });
@@ -1274,7 +1274,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const machine = await storage.createMachine(input);
       res.status(201).json(machine);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       console.error("Machine save failed:", err);
       res.status(400).json({ message: "Invalid machine data" });
     }
@@ -1673,7 +1673,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const employee = await storage.createEmployee(input);
       res.status(201).json(employee);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       console.error("Employee save failed:", err);
       res.status(400).json({ message: "Invalid employee data" });
     }
@@ -1788,19 +1788,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/plans", async (req, res) => {
     const plans = await storage.getPlans();
-    res.json(saasEnabled() ? Object.values(SAAS_PLANS).map(p => ({ ...p, id: p.slug, price: String(p.priceXaf), maxOrders: null, maxUsers: p.staff + 1, active: true, features: [] })) : plans);
+    res.json((await saasRequestEnabled(req)) ? Object.values(SAAS_PLANS).map(p => ({ ...p, id: p.slug, price: String(p.priceXaf), maxOrders: null, maxUsers: p.staff + 1, active: true, features: [] })) : plans);
   });
 
   app.get("/api/subscriptions/current", isAuthenticated, async (req, res) => {
     if (!(await requireOwnerOrganisation(req, res))) return;
-    if (saasEnabled()) return res.status(410).json({ code: "USE_SAAS_CURRENT" });
+    if (saasOrganisationEnabled((req as any).organisationId)) return res.status(410).json({ code: "USE_SAAS_CURRENT" });
     const sub = await storage.getUserSubscription((req.session as any).userId);
     res.json(sub);
   });
 
   app.post("/api/subscriptions/activate", isAuthenticated, rateLimit({ name: "subscription-activate", windowMs: 60 * 60 * 1000, max: 10, key: (req) => String(req.session?.userId || ""), keyOnly: true }), async (req, res) => {
     if (!(await requireOwnerOrganisation(req, res))) return;
-    if (saasEnabled()) return res.status(410).json({ code: "PAYMENT_CONFIRMATION_REQUIRED", message: "Use the SaaS invoice checkout; free activation is disabled." });
+    if (saasOrganisationEnabled((req as any).organisationId)) return res.status(410).json({ code: "PAYMENT_CONFIRMATION_REQUIRED", message: "Use the SaaS invoice checkout; free activation is disabled." });
     const planId = Number(req.body?.planId);
     if (!Number.isSafeInteger(planId) || planId < 1) return res.status(400).json({ message: "Valid planId required" });
     try {
@@ -2348,7 +2348,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/analytics/advanced", isAuthenticated, async (req: any, res) => {
     const planSlug = await effectivePlanSlug(req);
-    if (!(saasEnabled() ? ["pro", "business"] : ["business", "enterprise"]).includes(planSlug)) {
+    if (!(saasOrganisationEnabled(req.organisationId) ? ["pro", "business"] : ["business", "enterprise"]).includes(planSlug)) {
       return res.status(403).json({ message: "Business plan required for advanced analytics" });
     }
     const period = (req.query.period as string) || "month";
@@ -2483,7 +2483,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/sites/:id", isAuthenticated, async (req, res) => {
     try {
-      if (saasEnabled()) return res.status(409).json({ code: "USE_SCHEDULED_CHANGE", message: "Schedule site removal in the subscription page; historical sites are preserved." });
+      if (saasOrganisationEnabled((req as any).organisationId)) return res.status(409).json({ code: "USE_SCHEDULED_CHANGE", message: "Schedule site removal in the subscription page; historical sites are preserved." });
       const userId = (req.session as any).userId;
       const org = await storage.getOrganisationByOwner(userId);
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });
