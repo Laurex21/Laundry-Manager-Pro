@@ -935,7 +935,9 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
 }));
 
 // Insert schemas
-export const insertCustomerSchema = createInsertSchema(customers).omit({
+export const insertCustomerSchema = createInsertSchema(customers, {
+  name: z.string().trim().min(1, "Customer name is required"),
+}).omit({
   id: true,
   createdAt: true,
   lastVisitAt: true,
