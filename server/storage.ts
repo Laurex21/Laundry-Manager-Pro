@@ -1,3 +1,4 @@
+import { currentCustomerRisk } from "./lib/customer-risk";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { requireExistingColumns } from "./lib/existing-schema-check";
 import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
@@ -619,7 +620,7 @@ export class DatabaseStorage implements IStorage {
 
     const customersBySite = await db.select().from(customers).where(customerSiteWhere);
     const customersByOrder = await this.customersForScopedOrders([...orderRows, ...deliveredRows]);
-    const scopedCustomers = Array.from(new Map([...customersBySite, ...customersByOrder].map((customer) => [customer.id, customer])).values());
+    const scopedCustomers = Array.from(new Map([...customersBySite, ...customersByOrder].map((customer) => [customer.id, customer])).values()).map(customer => currentCustomerRisk(customer, now));
     const depositDates = orderRows
       .map((order) => order.createdAt ? new Date(order.createdAt) : null)
       .filter((date): date is Date => !!date && !Number.isNaN(date.getTime()));
@@ -637,7 +638,7 @@ export class DatabaseStorage implements IStorage {
       .map((row) => (new Date(row.paymentDate!).getTime() - new Date(row.orderCreatedAt!).getTime()) / 3600000);
     const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-    const atRiskCustomers = scopedCustomers.filter((customer) => Number(customer.churnRiskScore || 0) >= 55 || customer.segment === "at_risk" || customer.segment === "lost");
+    const atRiskCustomers = scopedCustomers.filter((customer) => customer.atRisk);
     const averageMonthlySpend = scopedCustomers.length
       ? scopedCustomers.reduce((sum, customer) => {
           const avgDays = Number(customer.avgDaysBetweenVisits || 0);
@@ -673,6 +674,8 @@ export class DatabaseStorage implements IStorage {
       customerCycles,
       churn: {
         atRiskCount: atRiskCustomers.length,
+        insufficientHistoryCount: scopedCustomers.filter(customer => !customer.riskHistorySufficient).length,
+        assessedAt: now.toISOString(),
         revenueAtRisk: averageMonthlySpend * atRiskCustomers.length,
         customers: atRiskCustomers.map((customer) => ({
           id: customer.id,

@@ -1,3 +1,4 @@
+import { getPilotageOverview } from "./lib/pilotage-overview";
 import { registerSaasRoutes } from "./lib/saas-routes";
 import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
 import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, saasStore, saasForOrganisation } from "./lib/saas-runtime";
@@ -1219,6 +1220,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(stats);
   });
 
+  app.get("/api/pilotage/overview", isAuthenticated, async (req: any, res) => {
+    try {
+      res.json(await getPilotageOverview(pool, scopedSites(req), new Date(), reportingTimeZone(req)));
+    } catch (error) {
+      console.error("Pilotage overview failed", error);
+      res.status(500).json({ message: "Overview unavailable" });
+    }
+  });
+
   app.get("/api/pilotage/today", isAuthenticated, async (req: any, res) => {
     const siteIds = scopedSites(req);
     const timeZone = reportingTimeZone(req);
@@ -1229,10 +1239,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const [orderCount, orderList, customerCount, customerList, collections, expenses] = await Promise.all([
         pool.query('SELECT COUNT(*)::int AS count FROM orders WHERE site_id = ANY($1::int[]) AND entry_date BETWEEN $2 AND $3 AND status <> \'cancelled\'', args),
-        pool.query('SELECT o.id, o.status, o.total_amount, c.name AS customer_name FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.site_id = ANY($1::int[]) AND o.entry_date BETWEEN $2 AND $3 AND o.status <> \'cancelled\' ORDER BY o.entry_date DESC, o.id DESC LIMIT 5', args),
+        pool.query('SELECT o.id, o.order_number AS "orderNumber", o.status, o.total_amount, c.name AS customer_name FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY created_at, id)::int AS order_number FROM orders WHERE site_id=ANY($1::int[])) o JOIN customers c ON c.id = o.customer_id WHERE o.site_id = ANY($1::int[]) AND o.entry_date BETWEEN $2 AND $3 AND o.status <> \'cancelled\' ORDER BY o.entry_date DESC, o.id DESC LIMIT 5', args),
         pool.query('SELECT COUNT(*)::int AS count FROM customers WHERE site_id = ANY($1::int[]) AND created_at BETWEEN $2 AND $3', args),
         pool.query('SELECT id, name FROM customers WHERE site_id = ANY($1::int[]) AND created_at BETWEEN $2 AND $3 ORDER BY created_at DESC, id DESC LIMIT 5', args),
-        pool.query('SELECT COALESCE(SUM(p.amount), 0)::text AS amount FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.site_id = ANY($1::int[]) AND p.date BETWEEN $2 AND $3', args),
+        pool.query('SELECT COALESCE(SUM(p.amount), 0)::text AS amount FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.site_id = ANY($1::int[]) AND p.date BETWEEN $2 AND $3 AND o.status <> \'cancelled\'', args),
         pool.query('SELECT COALESCE(SUM(amount), 0)::text AS amount FROM expenditures WHERE site_id = ANY($1::int[]) AND date BETWEEN $2 AND $3', args),
       ]);
       res.json({ date, ordersCount: orderCount.rows[0].count, recentOrders: orderList.rows, newCustomersCount: customerCount.rows[0].count, newCustomers: customerList.rows, collections: Number(collections.rows[0].amount), expenses: Number(expenses.rows[0].amount) });
