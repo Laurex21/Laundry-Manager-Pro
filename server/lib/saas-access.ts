@@ -49,7 +49,7 @@ export async function applySaasAccess(req: any, res: any): Promise<boolean> {
 }
 export function routeFeature(path: string, method: string): SaasFeature | null {
   if (method === "GET" && path.startsWith("/api/daily-site-reports")) return null; // Stored historical snapshots, not new calculations.
-  if (/^\/api\/(analytics\/(?!dashboard|credit-summary)|reports|performance|daily-site-reports|machines|production-cycles|pilotage\/today|attendance|employees)/.test(path)) return path.startsWith("/api/employees") || path.startsWith("/api/attendance") ? "team" : path.startsWith("/api/machines") || path.startsWith("/api/production-cycles") || path.includes("pilotage") ? "machines" : "reports";
+  if (/^\/api\/(analytics\/(?!dashboard|credit-summary)|reports|performance|daily-site-reports|machines|production-cycles|pilotage\/(?:today|overview)|attendance|employees)/.test(path)) return path.startsWith("/api/employees") || path.startsWith("/api/attendance") ? "team" : path.startsWith("/api/machines") || path.startsWith("/api/production-cycles") || path.includes("pilotage") ? "machines" : "reports";
   // Existing customer contracts, their balances, receipts and history remain readable.
   if (method !== "GET" && (/^\/api\/(subscription-plans|loyalty-program)/.test(path) || /^\/api\/customers\/\d+\/subscription(?:s)?(?:\/|$)/.test(path) || /^\/api\/subscriptions\/\d+\/(renew|suspend|cancel|card\/regenerate)/.test(path))) return "memberships";
   if (method !== "GET" && /^\/api\/(invitations$|sites\/\d+\/members)/.test(path)) return "team";

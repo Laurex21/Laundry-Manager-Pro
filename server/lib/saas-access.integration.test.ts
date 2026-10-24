@@ -34,6 +34,7 @@ try{
  assert.equal((await access('/api/daily-site-reports')).passed,true);
  assert.equal((await access('/api/daily-site-reports/draft','POST')).code,403);
  for(const path of ['/api/orders','/api/customers','/api/payments/ledger','/api/garment-returns','/api/settings'])assert.equal((await access(path)).passed,true,path);
+ assert.equal(routeFeature('/api/pilotage/overview','GET'),'machines','Overview retains the existing paid-plan boundary');
  assert.equal(routeFeature('/api/subscriptions/3/payments','POST'),null,'Existing customer contract payments must remain recordable');
  assert.equal(routeFeature('/api/customers/3/subscription','POST'),'memberships');
  assert.equal(routeFeature('/api/subscriptions/3/renew','POST'),'memberships');

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrency } from "@/hooks/use-currency";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { TrendingUp, TrendingDown, Target, AlertTriangle, CheckCircle, Sparkles, Users, Cog, Lightbulb, Wallet, ArrowRight, Banknote, Clock3, Gauge, Activity, ShieldCheck, CalendarRange, Building2, SlidersHorizontal, Radar, CircleAlert, LayoutDashboard, UserRoundSearch, Info, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +30,9 @@ export default function Analytics() {
 function AnalyticsContent() {
   const { t } = useTranslation();
   const [period, setPeriod] = useState("month");
-  const [view, setView] = useState<"executive" | "customers" | "operations" | "advanced">("executive");
+  const requestedView=new URLSearchParams(useSearch()).get("view");
+  const [view, setView] = useState<"executive" | "customers" | "operations" | "advanced">(requestedView === "customers" ? "customers" : "executive");
+  useEffect(()=>{if(requestedView === "customers") setView("customers");},[requestedView]);
 
   const periods = [
     { key: "day", label: t("period_day") },
@@ -782,9 +784,11 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   const symbol = getSymbol();
   const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
   const churnRiskRef = useRef<HTMLDivElement>(null);
-  const { data, isLoading } = useQuery<any>({
-    queryKey: ["/api/analytics/customer-behavior", period],
-    queryFn: () => fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }).then((res) => res.json()),
+  const { currentSite } = useAuth();
+  const { data, isLoading, isError } = useQuery<any>({
+    queryKey: ["/api/analytics/customer-behavior", period, currentSite?.id ?? "all"],
+    staleTime:0, refetchOnWindowFocus:true, refetchInterval:60_000,
+    queryFn: async () => { const res=await fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }); if(!res.ok) throw new Error("Customer analytics unavailable"); return res.json(); },
   });
 
   useEffect(() => {
@@ -796,6 +800,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   }, [data]);
 
   if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
+  if (isError) return <p role="alert">{t("decision_load_error")}</p>;
   if (!data) return null;
 
   const depositData = (data.depositActivityByHour || []).map((row: any) => ({ ...row, label: `${row.hour}h` }));
@@ -885,6 +890,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
                 <p className="text-2xl font-bold">{money(churn.revenueAtRisk)}</p>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">{i18n.language.startsWith("fr") ? "Au moins 3 visites ; risque à partir d’un délai d’environ 1,8 fois la fréquence habituelle. Historique insuffisant : " : "At least 3 visits; risk starts at roughly 1.8 times the usual visit interval. Insufficient history: "}{churn.insufficientHistoryCount ?? "—"}</p>
             <div className="space-y-2">
               {(churn.customers || []).slice(0, 6).map((customer: any) => (
                 <div key={customer.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">

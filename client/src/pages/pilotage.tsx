@@ -1,10 +1,11 @@
+import { Overview360, type OverviewData } from "@/components/pilotage/overview-360";
+import { useCurrency } from "@/hooks/use-currency";
+import { apiRequest } from "@/lib/queryClient";
 import { lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
-import { BarChart3, CheckCircle2, ClipboardList, FileText, RotateCcw, ShoppingBag, Users, Wallet, ReceiptText } from "lucide-react";
-import { Link } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
+import { BarChart3, CheckCircle2, ClipboardList, FileText, RotateCcw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -17,7 +18,7 @@ type PilotageView = "overview" | "reports" | "quality" | "daily";
 type DailySummary = {
   date: string;
   ordersCount: number;
-  recentOrders: { id: number; customer_name: string; status: string; total_amount: string }[];
+  recentOrders: { id: number; orderNumber?: number; customer_name: string; status: string; total_amount: string }[];
   newCustomersCount: number;
   newCustomers: { id: number; name: string }[];
   collections: number;
@@ -27,42 +28,39 @@ type DailySummary = {
 function Overview({ onSelect }: { onSelect: (view: PilotageView) => void }) {
   const { t, i18n } = useTranslation();
   const { currentSite, canAccess } = useAuth();
+  const symbol = useCurrency(state => state.getSymbol());
   const managerView = canAccess("reports");
-  const { data, isLoading, isError } = useQuery<DailySummary>({
+  const { data, isLoading, isError, refetch } = useQuery<DailySummary>({
     queryKey: ["/api/pilotage/today", currentSite?.id ?? "all"],
     queryFn: async () => {
       const response = await fetch("/api/pilotage/today", { credentials: "include", headers: { "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone } });
       if (!response.ok) throw new Error("Daily summary unavailable");
       return response.json();
     },
-    refetchInterval: 60_000,
+    staleTime: 0, refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
-  const { data: returns = [] } = useQuery<any[]>({ queryKey: ["/api/garment-returns", currentSite?.id ?? "all"], refetchInterval: 60_000 });
-  const { data: reports = [] } = useQuery<any[]>({ queryKey: ["/api/daily-site-reports", currentSite?.id ?? "all"], queryFn: () => fetch("/api/daily-site-reports", { credentials: "include" }).then((response) => response.ok ? response.json() : []), refetchOnWindowFocus: true, enabled: managerView });
+  const riskQuery = useQuery<{churn:{atRiskCount:number;insufficientHistoryCount:number}}>({
+    queryKey: ["/api/analytics/customer-behavior", "month", currentSite?.id ?? "all"],
+    queryFn: () => apiRequest("GET", "/api/analytics/customer-behavior?period=month").then(r=>r.json()),
+    enabled: canAccess("analytics"), staleTime: 0, refetchInterval: 60_000, refetchOnWindowFocus: true,
+  });
+  const returnsQuery = useQuery<any[]>({ queryKey: ["/api/garment-returns", currentSite?.id ?? "all"], queryFn: () => apiRequest("GET", `/api/garment-returns${currentSite?.id ? `?siteId=${currentSite.id}` : ""}`).then(r=>r.json()), staleTime: 0, refetchInterval: 60_000 });
+  const reportsQuery = useQuery<any[]>({ queryKey: ["/api/daily-site-reports", currentSite?.id ?? "all"], queryFn: () => apiRequest("GET", "/api/daily-site-reports").then(response => response.json()), staleTime: 0, refetchInterval: 60_000, refetchOnWindowFocus: true, enabled: managerView });
+  const returns = returnsQuery.data || [];
+  const reports = reportsQuery.data || [];
   const openReturns = returns.filter((item) => !["rejected", "resolved"].includes(item.returnCase.status)).length;
   const reportsToReview = managerView ? reports.filter((item) => item.report.status === "submitted").length : 0;
-  const money = (value: number) => new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 0 }).format(value) + " FCFA";
-  const metrics = [
-    { label: t("pilotage_today_orders"), value: data?.ordersCount ?? 0, icon: ShoppingBag, href: "/orders" },
-    { label: t("pilotage_today_customers"), value: data?.newCustomersCount ?? 0, icon: Users, href: "/customers" },
-    { label: t("pilotage_today_collections"), value: money(data?.collections ?? 0), icon: Wallet, href: "/payments" },
-    { label: t("pilotage_today_expenses"), value: money(data?.expenses ?? 0), icon: ReceiptText, href: "/expenses" },
-  ];
+  const money = (value: number) => new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 0 }).format(value) + " " + symbol;
+  const overview = useQuery<OverviewData>({
+    queryKey: ["/api/pilotage/overview", currentSite?.id ?? "all"],
+    queryFn: () => apiRequest("GET", "/api/pilotage/overview").then(response=>response.json()),
+    staleTime: 0, refetchInterval: 60_000, refetchOnWindowFocus: true,
+  });
+  if (isLoading || overview.isLoading) return <div className="space-y-3"><Skeleton className="h-28"/><Skeleton className="h-64"/></div>;
+  if (isError || !data || overview.isError || !overview.data) return <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive"><p>{t("pilotage_today_error")}</p><button className="min-h-11 underline" onClick={()=>{overview.refetch(); refetch();}}>{t("decision_retry")}</button></div>;
+  return <Overview360 showRisk={canAccess("analytics")} risk={riskQuery.data?.churn} riskError={riskQuery.isError} data={overview.data} today={data} money={money} openReturns={openReturns} reportsToReview={reportsToReview} partialError={returnsQuery.isError || (managerView && reportsQuery.isError)} onSelect={onSelect}/>;
 
-  if (isLoading) return <div className="space-y-3"><Skeleton className="h-28"/><Skeleton className="h-64"/></div>;
-  if (isError || !data) return <p role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive">{t("pilotage_today_error")}</p>;
-
-  return <div className="space-y-5">
-    <div><h2 className="text-xl font-semibold">{t("pilotage_today_title")}</h2><p className="text-sm text-muted-foreground">{data.date} · {currentSite?.name ?? t("pilotage_all_sites")}</p></div>
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(({ label, value, icon: Icon, href }) => <Link key={label} href={href} className="rounded-xl border bg-card p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Icon className="mb-4 h-5 w-5 text-primary" aria-hidden="true"/><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p></Link>)}</div>
-    <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
-      <Card><CardContent className="p-5"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("pilotage_today_recent_orders")}</h3><Link href="/orders" className="text-sm text-primary hover:underline">{t("pilotage_view_all")}</Link></div>{data.recentOrders.length ? <ul className="mt-4 divide-y">{data.recentOrders.map((order) => <li key={order.id} className="flex items-center justify-between gap-3 py-3 text-sm"><span className="truncate">{order.customer_name}</span><span className="shrink-0 text-muted-foreground">#{order.id} · {order.status}</span></li>)}</ul> : <p className="mt-4 text-sm text-muted-foreground">{t("pilotage_today_no_orders")}</p>}</CardContent></Card>
-      <div className="space-y-3"><Card><CardContent className="p-5"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("pilotage_today_customers")}</h3><Link href="/customers" className="text-sm text-primary hover:underline">{t("pilotage_view_all")}</Link></div>{data.newCustomers.length ? <ul className="mt-3 space-y-2 text-sm">{data.newCustomers.map((customer) => <li key={customer.id}>{customer.name}</li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">{t("pilotage_today_no_customers")}</p>}</CardContent></Card>
-      {(openReturns + reportsToReview) > 0 && <Card><CardContent className="p-5"><h3 className="font-semibold">{t("pilotage_attention")}</h3>{openReturns > 0 && <button type="button" onClick={() => onSelect("quality")} className="mt-3 block text-sm text-primary hover:underline">{openReturns} {t("pilotage_open_returns")}</button>}{reportsToReview > 0 && <button type="button" onClick={() => onSelect("daily")} className="mt-2 block text-sm text-primary hover:underline">{reportsToReview} {t("pilotage_reports_to_review")}</button>}</CardContent></Card>}</div>
-    </div>
-    <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-5"><div><h3 className="font-semibold">{t("pilotage_today_balance")}</h3><p className="text-xs text-muted-foreground">{t("pilotage_today_balance_note")}</p></div><p className="text-2xl font-semibold tabular-nums">{money(data.collections - data.expenses)}</p></CardContent></Card>
-  </div>;
 }
 
 export default function Pilotage() {
