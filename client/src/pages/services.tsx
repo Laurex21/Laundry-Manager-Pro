@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useServices, useCreateService, useUpdateService, useDeleteService } from "@/hooks/use-services";
 import { useForm, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { localizedZodResolver as zodResolver } from "@/lib/validation";
 import { insertServiceSchema, type InsertService, type Service } from "@shared/schema";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";

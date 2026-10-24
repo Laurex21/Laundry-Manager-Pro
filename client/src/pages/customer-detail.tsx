@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useCustomer, useUpdateCustomer } from "@/hooks/use-customers";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { localizedZodResolver as zodResolver } from "@/lib/validation";
 import { insertCustomerSchema, type InsertCustomer, type Customer } from "@shared/schema";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";

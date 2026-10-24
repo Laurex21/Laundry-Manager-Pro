@@ -5,7 +5,7 @@ import { useCustomers, useCreateCustomer } from "@/hooks/use-customers";
 import { useServices } from "@/hooks/use-services";
 import { useAuth } from "@/hooks/use-auth";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { localizedZodResolver as zodResolver } from "@/lib/validation";
 import { createOrderWithItemsSchema } from "@shared/routes";
 import { insertCustomerSchema, type Service } from "@shared/schema";
 import { PRODUCTION_STAGE_KEYS, normalizeProductionStatus } from "@shared/production-workflow";

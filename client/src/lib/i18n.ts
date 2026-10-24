@@ -1,6 +1,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { validationTranslations } from './validation-translations';
 
 const resources = {
   en: {
@@ -4125,6 +4126,10 @@ Object.entries(billingUiTranslations).forEach(([lang, translation]) => {
 });
 
 Object.entries(extraResources).forEach(([lang, translation]) => {
+  Object.assign(resources[lang as keyof typeof resources].translation, translation);
+});
+
+Object.entries(validationTranslations).forEach(([lang, translation]) => {
   Object.assign(resources[lang as keyof typeof resources].translation, translation);
 });
 
