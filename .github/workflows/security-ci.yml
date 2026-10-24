@@ -28,4 +28,11 @@ jobs:
       - run: npm run test:staff-invitation-boundary
       - run: npm run test:membership-run3
       - run: npm run test:schema-guard
+      - run: npm run test:automatic-maintenance
+      - run: npm run test:saas-billing
+      - run: npm run test:saas-business-launch
+      - run: npm run test:saas-full-journey
+      - run: npm run test:saas-collection-pilot
+      - run: npm run test:saas-pilot
+      - run: npm run test:pawapay-private-diagnostic
       - run: npm run build

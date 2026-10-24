@@ -1,4 +1,4 @@
-import { saasEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
+import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
 import type { Express } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
@@ -349,7 +349,7 @@ export function registerAuthRoutes(app: Express): void {
       await ensureUserOrganisation(user.id);
       if (saasEnabled()) {
         const created = await authStorage.getUser(user.id);
-        if (created?.organisationId) await saasStore.ensure(created.organisationId);
+        if (created?.organisationId && saasOrganisationEnabled(created.organisationId)) await saasStore.ensure(created.organisationId);
       }
 
       const userAfterOrg = await authStorage.getUser(user.id);
@@ -413,7 +413,7 @@ export function registerAuthRoutes(app: Express): void {
       await ensureUserOrganisation(user.id);
       if (saasEnabled()) {
         const created = await authStorage.getUser(user.id);
-        if (created?.organisationId) await saasStore.ensure(created.organisationId);
+        if (created?.organisationId && saasOrganisationEnabled(created.organisationId)) await saasStore.ensure(created.organisationId);
       }
 
       const response = await buildUserResponse(user.id);

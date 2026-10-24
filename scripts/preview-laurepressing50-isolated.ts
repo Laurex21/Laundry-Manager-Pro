@@ -1,0 +1,56 @@
+/** Laurepressing test copy: synthetic identity/data, memory-only DB, fake provider. */
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {readFile,writeFile}from'node:fs/promises';
+import express from 'express';
+import {PGlite}from'@electric-sql/pglite';
+import {drizzle}from'drizzle-orm/pglite';
+import{generateDrizzleJson,generateMigration}from'drizzle-kit/api';
+import * as schema from '../shared/schema';
+process.env.DATABASE_URL='postgresql://unused:unused@127.0.0.1:1/laurepressing_isolated';
+Object.assign(process.env,{NODE_ENV:'production',SAAS_BILLING_MODE:'live',SAAS_LIVE_ENABLED:'true',SAAS_DATABASE_ENVIRONMENT:'production',SAAS_PRODUCTION_ORIGIN:'https://isolated-laurepressing.example',PAWAPAY_PRODUCTION_API_TOKEN:'synthetic-never-sent',SAAS_LIVE_PILOT_ORGANISATION_ID:'424',SAAS_LIVE_PILOT_PURPOSE:'collection',XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED:'true'});
+delete process.env.PAWAPAY_SANDBOX_API_TOKEN;
+const pg=new PGlite();const testDb=drizzle(pg,{schema});const{db,pool}=await import('../server/db');
+for(const method of ['select','insert','update','delete','execute','transaction']as const)(db as any)[method]=testDb[method].bind(testDb);
+const query=async(sql:string,params?:any[])=>{const r=await pg.query(sql,params);return{rows:r.rows,rowCount:r.affectedRows};};(pool as any).query=query;
+let tail=Promise.resolve();(pool as any).connect=async()=>{const previous=tail;let release!:()=>void;tail=new Promise<void>(r=>release=r);await previous;return{query,release};};
+for(const sql of await generateMigration(generateDrizzleJson({}),generateDrizzleJson(schema)))await pg.exec(sql);
+for(const name of ['20261021_saas_billing_v5.sql','20261021_saas_provider_environment.sql'])await pg.exec(await readFile(new URL('../migrations/'+name,import.meta.url),'utf8'));
+await testDb.insert(schema.users).values({id:'laurepressing-test-owner',email:'laurepressing-copy@example.invalid',firstName:'Laurepressing',lastName:'TEST',organisationId:424});
+await testDb.insert(schema.organisations).values({id:424,ownerId:'laurepressing-test-owner',name:'Laurepressing — COPIE TEST'});
+await testDb.insert(schema.sites).values({id:424,organisationId:424,name:'Boutique TEST Laurepressing'});
+await query("INSERT INTO plans(name,slug,price) VALUES ('Starter','starter',6000)");
+await query("INSERT INTO subscriptions(user_id,plan_id,status,start_date,end_date) SELECT 'laurepressing-test-owner',id,'active','2026-10-22T22:23:31.31046','2026-11-22T22:23:31.389' FROM plans WHERE slug='starter'");
+const baseline=(await query('SELECT * FROM subscriptions ORDER BY id')).rows;
+const {privateKey,publicKey}=crypto.generateKeyPairSync('ec',{namedCurve:'P-256'});const checkouts=new Map<string,any>();let providerPosts=0;
+globalThis.fetch=async(input:any,options:any)=>{const url=String(input);
+ if(url==='https://api.pawapay.io/v2/public-key/http')return new Response(JSON.stringify([{id:'laurepressing-fixture',key:publicKey.export({type:'spki',format:'pem'}).toString()}]));
+ assert.ok(url.startsWith('https://api.pawapay.io/v2/checkouts'),'Unexpected network blocked');
+ if(options.method==='POST'){providerPosts++;const payload=JSON.parse(options.body);assert.deepEqual(payload.amounts,[{country:'CMR',currency:'XAF',amount:'50'}]);const data={...payload,status:'WAITING_PAYMENT',checkoutCode:'local-'+payload.checkoutId,redirectUrl:'https://checkout.pawapay.io/local-'+payload.checkoutId};checkouts.set(payload.checkoutId,data);return new Response(JSON.stringify({...data,status:'ACCEPTED'}));}
+ const data=checkouts.get(url.split('/').pop()!);return new Response(JSON.stringify(data?{status:'FOUND',data}:{status:'NOT_FOUND'}));
+};
+const{registerSaasRoutes}=await import('../server/lib/saas-routes');const{saasStore}=await import('../server/lib/saas-runtime');
+const handlers=new Map<string,Function>();const captured:any={get:(p:string,...fn:Function[])=>handlers.set('GET '+p,fn.at(-1)!),post:(p:string,...fn:Function[])=>handlers.set('POST '+p,fn.at(-1)!)};registerSaasRoutes(captured,{backgroundJobs:false});
+const owner={organisationId:424,userId:'laurepressing-test-owner',session:{userId:'laurepressing-test-owner'}};
+const app=express();app.use(express.json());app.use((_req,res,next)=>{res.set('X-Xpresspro-Qa-Fixture','laurepressing-50').set('Cache-Control','no-store');const json=res.json.bind(res);res.json=(value:any)=>{const visible={...value};if(visible.redirect_url)visible.redirect_url='/__qa/laurepressing50?checkout=simulation';if(visible.invoice?.redirect_url)visible.invoice={...visible.invoice,redirect_url:'/__qa/laurepressing50?checkout=simulation'};return json(visible);};next();});
+const invoke=(method:string,path:string)=>(req:any,res:any)=>Promise.resolve(handlers.get(method+' '+path)!({...owner,body:req.body,params:req.params},res)).catch(()=>res.status(500).json({code:'ISOLATED_FIXTURE_ERROR'}));
+app.get('/',invoke('GET','/api/saas/collection-pilot'));
+app.post('/quote',invoke('POST','/api/saas/collection-pilot/quote'));
+for(const action of ['checkout','refresh'])app.post('/:id/'+action,invoke('POST','/api/saas/collection-pilot/:id/'+action));
+async function info(){return{syntheticOnly:true,organisation:'Laurepressing — COPIE TEST',plan:'starter',sites:1,staff:0,subscriptionPreserved:JSON.stringify((await query('SELECT * FROM subscriptions ORDER BY id')).rows)===JSON.stringify(baseline),confirmations:(await query("SELECT count(*)::int n FROM saas_events WHERE action='collection_pilot_paid'")).rows[0].n,providerPosts,saasAccounts:(await query('SELECT count(*)::int n FROM saas_accounts')).rows[0].n};}
+app.get('/info',async(_req,res)=>res.json(await info()));
+app.post('/complete',async(_req,res)=>{try{
+ const invoice=(await query("SELECT * FROM saas_invoices WHERE organisation_id=424 ORDER BY created_at DESC LIMIT 1")).rows[0] as any;
+ if(!invoice?.checkout_id)return res.status(409).json({code:'NO_PENDING_SIMULATION'});
+ const data=checkouts.get(invoice.checkout_id);const event={...data,status:'COMPLETED',deposit:{status:'COMPLETED',amount:'50',currency:'XAF',country:'CMR',depositId:crypto.randomUUID()}};checkouts.set(invoice.checkout_id,event);
+ const rawBody=Buffer.from(JSON.stringify(event)),created=Math.floor(Date.now()/1000),path='/api/saas/live/callback';
+ const params=`("@method" "@authority" "@path" "signature-date" "content-digest" "content-type");alg="ecdsa-p256-sha256";keyid="laurepressing-fixture";created=${created};expires=${created+60}`;
+ const headers:any={'content-type':'application/json','signature-date':new Date().toISOString(),'content-digest':`sha-512=:${crypto.createHash('sha512').update(rawBody).digest('base64')}:`,'signature-input':`sig-pp=${params}`};
+ const base=`"@method": POST\n"@authority": isolated-laurepressing.example\n"@path": ${path}\n"signature-date": ${headers['signature-date']}\n"content-digest": ${headers['content-digest']}\n"content-type": application/json\n"@signature-params": ${params}`;
+ headers.signature=`sig-pp=:${crypto.sign('sha256',Buffer.from(base),privateKey).toString('base64')}:`;
+ let status=200;const sink:any={status:(v:number)=>{status=v;return sink;},json:()=>sink,sendStatus:(v:number)=>{status=v;return sink;}};
+ await handlers.get('POST '+path)!({method:'POST',path,headers,body:event,rawBody,is:()=>true,get:()=> 'isolated-laurepressing.example'},sink);
+ const result={...(await info()),callbackStatus:status,invoiceStatus:(await saasStore.invoice(saasStore.db,424,invoice.id)).status};
+ await writeFile('/tmp/xpresspro-laurepressing50-ui-result.json',JSON.stringify(result));res.status(status).json(result);
+ }catch{res.status(500).json({code:'ISOLATED_CALLBACK_FAILED'});}});
+app.listen(5175,'127.0.0.1',()=>console.log('LAUREPRESSING_ISOLATED_COPY_READY — memory DB, synthetic identity, fake provider only'));

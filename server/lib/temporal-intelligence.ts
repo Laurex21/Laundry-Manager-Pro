@@ -1,3 +1,4 @@
+import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db";
 import { customers, orders, payments, sites } from "@shared/schema";
@@ -64,6 +65,7 @@ export async function refreshCustomerAnalyticsFromHistory(customerId: number, ex
 }
 
 export async function recalculateCachedCustomerIntelligence(): Promise<void> {
+  if (automaticMaintenanceSuspended()) return;
   const siteRows = await db.select({ siteId: sites.id, organisationId: sites.organisationId }).from(sites);
   const siteToOrg = new Map(siteRows.map((site) => [site.siteId, site.organisationId]));
   const orgIds = Array.from(new Set(siteRows.map((site) => site.organisationId)));
@@ -100,6 +102,7 @@ export async function recalculateCachedCustomerIntelligence(): Promise<void> {
 }
 
 export function startTemporalIntelligenceJob(): void {
+  if (automaticMaintenanceSuspended()) return;
   recalculateCachedCustomerIntelligence().catch((err) => {
     console.error("[temporal-intelligence] Startup recalculation failed:", err);
   });

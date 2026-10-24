@@ -1,8 +1,10 @@
+import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import { pool } from "../db";
 import { checkSubscriptionNotifications } from "./subscription-notifications";
 import { expireLoyaltyPoints } from "./loyalty";
 
 export async function runDailyJobsWithLock(): Promise<void> {
+  if (automaticMaintenanceSuspended()) return;
   const client = await pool.connect();
   let locked = false;
   try {

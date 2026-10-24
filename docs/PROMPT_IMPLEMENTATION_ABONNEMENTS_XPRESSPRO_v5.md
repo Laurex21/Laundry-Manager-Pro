@@ -1,5 +1,7 @@
 # Cahier des charges — abonnements SaaS XPress Pro — v5
 
+> Révision du 24 octobre 2026 : les règles d’essai et de paiement pendant l’essai sont remplacées par [les conditions v6](ABONNEMENTS_V6_BUSINESS_LAUNCH.md), validées dans la conversation. Les tarifs et protections non remplacés restent applicables.
+
 Version du 21 octobre 2026. Ajustements commerciaux validés par le propriétaire dans la conversation. Cette version remplace la v4 pour les règles ci-dessous.
 
 **Phase actuelle autorisée :** implémenter les règles v5 et raccorder pawaPay en Sandbox, avec renouvellement manuel. Aucune publication, migration de production ou transaction réelle autorisée.

@@ -1,10 +1,12 @@
+import { businessLaunchTrial } from "../../shared/saas-business-launch";
 import crypto from "node:crypto";
+import { COLLECTION_PILOT_XAF, collectionPilotAllowed, isCollectionPilotInvoice } from "./saas-pilot";
 import { SAAS_PLANS, SAAS_OPTION_PRICES, DAY_MS, saasTrial, saasEffective, saasQuotas, saasSelection, sameSaasSelection, saasMonthly, quoteSaas, nextSaasMonth, type SaasState, type SaasSelection, type SaasQuote } from "../../shared/saas-plans";
 
 export interface SaasExecutor { query(sql: string, params?: any[]): Promise<{ rows: any[]; rowCount?: number | null }> }
 export interface SaasDatabase extends SaasExecutor { transaction<T>(fn: (tx: SaasExecutor) => Promise<T>): Promise<T> }
 export class SaasError extends Error { constructor(readonly code: string, readonly status = 409) { super(code); } }
-export type SaasInvoice = { id: string; organisation_id: number; quote: SaasQuote; status: string; total_xaf: number; provider_status: string | null; checkout_id: string | null; redirect_url: string | null; checkout_code: string | null; paid_at: string | null; created_at: string; newlyReserved?: boolean; };
+export type SaasInvoice = { id: string; organisation_id: number; quote: SaasQuote & { purpose?: "collection_pilot"; retryOf?: string }; status: string; total_xaf: number; provider_status: string | null; checkout_id: string | null; redirect_url: string | null; checkout_code: string | null; paid_at: string | null; created_at: string; newlyReserved?: boolean; };
 
 export class SaasStore {
   constructor(readonly db: SaasDatabase, readonly clock: () => Date = () => new Date(), readonly environment: "sandbox" | "live" = "sandbox") {}
@@ -20,10 +22,17 @@ export class SaasStore {
       if ((await tx.query("SELECT organisation_id FROM saas_accounts WHERE organisation_id=$1", [org])).rows.length) return;
       // Existing manually assigned/paid periods need an explicit migration decision.
       const legacy = await tx.query("SELECT id FROM subscriptions WHERE user_id=$1 AND status='active' LIMIT 1", [organisation.owner_id]);
-      if (legacy.rows.length) throw new SaasError("LEGACY_SUBSCRIPTION_REQUIRES_REVIEW");
+      if (legacy.rows.length && process.env.SAAS_BUSINESS_LAUNCH_ENABLED !== "true") throw new SaasError("LEGACY_SUBSCRIPTION_REQUIRES_REVIEW");
       const sites = (await tx.query("SELECT id FROM sites WHERE organisation_id=$1 AND is_active=true ORDER BY id", [org])).rows.map(r => Number(r.id));
       const staff = await this.staffCandidates(tx, org);
-      const state = saasTrial(new Date(organisation.created_at), this.clock(), sites, staff);
+      let protectedUntil: Date | undefined;
+      if (process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true" && legacy.rows.length) {
+        const periods = (await tx.query("SELECT end_date FROM subscriptions WHERE user_id=$1 AND status='active'",[organisation.owner_id])).rows;
+        if(periods.some(p=>!p.end_date||!Number.isFinite(new Date(p.end_date).getTime())))throw new SaasError("LEGACY_PERIOD_REQUIRES_REVIEW");
+        protectedUntil = new Date(Math.max(...periods.map(p=>new Date(p.end_date).getTime())));
+        if(protectedUntil<=this.clock())protectedUntil=undefined;
+      }
+      const state = process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true" ? businessLaunchTrial(new Date(organisation.created_at), this.clock(), sites, staff, protectedUntil) : saasTrial(new Date(organisation.created_at), this.clock(), sites, staff);
       await tx.query("INSERT INTO saas_accounts (organisation_id, state) VALUES ($1,$2::jsonb) ON CONFLICT DO NOTHING", [org, JSON.stringify(state)]);
       await this.log(tx, org, "trial_started", { endsAt: state.trialEndsAt });
     });
@@ -39,6 +48,12 @@ export class SaasStore {
     const old = row.state as SaasState;
     const state = saasEffective(structuredClone(old), this.clock());
     // Keep explicit owner selection; over-quota staff always require a choice.
+    if(state.launchBusiness && state.phase === "trialing") {
+      state.activeSiteIds=(await tx.query("SELECT id FROM sites WHERE organisation_id=$1 AND is_active=true ORDER BY id",[org])).rows.map(r=>Number(r.id));
+      state.activeStaffIds=await this.staffCandidates(tx,org,state.activeSiteIds);
+      state.extraSites=Math.max(0,state.activeSiteIds.length-2);
+      state.extraStaff=Math.max(0,state.activeStaffIds.length-5-state.extraSites*2);
+    }
     const quotas = saasQuotas(state);
     state.activeSiteIds = state.activeSiteIds.slice(0, quotas.sites);
     const eligibleStaff = await this.staffCandidates(tx, org, state.activeSiteIds);
@@ -80,7 +95,85 @@ export class SaasStore {
       return invoice;
     });
   }
+  /** One fixed collection attempt, independent of old/new subscription state. */
+  async createCollectionPilotQuote(org: number): Promise<SaasInvoice> {
+    if (this.environment !== "live" || !collectionPilotAllowed(org)) throw new SaasError("COLLECTION_PILOT_DISABLED", 404);
+    return this.db.transaction(async tx => {
+      if (!(await tx.query("SELECT id FROM organisations WHERE id=$1 FOR UPDATE", [org])).rows.length) throw new SaasError("ORGANISATION_NOT_FOUND", 404);
+      const previous = await tx.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND quote->>'purpose'='collection_pilot' ORDER BY (quote ? 'retryOf') DESC, created_at DESC LIMIT 1", [org, this.environment]);
+      if (previous.rows.length) return previous.rows[0]; // Never create a second charge after timeout/failure/success.
+      if ((await tx.query("SELECT id FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND status IN ('quoted','pending','review')", [org,this.environment])).rows.length) throw new SaasError("PAYMENT_ALREADY_PENDING");
+      const now = this.clock();
+      const quote: SaasInvoice["quote"] = { purpose: "collection_pilot", kind: "cycle", selection: saasSelection("starter"), version: 0,
+        lines: [{label:"plan",quantity:1,amountXaf:COLLECTION_PILOT_XAF}], totalXaf: COLLECTION_PILOT_XAF, nextMonthlyXaf: 0,
+        quotedAt: now.toISOString(), expiresAt: new Date(now.getTime()+15*60_000).toISOString(), cycleEnd: null };
+      const invoice = (await tx.query("INSERT INTO saas_invoices (id,organisation_id,quote,total_xaf,provider_environment) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING *", [crypto.randomUUID(),org,JSON.stringify(quote),COLLECTION_PILOT_XAF,this.environment])).rows[0];
+      await this.log(tx,org,"collection_pilot_created",{invoiceId:invoice.id,totalXaf:COLLECTION_PILOT_XAF});
+      return invoice;
+    });
+  }
+  /** Explicit, individually authorised second pilot; never erase/reopen the failed record. */
+  async retryCollectionPilotQuote(org: number, previousId: string): Promise<SaasInvoice> {
+    if (!collectionPilotAllowed(org) || process.env.SAAS_LIVE_PILOT_RETRY_INVOICE_ID !== previousId) throw new SaasError("COLLECTION_RETRY_NOT_AUTHORISED",404);
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT id FROM organisations WHERE id=$1 FOR UPDATE",[org]);
+      const previous=await this.invoice(tx,org,previousId,true);this.validateCollectionInvoice(previous);
+      if(previous.status!=="failed" || previous.provider_status!=="FAILED" || previous.paid_at || previous.quote.retryOf) throw new SaasError("COLLECTION_RETRY_NOT_SAFE");
+      const all=(await tx.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND quote->>'purpose'='collection_pilot'",[org,this.environment])).rows as SaasInvoice[];
+      if(all.some(i=>i.status==="paid" || i.paid_at))throw new SaasError("COLLECTION_ALREADY_PAID");
+      const child=all.find(i=>i.quote.retryOf===previousId);if(child)return child;
+      if(all.length!==1 || (await tx.query("SELECT id FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND status IN ('quoted','pending','review')",[org,this.environment])).rows.length)throw new SaasError("PAYMENT_ALREADY_PENDING");
+      const now=this.clock();const quote:SaasInvoice["quote"]={...previous.quote,retryOf:previousId,quotedAt:now.toISOString(),expiresAt:new Date(now.getTime()+15*60_000).toISOString()};
+      const invoice=(await tx.query("INSERT INTO saas_invoices (id,organisation_id,quote,total_xaf,provider_environment) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING *",[crypto.randomUUID(),org,JSON.stringify(quote),COLLECTION_PILOT_XAF,this.environment])).rows[0];
+      await this.log(tx,org,"collection_pilot_retry_authorised",{invoiceId:invoice.id,retryOf:previousId,totalXaf:COLLECTION_PILOT_XAF});return invoice;
+    });
+  }
+  private validateCollectionInvoice(invoice: SaasInvoice) {
+    if (this.environment !== "live" || !isCollectionPilotInvoice(invoice) || Number(invoice.total_xaf) !== COLLECTION_PILOT_XAF ||
+        invoice.quote.totalXaf !== COLLECTION_PILOT_XAF || invoice.quote.selection.plan !== "starter" || invoice.quote.selection.extraSites || invoice.quote.selection.extraStaff) throw new SaasError("COLLECTION_PILOT_MISMATCH");
+  }
+  private async reserveCollectionCheckout(org: number, id: string): Promise<SaasInvoice> {
+    if (!collectionPilotAllowed(org)) throw new SaasError("COLLECTION_PILOT_DISABLED",404);
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT id FROM organisations WHERE id=$1 FOR UPDATE",[org]);
+      const invoice=await this.invoice(tx,org,id,true); this.validateCollectionInvoice(invoice);
+      if (invoice.status === "pending") return invoice;
+      if (invoice.status !== "quoted") throw new SaasError("COLLECTION_PILOT_ALREADY_ATTEMPTED");
+      if (new Date(invoice.quote.expiresAt) <= this.clock()) throw new SaasError("QUOTE_EXPIRED");
+      return {...(await tx.query("UPDATE saas_invoices SET checkout_id=$2,status='pending' WHERE id=$1 RETURNING *",[id,crypto.randomUUID()])).rows[0],newlyReserved:true};
+    });
+  }
+  private async applyCollectionResult(org: number, checkoutId: string, event: any, source: string) {
+    // No activation/scope check here: an in-flight signed result must remain reconcilable.
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT id FROM organisations WHERE id=$1 FOR UPDATE",[org]);
+      const invoice: SaasInvoice=(await tx.query("SELECT * FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2 FOR UPDATE",[checkoutId,this.environment])).rows[0];
+      this.validateCollectionInvoice(invoice);
+      if (source !== "pawapay_live" || event.clientReferenceId !== invoice.id) throw new SaasError("INVOICE_REFERENCE_MISMATCH");
+      const status=String(event.status || "");
+      if (!["COMPLETED","FAILED","EXPIRED","CANCELLED"].includes(status)) return;
+      if (event.checkoutId !== checkoutId || !invoice.checkout_code || event.checkoutCode !== invoice.checkout_code) throw new SaasError("CHECKOUT_MISMATCH");
+      const moneyMatches=(v:any)=>v?.currency === "XAF" && v?.country === "CMR" && /^\d+(?:\.0+)?$/.test(String(v?.amount)) && Number(v.amount) === COLLECTION_PILOT_XAF;
+      if (status === "COMPLETED" && (event.deposit?.status !== "COMPLETED" || !moneyMatches(event.deposit))) throw new SaasError("PAYMENT_MISMATCH");
+      if ([event.amount,event.currency,event.country].some(v=>v!==undefined) && !moneyMatches(event)) throw new SaasError("AMOUNT_MISMATCH");
+      if (event.amounts !== undefined && (!Array.isArray(event.amounts) || !event.amounts.some(moneyMatches))) throw new SaasError("AMOUNT_MISMATCH");
+      if (invoice.provider_status) {
+        if (invoice.provider_status !== status) throw new SaasError("CONFLICTING_FINAL_STATUS");
+        return;
+      }
+      if (invoice.status !== "pending") throw new SaasError("INVOICE_NOT_PENDING");
+      if (status === "COMPLETED") {
+        await tx.query("UPDATE saas_invoices SET status='paid',provider_status='COMPLETED',paid_at=$2,payment_source=$3 WHERE id=$1",[invoice.id,this.clock().toISOString(),source]);
+        await this.log(tx,org,"collection_pilot_paid",{invoiceId:invoice.id,totalXaf:COLLECTION_PILOT_XAF,subscriptionChanged:false});
+      } else {
+        await tx.query("UPDATE saas_invoices SET status='failed',provider_status=$2 WHERE id=$1",[invoice.id,status]);
+        await this.log(tx,org,"collection_pilot_failed",{invoiceId:invoice.id,status});
+      }
+    });
+  }
   async reserveCheckout(org: number, id: string): Promise<SaasInvoice> {
+    const candidate = await this.invoice(this.db,org,id);
+    if (isCollectionPilotInvoice(candidate)) return this.reserveCollectionCheckout(org,id);
     return this.db.transaction(async tx => {
       const state = await this.read(tx, org);
       const invoice = await this.invoice(tx, org, id, true);
@@ -100,8 +193,9 @@ export class SaasStore {
   }
   async applyProviderResult(checkoutId: string, event: any, source: "pawapay_sandbox" | "pawapay_live" | "credit" = "pawapay_sandbox"): Promise<void> {
     if (source !== "credit" && source !== (this.environment === "live" ? "pawapay_live" : "pawapay_sandbox")) throw new SaasError("PROVIDER_ENVIRONMENT_MISMATCH");
-    const found = (await this.db.query("SELECT organisation_id FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [checkoutId, this.environment])).rows[0];
+    const found = (await this.db.query("SELECT organisation_id,quote FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [checkoutId, this.environment])).rows[0];
     if (!found) throw new SaasError("CHECKOUT_NOT_FOUND", 404);
+    if (isCollectionPilotInvoice(found)) return this.applyCollectionResult(Number(found.organisation_id),checkoutId,event,source);
     await this.db.transaction(async tx => {
       const org = Number(found.organisation_id);
       // All mutations lock the account first, then invoice: consistent ordering.
@@ -145,8 +239,8 @@ export class SaasStore {
       const now = this.clock();
       const target = quote.selection;
       const next = { ...state, version: state.version + 1 };
-      if (quote.kind === "renewal" && state.phase === "active") {
-        const start = new Date(state.cycleEnd!);
+      if (quote.kind === "renewal" && (state.phase === "active" || state.phase === "trialing" && state.launchBusiness)) {
+        const start = new Date(state.phase === "trialing" ? state.trialEndsAt! : state.cycleEnd!);
         next.renewal = { selection: target, start: start.toISOString(), end: nextSaasMonth(start, state.anchorDay).toISOString(),
           paidBaseXaf: SAAS_PLANS[target.plan].priceXaf, paidStaffXaf: target.extraStaff * SAAS_OPTION_PRICES.staffXaf, paidSiteXaf: target.extraSites * SAAS_OPTION_PRICES.siteXaf };
       } else if (quote.kind === "options") {
@@ -183,7 +277,7 @@ export class SaasStore {
       const state = await this.read(tx, org);
       if (state.renewal) throw new SaasError("RENEWAL_ALREADY_PAID");
       if ((await tx.query("SELECT id FROM saas_invoices WHERE organisation_id=$1 AND status IN ('pending','review')", [org])).rows.length) throw new SaasError("PAYMENT_ALREADY_PENDING");
-      if (state.phase !== "active") throw new SaasError("NO_PAID_CYCLE");
+      if (state.phase !== "active" && !(state.launchBusiness && state.phase === "trialing" && selection.plan === "starter")) throw new SaasError("NO_PAID_CYCLE");
       if (saasMonthly(selection) > saasMonthly(state) || (state.plan === "pro" && selection.plan === "business")) throw new SaasError("PAYMENT_REQUIRED");
       state.pending = selection; state.version++;
       await this.write(tx, org, state); await this.log(tx, org, "change_scheduled", selection);
@@ -208,7 +302,7 @@ export class SaasStore {
     const state = await this.read(tx, org);
     const quota = saasQuotas(state);
     if (state.plan !== "business" && state.activeSiteIds.length >= 1) throw new SaasError("BUSINESS_REQUIRED");
-    if (state.activeSiteIds.length >= quota.sites) throw new SaasError("SITE_QUOTA_EXCEEDED");
+    if (!(state.launchBusiness && state.phase === "trialing") && state.activeSiteIds.length >= quota.sites) throw new SaasError("SITE_QUOTA_EXCEEDED");
     const id = await create(); state.activeSiteIds.push(id); await this.write(tx, org, state);
     return id;
   }
@@ -217,7 +311,7 @@ export class SaasStore {
     if (siteId && !state.activeSiteIds.includes(siteId)) throw new SaasError("SAAS_SITE_READ_ONLY", 403);
     const owner = (await tx.query("SELECT owner_id FROM organisations WHERE id=$1", [org])).rows[0];
     if (owner.owner_id === userId || state.activeStaffIds.includes(userId)) return;
-    if (state.activeStaffIds.length >= saasQuotas(state).staff) throw new SaasError("STAFF_QUOTA_EXCEEDED");
+    if (!(state.launchBusiness && state.phase === "trialing") && state.activeStaffIds.length >= saasQuotas(state).staff) throw new SaasError("STAFF_QUOTA_EXCEEDED");
     state.activeStaffIds.push(userId); await this.write(tx, org, state);
   }
   async tick(org: number, timeZone?: string) {

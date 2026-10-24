@@ -1,3 +1,4 @@
+import CollectionPilot from "./collection-pilot";
 import SaasSubscriptions from "./saas-subscriptions";
 import { labelForPlanFeature } from "@/lib/display-labels";
 import { useState } from "react";
@@ -27,8 +28,9 @@ function dateLocaleFor(language: string) {
 }
 
 export default function Subscriptions() {
-  const config = useQuery<{enabled:boolean}>({ queryKey:["/api/saas/config"] });
+  const config = useQuery<{enabled:boolean;collectionPilot?:boolean}>({ queryKey:["/api/saas/config"] });
   if (config.isLoading) return <Skeleton className="h-48 w-full" />;
+  if (config.data?.collectionPilot) return <CollectionPilot />;
   return config.data?.enabled ? <SaasSubscriptions /> : <LegacySubscriptions />;
 }
 

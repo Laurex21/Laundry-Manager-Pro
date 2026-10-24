@@ -1,3 +1,4 @@
+import { isCollectionPilotInvoice } from "./saas-pilot";
 import { SaasError, SaasStore, type SaasInvoice } from "./saas-store";
 
 import { PAWAPAY_ENDPOINTS, saasEnvironment, type SaasMode } from "./saas-environment";
@@ -37,7 +38,8 @@ export class SaasPawapay {
       response = await this.call("", {
         checkoutId: invoice.checkout_id, returnUrl, returnMethod: "INSTANT", defaultLanguage: "fr", countries: ["CMR"], expiresAfter: 15,
         amounts: [{ country: "CMR", currency: "XAF", amount: String(invoice.total_xaf) }],
-        clientReferenceId: invoice.id, reason: { fr: "XpressPro abonnement", en: "XpressPro subscription" },
+        // CheckoutReason uses CustomerMessage: 4–22 ASCII letters/digits/spaces.
+        clientReferenceId: invoice.id, reason: isCollectionPilotInvoice(invoice) ? { fr: "XpressPro test 50 FCFA", en: "XpressPro test 50 XAF" } : { fr: "XpressPro abonnement", en: "XpressPro subscription" },
         metadata: [{ invoiceId: invoice.id }, { organisationId: String(org) }],
       });
     } catch { throw new SaasError("PAYMENT_AWAITING_RECONCILIATION", 503); }
@@ -58,6 +60,13 @@ export class SaasPawapay {
     if (!invoice.checkout_code) await this.store.recordCheckout(org, id, event.checkoutCode, redirect);
     await this.store.applyProviderResult(invoice.checkout_id, event, this.mode === "live" ? "pawapay_live" : "pawapay_sandbox");
     return this.store.invoice(this.store.db, org, id);
+  }
+  async verifyFailedCollection(org: number, id: string) {
+    const invoice=await this.store.invoice(this.store.db,org,id);
+    if(!isCollectionPilotInvoice(invoice)||!invoice.checkout_id||invoice.status!=="failed")throw new SaasError("COLLECTION_RETRY_NOT_SAFE");
+    const result:any=await this.call(`/${invoice.checkout_id}`);const event=result.data;
+    const attempts=[event?.deposit,...(Array.isArray(event?.depositsHistory)?event.depositsHistory:[])].filter(Boolean);
+    if(result.status!=="FOUND"||event?.checkoutId!==invoice.checkout_id||event?.clientReferenceId!==invoice.id||event?.checkoutCode!==invoice.checkout_code||event?.status!=="FAILED"||!attempts.length||attempts.some((d:any)=>!["FAILED","CANCELLED","EXPIRED"].includes(d.status)))throw new SaasError("COLLECTION_RETRY_NOT_SAFE");
   }
 }
 

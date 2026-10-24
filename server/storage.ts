@@ -1,4 +1,6 @@
-import { saasEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
+import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
+import { requireExistingColumns } from "./lib/existing-schema-check";
+import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
 import { standardSaasSettings } from "./lib/saas-access";
 import { db } from "./db";
 import { insertOrderRecords, type OrderCreationRecords } from "./lib/order-creation";
@@ -38,6 +40,11 @@ let businessSettingsSchemaReady = false;
 
 async function ensureBusinessSettingsSchema(): Promise<void> {
   if (businessSettingsSchemaReady) return;
+  if (automaticMaintenanceSuspended()) {
+    await requireExistingColumns("business_settings", ["company_registration_number", "whatsapp_app_preference", "receipt_qr_code_base64", "receipt_qr_code_target", "receipt_qr_code_label"]);
+    businessSettingsSchemaReady = true;
+    return;
+  }
   await db.execute(sql`
     ALTER TABLE business_settings
     ADD COLUMN IF NOT EXISTS company_registration_number varchar(100) DEFAULT ''
@@ -1727,7 +1734,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
-    if (saasEnabled()) await saasStore.ensure(organisationId);
+    if (saasOrganisationEnabled(organisationId)) await saasStore.ensure(organisationId);
     return await db.transaction(async (tx) => {
       const create = async () => {
       const [site] = await tx.insert(sites).values({
@@ -1743,7 +1750,7 @@ export class DatabaseStorage implements IStorage {
       }
       return site;
       };
-      if (!saasEnabled()) return create();
+      if (!saasOrganisationEnabled(organisationId)) return create();
       let created: Site | undefined;
       await saasStore.allocateSite(drizzleSaasExecutor(tx), organisationId, async () => { created = await create(); return created.id; });
       return created!;
@@ -1859,7 +1866,7 @@ export class DatabaseStorage implements IStorage {
       return null;
     }
 
-    if (saasEnabled()) await saasStore.ensure(inv.organisationId);
+    if (saasOrganisationEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
       const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
       if (!site || site.organisationId !== inv.organisationId) return null;
@@ -1876,7 +1883,7 @@ export class DatabaseStorage implements IStorage {
         currentSiteId: inv.siteId,
       }).returning();
 
-      if (saasEnabled()) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, staffUser.id, inv.siteId);
+      if (saasOrganisationEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, staffUser.id, inv.siteId);
       await tx.insert(siteMembers).values({ siteId: inv.siteId, userId: staffUser.id, role: inv.role });
       await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id));
       return staffUser;
@@ -1900,9 +1907,9 @@ export class DatabaseStorage implements IStorage {
     if (!userIdentifiers.includes(invitedIdentifier)) {
       throw new Error("INVITATION_IDENTIFIER_MISMATCH");
     }
-    if (saasEnabled()) await saasStore.ensure(inv.organisationId);
+    if (saasOrganisationEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
-      if (saasEnabled()) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, userId, inv.siteId);
+      if (saasOrganisationEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, userId, inv.siteId);
       const [site] = await tx.select().from(sites).where(and(
         eq(sites.id, inv.siteId),
         eq(sites.organisationId, inv.organisationId),

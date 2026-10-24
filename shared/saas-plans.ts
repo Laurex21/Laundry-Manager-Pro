@@ -1,5 +1,5 @@
-/** Commercial catalogue v5. SaaS XAF prices are independent of a laundry's currency. */
-export const SAAS_CATALOGUE_VERSION = "2026-10-v5";
+/** Commercial catalogue v6. SaaS XAF prices are independent of a laundry's currency. */
+export const SAAS_CATALOGUE_VERSION = "2026-10-v6";
 export const SAAS_PLANS = {
   starter: { slug: "starter", name: "Starter", priceXaf: 0, sites: 1, staff: 0 },
   pro: { slug: "pro", name: "Pro", priceXaf: 10999, sites: 1, staff: 2 },
@@ -17,6 +17,7 @@ export type SaasState = SaasSelection & {
   activeSiteIds: number[]; activeStaffIds: string[]; version: number;
   pending: SaasSelection | null;
   timeZone?: string;
+  launchBusiness?: boolean; launchEstablished?: boolean; protectedUntil?: string | null;
   renewal?: { selection: SaasSelection; start: string; end: string; paidBaseXaf: number; paidStaffXaf: number; paidSiteXaf: number } | null;
 };
 export type SaasFeature = "receiptCustomization" | "reports" | "analytics" | "machines" | "team" | "memberships" | "multiSite";
@@ -82,12 +83,13 @@ export function quoteSaas(input: SaasState, target: SaasSelection, now: Date): S
   const samePlan = active && target.plan === current.plan;
   const upgrade = active && current.plan === "pro" && target.plan === "business";
   const scheduledRenewal = active && current.pending && sameSaasSelection(current.pending, target);
-  if (active && current.renewal) throw new Error("RENEWAL_ALREADY_PAID");
+  if (current.renewal) throw new Error("RENEWAL_ALREADY_PAID");
   if (!scheduledRenewal && active && current.plan === "business" && target.plan === "pro") throw new Error("USE_SCHEDULED_CHANGE");
   if (!scheduledRenewal && samePlan && (target.extraSites < current.extraSites || target.extraStaff < current.extraStaff)) throw new Error("USE_SCHEDULED_CHANGE");
   const options = samePlan && (target.extraSites > current.extraSites || target.extraStaff > current.extraStaff);
-  const renewal = active && !options && !upgrade;
-  if (renewal) {
+  const deferredTrial = current.phase === "trialing" && !!current.launchBusiness;
+  const renewal = deferredTrial || active && !options && !upgrade;
+  if (renewal && !deferredTrial) {
     const included = SAAS_PLANS[target.plan].staff + target.extraSites * 2;
     // Suspended/unused staff places are not charged for the next monthly cycle.
     target = { ...target, extraStaff: Math.min(target.extraStaff, Math.max(0, current.activeStaffIds.length - included)) };
@@ -111,7 +113,7 @@ export function quoteSaas(input: SaasState, target: SaasSelection, now: Date): S
   if (totalXaf < 0) throw new Error("EXCESS_CREDIT_REQUIRES_REVIEW");
   const expiry = Math.min(now.getTime() + 15 * 60_000, active ? new Date(current.cycleEnd!).getTime() : Infinity);
   return { kind: options ? "options" : upgrade ? "upgrade" : renewal ? "renewal" : "cycle", selection: target, version: current.version,
-    lines, totalXaf, nextMonthlyXaf: saasMonthly(target), quotedAt: now.toISOString(), expiresAt: new Date(expiry).toISOString(), cycleEnd: options || renewal ? current.cycleEnd : null };
+    lines, totalXaf, nextMonthlyXaf: saasMonthly(target), quotedAt: now.toISOString(), expiresAt: new Date(expiry).toISOString(), cycleEnd: deferredTrial ? current.trialEndsAt : options || renewal ? current.cycleEnd : null };
 }
 export function saasTrial(createdAt: Date, now: Date, siteIds: number[], staffIds: string[]): SaasState {
   const initialEnd = createdAt.getTime() + 30 * DAY_MS;

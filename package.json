@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development tsx server/index.ts",
+    "dev": "NODE_ENV=development SAAS_BILLING_MODE=disabled SAAS_LIVE_ENABLED=false XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true tsx server/index.ts",
     "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
@@ -49,8 +49,14 @@
     "db:seed:plans": "tsx scripts/seed-plans.ts",
     "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts",
     "test:receipt-export": "tsx server/lib/receipt-export.test.ts",
+    "test:saas-collection-pilot": "tsx server/lib/saas-collection-pilot.integration.test.ts",
     "test:saas-billing": "tsx server/lib/saas-billing.test.ts && tsx server/lib/saas-access.integration.test.ts && tsx server/lib/saas-callback-proxy.test.ts && tsx server/lib/saas-launch-verification.integration.test.ts && tsx server/lib/saas-production-config.test.ts",
-    "test:marketing": "tsx client/src/lib/analytics.test.ts && tsx client/src/lib/marketing.test.ts && tsx client/src/lib/marketing-pixel.test.ts && tsx server/lib/auth-conversion-regression.test.ts"
+    "test:automatic-maintenance": "tsx server/lib/automatic-maintenance.integration.test.ts",
+    "test:marketing": "tsx client/src/lib/analytics.test.ts && tsx client/src/lib/marketing.test.ts && tsx client/src/lib/marketing-pixel.test.ts && tsx server/lib/auth-conversion-regression.test.ts",
+    "test:saas-business-launch": "tsx server/lib/saas-business-launch.integration.test.ts",
+    "test:saas-full-journey": "tsx server/lib/saas-full-journey.integration.test.ts --live",
+    "test:saas-pilot": "tsx server/lib/saas-pilot.test.ts && tsx server/lib/collection-pilot-qa-proxy.test.ts",
+    "test:pawapay-private-diagnostic": "tsx server/lib/pawapay-private-diagnostic.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

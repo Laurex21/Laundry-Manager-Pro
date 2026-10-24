@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { livePilotConfigured, pilotOrganisationAllowed, pilotSelectionAllowed } from "./saas-pilot";
+const env={SAAS_BILLING_MODE:"live",SAAS_LIVE_PILOT_ORGANISATION_ID:"1"};
+assert.equal(livePilotConfigured(env),true);
+assert.equal(pilotOrganisationAllowed(1,env),true);
+for(const org of [undefined,null,"1",2,NaN,Infinity,-1]) assert.equal(pilotOrganisationAllowed(org,env),false);
+for(const id of ["","0","-1","1,2","1 ","1x","9007199254740992"]) assert.equal(pilotOrganisationAllowed(1,{...env,SAAS_LIVE_PILOT_ORGANISATION_ID:id}),false);
+assert.equal(pilotOrganisationAllowed(2,{SAAS_BILLING_MODE:"live"}),true);
+assert.equal(pilotOrganisationAllowed(2,{...env,SAAS_BILLING_MODE:"sandbox"}),true);
+assert.equal(pilotSelectionAllowed({plan:"pro",extraSites:0,extraStaff:0}),true);
+for(const selection of [{plan:"business"},{plan:"starter"},{plan:"pro",extraStaff:1},{plan:"pro",extraSites:1}])assert.equal(pilotSelectionAllowed(selection),false);
+console.log("PASS pilot policy: exact organisation, fail-closed invalid scope, sandbox compatibility, Pro without options");

@@ -10,6 +10,8 @@ import { saasSelection } from "../../shared/saas-plans";
 // No configured database or provider credentials are used by this rehearsal.
 process.env.DATABASE_URL = "postgresql://unused:unused@127.0.0.1:1/isolated_launch";
 const mode = process.argv.includes("--live") ? "live" : "sandbox";
+const pilot = process.argv.includes("--pilot");
+if (pilot) process.env.SAAS_LIVE_PILOT_ORGANISATION_ID = "1";
 const callbackPath = `/api/saas/${mode}/callback`;
 process.env.NODE_ENV = mode === "live" ? "production" : "test";
 process.env.SAAS_BILLING_MODE = mode;
@@ -61,6 +63,41 @@ try {
   const handlers = new Map<string, Function>();
   const app: any = { get: (path: string, ...fn: Function[]) => handlers.set("GET " + path, fn.at(-1)!), post: (path: string, ...fn: Function[]) => handlers.set("POST " + path, fn.at(-1)!) };
   registerSaasRoutes(app, { backgroundJobs: false });
+  async function pilotRequest(method: string, path: string, req: any) {
+    let status=200; let body:any; const headers:Record<string,string>={};
+    const res:any={set:(k:string,v:string)=>{headers[k]=v;return res;},status:(c:number)=>{status=c;return res;},json:(b:any)=>{body=b;return res;},sendStatus:(c:number)=>{status=c;return res;}};
+    await handlers.get(method+" "+path)!(req,res);
+    return {status,body,headers};
+  }
+  if(pilot) {
+    const runtime=await import("./saas-runtime");
+    assert.equal(await runtime.saasForOrganisation(2),null);
+    const {applySaasAccess}=await import("./saas-access");
+    assert.equal(await applySaasAccess({organisationId:2},{status:()=>{throw Error("FOREIGN_ACCESS_CHANGED");}}),true);
+    for(const session of [undefined,{userId:"foreign-owner"}]) {
+      const config=await pilotRequest("GET","/api/saas/config",{session});
+      assert.equal(config.body.enabled,false);assert.equal(config.headers["Cache-Control"],"private, no-store");
+    }
+    assert.equal((await pilotRequest("GET","/api/saas/config",{session:{userId:"launch-owner"}})).body.enabled,true);
+    const foreign={organisationId:2,userId:"foreign-owner",body:{plan:"pro"}};
+    assert.equal((await pilotRequest("POST","/api/saas/quote",foreign)).status,404);
+    for(const body of [{plan:"business"},{plan:"pro",extraSites:1},{plan:"pro",extraStaff:1}]) {
+      assert.equal((await pilotRequest("POST","/api/saas/quote",{organisationId:1,userId:"launch-owner",body})).status,403);
+    }
+    for(const path of ["/api/saas/schedule","/api/saas/access"])assert.equal((await pilotRequest("POST",path,{organisationId:1,userId:"launch-owner",body:{}})).status,403);
+    assert.equal((await pilotRequest("POST","/api/receipt-snapshots",{...foreign,saas:{}})).status,404);
+    assert.equal((await query("SELECT count(*)::int n FROM saas_accounts")).rows[0].n,0,"Denied requests and config must never enrol accounts");
+    assert.equal((await query("SELECT count(*)::int n FROM saas_events")).rows[0].n,0);
+    const {storage}=await import("../storage");
+    await storage.createSite(2,{name:"Legacy organisation retains site creation"});
+    assert.equal((await query("SELECT count(*)::int n FROM saas_accounts WHERE organisation_id=2")).rows[0].n,0);
+    const validQuote=await pilotRequest("POST","/api/saas/quote",{organisationId:1,userId:"launch-owner",body:{plan:"pro"}});
+    assert.equal(validQuote.status,201);assert.equal(Number(validQuote.body.total_xaf),10999);
+    await query("UPDATE saas_invoices SET total_xaf=0 WHERE id=$1",[validQuote.body.id]);
+    const wrongAmount=await pilotRequest("POST","/api/saas/invoices/:id/checkout",{organisationId:1,userId:"launch-owner",params:{id:validQuote.body.id}});
+    assert.equal(wrongAmount.body.code,"PILOT_AMOUNT_REQUIRES_REVIEW");
+    await query("UPDATE saas_invoices SET total_xaf=10999 WHERE id=$1",[validQuote.body.id]);
+  }
   async function pending() {
     const quote = await saasStore.createQuote(1, saasSelection("pro"));
     const invoice = await saasStore.reserveCheckout(1, quote.id);
@@ -102,6 +139,11 @@ try {
   const active = await saasStore.current(1);
   assert.equal(active.phase, "active");
   assert.equal(active.plan, "pro");
+  if(pilot) {
+    const request={organisationId:1,userId:"launch-owner",body:{plan:"pro"},params:{id:invoice.id}};
+    assert.equal((await pilotRequest("POST","/api/saas/quote",request)).body.code,"PILOT_ALREADY_PAID");
+    assert.equal((await pilotRequest("POST","/api/saas/invoices/:id/checkout",request)).body.code,"PILOT_ALREADY_PAID");
+  }
   assert.equal((await saasStore.invoice(saasStore.db, 1, invoice.id)).status, "paid");
   assert.equal(await callback(completed), 200);
   assert.deepEqual(await saasStore.current(1), active, "Duplicate notification cannot add another cycle");

@@ -1,9 +1,10 @@
+import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import { pool } from "../db";
 
 let decimalQuantitySchemaPromise: Promise<void> | null = null;
 
 async function migrateOrderItemQuantityToDecimal() {
-  await pool.query(`
+  if (!automaticMaintenanceSuspended()) await pool.query(`
     DO $$
     BEGIN
       IF EXISTS (

@@ -23,7 +23,7 @@ VITE_TIKTOK_PIXEL_ENABLED = "true"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["node", "./dist/index.cjs"]
+run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
 
 [workflows]
