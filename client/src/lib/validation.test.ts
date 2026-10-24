@@ -3,6 +3,8 @@ import { z } from "zod";
 import i18n from "./i18n";
 import { localizedZodResolver } from "./validation";
 import { translateValidationMessage, validationTranslations, validationLanguage } from "./validation-translations";
+import { insertCustomerSchema } from "../../../shared/schema";
+import { orderFormTranslations } from "./order-form-translations";
 import { createOrderWithItemsSchema } from "../../../shared/routes";
 
 const options = { criteriaMode: "firstError" as const, fields: {}, shouldUseNativeValidation: false };
@@ -44,3 +46,17 @@ const unchanged = z.number().safeParse(undefined);
 assert.equal(unchanged.success, false);
 if (!baseline.success && !unchanged.success) assert.equal(unchanged.error.issues[0].message, baseline.error.issues[0].message, "No global or server error-map change");
 console.log("PASS validation FR/EN/PT: missing selection, percentage bounds, custom schema messages, defaults, unchanged values and live message translation");
+
+for (const name of ["", " ", "\t\n"]) {
+  assert.equal(insertCustomerSchema.safeParse({ name }).success, false);
+  assert.equal(insertCustomerSchema.partial().safeParse({ name }).success, false);
+}
+assert.equal(insertCustomerSchema.parse({ name: "  Client QA  ", phone: "", address: "" }).name, "Client QA");
+assert.equal(insertCustomerSchema.partial().safeParse({ address: "QA" }).success, true);
+for (const lang of ["fr", "en", "pt"] as const) {
+  await i18n.changeLanguage(lang);
+  for (const [key, value] of Object.entries(orderFormTranslations[lang])) assert.equal(i18n.t(key), value);
+  const result = await localizedZodResolver(insertCustomerSchema)({ name: "  ", phone: "", address: "" }, undefined, options);
+  assert.equal(translateValidationMessage(String(result.errors.name?.message), lang), validationTranslations[lang].validation_customer_name);
+}
+console.log("PASS empty/whitespace customer rejected, optional phone retained, partial update preserved, wizard translations FR/EN/PT");

@@ -1,5 +1,6 @@
 export const validationTranslations = {
   fr: {
+    validation_customer_name: "Saisissez le nom du client.",
     validation_required: "Ce champ est obligatoire.",
     validation_customer: "Sélectionnez un client.",
     validation_service: "Sélectionnez un service.",
@@ -12,6 +13,7 @@ export const validationTranslations = {
     subtotal: "Sous-total",
   },
   en: {
+    validation_customer_name: "Enter the customer’s name.",
     validation_required: "This field is required.",
     validation_customer: "Select a customer.",
     validation_service: "Select a service.",
@@ -24,6 +26,7 @@ export const validationTranslations = {
     subtotal: "Subtotal",
   },
   pt: {
+    validation_customer_name: "Introduza o nome do cliente.",
     validation_required: "Este campo é obrigatório.",
     validation_customer: "Selecione um cliente.",
     validation_service: "Selecione um serviço.",
@@ -44,6 +47,7 @@ export function validationLanguage(language?: string) {
 
 type MessageKey = keyof typeof validationTranslations.en;
 const schemaMessages: Record<string, MessageKey> = {
+  "Customer name is required": "validation_customer_name",
   "Please select a service": "validation_service",
   "Quantity must be greater than 0": "validation_quantity",
   "Advance payment must be a non-negative amount": "validation_advance",
