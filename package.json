@@ -57,6 +57,7 @@
     "test:saas-full-journey": "tsx server/lib/saas-full-journey.integration.test.ts --live",
     "test:saas-pilot": "tsx server/lib/saas-pilot.test.ts && tsx server/lib/collection-pilot-qa-proxy.test.ts",
     "test:pawapay-private-diagnostic": "tsx server/lib/pawapay-private-diagnostic.test.ts",
+    "test:decision-support": "tsx server/lib/decision-support.integration.test.ts",
     "test:zod-migration": "tsx server/lib/zod-migration.test.ts",
     "test:pilotage-overview": "node --import tsx server/lib/pilotage-overview.integration.test.ts",
     "test:customer-risk": "node --import tsx server/lib/customer-risk.integration.test.ts"

@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
       { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
       { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
       { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
+      { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
       { icon: CreditCard, labelKey: "payments", href: "/payments", page: "payments" },
     ],
   },
@@ -68,7 +69,6 @@ const NAV_GROUPS: NavGroup[] = [
     key: "administration",
     fallback: "Administration",
     items: [
-      { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
       { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
@@ -406,7 +406,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const NavContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="px-4 py-4 border-b border-white/10 xl:px-5 xl:py-5">
+      <div className="px-4 py-4 border-b border-white/10 lg:py-2 lg:px-4">
         <div className="flex items-center gap-3" data-testid="xpresspro-brand">
           <img src="/xpresspro-mark-white.svg" alt="" className="h-9 w-9 shrink-0" aria-hidden="true" />
           <h1 className="font-display text-[20px] font-bold leading-none tracking-[-0.035em] text-white">
@@ -416,7 +416,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </div>
 
       {/* Site switcher */}
-      <div className="pt-2 xl:pt-3">
+      <div className="pt-2 lg:pt-1">
         <SiteSwitcher />
       </div>
 
@@ -426,18 +426,18 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           const items = group.items.filter((item) => canAccess(item.page));
           if (!items.length) return null;
           return (
-            <div key={group.key} className="mb-2.5 last:mb-0 xl:mb-4">
-              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/50 xl:pb-1.5">
+            <div key={group.key} className="mb-2.5 last:mb-0 lg:mb-1.5">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/50 lg:pb-0.5">
                 {t(group.key, group.fallback)}
               </p>
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 lg:space-y-0">
                 {items.map((item) => {
                   const isActive = location === item.href;
                   return (
                     <Link key={item.href} href={item.href}>
                       <div
                         className={cn(
-                          "group flex min-h-9 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 xl:min-h-10 xl:py-2.5",
+                          "group flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 lg:min-h-[26px] lg:py-1 lg:text-[13px] lg:leading-[18px]",
                           isActive
                             ? "bg-sidebar-primary text-white shadow-sm shadow-black/10"
                             : "text-white/68 hover:bg-white/8 hover:text-white"
@@ -459,10 +459,10 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </nav>
 
       {/* Bottom: plan + user */}
-      <div className="shrink-0 border-t border-white/10 px-3 pb-3 pt-2.5 space-y-2 xl:pb-4 xl:pt-3 xl:space-y-3">
+      <div className="shrink-0 border-t border-white/10 px-3 pb-3 pt-2.5 space-y-2 lg:pb-2 lg:pt-1.5 lg:space-y-1.5">
         {/* Plan badge */}
         <div
-          className={cn("flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-semibold", planColor)}
+          className={cn("flex items-center justify-between px-3 py-2 lg:py-1 rounded-lg border text-xs font-semibold", planColor)}
           data-testid="plan-badge"
         >
           <span className="uppercase tracking-wide">{t("current_plan")}</span>

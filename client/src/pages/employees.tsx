@@ -57,6 +57,8 @@ export default function Employees() {
       </div>
       </section>
 
+      <StaffPerformance />
+      <p className="text-sm text-muted-foreground">{t("staff_legacy_note")}</p>
       <EmployeeList onEdit={(e) => { setEditing(e); setOpen(true); }} onDelete={setDeleteTarget} onAttendance={setAttendanceTarget} />
 
       <EmployeeDialog open={open} onOpenChange={setOpen} employee={editing} />
@@ -109,8 +111,9 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
-  const { data: employees, isLoading } = useQuery<Employee[]>({ queryKey: ["/api/employees"] });
-  const { data: todayAttendance = [] } = useQuery<any[]>({ queryKey: ["/api/attendance/today"] });
+  const { data: employees, isLoading, isError } = useQuery<Employee[]>({ queryKey: ["/api/employees"], staleTime:0, refetchOnWindowFocus:true });
+  const attendanceQuery = useQuery<any[]>({ queryKey: ["/api/attendance/today"], staleTime:0, refetchOnWindowFocus:true });
+  const todayAttendance = attendanceQuery.data || [];
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const attendanceByEmployee = new Map(todayAttendance.map((row) => [row.employeeId, row]));
@@ -119,6 +122,8 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/advanced"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/performance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/decision-cockpit"] });
     },
     onError: (error: any) => toast({ title: t("attendance_error", "Pointage impossible"), description: error?.message, variant: "destructive" }),
   });
@@ -132,6 +137,7 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
     inactive: t("inactive", "Inactif"),
   };
   const attendanceControl = (emp: Employee) => {
+    if(attendanceQuery.isError) return <span role="alert" className="text-xs text-destructive">{t("decision_load_error")}</span>;
     const attendance = attendanceByEmployee.get(emp.id);
     const incomplete = attendance?.checkInAt && !attendance?.checkOutAt;
     if (!attendance?.checkInAt) {
@@ -144,6 +150,7 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
   };
   const formatAmount = (value: string | number) => Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 0 });
 
+  if (isError) return <p role="alert">{t("decision_load_error")}</p>;
   if (isLoading) {
     return <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded" />)}</div>;
   }
@@ -166,8 +173,8 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
         <span>{t("employee_name")}</span>
         <span>{t("employee_position", "Position")}</span>
         <span>{t("phone")} / {t("email")}</span>
-        <span>{t("kg_processed")}</span>
-        <span>{t("orders_handled")}</span>
+        <span>{t("staff_cumulative_weight")}</span>
+        <span>{t("staff_cumulative_actions")}</span>
         <span>{t("monthly_salary")}</span>
         <span className="text-right">{t("actions", "Actions")}</span>
       </div>
@@ -217,11 +224,11 @@ function EmployeeList({ onEdit, onDelete, onAttendance }: { onEdit: (e: Employee
             </div>
             <div className="grid grid-cols-3 gap-3 rounded-xl border border-[#082D5B]/5 bg-muted/35 p-3 lg:contents">
               <div className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("kg_processed")}</span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("staff_cumulative_weight")}</span>
                 <span className="text-sm font-mono">{emp.kgProcessed}</span>
               </div>
               <div className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("orders_handled")}</span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:hidden">{t("staff_cumulative_actions")}</span>
                 <span className="text-sm font-mono">{emp.ordersHandled}</span>
               </div>
               <div className="min-w-0">
@@ -275,6 +282,8 @@ function AttendanceDialog({ open, onOpenChange, employee }: { open: boolean; onO
     mutationFn: (data: any) => apiRequest("POST", `/api/employees/${employee!.id}/attendance`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/advanced"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees/performance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/decision-cockpit"] });
       onOpenChange(false);
       form.reset({ employeeId: employee?.id || 0, workDate: todayDate(), status: "present", checkInAt: "", checkOutAt: "" });
     },
@@ -462,13 +471,13 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
               )} />
               <FormField control={form.control} name="kgProcessed" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("kg_processed")}</FormLabel>
+                  <FormLabel>{t("staff_cumulative_weight")}</FormLabel>
                   <FormControl><Input type="number" step="0.01" {...field} data-testid="input-employee-kg" /></FormControl>
                 </FormItem>
               )} />
               <FormField control={form.control} name="ordersHandled" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("orders_handled")}</FormLabel>
+                  <FormLabel>{t("staff_cumulative_actions")}</FormLabel>
                   <FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 0)} data-testid="input-employee-orders" /></FormControl>
                 </FormItem>
               )} />
@@ -501,4 +510,17 @@ function EmployeeDialog({ open, onOpenChange, employee }: { open: boolean; onOpe
       </DialogContent>
     </Dialog>
   );
+}
+
+function StaffPerformance() {
+  const {t,i18n}=useTranslation();
+  const {currentSite}=useAuth();
+  const [period,setPeriod]=useState("month");
+  const query=useQuery<any>({queryKey:["/api/employees/performance",period,currentSite?.id??"all"],queryFn:()=>apiRequest("GET",`/api/employees/performance?period=${period}`).then(r=>r.json()),staleTime:0,refetchOnWindowFocus:true,refetchInterval:60_000});
+  const fmt=(n:number)=>Number(n).toLocaleString(i18n.language,{maximumFractionDigits:2});
+  return <section className="space-y-3 rounded-xl border bg-card p-4" data-testid="staff-performance">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{t("staff_period_performance")}</h2><label>{t("period")}<select className="ml-2 rounded border bg-background p-2" value={period} onChange={e=>setPeriod(e.target.value)}>{["day","week","month","year"].map(p=><option key={p} value={p}>{t(`decision_${p}`)}</option>)}</select></label></div>
+    <p className="text-sm text-muted-foreground">{t("staff_performance_note")}</p>
+    {query.isError?<div role="alert">{t("decision_load_error")} <Button variant="outline" onClick={()=>query.refetch()}>{t("decision_retry")}</Button></div>:query.isLoading?<p role="status">{t("loading")}</p>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{["name","staff_unique_orders","staff_actions","staff_tracked_weight","staff_completed_hours","staff_orders_per_hour","staff_linked_rework"].map(k=><th className="p-2 text-left" key={k}>{t(k)}</th>)}</tr></thead><tbody>{(query.data?.rows||[]).map((r:any)=><tr className="border-t" key={r.id}><td className="p-2">{r.name}</td><td className="p-2">{r.orders}</td><td className="p-2">{r.actions}</td><td className="p-2">{fmt(r.weight)} kg</td><td className="p-2">{r.hours>0?fmt(r.hours):t("insufficient_data")}{r.incomplete>0&&<p className="text-amber-700">{t("staff_incomplete_shifts",{count:r.incomplete})}</p>}</td><td className="p-2">{r.hours>0&&r.incomplete===0?fmt(r.delivered/r.hours):t("insufficient_data")}</td><td className="p-2">{r.rework}</td></tr>)}</tbody></table></div>}
+  </section>;
 }
