@@ -21,7 +21,7 @@ export default function Analytics() {
   const { hasFeature } = useAuth();
 
   if (!hasFeature("analytics")) {
-    return <UpgradePrompt title={t("analytics_kpis")} description="Get detailed insights into your laundry's financial performance." requiredPlan="Pro" />;
+    return <UpgradePrompt title={t("analytics_kpis")} description={t("analytics_upgrade_description")} requiredPlan="Pro" />;
   }
 
   return <AnalyticsContent />;
