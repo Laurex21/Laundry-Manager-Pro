@@ -340,7 +340,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const cancellationRejectionSchema = z.object({ note: z.string().trim().max(500).optional().default("") }).strict();
   const orderDraftSchema = z.object({
     currentStep: z.number().int().min(1).max(5),
-    payload: z.record(z.unknown()),
+    payload: z.record(z.string(), z.unknown()),
   }).strict();
 
   app.get("/api/order-drafts/current", isAuthenticated, async (req: any, res) => {
@@ -403,7 +403,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const customer = await storage.createCustomer({ ...input, siteId });
       res.status(201).json(customer);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join('.') });
       throw err;
     }
   });
@@ -584,7 +584,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.status(201).json(order);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join('.') });
       throw err;
     }
   });
@@ -653,7 +653,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.json(result);
     } catch (error) {
-      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.issues[0].message });
       if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
       throw error;
     }
@@ -690,7 +690,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       res.status(201).json(result);
     } catch (error) {
-      if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+      if (error instanceof z.ZodError) return res.status(400).json({ message: error.issues[0].message });
       if (error instanceof OrderCorrectionError) return res.status(error.statusCode).json({ message: error.message });
       throw error;
     }
@@ -1140,7 +1140,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!updated) return res.status(404).json({ message: "Expenditure not found" });
       res.json(updated);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message });
       throw err;
     }
   });
@@ -1274,7 +1274,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const machine = await storage.createMachine(input);
       res.status(201).json(machine);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       console.error("Machine save failed:", err);
       res.status(400).json({ message: "Invalid machine data" });
     }
@@ -1673,7 +1673,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const employee = await storage.createEmployee(input);
       res.status(201).json(employee);
     } catch (err) {
-      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       console.error("Employee save failed:", err);
       res.status(400).json({ message: "Invalid employee data" });
     }

@@ -56,12 +56,13 @@
     "test:saas-business-launch": "tsx server/lib/saas-business-launch.integration.test.ts",
     "test:saas-full-journey": "tsx server/lib/saas-full-journey.integration.test.ts --live",
     "test:saas-pilot": "tsx server/lib/saas-pilot.test.ts && tsx server/lib/collection-pilot-qa-proxy.test.ts",
-    "test:pawapay-private-diagnostic": "tsx server/lib/pawapay-private-diagnostic.test.ts"
+    "test:pawapay-private-diagnostic": "tsx server/lib/pawapay-private-diagnostic.test.ts",
+    "test:zod-migration": "tsx server/lib/zod-migration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
     "@google/generative-ai": "^0.24.1",
-    "@hookform/resolvers": "^3.10.0",
+    "@hookform/resolvers": "^5.2.2",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
@@ -101,7 +102,7 @@
     "connect-pg-simple": "^10.0.0",
     "date-fns": "^3.6.0",
     "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.7.0",
+    "drizzle-zod": "^0.8.3",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.0.1",
     "express-session": "^1.19.0",
@@ -135,8 +136,7 @@
     "vaul": "^1.1.2",
     "wouter": "^3.3.5",
     "ws": "^8.21.0",
-    "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0",
+    "zod": "^4.6.7",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

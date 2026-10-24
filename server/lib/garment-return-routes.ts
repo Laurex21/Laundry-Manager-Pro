@@ -108,7 +108,7 @@ export function registerGarmentReturnRoutes(app: Express) {
     const orderId = Number(req.params.orderId);
     const parsed = createSchema.safeParse(req.body);
     if (!organisationId || !Number.isInteger(orderId)) return res.status(400).json({ message: "Invalid order" });
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid return" });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid return" });
     let images;
     try { images = validateEvidenceImages(parsed.data.images); }
     catch (error) { return res.status(400).json({ message: (error as Error).message }); }
@@ -223,7 +223,7 @@ export function registerGarmentReturnRoutes(app: Express) {
     const id = Number(req.params.id);
     const parsed = decisionSchema.safeParse(req.body);
     if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid return" });
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid decision" });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid decision" });
     const current = await caseInScope(id, organisationId, allowedSites(req, true));
     if (!current) return res.status(404).json({ message: "Return not found" });
     if (!(await requireManagerOrOwner(req, res, organisationId, current.siteId))) return;
@@ -271,7 +271,7 @@ export function registerGarmentReturnRoutes(app: Express) {
     const id = Number(req.params.id);
     const parsed = transitionSchema.safeParse(req.body);
     if (!organisationId || !Number.isInteger(id)) return res.status(400).json({ message: "Invalid return" });
-    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid transition" });
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid transition" });
     const current = await caseInScope(id, organisationId, allowedSites(req, true));
     if (!current) return res.status(404).json({ message: "Return not found" });
     if (!(await requireManagerOrOwner(req, res, organisationId, current.siteId))) return;

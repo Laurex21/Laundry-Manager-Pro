@@ -106,6 +106,7 @@ import {
 } from "@shared/exact-decimal";
 
 type CreateOrderFormValues = z.infer<typeof createOrderWithItemsSchema>;
+type CreateOrderFormInput = z.input<typeof createOrderWithItemsSchema>;
 
 const ACTIVE_STATUSES = new Set(["pending", "received", "sorting", "washing", "drying", "ironing", "packaging", "stain_treatment"]);
 const PIPELINE_STATUSES = new Set(["received", "washing", "ready", "delivered"]);
@@ -893,7 +894,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
-  const form = useForm<CreateOrderFormValues>({
+  const form = useForm<CreateOrderFormInput, unknown, CreateOrderFormValues>({
     resolver: zodResolver(createOrderWithItemsSchema),
     defaultValues: {
       status: "pending",

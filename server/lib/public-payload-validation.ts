@@ -7,6 +7,6 @@ function jsonDepth(value: unknown, depth = 0): number {
   return values.reduce((max, item) => Math.max(max, jsonDepth(item, depth + 1)), depth);
 }
 
-export const boundedJsonObject = z.record(z.unknown())
+export const boundedJsonObject = z.record(z.string(), z.unknown())
   .refine((value) => jsonDepth(value) <= 6, "Payload is nested too deeply")
   .refine((value) => Buffer.byteLength(JSON.stringify(value), "utf8") <= 64 * 1024, "Payload is too large");

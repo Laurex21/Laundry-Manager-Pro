@@ -21,6 +21,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev --audit-level=low
       - run: npm run check
+      - run: npm run test:zod-migration
       - run: npm run test:security-hardening
       - run: npm run test:marketing
       - run: npm run test:order-integrity
