@@ -941,7 +941,7 @@ export default function OrderDetail() {
                   <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                   <StatusBadge status={entry.status} />
                   <span className="text-muted-foreground">{entry.changedAt ? formatBusinessDateTime(entry.changedAt) : ""}</span>
-                  {entry.notes && <span className="text-muted-foreground italic">- {entry.notes}</span>}
+                  {entry.notes && <span className="text-muted-foreground italic">- {entry.notes === "Order created" ? t("order_created_history") : entry.notes}</span>}
                 </div>
               ))}
             </div>
@@ -1027,7 +1027,7 @@ export default function OrderDetail() {
               {order.payments?.map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{p.method}</span>
+                    <span className="font-medium">{t(p.method, { defaultValue: p.method })}</span>
                     {p.isAdvance && (
                       <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 px-2 py-0.5 rounded-full font-semibold">
                         {t("advance_badge")}

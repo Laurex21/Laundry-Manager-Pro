@@ -1,4 +1,5 @@
 import i18n from 'i18next';
+import { subscriptionUiTranslations } from './subscription-ui-translations';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { decisionTranslations } from './decision-translations';
@@ -4140,6 +4141,10 @@ Object.entries(orderFormTranslations).forEach(([lang, translation]) => {
 });
 
 Object.entries(validationTranslations).forEach(([lang, translation]) => {
+  Object.assign(resources[lang as keyof typeof resources].translation, translation);
+});
+
+Object.entries(subscriptionUiTranslations).forEach(([lang, translation]) => {
   Object.assign(resources[lang as keyof typeof resources].translation, translation);
 });
 

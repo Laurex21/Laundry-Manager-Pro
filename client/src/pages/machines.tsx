@@ -35,7 +35,7 @@ export default function Machines() {
   const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
 
   if (!hasFeature("machines")) {
-    return <UpgradePrompt title={t("machines")} description="Track your machine fleet, utilization rates and maintenance." requiredPlan="Pro" />;
+    return <UpgradePrompt title={t("machines")} description={t("machines_upgrade_description")} requiredPlan="Pro" />;
   }
 
   return (

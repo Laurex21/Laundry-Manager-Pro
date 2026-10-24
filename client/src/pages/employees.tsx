@@ -36,7 +36,7 @@ export default function Employees() {
   const [attendanceTarget, setAttendanceTarget] = useState<Employee | null>(null);
 
   if (!hasFeature("employees")) {
-    return <UpgradePrompt title={t("employees")} description="Track staff productivity, kg processed and salaries." requiredPlan="Pro" />;
+    return <UpgradePrompt title={t("employees")} description={t("employees_upgrade_description")} requiredPlan="Pro" />;
   }
 
   return (
