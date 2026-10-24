@@ -14,6 +14,8 @@ import {
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
+import { useTranslation } from "react-i18next"
+import { translateValidationMessage } from "@/lib/validation-translations"
 
 const Form = FormProvider
 
@@ -148,7 +150,8 @@ const FormMessage = React.forwardRef<
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, children, ...props }, ref) => {
   const { error, formMessageId } = useFormField()
-  const body = error ? String(error?.message ?? "") : children
+  const { i18n } = useTranslation()
+  const body = error ? translateValidationMessage(String(error?.message ?? ""), i18n.resolvedLanguage || i18n.language) : children
 
   if (!body) {
     return null
