@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod";
+import { decisionRange } from "./decision-support";
+import { reportingDateRange, reportingDateString, shiftReportingDate, validReportingTimeZone } from "./reporting-date";
 import { pool } from "../db";
 import { db } from "../db";
 import { isAuthenticated } from "../replit_integrations/auth";
@@ -147,7 +149,22 @@ export function registerInventoryRoutes(app: Express) {
     finally { client.release(); }
   });
 
+  app.get("/api/inventory/planning", isAuthenticated, async (req: any, res) => {
+    const now = new Date();
+    const timeZone = validReportingTimeZone(req.get("X-Client-Timezone"));
+    const today = reportingDateString(now, timeZone);
+    const { start } = reportingDateRange(shiftReportingDate(today, -29), today, timeZone);
+    const result = await pool.query(`SELECT p.id,p.name,p.unit,p.current_quantity,
+      COALESCE(SUM(ABS(im.quantity)) FILTER(WHERE im.movement_type='consumption' AND im.created_at >= $2),0)::float8 AS consumed,
+      LEAST(30, GREATEST(0, EXTRACT(EPOCH FROM ($3::timestamp - MIN(im.created_at)))/86400))::float8 AS "historyDays"
+      FROM inventory_products p LEFT JOIN inventory_movements im ON im.product_id=p.id AND im.site_id=p.site_id AND im.created_at<=$3
+      WHERE p.site_id=ANY($1::int[]) AND p.is_active=true GROUP BY p.id ORDER BY p.name`, [siteScope(req),start,now]);
+    res.json({range:{start,end:now,timeZone},rows:result.rows});
+  });
+
   app.get("/api/inventory/summary", isAuthenticated, async (req: any, res) => {
+    const now = new Date();
+    const { start } = decisionRange("month", now, validReportingTimeZone(req.get("X-Client-Timezone")));
     const result = await pool.query(
       `SELECT COUNT(*)::int AS "productCount",
          COUNT(*) FILTER (WHERE current_quantity <= reorder_level)::int AS "lowStockCount",
@@ -155,8 +172,8 @@ export function registerInventoryRoutes(app: Express) {
          COALESCE((SELECT SUM(ABS(im.quantity) * im.unit_cost)
            FROM inventory_movements im
            WHERE im.site_id=ANY($1::int[]) AND im.movement_type='consumption'
-             AND im.created_at >= date_trunc('month', NOW())),0)::text AS "consumptionCostThisMonth"
-       FROM inventory_products WHERE site_id=ANY($1::int[]) AND is_active=true`, [siteScope(req)],
+             AND im.created_at BETWEEN $2 AND $3),0)::text AS "consumptionCostThisMonth"
+       FROM inventory_products WHERE site_id=ANY($1::int[]) AND is_active=true`, [siteScope(req), start, now],
     );
     res.json(result.rows[0]);
   });
@@ -177,6 +194,8 @@ export function registerInventoryRoutes(app: Express) {
   });
 
   app.get("/api/inventory/consumption-breakdown", isAuthenticated, async (req: any, res) => {
+    const now = new Date();
+    const { start } = decisionRange("month", now, validReportingTimeZone(req.get("X-Client-Timezone")));
     const result = await pool.query(
       `SELECT im.product_id AS "productId", p.name AS "productName", p.unit,
          im.production_cycle_id AS "productionCycleId",
@@ -189,10 +208,10 @@ export function registerInventoryRoutes(app: Express) {
        JOIN inventory_products p ON p.id=im.product_id
        LEFT JOIN production_cycles pc ON pc.id=im.production_cycle_id AND pc.site_id=im.site_id
        WHERE im.site_id=ANY($1::int[]) AND im.movement_type='consumption'
-         AND im.created_at >= date_trunc('month', NOW())
+         AND im.created_at BETWEEN $2 AND $3
        GROUP BY im.product_id, p.name, p.unit, im.production_cycle_id, pc.status
        ORDER BY SUM(ABS(im.quantity) * im.unit_cost) DESC`,
-      [siteScope(req)],
+      [siteScope(req), start, now],
     );
     res.json(result.rows);
   });

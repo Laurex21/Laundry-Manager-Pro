@@ -15,6 +15,8 @@ import { registerDiagnosticRoutes } from "./lib/diagnostic-routes";
 import { registerLegalRoutes } from "./lib/legal-routes";
 import { registerRentabiliteRoutes } from "./lib/rentabilite-routes";
 import { insertBusinessSettingsSchema, insertEmployeeSchema, insertExpenditureSchema, insertMachineSchema, orderDrafts, orders, orderStatusHistory, sites } from "@shared/schema";
+import { decisionRange, employeePerformanceSql } from "./lib/decision-support";
+import { cashResult } from "../shared/decision-support";
 import { reportingDateRange, reportingDateString, validReportingTimeZone } from "./lib/reporting-date";
 import { getBusinessEvolution } from "./lib/business-evolution";
 import { startTemporalIntelligenceJob } from "./lib/temporal-intelligence";
@@ -1641,6 +1643,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/employees/performance", isAuthenticated, async (req: any, res) => {
+    const period = z.enum(["day", "week", "month", "year"]).catch("month").parse(req.query.period);
+    const now = new Date();
+    const range = decisionRange(period, now, reportingTimeZone(req));
+    const result = await pool.query(employeePerformanceSql, [scopedSites(req), range.start, now, range.startDay, range.endDay]);
+    res.json({ period, range, rows: result.rows });
+  });
+
   app.get("/api/employees", isAuthenticated, async (req: any, res) => {
     const employees = await storage.getEmployees(scopedSites(req), (req.session as any).userId);
     res.json(employees);
@@ -1853,13 +1863,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!siteIds.length) return res.json({ period, metrics: {}, stages: [], confidence: { level: "insufficient", score: 0 } });
 
     const now = new Date();
-    const start = period === "day"
-      ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      : period === "week"
-        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
-        : period === "year"
-          ? new Date(now.getFullYear(), 0, 1)
-          : new Date(now.getFullYear(), now.getMonth(), 1);
+    const timeZone = reportingTimeZone(req);
+    const { start } = decisionRange(period, now, timeZone);
+    const costBasis = req.query.costBasis === "separate" ? "separate" : "included";
+    const categories = (value: unknown, fallback: string[]) => typeof value === "string"
+      ? value.slice(0,1000).split(",").map(x=>x.trim().toLowerCase()).filter(Boolean).slice(0,30) : fallback;
+    const fixedCategories = categories(req.query.fixedCategories, ["loyer","rent","salaire","salary","salaires"]);
+    const variableCategories = categories(req.query.variableCategories, ["eau","water","electricite","électricité","electricity","transport","carburant","fuel","produits","products","fournitures","supplies"]).filter(x=>!fixedCategories.includes(x));
     const durationMs = Math.max(86400000, now.getTime() - start.getTime());
     const previousStart = new Date(start.getTime() - durationMs);
 
@@ -1872,17 +1882,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
            FROM orders o
            WHERE o.site_id = ANY($1::int[]) AND o.entry_date >= $2 AND o.entry_date <= $3
          ), scoped_expenses AS (
-           SELECT amount, LOWER(COALESCE(category, '')) AS category
+           SELECT amount, LOWER(TRIM(COALESCE(category, ''))) AS category
            FROM expenditures
            WHERE site_id = ANY($1::int[]) AND date >= $2 AND date <= $3
          )
          SELECT
            COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS total_orders,
-           COUNT(*) FILTER (WHERE status = 'delivered' AND delivered_at >= $2 AND delivered_at <= $3)::int AS delivered_orders,
-           COUNT(*) FILTER (WHERE status = 'delivered' AND delivered_at >= $2 AND delivered_at <= $3
-             AND pickup_date IS NOT NULL)::int AS delivered_with_promise,
-           COUNT(*) FILTER (WHERE status = 'delivered' AND delivered_at >= $2 AND delivered_at <= $3
-             AND pickup_date IS NOT NULL AND delivered_at <= pickup_date)::int AS delivered_on_time,
+           (SELECT COUNT(*) FROM orders d WHERE d.site_id=ANY($1::int[]) AND d.status='delivered' AND d.delivered_at BETWEEN $2 AND $3)::int AS delivered_orders,
+           (SELECT COUNT(*) FROM orders d WHERE d.site_id=ANY($1::int[]) AND d.status='delivered' AND d.delivered_at BETWEEN $2 AND $3 AND d.pickup_date IS NOT NULL)::int AS delivered_with_promise,
+           (SELECT COUNT(*) FROM orders d WHERE d.site_id=ANY($1::int[]) AND d.status='delivered' AND d.delivered_at BETWEEN $2 AND $3 AND d.pickup_date IS NOT NULL
+             AND (d.delivered_at AT TIME ZONE 'UTC' AT TIME ZONE $4)::date <= d.pickup_date::date)::int AS delivered_on_time,
            (SELECT COUNT(*) FROM orders live
              WHERE live.site_id = ANY($1::int[]) AND live.status NOT IN ('cancelled','delivered')
                AND live.pickup_date IS NOT NULL AND live.pickup_date < $3)::int AS delayed_orders,
@@ -1896,8 +1905,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
            COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders po ON po.id = p.order_id
              WHERE po.site_id = ANY($1::int[]) AND p.date >= $2 AND p.date <= $3 AND po.status <> 'cancelled'), 0)::text AS revenue,
            COALESCE((SELECT SUM(amount) FROM scoped_expenses), 0)::text AS expenses,
-           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE category IN ('loyer','rent','salaire','salary','salaires')), 0)::text AS fixed_costs,
-           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE category NOT IN ('loyer','rent','salaire','salary','salaires')), 0)::text AS variable_costs,
+           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE category=ANY($5::text[])), 0)::text AS fixed_costs,
+           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE category=ANY($6::text[])), 0)::text AS variable_costs,
+           COALESCE((SELECT SUM(amount) FROM scoped_expenses WHERE NOT(category=ANY($5::text[]) OR category=ANY($6::text[]))),0)::text AS unclassified_costs,
            COALESCE(SUM(discount_amount) FILTER (WHERE status <> 'cancelled'), 0)::text AS discounts,
            (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status = 'received')::int AS received,
            (SELECT COUNT(*) FROM orders live WHERE live.site_id = ANY($1::int[]) AND live.status IN ('washing','stain_treatment'))::int AS washing,
@@ -1909,7 +1919,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
            COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled,
            COUNT(*) FILTER (WHERE pickup_date IS NOT NULL)::int AS promised_date_coverage
          FROM scoped_orders`,
-        [siteIds, start, now],
+        [siteIds, start, now, timeZone, fixedCategories, variableCategories],
       ),
       pool.query(
         `SELECT
@@ -1949,26 +1959,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ),
       pool.query(
         `SELECT
-           COUNT(DISTINCT grc.garment_item_id)::int AS returned_items,
-           COUNT(DISTINCT grc.order_id)::int AS complaint_orders,
-           COUNT(DISTINCT grc.order_id) FILTER (WHERE grc.status <> 'rejected')::int AS accepted_rework_orders
-         FROM garment_return_cases grc
-         WHERE grc.site_id = ANY($1::int[]) AND grc.returned_at >= $2 AND grc.returned_at <= $3`,
+           COUNT(DISTINCT grc.garment_item_id) FILTER (WHERE grc.returned_at BETWEEN $2 AND $3)::int AS returned_items,
+           COUNT(DISTINCT grc.order_id) FILTER (WHERE qo.status='delivered' AND qo.delivered_at BETWEEN $2 AND $3)::int AS complaint_orders,
+           COUNT(DISTINCT grc.order_id) FILTER (WHERE grc.status<>'rejected' AND qo.status='delivered' AND qo.delivered_at BETWEEN $2 AND $3)::int AS accepted_rework_orders
+         FROM garment_return_cases grc JOIN orders qo ON qo.id=grc.order_id AND qo.site_id=grc.site_id
+         WHERE grc.site_id = ANY($1::int[]) AND grc.returned_at <= $3`,
         [siteIds, start, now],
       ),
       pool.query(
         `SELECT
-           DATE(o.entry_date) AS business_date,
-           EXTRACT(ISODOW FROM o.entry_date)::int AS weekday,
+           (o.entry_date AT TIME ZONE 'UTC' AT TIME ZONE $3)::date AS business_date,
+           EXTRACT(ISODOW FROM (o.entry_date AT TIME ZONE 'UTC' AT TIME ZONE $3))::int AS weekday,
            COUNT(*) FILTER (WHERE o.status <> 'cancelled')::int AS orders,
            COALESCE(SUM(o.total_amount) FILTER (WHERE o.status <> 'cancelled'), 0)::text AS order_value
          FROM orders o
          WHERE o.site_id = ANY($1::int[])
            AND o.entry_date >= $2::timestamp - INTERVAL '56 days'
            AND o.entry_date < $2::timestamp
-         GROUP BY DATE(o.entry_date), EXTRACT(ISODOW FROM o.entry_date)
+         GROUP BY (o.entry_date AT TIME ZONE 'UTC' AT TIME ZONE $3)::date, EXTRACT(ISODOW FROM (o.entry_date AT TIME ZONE 'UTC' AT TIME ZONE $3))
          ORDER BY business_date`,
-        [siteIds, now],
+        [siteIds, now, timeZone],
       ),
       pool.query(
         `SELECT
@@ -2033,11 +2043,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const unassignedProductConsumptionCost = number(inventoryCosts.unassigned_product_cost);
     const costedCycles = number(inventoryCosts.costed_cycles);
     const inProgressCostedCycles = number(inventoryCosts.in_progress_costed_cycles);
-    const profitAfterProductCosts = revenue - expenses - productConsumptionCost;
-    const marginAfterProductCostsPct = revenue > 0 ? (profitAfterProductCosts / revenue) * 100 : null;
+    const profitAfterProductCosts = cashResult(revenue, expenses, productConsumptionCost, costBasis);
+    const marginAfterProductCostsPct = revenue > 0 && expenses > 0 ? (profitAfterProductCosts / revenue) * 100 : null;
     const contribution = revenue - variableCosts;
     const contributionMarginRatio = revenue > 0 ? contribution / revenue : 0;
-    const breakEvenRevenue = fixedCosts > 0 && contributionMarginRatio > 0 ? fixedCosts / contributionMarginRatio : null;
+    const breakEvenRevenue = fixedCosts > 0 && contributionMarginRatio > 0 && number(current.unclassified_costs) === 0 ? fixedCosts / contributionMarginRatio : null;
     const totalOrders = number(current.total_orders);
     const loadEfficiency = number(machine.cycle_capacity) > 0 ? (number(machine.weight) / number(machine.cycle_capacity)) * 100 : null;
     const productCostPerCycle = costedCycles > 0 ? completedProductConsumptionCost / costedCycles : null;
@@ -2135,7 +2145,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         revenue: siteRevenue,
         expenses: siteExpenses,
         profit: siteRevenue - siteExpenses,
-        marginPct: siteRevenue > 0 ? ((siteRevenue - siteExpenses) / siteRevenue) * 100 : null,
+        marginPct: siteRevenue > 0 && siteExpenses > 0 ? ((siteRevenue - siteExpenses) / siteRevenue) * 100 : null,
         averageOrderValue: siteOrders > 0 ? number(row.order_value) / siteOrders : null,
         completionRate: siteOrders > 0 ? (number(row.delivered_orders) / siteOrders) * 100 : null,
       };
@@ -2155,7 +2165,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const discountRatio = number(current.order_value) > 0
       ? (number(current.discounts) / number(current.order_value)) * 100
       : null;
-    const marginPct = revenue > 0 ? ((revenue - expenses) / revenue) * 100 : null;
+    const marginPct = revenue > 0 && expenses > 0 ? ((revenue - expenses) / revenue) * 100 : null;
     const predictiveAlerts: Array<{
       code: string;
       severity: "high" | "medium" | "low";
@@ -2238,7 +2248,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     res.json({
       period,
-      range: { start, end: now },
+      range: { start, end: now, timeZone },
+      costBasis,
+      fixedCategories, variableCategories,
+      expenseCoverage: expenses > 0,
       metrics: {
         revenue,
         expenses,
@@ -2266,8 +2279,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         expenseDeltaPct: delta(expenses, number(previous.expenses)),
         orderDeltaPct: delta(totalOrders, number(previous.orders)),
         fixedCosts,
+        unclassifiedCosts: number(current.unclassified_costs),
         variableCosts,
-        contributionMarginRatio: contributionMarginRatio > 0 ? contributionMarginRatio * 100 : null,
+        contributionMarginRatio: expenses > 0 && number(current.unclassified_costs) === 0 && contributionMarginRatio > 0 ? contributionMarginRatio * 100 : null,
         breakEvenRevenue,
         machineCycles: number(machine.cycles),
         machineWeight: number(machine.weight),

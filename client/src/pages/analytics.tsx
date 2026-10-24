@@ -77,13 +77,17 @@ function AnalyticsContent() {
 }
 
 function ExecutiveDecisionCockpit({ period }: { period: string }) {
+  const [costBasis, setCostBasis] = useState("included");
+  const [fixedCategories,setFixedCategories] = useState("loyer,rent,salaire,salary,salaires");
+  const [variableCategories,setVariableCategories] = useState("eau,water,electricite,électricité,electricity,transport,carburant,fuel,produits,products,fournitures,supplies");
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { data, isLoading, isError } = useQuery<any>({
-    queryKey: ["/api/analytics/decision-cockpit", period],
+    queryKey: ["/api/analytics/decision-cockpit", period, costBasis, fixedCategories, variableCategories],
+    staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 60_000,
     queryFn: async () => {
-      const response = await fetch(`/api/analytics/decision-cockpit?period=${period}`, { credentials: "include" });
+      const response = await fetch(`/api/analytics/decision-cockpit?period=${period}&costBasis=${costBasis}&fixedCategories=${encodeURIComponent(fixedCategories)}&variableCategories=${encodeURIComponent(variableCategories)}`, { credentials: "include", headers: {"X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone} });
       if (!response.ok) throw new Error("Unable to load decision cockpit");
       return response.json();
     },
@@ -111,6 +115,14 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
 
   return (
     <div className="space-y-5" data-testid="section-executive-decision-cockpit">
+      <section className="rounded-xl border bg-card p-4 space-y-2">
+        <p className="text-sm">{t("decision_cash_note")}</p>
+        <label className="block text-sm">{t("decision_cost_basis")}<select className="ml-2 rounded border bg-background p-2" value={costBasis} onChange={e=>setCostBasis(e.target.value)}><option value="included">{t("decision_products_included")}</option><option value="separate">{t("decision_products_separate")}</option></select></label>
+        <div className="grid gap-3 md:grid-cols-2"><label className="text-sm">{t("decision_cost_categories")}<input className="w-full rounded border bg-background p-2" maxLength={1000} defaultValue={fixedCategories} onBlur={e=>setFixedCategories(e.target.value)}/></label><label className="text-sm">{t("decision_variable_categories")}<input className="w-full rounded border bg-background p-2" maxLength={1000} defaultValue={variableCategories} onBlur={e=>setVariableCategories(e.target.value)}/></label></div>
+        {!data.expenseCoverage && <p role="alert" className="text-sm text-amber-700">{t("decision_no_expenses")}</p>}
+        {Number(m.unclassifiedCosts)>0 && <p role="alert" className="text-sm text-amber-700">{t("decision_unclassified_costs",{amount:money(m.unclassifiedCosts)})}</p>}
+        <p className="text-xs text-muted-foreground">{data.range?.timeZone} · {new Date(data.range.start).toLocaleDateString(i18n.language)} – {new Date(data.range.end).toLocaleDateString(i18n.language)}</p>
+      </section>
       <section aria-labelledby="decision-summary-title" className="overflow-hidden rounded-xl border bg-slate-950 text-white shadow-sm">
         <div className="grid gap-5 p-5 lg:grid-cols-[1.5fr_1fr] lg:p-6">
           <div>
@@ -124,7 +136,7 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
             <p className="mt-2 max-w-2xl text-sm text-slate-300">{t("decision_summary_subtitle")}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-400">{t("net_operating_result")}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-400">{t("decision_cash_balance")}</p>
             <p className={`mt-1 text-3xl font-bold ${Number(m.profit) >= 0 ? "text-emerald-300" : "text-red-300"}`}>{money(m.profit)}</p>
             <p className="mt-1 text-sm text-slate-300">{t("margin")}: {pct(m.marginPct)}</p>
           </div>
