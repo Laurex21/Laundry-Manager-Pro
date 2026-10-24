@@ -1,3 +1,5 @@
+import { consumeRegistrationWelcome } from "@/lib/onboarding-welcome";
+import { OnboardingIntroduction } from "@/components/onboarding-introduction";
 import { SaasNotice } from "./saas-notice";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -91,7 +93,6 @@ const WHATSAPP_SUPPORT_URL = "https://wa.me/237651638889";
 const PWA_LEGACY_DISMISS_STORAGE_KEY = "xpresspro-install-dismissed-at";
 const pwaSuggestionKey = (userId: string) => `xpresspro-install-suggested-v1:${userId}`;
 const guideProgressKey = (userId: string) => `xpresspro-getting-started-v1:${userId}`;
-const guideActiveKey = (userId: string) => `xpresspro-getting-started-active-v1:${userId}`;
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "dashboard",
@@ -351,22 +352,20 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const [mobileOpen, setMobileOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [guideIntro, setGuideIntro] = useState<"welcome" | "reminder" | null>(null);
   const guideRestartToken = 0;
   const pwaInstaller = usePwaInstall();
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
     if (!user?.id || (user as any).role !== "owner" || user.legalAcceptance?.required) return;
-    const progress = window.localStorage.getItem(guideProgressKey(user.id));
-    const active = window.localStorage.getItem(guideActiveKey(user.id));
-    if (active !== "0" && progress !== "done" && (progress === null || /^[0-6]$/.test(progress))) {
-      window.localStorage.setItem(guideActiveKey(user.id), "1");
-      setGuideOpen(true);
-    }
+    try {
+      if (consumeRegistrationWelcome(window.sessionStorage, user.id)) setGuideIntro("welcome");
+    } catch { /* No automatic interruption if browser storage is unavailable. */ }
   }, [user?.id, (user as any)?.role, user?.legalAcceptance?.required]);
 
   useEffect(() => {
-    if (!user?.id || location !== "/dashboard" || user.legalAcceptance?.required || guideOpen || pwaInstaller.installed
+    if (!user?.id || location !== "/dashboard" || user.legalAcceptance?.required || guideOpen || guideIntro !== null || pwaInstaller.installed
       || (!pwaInstaller.canInstall && !pwaInstaller.isIos && !pwaInstaller.isAndroid && !pwaInstaller.isMacSafari)) return;
     try {
       // Existing users who dismissed the old prompt should not be interrupted again.
@@ -377,7 +376,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       setInstallOpen(true);
     }, 5000);
     return () => window.clearTimeout(timer);
-  }, [location, user?.id, user?.legalAcceptance?.required, guideOpen, pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIos, pwaInstaller.isAndroid, pwaInstaller.isMacSafari]);
+  }, [location, user?.id, user?.legalAcceptance?.required, guideOpen, guideIntro, pwaInstaller.canInstall, pwaInstaller.installed, pwaInstaller.isIos, pwaInstaller.isAndroid, pwaInstaller.isMacSafari]);
 
   useEffect(() => {
     const openInstallHelp = () => setInstallOpen(true);
@@ -554,7 +553,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
-                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { if (user?.id) window.localStorage.setItem(guideActiveKey(user.id), "1"); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
+                {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { setGuideIntro(null); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}
                 </DropdownMenuItem>}
@@ -583,7 +582,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           {children}
         </div>
       </main>
-      {guideOpen && user?.id && <GettingStartedGuide userId={user.id} restartToken={guideRestartToken} onClose={() => { window.localStorage.setItem(guideActiveKey(user.id), "0"); setGuideOpen(false); }} />}
+      {guideOpen && user?.id && <GettingStartedGuide userId={user.id} restartToken={guideRestartToken} onClose={() => { setGuideOpen(false);
+        try { if (window.localStorage.getItem(guideProgressKey(user.id)) !== "done") setGuideIntro("reminder"); } catch { setGuideIntro("reminder"); } }} />}
+      <OnboardingIntroduction mode={guideIntro} onStart={() => { setGuideIntro(null); setGuideOpen(true); }} onSkip={() => setGuideIntro("reminder")} onClose={() => setGuideIntro(null)} />
       <LegalAcceptanceGate />
       <PwaInstallDialog open={installOpen} onOpenChange={handleInstallOpenChange} installer={pwaInstaller} />
 

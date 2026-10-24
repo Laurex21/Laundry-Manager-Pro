@@ -1,3 +1,4 @@
+import { recordWelcomeEligibility } from "@/lib/onboarding-welcome";
 import { SaasTrialInfo } from "@/components/saas-public-plans";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,9 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         trackEvent("signup_completed");
         trackMarketingEvent("signup_completed");
         await waitForMarketingDispatch();
+      }
+      if (data?.id) {
+        try { recordWelcomeEligibility(window.sessionStorage, data.id, tab === "register"); } catch { /* Authentication remains usable without storage. */ }
       }
       queryClient.setQueryData(["/api/auth/user"], data);
       // Leave the document containing the marketing SDK before entering the app.
