@@ -420,23 +420,23 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </div>
 
       {/* Nav items */}
-      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2" data-testid="grouped-navigation">
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 lg:flex lg:flex-col lg:overflow-y-hidden" data-testid="grouped-navigation">
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter((item) => canAccess(item.page));
           if (!items.length) return null;
           return (
-            <div key={group.key} className="mb-2.5 last:mb-0 lg:mb-1.5">
-              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/50 lg:pb-0.5">
+            <div key={group.key} style={{ flexGrow: items.length, flexBasis: 0 }} className="mb-2.5 last:mb-0 lg:mb-1.5 lg:flex lg:min-h-0 lg:flex-col">
+              <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/50 lg:shrink-0 lg:pb-0.5 lg:text-[11px]">
                 {t(group.key, group.fallback)}
               </p>
-              <div className="space-y-0.5 lg:space-y-0">
+              <div className="space-y-0.5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:space-y-0">
                 {items.map((item) => {
                   const isActive = location === item.href;
                   return (
-                    <Link key={item.href} href={item.href}>
+                    <Link key={item.href} href={item.href} className="lg:flex lg:min-h-0 lg:flex-1">
                       <div
                         className={cn(
-                          "group flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 lg:min-h-[26px] lg:py-1 lg:text-[13px] lg:leading-[18px]",
+                          "group flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 lg:h-full lg:min-h-0 lg:w-full lg:py-0 lg:text-[14px] lg:leading-5",
                           isActive
                             ? "bg-sidebar-primary text-white shadow-sm shadow-black/10"
                             : "text-white/68 hover:bg-white/8 hover:text-white"
@@ -444,7 +444,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                         onClick={() => setMobileOpen(false)}
                         data-testid={`nav-${item.page}`}
                       >
-                        <item.icon className={cn("h-4 w-4 shrink-0", isActive ? "text-white" : "text-white/55 group-hover:text-white")} />
+                        <item.icon className={cn("h-4 w-4 shrink-0 lg:h-[18px] lg:w-[18px]", isActive ? "text-white" : "text-white/55 group-hover:text-white")} />
                         <span className="flex-1">{t(item.labelKey)}</span>
                         {isActive && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/65" />}
                       </div>
@@ -509,7 +509,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-muted/30 flex overflow-x-hidden w-full">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:block w-60 bg-sidebar text-sidebar-foreground border-r border-sidebar-border fixed inset-y-0 z-30 shadow-[8px_0_30px_rgba(8,45,91,0.08)]">
+      <aside className="hidden lg:block w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border fixed inset-y-0 z-30 shadow-[8px_0_30px_rgba(8,45,91,0.08)]">
         <NavContent />
       </aside>
 
@@ -521,7 +521,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </SheetContent>
       </Sheet>
 
-      <main className="flex-1 lg:ml-60 min-h-screen flex flex-col min-w-0 overflow-x-hidden">
+      <main className="flex-1 lg:ml-64 min-h-screen flex flex-col min-w-0 overflow-x-hidden">
         {/* Top header */}
         <header
           className="h-14 bg-card/95 backdrop-blur-sm border-b border-[#082D5B]/10 flex items-center justify-between px-4 sm:px-5 sticky top-0 z-20"

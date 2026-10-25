@@ -49,7 +49,7 @@ assert.match(routes, /piecesConsumed: Number\(row\.transaction\.piecesConsumed/)
 assert.match(routes, /currentCycleFinancials/);
 assert.match(routes, /isReceivedSubscriptionPayment/);
 assert.doesNotMatch(routes, /row\.subscription\.status === "active"\s*\? "paid"/);
-assert.match(subscriberReceipt, /order\.orderNumber \?\? order\.id/);
+assert.match(subscriberReceipt, /order\.orderReference \?\? order\.orderNumber \?\? order\.id/);
 assert.match(subscriberReceipt, /Vêtements enregistrés/);
 assert.match(subscriberReceipt, /Cette commande/);
 assert.match(subscriberReceipt, /Utilisation cumulée/);

@@ -21,7 +21,7 @@ export function generateSubscriberReceiptHTML(data: any, thermalWidth?: 58 | 80)
   const { order, customer, subscription, plan, coverage, settings, items, garments = [], card, paymentSummary } = data;
   const thermal = !!thermalWidth;
   const width = thermal ? `${thermalWidth}mm` : "210mm";
-  const receiptNumber = order.orderNumber ?? order.id;
+  const receiptNumber = order.orderReference ?? order.orderNumber ?? order.id;
   const kgRate = usageRate(plan.includedWeightKg, subscription.remainingKg);
   const piecesRate = usageRate(plan.includedPieces, subscription.remainingPieces);
   const ordersRate = usageRate(plan.maxOrders, subscription.remainingOrders);

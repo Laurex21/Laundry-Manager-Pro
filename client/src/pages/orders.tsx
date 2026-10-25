@@ -421,6 +421,7 @@ export default function Orders() {
       const q = search.toLowerCase();
       result = result.filter((o: any) =>
         o.id.toString().includes(q) ||
+        String(orderDisplayId(o)).toLowerCase().includes(q) ||
         (o.customer?.name || "").toLowerCase().includes(q)
       );
     }

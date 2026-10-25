@@ -63,6 +63,7 @@ export const services = pgTable("services", {
 
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
+  orderReference: varchar("order_reference", { length: 32 }),
   customerId: integer("customer_id").notNull().references(() => customers.id),
   createdByEmployeeId: integer("created_by_employee_id"),
   status: text("status").notNull().default("received"),
@@ -94,6 +95,7 @@ export const orders = pgTable("orders", {
   index("idx_orders_site_status_ready")
     .on(table.siteId, table.status, table.readyAt)
     .where(sql`${table.status} = 'ready'`),
+  uniqueIndex("idx_orders_reference_unique").on(table.orderReference),
   index("idx_orders_created_at").on(table.createdAt),
   index("idx_orders_delivered_at").on(table.deliveredAt),
   index("idx_orders_corrected_from").on(table.correctedFromOrderId),
@@ -955,6 +957,7 @@ export const insertCustomerSchema = createInsertSchema(customers, {
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
+  orderReference: true,
   createdAt: true,
   updatedAt: true,
   totalAmount: true,

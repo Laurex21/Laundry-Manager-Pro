@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { securityHeaders } from "./lib/http-security";
 import { repairKnownAccountOrganisationLinks } from "./replit_integrations/auth/replitAuth";
 import { syncConfiguredPlatformAdmins } from "./lib/platform-admin-bootstrap";
+import { requireExistingColumns } from "./lib/existing-schema-check";
 import { ensureGarmentVerificationSchema } from "./lib/garment-verification-schema";
 
 const app = express();
@@ -87,6 +88,7 @@ app.use((req, res, next) => {
   await repairKnownAccountOrganisationLinks();
   await syncConfiguredPlatformAdmins();
   await ensureGarmentVerificationSchema();
+  await requireExistingColumns("orders", ["order_reference"]);
   await registerRoutes(httpServer, app);
   if (automaticMaintenanceSuspended()) {
     console.log("[maintenance] Automatic maintenance suspended for release verification.");

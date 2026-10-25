@@ -984,7 +984,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const params: any[] = [siteIds, from, to];
     let where = `o.site_id = ANY($1::int[]) AND p.date BETWEEN $2 AND $3`;
     if (parsed.data.method) { params.push(parsed.data.method); where += ` AND p.method = $${params.length}`; }
-    if (parsed.data.search) { params.push(`%${parsed.data.search}%`); where += ` AND (c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length} OR CAST(o."orderNumber" AS text) ILIKE $${params.length} OR COALESCE(p.reference, '') ILIKE $${params.length})`; }
+    if (parsed.data.search) { params.push(`%${parsed.data.search}%`); where += ` AND (c.name ILIKE $${params.length} OR c.phone ILIKE $${params.length} OR o.order_reference ILIKE $${params.length} OR CAST(o."orderNumber" AS text) ILIKE $${params.length} OR COALESCE(p.reference, '') ILIKE $${params.length})`; }
     if (!managerOrOwner) { params.push(userId); where += ` AND e.user_id = $${params.length}`; }
     const result = await pool.query(
       `WITH numbered_orders AS (
@@ -993,7 +993,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
        )
        SELECT p.id, p.order_id AS "orderId", p.amount, p.method, p.reference, p.date,
               o.site_id AS "siteId", o.payment_status AS "paymentStatus",
-              o."orderNumber",
+              COALESCE(o.order_reference, o."orderNumber"::text) AS "orderNumber",
               c.name AS "customerName", c.phone AS "customerPhone",
               e.name AS "employeeName", s.name AS "siteName"
        FROM payments p
@@ -1241,7 +1241,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const [orderCount, orderList, customerCount, customerList, collections, expenses] = await Promise.all([
         pool.query('SELECT COUNT(*)::int AS count FROM orders WHERE site_id = ANY($1::int[]) AND entry_date BETWEEN $2 AND $3 AND status <> \'cancelled\'', args),
-        pool.query('SELECT o.id, o.order_number AS "orderNumber", o.status, o.total_amount, c.name AS customer_name FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY created_at, id)::int AS order_number FROM orders WHERE site_id=ANY($1::int[])) o JOIN customers c ON c.id = o.customer_id WHERE o.site_id = ANY($1::int[]) AND o.entry_date BETWEEN $2 AND $3 AND o.status <> \'cancelled\' ORDER BY o.entry_date DESC, o.id DESC LIMIT 5', args),
+        pool.query('SELECT o.id, COALESCE(o.order_reference, o.order_number::text) AS "orderNumber", o.status, o.total_amount, c.name AS customer_name FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY created_at, id)::int AS order_number FROM orders WHERE site_id=ANY($1::int[])) o JOIN customers c ON c.id = o.customer_id WHERE o.site_id = ANY($1::int[]) AND o.entry_date BETWEEN $2 AND $3 AND o.status <> \'cancelled\' ORDER BY o.entry_date DESC, o.id DESC LIMIT 5', args),
         pool.query('SELECT COUNT(*)::int AS count FROM customers WHERE site_id = ANY($1::int[]) AND created_at BETWEEN $2 AND $3', args),
         pool.query('SELECT id, name FROM customers WHERE site_id = ANY($1::int[]) AND created_at BETWEEN $2 AND $3 ORDER BY created_at DESC, id DESC LIMIT 5', args),
         pool.query('SELECT COALESCE(SUM(p.amount), 0)::text AS amount FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.site_id = ANY($1::int[]) AND p.date BETWEEN $2 AND $3 AND o.status <> \'cancelled\'', args),
