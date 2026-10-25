@@ -38,6 +38,7 @@ jobs:
       - run: npm run test:saas-business-launch
       - run: npm run test:saas-full-journey
       - run: npm run test:saas-collection-pilot
+      - run: npm run test:saas-pro-pilot
       - run: npm run test:saas-pilot
       - run: npm run test:pawapay-private-diagnostic
       - run: npm run build

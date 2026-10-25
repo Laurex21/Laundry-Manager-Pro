@@ -61,7 +61,8 @@
     "test:decision-support": "tsx server/lib/decision-support.integration.test.ts",
     "test:zod-migration": "tsx server/lib/zod-migration.test.ts",
     "test:pilotage-overview": "node --import tsx server/lib/pilotage-overview.integration.test.ts",
-    "test:customer-risk": "node --import tsx server/lib/customer-risk.integration.test.ts"
+    "test:customer-risk": "node --import tsx server/lib/customer-risk.integration.test.ts",
+    "test:saas-pro-pilot": "node --import tsx server/lib/saas-pro-pilot.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

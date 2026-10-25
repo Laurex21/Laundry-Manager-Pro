@@ -1,3 +1,4 @@
+import { ProPilotStore, isProPilotInvoice } from "./saas-pro-pilot";
 import { businessLaunchTrial } from "../../shared/saas-business-launch";
 import crypto from "node:crypto";
 import { COLLECTION_PILOT_XAF, collectionPilotAllowed, isCollectionPilotInvoice } from "./saas-pilot";
@@ -6,7 +7,7 @@ import { SAAS_PLANS, SAAS_OPTION_PRICES, DAY_MS, saasTrial, saasEffective, saasQ
 export interface SaasExecutor { query(sql: string, params?: any[]): Promise<{ rows: any[]; rowCount?: number | null }> }
 export interface SaasDatabase extends SaasExecutor { transaction<T>(fn: (tx: SaasExecutor) => Promise<T>): Promise<T> }
 export class SaasError extends Error { constructor(readonly code: string, readonly status = 409) { super(code); } }
-export type SaasInvoice = { id: string; organisation_id: number; quote: SaasQuote & { purpose?: "collection_pilot"; retryOf?: string }; status: string; total_xaf: number; provider_status: string | null; checkout_id: string | null; redirect_url: string | null; checkout_code: string | null; paid_at: string | null; created_at: string; newlyReserved?: boolean; };
+export type SaasInvoice = { id: string; organisation_id: number; quote: SaasQuote & { purpose?: "collection_pilot" | "subscription_pilot"; pilot?: {organisationId:number;subscriptionId:number;protectedUntil:string;grantEnd:string;fingerprint:string}; retryOf?: string }; status: string; total_xaf: number; provider_status: string | null; checkout_id: string | null; redirect_url: string | null; checkout_code: string | null; paid_at: string | null; created_at: string; newlyReserved?: boolean; };
 
 export class SaasStore {
   constructor(readonly db: SaasDatabase, readonly clock: () => Date = () => new Date(), readonly environment: "sandbox" | "live" = "sandbox") {}
@@ -173,6 +174,7 @@ export class SaasStore {
   }
   async reserveCheckout(org: number, id: string): Promise<SaasInvoice> {
     const candidate = await this.invoice(this.db,org,id);
+    if (isProPilotInvoice(candidate)) return new ProPilotStore(this).reserve(org,id);
     if (isCollectionPilotInvoice(candidate)) return this.reserveCollectionCheckout(org,id);
     return this.db.transaction(async tx => {
       const state = await this.read(tx, org);
@@ -195,6 +197,7 @@ export class SaasStore {
     if (source !== "credit" && source !== (this.environment === "live" ? "pawapay_live" : "pawapay_sandbox")) throw new SaasError("PROVIDER_ENVIRONMENT_MISMATCH");
     const found = (await this.db.query("SELECT organisation_id,quote FROM saas_invoices WHERE checkout_id=$1 AND provider_environment=$2", [checkoutId, this.environment])).rows[0];
     if (!found) throw new SaasError("CHECKOUT_NOT_FOUND", 404);
+    if (isProPilotInvoice(found)) return new ProPilotStore(this).apply(Number(found.organisation_id),checkoutId,event,source);
     if (isCollectionPilotInvoice(found)) return this.applyCollectionResult(Number(found.organisation_id),checkoutId,event,source);
     await this.db.transaction(async tx => {
       const org = Number(found.organisation_id);
