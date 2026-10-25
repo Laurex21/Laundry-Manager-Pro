@@ -138,6 +138,7 @@ export default function Payments() {
         if (!q) return true;
         return (
           o.id.toString().includes(q) ||
+          String(orderDisplayId(o)).toLowerCase().includes(q) ||
           (o.customer?.name || "").toLowerCase().includes(q) ||
           (o.customer?.phone || "").toLowerCase().includes(q)
         );

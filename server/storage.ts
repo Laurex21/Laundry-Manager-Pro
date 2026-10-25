@@ -208,7 +208,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(customers).where(inArray(customers.id, customerIds));
   }
 
-  private async withSiteOrderNumbers<T extends { id: number; siteId: number | null; orderNumber?: number | null }>(rows: T[]): Promise<(T & { orderNumber: number })[]> {
+  private async withSiteOrderNumbers<T extends { id: number; siteId: number | null; orderNumber?: number | string | null; orderReference?: string | null }>(rows: T[]): Promise<(T & { orderNumber: number | string })[]> {
     const scopes = Array.from(new Set(rows.map((row) => row.siteId).filter((siteId): siteId is number => typeof siteId === "number")));
     const fallbackNumbers = new Map<number, number>();
 
@@ -222,7 +222,7 @@ export class DatabaseStorage implements IStorage {
 
     return rows.map((row) => ({
       ...row,
-      orderNumber: fallbackNumbers.get(row.id) ?? row.id,
+      orderNumber: row.orderReference ?? fallbackNumbers.get(row.id) ?? row.id,
     }));
   }
 

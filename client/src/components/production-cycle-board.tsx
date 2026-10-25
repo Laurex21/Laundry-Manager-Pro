@@ -1,3 +1,4 @@
+import { orderDisplayId } from "@/lib/order-display";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -235,7 +236,7 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
           {cycle.orders.map((order) => (
             <li key={order.id} className="flex items-center justify-between gap-3 p-3 text-sm">
               <span className="min-w-0">
-                <strong>#{order.orderId}</strong>
+                <strong>#{orderDisplayId(orders.find((candidate) => candidate.id === order.orderId) ?? order.orderId)}</strong>
                 <span className="ml-2 text-muted-foreground">{order.customerName}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
@@ -258,7 +259,7 @@ function ProductionCycleCard({ cycle, orders, onChanged }: { cycle: ProductionCy
                 <Select value={orderId} onValueChange={setOrderId}>
                   <SelectTrigger id={`cycle-order-${cycle.id}`}><SelectValue placeholder={t("select_order")} /></SelectTrigger>
                   <SelectContent>
-                    {candidates.map((order) => <SelectItem key={order.id} value={String(order.id)}>#{order.id} · {order.customer?.name}</SelectItem>)}
+                    {candidates.map((order) => <SelectItem key={order.id} value={String(order.id)}>#{orderDisplayId(order)} · {order.customer?.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

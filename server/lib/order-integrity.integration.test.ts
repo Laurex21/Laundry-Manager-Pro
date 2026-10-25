@@ -70,6 +70,10 @@ try {
     initialPayment: { amount: "10.00", method: "Cash", collectedByEmployeeId: 1, date: entryDate },
   };
   const created = await storage.createOrder(input, items, [{ itemName: "Shirt", quantity: 1, color: "burgundy", textileReserve: "Delicate" }], records);
+  assert.match(created.orderReference!, /^A1-\d{2}-[2-9A-HJ-NP-Z]{7}$/);
+  assert.equal(created.orderNumber, created.orderReference);
+  assert.equal((await storage.getOrder(created.id))?.orderReference, created.orderReference);
+  await assert.rejects(testDb.insert(schema.orders).values({ ...input, orderReference: created.orderReference }));
   assert.equal(created.paymentStatus, "partial");
   assert.equal(created.requiresGarmentVerification, true);
   const [garment] = await testDb.select().from(schema.garmentItems);
@@ -137,6 +141,18 @@ try {
     assert.deepEqual(await storage.getCustomersBySite(scope as any), []);
   }
   console.log("PASS: real auth and storage isolate two organisations, staff, forged site selections and empty scopes");
+  const unpaid = await storage.createOrder(input, items, [], {});
+  (pool as any).connect = async () => ({ query: (text: string, params?: unknown[]) => pg.query(text, params), release() {} });
+  const { createCorrectedOrderCopy } = await import("./order-corrections");
+  const copy = await createCorrectedOrderCopy(unpaid.id, 1, "owner-a", null, "QA reference replacement");
+  const copiedOrder = await storage.getOrder(copy.orderId);
+  assert.ok(copiedOrder?.orderReference);
+  assert.notEqual(copiedOrder?.orderReference, unpaid.orderReference);
+  assert.equal((await storage.getOrder(unpaid.id))?.orderReference, unpaid.orderReference);
+  console.log("PASS: corrected copy gets its own permanent reference; original reference unchanged");
+  await testDb.update(schema.sites).set({ name: "Renamed shop" }).where(eq(schema.sites.id, 1));
+  assert.equal((await storage.getOrder(created.id))?.orderNumber, created.orderReference);
+  await testDb.update(schema.sites).set({ name: "A1" }).where(eq(schema.sites.id, 1));
 } finally {
   await pool.end();
   await pg.close();

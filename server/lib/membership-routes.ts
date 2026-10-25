@@ -522,7 +522,7 @@ export function registerMembershipRoutes(app: Express) {
     const garments = await db.select({ itemName: garmentItems.itemName, quantity: garmentItems.quantity, color: garmentItems.color }).from(garmentItems).where(eq(garmentItems.orderId, orderId));
     const siteOrders = await db.select({ id: orders.id }).from(orders).where(eq(orders.siteId, siteId)).orderBy(asc(orders.createdAt), asc(orders.id));
     const siteOrderIndex = siteOrders.findIndex((siteOrder) => siteOrder.id === orderId);
-    const order = { ...row.order, orderNumber: siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id };
+    const order = { ...row.order, orderNumber: row.order.orderReference ?? (siteOrderIndex >= 0 ? siteOrderIndex + 1 : row.order.id) };
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
     const subscriptionPayments = await db.select({ id: membershipSubscriptionPayments.id, status: membershipSubscriptionPayments.status, amount: membershipSubscriptionPayments.amount }).from(membershipSubscriptionPayments)

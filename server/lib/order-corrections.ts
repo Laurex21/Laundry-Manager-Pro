@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db";
+import { createOrderReference } from "./order-reference";
 import {
   addDecimals,
   compareDecimals,
@@ -287,7 +288,7 @@ export async function createCorrectedOrderCopy(
          entry_date, pickup_date, discount, discount_pct, discount_amount,
          original_price, pickup_cost, site_id, corrected_from_order_id, correction_reason)
        VALUES ($1, $2, $3, $4, 'unpaid', NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       RETURNING id`,
+       RETURNING id, created_at`,
       [
         order.customer_id, actorEmployeeId, "received", order.total_amount, order.pickup_date,
         order.discount, order.discount_pct, order.discount_amount, order.original_price,
@@ -295,6 +296,9 @@ export async function createCorrectedOrderCopy(
       ],
     );
     const newOrderId = Number(copyResult.rows[0].id);
+    const site = await client.query("SELECT name FROM sites WHERE id = $1", [siteId]);
+    const newReference = createOrderReference(newOrderId, site.rows[0]?.name ?? "XP", new Date(copyResult.rows[0].created_at));
+    await client.query("UPDATE orders SET order_reference = $2 WHERE id = $1", [newOrderId, newReference]);
     await client.query(
       `INSERT INTO order_items (order_id, service_id, quantity, price_at_order)
        SELECT $2, service_id, quantity, price_at_order FROM order_items WHERE order_id = $1`,
@@ -310,7 +314,7 @@ export async function createCorrectedOrderCopy(
          cancellation_reason = $2, cancellation_reviewed_by = $3,
          cancellation_reviewed_at = NOW(), updated_at = NOW()
        WHERE id = $1`,
-      [orderId, `Replaced by corrected order #${newOrderId}: ${reason}`, actorUserId],
+      [orderId, `Replaced by corrected order #${newReference}: ${reason}`, actorUserId],
     );
     const after = await snapshot(client, orderId);
     await client.query(
@@ -321,7 +325,7 @@ export async function createCorrectedOrderCopy(
     await client.query(
       `INSERT INTO order_status_history (order_id, status, changed_by, notes)
        VALUES ($1, 'cancelled', $3, $4), ($2, $5, $3, $6)`,
-      [orderId, newOrderId, actorUserId, `Replaced by corrected order #${newOrderId}: ${reason}`, "received", `Corrected copy of order #${orderId}: ${reason}`],
+      [orderId, newOrderId, actorUserId, `Replaced by corrected order #${newReference}: ${reason}`, "received", `Corrected copy of order #${orderId}: ${reason}`],
     );
     await client.query("COMMIT");
     return { orderId: newOrderId, correctedFromOrderId: orderId };

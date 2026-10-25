@@ -24,7 +24,7 @@ const { PGlite } = await import("@electric-sql/pglite");
 const ledgerDb = new PGlite();
 try {
   await ledgerDb.exec(`
-    CREATE TABLE orders (id int, site_id int, customer_id int, created_at timestamptz, payment_status text);
+    CREATE TABLE orders (id int, site_id int, customer_id int, created_at timestamptz, payment_status text, order_reference varchar(32));
     CREATE TABLE payments (id int, order_id int, amount numeric, method text, reference text, date timestamptz, collected_by_employee_id int);
     CREATE TABLE customers (id int, name text, phone text);
     CREATE TABLE sites (id int, name text);
@@ -33,10 +33,10 @@ try {
     INSERT INTO sites VALUES (1,'QA site'),(2,'Other site');
     INSERT INTO employees VALUES (1,'QA employee','qa-user');
     INSERT INTO orders VALUES
-      (10,1,1,'2026-10-01','unpaid'),
-      (50,1,1,'2026-10-02','paid'),
-      (51,1,1,'2026-10-03','paid'),
-      (99,2,1,'2026-10-01','paid');
+      (10,1,1,'2026-10-01','unpaid',NULL),
+      (50,1,1,'2026-10-02','paid',NULL),
+      (51,1,1,'2026-10-03','paid',NULL),
+      (99,2,1,'2026-10-01','paid',NULL);
     INSERT INTO payments VALUES
       (1,50,500,'Cash',NULL,'2026-10-10',1),
       (2,50,1500,'Bank Transfer',NULL,'2026-10-20',1),
@@ -56,6 +56,12 @@ try {
   assert.equal(Number(filtered.rows[0].orderNumber), 2);
   const later = await ledgerDb.query<any>(template.replace('${where}', where), [[1], '2026-11-01', '2026-11-30']);
   assert.equal(Number(later.rows[0].orderNumber), 3);
+  await ledgerDb.exec("UPDATE orders SET order_reference='LP-26-7K4M9AA' WHERE id=50");
+  const coded = await ledgerDb.query<any>(template.replace('${where}', where + ' AND o.order_reference ILIKE $4'), [...params, '%lp-26-7k4m9aa%']);
+  assert.equal(coded.rows.length, 2);
+  assert.ok(coded.rows.every(row => row.orderNumber === 'LP-26-7K4M9AA' && row.orderId === 50));
+  const otherSite = await ledgerDb.query<any>(template.replace('${where}', where), [[2], '2026-10-01', '2026-10-31']);
+  assert.ok(otherSite.rows.every(row => row.orderId === 99));
   console.log("Payment ledger SQL: stable numbering across payments, filters and site boundaries passed");
 } finally {
   await ledgerDb.close();

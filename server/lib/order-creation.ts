@@ -1,10 +1,11 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { db } from "../db";
 import {
   orders, orderItems, orderStatusHistory, garmentItems, services, payments,
-  employeeActivities, employees, machines, machineUsage,
+  employeeActivities, employees, machines, machineUsage, sites,
   type InsertOrder, type InsertPayment, type InsertEmployeeActivity,
 } from "@shared/schema";
+import { createOrderReference } from "./order-reference";
 import { compareDecimals } from "@shared/exact-decimal";
 
 type OrderTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -32,13 +33,11 @@ export async function insertOrderRecords(
   const [order] = await tx.insert(orders).values({
     ...insertOrder, paymentStatus, requiresGarmentVerification: !!garments.length,
   }).returning();
-  let orderWithNumber = { ...order, orderNumber: order.id };
-  if (typeof order.siteId === "number") {
-    const siteRows = await tx.select({ id: orders.id }).from(orders)
-      .where(eq(orders.siteId, order.siteId)).orderBy(asc(orders.createdAt), asc(orders.id));
-    const index = siteRows.findIndex((row) => row.id === order.id);
-    orderWithNumber = { ...order, orderNumber: index >= 0 ? index + 1 : order.id };
-  }
+  const [site] = order.siteId == null ? [] : await tx.select({ name: sites.name }).from(sites).where(eq(sites.id, order.siteId));
+  const reference = createOrderReference(order.id, site?.name ?? "XP", order.createdAt ?? new Date());
+  await tx.update(orders).set({ orderReference: reference }).where(eq(orders.id, order.id));
+  order.orderReference = reference;
+  let orderWithNumber = { ...order, orderNumber: reference };
   await tx.insert(orderStatusHistory).values({ orderId: order.id, status: order.status, notes: "Order created" });
   for (const item of items) {
     const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));

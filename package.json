@@ -47,6 +47,7 @@
     "db:push": "drizzle-kit push",
     "db:migrate:reviewed": "tsx scripts/run-reviewed-migrations.ts",
     "db:seed:plans": "tsx scripts/seed-plans.ts",
+    "test:order-references": "node --import tsx server/lib/order-reference.test.ts && node --import tsx server/lib/payment-ledger.test.ts",
     "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts",
     "test:receipt-export": "tsx server/lib/receipt-export.test.ts",
     "test:saas-collection-pilot": "tsx server/lib/saas-collection-pilot.integration.test.ts",
