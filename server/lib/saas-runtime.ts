@@ -1,3 +1,4 @@
+import { proPilotConfigured } from "./saas-pro-pilot";
 import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import { livePilotConfigured, pilotOrganisationAllowed, collectionPilotConfigured, collectionPilotAllowed } from "./saas-pilot";
 import { sql } from "drizzle-orm";
@@ -41,6 +42,7 @@ const database: SaasDatabase = {
 export const saasStore = new SaasStore(database, undefined, process.env.SAAS_BILLING_MODE === "live" ? "live" : "sandbox");
 export async function saasForOrganisation(org: number) {
   if (!saasOrganisationEnabled(org)) return null;
+  if(proPilotConfigured() && !(await saasStore.db.query("SELECT organisation_id FROM saas_accounts WHERE organisation_id=$1",[org])).rows.length) return null;
   try { return await saasStore.current(org); } catch (error) {
     if (error instanceof SaasError && error.code === "LEGACY_SUBSCRIPTION_REQUIRES_REVIEW") return null;
     throw error;

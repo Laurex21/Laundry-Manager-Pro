@@ -1,3 +1,4 @@
+import { ProPilotStore, proPilotAllowed, proPilotConfigured } from "./saas-pro-pilot";
 import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import type { Express } from "express";
 import { z } from "zod";
@@ -30,9 +31,36 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
   app.get("/api/saas/config", async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     try {
-      const enabled = await saasRequestEnabled(req);
-      res.json({ enabled, mode: enabled ? saasEnvironment()?.mode : "disabled", collectionPilot: await collectionPilotRequestEnabled(req), manualRenewal: true, businessLaunch: process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true", catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) });
+      const pilotUserId=(req.session as any)?.userId;
+      const pilotOwner=proPilotConfigured() && pilotUserId ? (await saasStore.db.query("SELECT u.organisation_id FROM users u JOIN organisations o ON o.id=u.organisation_id AND o.owner_id=u.id WHERE u.id=$1",[pilotUserId])).rows[0] : null;
+      const subscriptionPilot=saasEnabled() && proPilotAllowed(pilotOwner?.organisation_id);
+      const enabled = await saasRequestEnabled(req) && (!proPilotConfigured() || subscriptionPilot);
+      res.json({ enabled, subscriptionPilot, mode: enabled ? saasEnvironment()?.mode : "disabled", collectionPilot: await collectionPilotRequestEnabled(req), manualRenewal: true, businessLaunch: process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true", catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) });
     } catch { res.status(503).json({ enabled: false, mode: "disabled" }); }
+  });
+  const proPilot = new ProPilotStore(saasStore);
+  function proRoute(method: "get"|"post", path:string, fn:(org:number,req:any,res:any)=>Promise<void>) {
+    app[method](path,isAuthenticated,limited,async(req:any,res:any)=>{
+      res.set("Cache-Control","private, no-store");
+      try {
+        if(!saasEnabled() || !proPilotAllowed(req.organisationId))throw new SaasError("PRO_PILOT_DISABLED",404);
+        const row=(await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1",[req.organisationId])).rows[0];
+        if(row?.owner_id!==req.userId)throw new SaasError("OWNER_REQUIRED",403);
+        if(method==="post")z.object({}).strict().parse(req.body);
+        await fn(Number(req.organisationId),req,res);
+      } catch(error){saasFailure(res,error);}
+    });
+  }
+  proRoute("get","/api/saas/pro-pilot",async(org,_req,res)=>{res.json(await proPilot.current(org));});
+  proRoute("post","/api/saas/pro-pilot/quote",async(org,_req,res)=>{res.status(201).json(await proPilot.quote(org));});
+  for(const action of ["checkout","refresh"] as const)proRoute("post",`/api/saas/pro-pilot/:id/${action}`,async(org,req,res)=>{
+    z.string().uuid().parse(req.params.id);
+    const invoice=await saasStore.invoice(saasStore.db,org,req.params.id);
+    if(invoice.quote.purpose!=="subscription_pilot")throw new SaasError("PRO_PILOT_INVOICE_MISMATCH");
+    if(action==="refresh"){res.json(await provider().refresh(org,invoice.id));return;}
+    const origin=saasEnvironment()?.returnOrigin;
+    if(!origin)throw new SaasError("LIVE_HTTPS_ORIGIN_REQUIRED",503);
+    res.json(await provider().start(org,invoice.id,new URL("/subscriptions",origin).toString()));
   });
   async function owner(req: any, res: any) {
     if (!saasOrganisationEnabled(req.organisationId)) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
@@ -43,7 +71,10 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
   }
   function route(method: "get" | "post", path: string, fn: (org: number, req: any, res: any) => Promise<void>) {
     app[method](path, isAuthenticated, limited, async (req: any, res: any) => {
-      try { const org = await owner(req, res); if (org) await fn(org, req, res); }
+      try { const org = await owner(req, res); if (org) {
+        if(proPilotConfigured() && path !== "/api/saas/notices") throw new SaasError("PRO_PILOT_USE_DEDICATED_FLOW",403);
+        await fn(org, req, res);
+      } }
       catch (error) { saasFailure(res, error); }
     });
   }
@@ -91,6 +122,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
     res.json({ state, quotas: saasQuotas(state), monthlyXaf: saasMonthly(state), sites, staff, sandboxConfigured: !!saasEnvironment()?.token, paymentConfigured: !!saasEnvironment()?.token, mode: saasEnvironment()?.mode });
   });
   route("get", "/api/saas/notices", async (org, req, res) => {
+    if(proPilotConfigured()) return res.json([]);
     await saasStore.tick(org, req.get("X-Client-Timezone") || "Africa/Douala");
     // Atomic delivery: a second session never returns the same daily notice twice.
     const notices = await saasStore.db.query(`UPDATE saas_notices SET delivered_at=now() WHERE organisation_id=$1 AND delivered_at IS NULL

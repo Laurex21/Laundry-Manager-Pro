@@ -1,3 +1,4 @@
+import ProPilot from "./pro-pilot";
 import CollectionPilot from "./collection-pilot";
 import SaasSubscriptions from "./saas-subscriptions";
 import { useQuery } from "@tanstack/react-query";
@@ -10,9 +11,10 @@ import { SAAS_PLANS } from "@shared/saas-plans";
 import type { SubscriptionWithPlan } from "@shared/schema";
 
 export default function Subscriptions() {
-  const config = useQuery<{ enabled: boolean; collectionPilot?: boolean }>({ queryKey: ["/api/saas/config"] });
+  const config = useQuery<{ enabled: boolean; collectionPilot?: boolean; subscriptionPilot?: boolean }>({ queryKey: ["/api/saas/config"] });
   if (config.isLoading) return <Skeleton className="h-48 w-full" />;
   if (config.isError || !config.data?.enabled) return <DisabledSubscriptions configUnavailable={config.isError} onRetry={() => void config.refetch()} />;
+  if (config.data.subscriptionPilot) return <ProPilot />;
   if (config.data.collectionPilot) return <CollectionPilot />;
   return <SaasSubscriptions />;
 }

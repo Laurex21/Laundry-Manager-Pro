@@ -1,6 +1,6 @@
 /** Optional live pilot scope. Invalid/missing request identity fails closed. */
 export function livePilotConfigured(env: NodeJS.ProcessEnv = process.env) {
-  return env.SAAS_BILLING_MODE === "live" && env.SAAS_LIVE_PILOT_ORGANISATION_ID !== undefined;
+  return env.SAAS_BILLING_MODE === "live" && (env.SAAS_LIVE_PILOT_ORGANISATION_ID !== undefined || env.SAAS_LIVE_PILOT_PURPOSE !== undefined);
 }
 export function pilotOrganisationAllowed(org: unknown, env: NodeJS.ProcessEnv = process.env) {
   if (!livePilotConfigured(env)) return true;
