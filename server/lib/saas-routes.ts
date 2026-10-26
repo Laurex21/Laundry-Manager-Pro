@@ -1,9 +1,10 @@
+import { saasOrganisationDeferred } from "./saas-deferred";
 import { ProPilotStore, proPilotAllowed, proPilotConfigured } from "./saas-pro-pilot";
 import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import type { Express } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, collectionPilotRequestEnabled, saasStore, startSaasJobs } from "./saas-runtime";
+import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, collectionPilotRequestEnabled, saasStore, startSaasJobs, saasUserDeferred } from "./saas-runtime";
 import { livePilotConfigured, pilotSelectionAllowed, collectionPilotConfigured, collectionPilotAllowed, isCollectionPilotInvoice, COLLECTION_PILOT_XAF } from "./saas-pilot";
 import { saasFailure } from "./saas-access";
 import { configuredSaasProvider, saasCallbackAuthority } from "./saas-pawapay";
@@ -43,7 +44,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
     app[method](path,isAuthenticated,limited,async(req:any,res:any)=>{
       res.set("Cache-Control","private, no-store");
       try {
-        if(!saasEnabled() || !proPilotAllowed(req.organisationId))throw new SaasError("PRO_PILOT_DISABLED",404);
+        if(await saasUserDeferred(req.userId) || !saasOrganisationEnabled(req.organisationId) || !proPilotAllowed(req.organisationId))throw new SaasError("PRO_PILOT_DISABLED",404);
         const row=(await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1",[req.organisationId])).rows[0];
         if(row?.owner_id!==req.userId)throw new SaasError("OWNER_REQUIRED",403);
         if(method==="post")z.object({}).strict().parse(req.body);
@@ -63,7 +64,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
     res.json(await provider().start(org,invoice.id,new URL("/subscriptions",origin).toString()));
   });
   async function owner(req: any, res: any) {
-    if (!saasOrganisationEnabled(req.organisationId)) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
+    if (await saasUserDeferred(req.userId) || !saasOrganisationEnabled(req.organisationId)) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
     if (!req.organisationId) { res.status(403).json({ code: "ORGANISATION_REQUIRED" }); return null; }
     const row = (await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1", [req.organisationId])).rows[0];
     if (row?.owner_id !== req.userId) { res.status(403).json({ code: "OWNER_REQUIRED" }); return null; }
@@ -82,7 +83,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
     app[method](path,isAuthenticated,limited,async(req:any,res:any)=>{
       res.set("Cache-Control","private, no-store");
       try {
-        if (!collectionPilotConfigured() || !saasEnabled() || !collectionPilotAllowed(req.organisationId)) return res.status(404).json({code:"COLLECTION_PILOT_DISABLED"});
+        if (saasOrganisationDeferred(req.organisationId) || await saasUserDeferred(req.userId) || !collectionPilotConfigured() || !saasEnabled() || !collectionPilotAllowed(req.organisationId)) return res.status(404).json({code:"COLLECTION_PILOT_DISABLED"});
         const row=(await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1",[req.organisationId])).rows[0];
         if (row?.owner_id !== req.userId) return res.status(403).json({code:"OWNER_REQUIRED"});
         await fn(Number(req.organisationId),req,res);

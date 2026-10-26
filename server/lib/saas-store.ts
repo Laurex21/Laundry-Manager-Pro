@@ -1,3 +1,4 @@
+import { saasOrganisationDeferred } from "./saas-deferred";
 import { ProPilotStore, isProPilotInvoice } from "./saas-pro-pilot";
 import { businessLaunchTrial } from "../../shared/saas-business-launch";
 import { legacyLaunchProtection } from "./saas-legacy-protection";
@@ -16,6 +17,7 @@ export class SaasStore {
     await tx.query("INSERT INTO saas_events (organisation_id, action, details) VALUES ($1,$2,$3::jsonb)", [org, action, JSON.stringify(data)]);
   }
   async ensure(org: number): Promise<void> {
+    if (saasOrganisationDeferred(org)) throw new SaasError("SAAS_ORGANISATION_DEFERRED",403);
     const existing = await this.db.query("SELECT organisation_id FROM saas_accounts WHERE organisation_id=$1", [org]);
     if (existing.rows.length) return;
     await this.db.transaction(async tx => {
@@ -174,6 +176,7 @@ export class SaasStore {
     });
   }
   async reserveCheckout(org: number, id: string): Promise<SaasInvoice> {
+    if (saasOrganisationDeferred(org)) throw new SaasError("SAAS_ORGANISATION_DEFERRED",403);
     const candidate = await this.invoice(this.db,org,id);
     if (isProPilotInvoice(candidate)) return new ProPilotStore(this).reserve(org,id);
     if (isCollectionPilotInvoice(candidate)) return this.reserveCollectionCheckout(org,id);

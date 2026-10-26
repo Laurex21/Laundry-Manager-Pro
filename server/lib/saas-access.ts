@@ -10,7 +10,7 @@ export function standardSaasSettings<T extends Record<string, any>>(settings: T,
 }
 export async function applySaasAccess(req: any, res: any): Promise<boolean> {
   if (!saasEnabled() || !req.organisationId) return true;
-  const state = await saasForOrganisation(req.organisationId);
+  const state = await saasForOrganisation(req.organisationId,req.userId);
   if (!state) return true; // Unreviewed legacy accounts keep their existing access.
   req.saas = state;
   const owner = (await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1", [req.organisationId])).rows[0];
