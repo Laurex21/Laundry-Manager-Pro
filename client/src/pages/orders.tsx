@@ -1,3 +1,4 @@
+import { orderReceiptMessages } from "@/lib/order-receipt-messages";
 import { downloadReceiptDocument } from "@/lib/receipt-export";
 import { useState, useMemo, useEffect } from "react";
 import { useOrders, useCreateOrder, useUpdateOrderStatus } from "@/hooks/use-orders";
@@ -349,6 +350,8 @@ export default function Orders() {
   const formatListMoney = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 2 })} ${symbol}`;
   const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
+  const { toast } = useToast();
+  const [notifyingCustomer, setNotifyingCustomer] = useState(false);
   const correctionOrderId = Number(new URLSearchParams(window.location.search).get("correct"));
   const {
     data: correctionOrder,
@@ -387,21 +390,28 @@ export default function Orders() {
   async function handleCreatedOrderWhatsApp() {
     if (!createdOrder || !createdOrderWhatsAppPhone) return;
 
-    await generateDepositReceipt(createdOrder, symbol, {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    }, "download");
-
-    openWhatsApp({
-      phone: createdOrderWhatsAppPhone,
-      text: buildOrderConfirmationWhatsAppMessage({
-      order: createdOrder,
-      symbol,
-      businessName: settings?.businessName || "Xpress Pro",
-      language: i18n.language,
-      }),
-    });
+    if (notifyingCustomer) return;
+    setNotifyingCustomer(true);
+    try {
+      await generateDepositReceipt(createdOrder, symbol, {
+        ...DEFAULT_SETTINGS,
+        ...(settings || {}),
+        receiptLanguage: settings?.receiptLanguage || i18n.language,
+      }, "download");
+      openWhatsApp({
+        phone: createdOrderWhatsAppPhone,
+        text: buildOrderConfirmationWhatsAppMessage({
+          order: createdOrder, symbol,
+          businessName: settings?.businessName || "Xpress Pro",
+          language: i18n.language,
+        }),
+      });
+    } catch {
+      const message = orderReceiptMessages(i18n.language);
+      toast({ title: message.receiptTitle, description: message.receiptDescription, variant: "destructive" });
+    } finally {
+      setNotifyingCustomer(false);
+    }
   }
 
   const summary = useMemo(() => {
@@ -553,7 +563,7 @@ export default function Orders() {
                 <Button
                   className="w-full"
                   onClick={handleCreatedOrderWhatsApp}
-                  disabled={!createdOrderWhatsAppPhone}
+                  disabled={!createdOrderWhatsAppPhone || notifyingCustomer}
                   title={!createdOrderWhatsAppPhone ? t("customer_phone_missing") : undefined}
                   data-testid="button-send-order-confirmation-whatsapp"
                 >
@@ -1232,6 +1242,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
     createOrder(formattedData, {
       onSuccess: async (newOrder: any) => {
         let orderDetails = newOrder;
+        let coverageFailed = false;
         try {
           if (activeSub?.id) {
             const apply = await fetch("/api/subscriptions/apply-to-order", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ customerSubscriptionId: activeSub.id, orderId: newOrder.id }) });
@@ -1239,8 +1250,15 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
             if (!apply.ok) throw new Error(payload?.message || "Order saved, but subscription coverage could not be applied");
             orderDetails.subscriptionCoverage = payload.coverage;
           }
+        } catch {
+          coverageFailed = true;
+          const message = orderReceiptMessages(i18n.language);
+          toast({ title: message.coverageTitle, description: message.coverageDescription, variant: "destructive" });
+        }
+        try {
           const res = await fetch(`/api/orders/${newOrder.id}`, { credentials: "include" });
-          if (res.ok) {
+          if (!res.ok) throw new Error("Order details unavailable");
+          if (!coverageFailed) {
             orderDetails = { ...(await res.json()), subscriptionCoverage: orderDetails.subscriptionCoverage };
             if (activeSub?.id) {
               const subscriberReceipt = await fetch(`/api/orders/${newOrder.id}/subscriber-receipt?format=a4`, { credentials: "include" });
@@ -1255,12 +1273,9 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
               }, "download");
             }
           }
-        } catch (error) {
-          toast({
-            title: "Subscription coverage not applied",
-            description: error instanceof Error ? error.message : "The order was saved without deducting the subscription balance.",
-            variant: "destructive",
-          });
+        } catch {
+          const message = orderReceiptMessages(i18n.language);
+          toast({ title: message.receiptTitle, description: message.receiptDescription, variant: "destructive" });
         }
         form.reset();
         await fetch("/api/order-drafts/current", { method: "DELETE", credentials: "include" }).catch(() => undefined);

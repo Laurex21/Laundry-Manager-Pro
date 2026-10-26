@@ -49,7 +49,7 @@
     "db:seed:plans": "tsx scripts/seed-plans.ts",
     "test:order-references": "node --import tsx server/lib/order-reference.test.ts && node --import tsx server/lib/payment-ledger.test.ts",
     "test:order-integrity": "tsx server/lib/order-integrity.integration.test.ts",
-    "test:receipt-export": "tsx server/lib/receipt-export.test.ts",
+    "test:receipt-export": "tsx server/lib/receipt-export.test.ts && tsx server/lib/receipt-json-parser.test.ts",
     "test:saas-collection-pilot": "tsx server/lib/saas-collection-pilot.integration.test.ts",
     "test:saas-billing": "tsx server/lib/saas-billing.test.ts && tsx server/lib/saas-access.integration.test.ts && tsx server/lib/saas-callback-proxy.test.ts && tsx server/lib/saas-launch-verification.integration.test.ts && tsx server/lib/saas-production-config.test.ts",
     "test:automatic-maintenance": "tsx server/lib/automatic-maintenance.integration.test.ts",
