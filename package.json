@@ -57,6 +57,7 @@
     "test:saas-business-launch": "tsx server/lib/saas-business-launch.integration.test.ts",
     "test:saas-legacy-protection": "node --import tsx server/lib/saas-legacy-protection.integration.test.ts",
     "test:saas-normal-opening": "node --import tsx server/lib/saas-normal-opening.integration.test.ts",
+    "test:dual-role-atomic": "node --import tsx server/lib/dual-role-atomic.integration.test.ts",
     "test:saas-full-journey": "tsx server/lib/saas-full-journey.integration.test.ts --live",
     "test:saas-pilot": "tsx server/lib/saas-pilot.test.ts && tsx server/lib/collection-pilot-qa-proxy.test.ts",
     "test:pawapay-private-diagnostic": "tsx server/lib/pawapay-private-diagnostic.test.ts",
