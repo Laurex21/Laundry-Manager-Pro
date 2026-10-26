@@ -1,4 +1,5 @@
 import { automaticMaintenanceSuspended } from "../../lib/automatic-maintenance";
+import { deferredSaasOrganisations } from "../../lib/saas-deferred";
 import { applySaasAccess } from "../../lib/saas-access";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
@@ -507,6 +508,7 @@ export async function ensureAuthSchema() {
  */
 export async function repairKnownAccountOrganisationLinks() {
   if (automaticMaintenanceSuspended()) return;
+  const deferredOrganisations = deferredSaasOrganisations();
   await pool.query(`
     WITH owner_site AS (
       SELECT
@@ -524,6 +526,12 @@ export async function repairKnownAccountOrganisationLinks() {
        AND sm.user_id = u.id
        AND sm.role = 'owner'
       WHERE lower(trim(u.email)) = 'xpress@gmail.com'
+        -- Protect the whole dual-role identity, including its employee context.
+        AND NOT EXISTS (
+          SELECT 1 FROM organisations AS deferred_org
+          WHERE deferred_org.owner_id = u.id
+            AND deferred_org.id = ANY($1::int[])
+        )
       GROUP BY u.id, owner_org.id
     )
     UPDATE users AS u
@@ -541,7 +549,7 @@ export async function repairKnownAccountOrganisationLinks() {
         OR u.user_type IS DISTINCT FROM 'owner'
         OR u.role IS DISTINCT FROM 'owner'
       )
-  `);
+  `, [deferredOrganisations]);
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {

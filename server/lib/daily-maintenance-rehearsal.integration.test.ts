@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import {PGlite} from '@electric-sql/pglite';
+import {drizzle} from 'drizzle-orm/pglite';
+import {generateDrizzleJson,generateMigration} from 'drizzle-kit/api';
+import * as schema from '../../shared/schema';
+process.env.DATABASE_URL='postgresql://unused:unused@127.0.0.1:1/isolated_daily';
+process.env.SAAS_BILLING_MODE='disabled';
+process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
+process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='true';
+const pg=new PGlite();const memory=drizzle(pg,{schema});
+const {db,pool}=await import('../db');
+for(const m of ['select','insert','update','delete','execute','transaction'] as const)(db as any)[m]=memory[m].bind(memory);
+(pool as any).query=async(sql:string,args?:any[])=>{const r=await pg.query(sql,args);return {rows:r.rows,rowCount:r.affectedRows};};
+let lockAvailable=true,acquisitions=0,releases=0;
+(pool as any).connect=async()=>{acquisitions++;return {query:async(sql:string)=>{if(sql.includes('pg_try_advisory_lock'))return {rows:[{locked:lockAvailable}]};if(sql.includes('pg_advisory_unlock'))return {rows:[]};throw Error('UNEXPECTED_LOCK_QUERY');},release(){releases++;}};};
+const {runDailyJobsWithLock}=await import('./daily-jobs');
+const {repairKnownAccountOrganisationLinks}=await import('../replit_integrations/auth/replitAuth');
+const {expireLoyaltyPoints}=await import('./loyalty');
+const nativeFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('NETWORK_FORBIDDEN');};
+const now=new Date(),day=(offset:number)=>new Date(now.getTime()+offset*86400000).toISOString().slice(0,10);
+const snapshot=async()=>({customers:(await pg.query('SELECT * FROM customers ORDER BY id')).rows,subscriptions:(await pg.query('SELECT * FROM customer_subscriptions ORDER BY id')).rows,notices:(await pg.query('SELECT * FROM subscription_notifications ORDER BY id')).rows,points:(await pg.query('SELECT * FROM loyalty_points ORDER BY id')).rows});
+try{
+ for(const sql of await generateMigration(generateDrizzleJson({}),generateDrizzleJson(schema)))await pg.exec(sql);
+ await memory.insert(schema.users).values([{id:'synthetic-host',email:'host@example.invalid'},{id:'synthetic-dual-3',email:'xpress@gmail.com',organisationId:2,currentSiteId:2,role:'operator',userType:'owner'}]);
+ await memory.insert(schema.organisations).values([{id:2,name:'Synthetic host',ownerId:'synthetic-host'},{id:3,name:'Synthetic deferred',ownerId:'synthetic-dual-3'}]);
+ await memory.insert(schema.sites).values([{id:2,name:'Synthetic host',organisationId:2},{id:3,name:'Synthetic deferred',organisationId:3}]);
+ await memory.insert(schema.siteMembers).values([{siteId:2,userId:'synthetic-dual-3',role:'operator'},{siteId:3,userId:'synthetic-dual-3',role:'owner'}]);
+ await memory.insert(schema.subscriptionPlans).values({id:2,organisationId:2,name:'Synthetic plan',billingCycle:'monthly',durationDays:30,recurringPrice:'1000'});
+ for(const [id,offset] of [[1,-1],[2,0],[3,8]]){
+  await memory.insert(schema.customers).values({id,siteId:2,name:'Synthetic '+id,phone:'',address:'',loyaltyPoints:id===1?120:0});
+  await memory.insert(schema.customerSubscriptions).values({id,organisationId:2,customerId:id,subscriptionPlanId:2,membershipNumber:'SYN-'+id,startDate:day(-30),expiryDate:day(offset)});
+ }
+ await memory.insert(schema.loyaltyPoints).values([{id:1,organisationId:2,clientId:1,points:100,redeemedPoints:20,reason:'order',expiresAt:new Date(now.getTime()-86400000)},{id:2,organisationId:2,clientId:1,points:40,reason:'order',expiresAt:new Date(now.getTime()+86400000)}]);
+ const paused=await snapshot();await runDailyJobsWithLock();assert.deepEqual(await snapshot(),paused);assert.equal(acquisitions,0);
+ process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='false';lockAvailable=false;await runDailyJobsWithLock();assert.deepEqual(await snapshot(),paused,'Other worker owns daily lock: zero changes');
+ lockAvailable=true;await runDailyJobsWithLock();
+ assert.equal((await pg.query<any>('SELECT status FROM customer_subscriptions WHERE id=1')).rows[0].status,'expired');
+ assert.equal((await pg.query<any>('SELECT status FROM customer_subscriptions WHERE id=2')).rows[0].status,'active','Expiry date itself remains available');
+ assert.equal((await pg.query<any>('SELECT status FROM customer_subscriptions WHERE id=3')).rows[0].status,'active');
+ assert.equal((await pg.query<any>('SELECT loyalty_points FROM customers WHERE id=1')).rows[0].loyalty_points,40,'Only unredeemed expired points removed');
+ assert.equal((await pg.query<any>('SELECT count(*)::int n FROM subscription_notifications')).rows[0].n,2,'One expiry notice and one reminder');
+ assert.ok((await pg.query<any>('SELECT status,sent_at FROM subscription_notifications')).rows.every(n=>n.status==='pending'&&n.sent_at===null),'Notifications prepared, never sent');
+ const first=await snapshot();await runDailyJobsWithLock();assert.deepEqual(await snapshot(),first,'Daily jobs idempotent');assert.deepEqual(await expireLoyaltyPoints(now),{expired:0});assert.equal(acquisitions,releases,'Lock clients released');
+ console.log('PASS isolated daily jobs: pause, advisory lock contention, customer subscription expiry/reminder, unredeemed loyalty point expiry, idempotence, pending-only notifications, no network');
+ const beforeRepair=(await pg.query<any>("SELECT organisation_id,current_site_id,role FROM users WHERE id='synthetic-dual-3'")).rows[0];
+ await repairKnownAccountOrganisationLinks();
+ const afterRepair=(await pg.query<any>("SELECT organisation_id,current_site_id,role FROM users WHERE id='synthetic-dual-3'")).rows[0];
+ assert.deepEqual(beforeRepair,{organisation_id:2,current_site_id:2,role:'operator'});
+ assert.deepEqual(afterRepair,beforeRepair,'Deferred owner retains its existing employee context during historic repair');
+ console.log('PASS historical repair preserves deferred organisation 3 identity and employee context');
+}finally{globalThis.fetch=nativeFetch;process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='true';await pg.close();await pool.end();}

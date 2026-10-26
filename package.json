@@ -53,6 +53,7 @@
     "test:saas-collection-pilot": "tsx server/lib/saas-collection-pilot.integration.test.ts",
     "test:saas-billing": "tsx server/lib/saas-billing.test.ts && tsx server/lib/saas-access.integration.test.ts && tsx server/lib/saas-callback-proxy.test.ts && tsx server/lib/saas-launch-verification.integration.test.ts && tsx server/lib/saas-production-config.test.ts",
     "test:automatic-maintenance": "tsx server/lib/automatic-maintenance.integration.test.ts",
+    "test:historical-repair-protection": "tsx server/lib/historical-repair-deferred.integration.test.ts && tsx server/lib/daily-maintenance-rehearsal.integration.test.ts && tsx server/lib/saas-maintenance-rehearsal.integration.test.ts",
     "test:marketing": "tsx client/src/lib/analytics.test.ts && tsx client/src/lib/marketing.test.ts && tsx client/src/lib/marketing-pixel.test.ts && tsx server/lib/auth-conversion-regression.test.ts",
     "test:saas-business-launch": "tsx server/lib/saas-business-launch.integration.test.ts",
     "test:saas-legacy-protection": "node --import tsx server/lib/saas-legacy-protection.integration.test.ts",
