@@ -11,6 +11,7 @@ export function SaasCustomPlan({onSelect,selection:selected,previewOnly=false}:{
  const change=(value:string,set:(n:number)=>void)=>{const n=Number(value);if(Number.isSafeInteger(n)&&n>=0&&n<=1000)set(n);};
  return <article className={"rounded-xl border bg-white p-6 text-slate-950 "+(selected?.plan==='business'&&(selected.extraSites>0||selected.extraStaff>0)?"ring-2 ring-primary":"")} data-testid="saas-custom-plan">
   <h3 className="text-xl font-bold">{fr?'Personnalisé':'Custom'}</h3>
+  <p className="mt-3 text-sm">{fr?'Toutes les fonctionnalités de Business, avec les boutiques et places employés adaptées à votre activité.':'All Business features, with site and staff capacity tailored to your business.'}</p>
   <p className="my-3">{fr?'Base Business : 2 boutiques et 5 employés + propriétaire':'Business base: 2 sites and 5 staff + owner'} · {price(SAAS_PLANS.business.priceXaf)}{fr?'/mois':'/month'}</p>
   <div className="space-y-4">
    <label className="block">{fr?'Boutiques supplémentaires':'Additional sites'} · {price(SAAS_OPTION_PRICES.siteXaf)}{fr?'/mois chacune':'/month each'}
