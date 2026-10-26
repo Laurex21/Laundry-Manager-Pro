@@ -1,0 +1,53 @@
+OUVERTURE AUX TARIFS NORMAUX — PRÉPARATION, SANS ACTIVATION
+
+Exécuter : npm run test:saas-normal-opening
+
+Le scénario utilise le schéma complet dans PostgreSQL PGlite en mémoire et des
+identités fictives hors pilote. Les requêtes Checkout sont interceptées dans le
+processus ; les réponses Sandbox et notifications signées sont simulées. Aucune
+clé réelle, connexion de production ou requête réelle à pawaPay n'est utilisée.
+Ce test ne constitue pas un paiement traité par le réseau Sandbox.
+
+Montants : Pro 10 999 XAF ; Business 18 999 XAF ; Personnalisé (Business + une
+boutique à 5 000 + un employé à 2 000) 25 999 XAF, 3 boutiques et 8 employés.
+Le propriétaire reste hors quota. Le tarif exceptionnel de 50 XAF est exclu.
+
+Vérifications : devis calculé côté serveur, checkout, attente sans activation,
+signature incorrecte refusée, confirmation valide, doublon sans double période,
+échec sans activation, durée mensuelle, jours Business offerts conservés,
+ancien contrat protégé, accès employé et refus d'une facture d'une autre
+organisation. Les traitements sont suspendus dans tous ces scénarios.
+Les tests de protection ancienne, de suspension et TypeScript ont aussi réussi
+dans le développement Replit. Aucun essai visuel complet n'est revendiqué ici.
+
+CONFIGURATION À PRÉVOIR POUR UNE FUTURE OUVERTURE RÉELLE
+Ne pas appliquer ces changements depuis un test ou au démarrage.
+Après validation des exceptions et autorisation séparée, conserver :
+SAAS_BILLING_MODE=live
+SAAS_LIVE_ENABLED=true
+SAAS_DATABASE_ENVIRONMENT=production
+SAAS_PRODUCTION_ORIGIN=https://app.xpressclean.cm
+XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true
+Conserver la clé Production existante, sans la copier dans un fichier Git.
+
+Retirer ensemble les deux variables de portée pilote :
+SAAS_LIVE_PILOT_ORGANISATION_ID
+SAAS_LIVE_PILOT_PURPOSE
+Retirer ensuite les paramètres exceptionnels devenus inutiles :
+SAAS_LIVE_PILOT_RETRY_INVOICE_ID
+SAAS_PRO_PILOT_SUBSCRIPTION_ID
+SAAS_PRO_PILOT_PROTECTED_UNTIL
+Il faut supprimer les variables de portée, pas simplement les laisser vides.
+Conserver les factures historiques, notamment le pilote déjà payé.
+
+SAAS_BUSINESS_LAUNCH_ENABLED doit être décidé explicitement pour la reprise
+générale selon les règles validées ; son activation n'est pas effectuée ici.
+Les anciens contrats valables conservent leur parcours jusqu'à l'échéance.
+Les quatre doubles rôles réels doivent encore être réglés avant l'ouverture
+générale ; la répétition ne crée ni ne sépare aucun compte réel.
+
+PÉRIMÈTRE
+Cette préparation ajoute uniquement un test, sa commande et son exécution CI,
+ainsi que ce document. Aucun réglage de déploiement, tarif applicatif, migration,
+secret ou code d'activation automatique n'est modifié. Le développement courant
+reste avec les paiements désactivés en dehors du processus de test isolé.
