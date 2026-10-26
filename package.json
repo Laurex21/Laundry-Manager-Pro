@@ -55,6 +55,7 @@
     "test:automatic-maintenance": "tsx server/lib/automatic-maintenance.integration.test.ts",
     "test:marketing": "tsx client/src/lib/analytics.test.ts && tsx client/src/lib/marketing.test.ts && tsx client/src/lib/marketing-pixel.test.ts && tsx server/lib/auth-conversion-regression.test.ts",
     "test:saas-business-launch": "tsx server/lib/saas-business-launch.integration.test.ts",
+    "test:saas-legacy-protection": "node --import tsx server/lib/saas-legacy-protection.integration.test.ts",
     "test:saas-full-journey": "tsx server/lib/saas-full-journey.integration.test.ts --live",
     "test:saas-pilot": "tsx server/lib/saas-pilot.test.ts && tsx server/lib/collection-pilot-qa-proxy.test.ts",
     "test:pawapay-private-diagnostic": "tsx server/lib/pawapay-private-diagnostic.test.ts",

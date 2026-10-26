@@ -1,5 +1,6 @@
 import { ProPilotStore, isProPilotInvoice } from "./saas-pro-pilot";
 import { businessLaunchTrial } from "../../shared/saas-business-launch";
+import { legacyLaunchProtection } from "./saas-legacy-protection";
 import crypto from "node:crypto";
 import { COLLECTION_PILOT_XAF, collectionPilotAllowed, isCollectionPilotInvoice } from "./saas-pilot";
 import { SAAS_PLANS, SAAS_OPTION_PRICES, DAY_MS, saasTrial, saasEffective, saasQuotas, saasSelection, sameSaasSelection, saasMonthly, quoteSaas, nextSaasMonth, type SaasState, type SaasSelection, type SaasQuote } from "../../shared/saas-plans";
@@ -26,14 +27,14 @@ export class SaasStore {
       if (legacy.rows.length && process.env.SAAS_BUSINESS_LAUNCH_ENABLED !== "true") throw new SaasError("LEGACY_SUBSCRIPTION_REQUIRES_REVIEW");
       const sites = (await tx.query("SELECT id FROM sites WHERE organisation_id=$1 AND is_active=true ORDER BY id", [org])).rows.map(r => Number(r.id));
       const staff = await this.staffCandidates(tx, org);
-      let protectedUntil: Date | undefined;
       if (process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true" && legacy.rows.length) {
-        const periods = (await tx.query("SELECT end_date FROM subscriptions WHERE user_id=$1 AND status='active'",[organisation.owner_id])).rows;
-        if(periods.some(p=>!p.end_date||!Number.isFinite(new Date(p.end_date).getTime())))throw new SaasError("LEGACY_PERIOD_REQUIRES_REVIEW");
-        protectedUntil = new Date(Math.max(...periods.map(p=>new Date(p.end_date).getTime())));
-        if(protectedUntil<=this.clock())protectedUntil=undefined;
+        const periods = (await tx.query("SELECT extract(epoch FROM end_date)*1000 AS end_milliseconds FROM subscriptions WHERE user_id=$1 AND status='active'",[organisation.owner_id])).rows;
+        // Preserving only a date loses legacy unlimited/API and unused staff
+        // rights. Runtime falls back to legacy access for this review error;
+        // quote/checkout callers receive a refusal before creating an invoice.
+        if (legacyLaunchProtection(periods, this.clock()).defer) throw new SaasError("LEGACY_SUBSCRIPTION_REQUIRES_REVIEW");
       }
-      const state = process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true" ? businessLaunchTrial(new Date(organisation.created_at), this.clock(), sites, staff, protectedUntil) : saasTrial(new Date(organisation.created_at), this.clock(), sites, staff);
+      const state = process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true" ? businessLaunchTrial(new Date(organisation.created_at), this.clock(), sites, staff) : saasTrial(new Date(organisation.created_at), this.clock(), sites, staff);
       await tx.query("INSERT INTO saas_accounts (organisation_id, state) VALUES ($1,$2::jsonb) ON CONFLICT DO NOTHING", [org, JSON.stringify(state)]);
       await this.log(tx, org, "trial_started", { endsAt: state.trialEndsAt });
     });
