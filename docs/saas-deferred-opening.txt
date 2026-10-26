@@ -1,0 +1,41 @@
+Temporary deferral for reviewed dual roles — preparation only
+
+Prepared deployment variable (NOT applied):
+SAAS_DEFERRED_ORGANISATION_IDS=3,100,112,193
+Keep XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true.
+
+The server excludes the listed organisations from SaaS initialisation and new
+quotes/checkouts. It resolves their owner identities from the database and keeps
+those identities on their existing tenant-limited access path in their employer
+organisations as well. Other employer users are not excluded. No memberships,
+roles, historical authors, employee identities or extra staff places are created.
+Legacy activation cannot bypass the exclusion.
+
+The setting is optional: absent preserves previous behaviour. Empty values,
+invalid IDs and duplicates fail closed. Do not populate it from a browser request.
+Payment callbacks are not disabled by this setting. Review pending payments and
+any existing paid SaaS entitlements before excluding an organisation; do not hide
+an acquired contract behind a temporary deferral.
+
+Validation:
+- npm run test:saas-normal-opening (already included in Security CI): four
+  synthetic dual-role topologies, request scopes, no new cross-tenant access,
+  excluded quote/checkout refusals, unchanged identities/memberships, no deferred
+  invoices/states, employer owner eligibility, invalid configuration rejection.
+- Normal Pro 10999 XAF, Business 18999 XAF and Custom 25999 XAF; simulated signed
+  confirmation, duplicate/failure handling, acquired periods and legacy protection.
+- Legacy protection, Pro pilot, collection pilot, SaaS access, automatic maintenance,
+  tenant isolation and auth organisation boundary regression suites passed locally.
+- TypeScript and production build passed. Provider calls are mocked; no live debit.
+
+Before a separately authorised opening:
+Review fresh topology/invoices, backup, three other owner-link corrections and
+legacy contracts. Define this exact exclusion while coordinating the removal of
+pilot-only settings and the approved Business launch profile. Keep the production
+origin/key and maintenance suspension. Do not copy development data to production.
+The four employee identifiers and real separation may be postponed. Remove each
+ID only after its separation and access/quota checks are completed.
+
+No migration or automatic real cutover is introduced. No deployment settings or
+production data are changed by this preparation. Publishing/activation are separate
+operations. Background suspension does not freeze request-time subscription updates.

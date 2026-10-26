@@ -1,7 +1,8 @@
+import { saasOrganisationDeferred } from "./lib/saas-deferred";
 import { getPilotageOverview } from "./lib/pilotage-overview";
 import { registerSaasRoutes } from "./lib/saas-routes";
 import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
-import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, saasStore, saasForOrganisation } from "./lib/saas-runtime";
+import { saasEnabled, saasRequestEnabled, saasStore, saasForOrganisation, saasUserDeferred } from "./lib/saas-runtime";
 import { SAAS_CUSTOM_FIELDS, standardSaasSettings } from "./lib/saas-access";
 import { SAAS_PLANS } from "@shared/saas-plans";
 import type { Express } from "express";
@@ -297,7 +298,7 @@ async function effectivePlanSlug(req: any): Promise<string> {
   }
   if (saasEnabled()) {
     const orgId = Number((req as any).organisationId);
-    const state = orgId ? await saasForOrganisation(orgId) : null;
+    const state = orgId ? await saasForOrganisation(orgId,userId) : null;
     if (state) return state.plan;
   }
   const sub = await storage.getUserSubscription(subscriptionOwnerId);
@@ -1813,14 +1814,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/subscriptions/current", isAuthenticated, async (req, res) => {
     if (!(await requireOwnerOrganisation(req, res))) return;
-    if (saasOrganisationEnabled((req as any).organisationId)) return res.status(410).json({ code: "USE_SAAS_CURRENT" });
+    if (await saasRequestEnabled(req)) return res.status(410).json({ code: "USE_SAAS_CURRENT" });
     const sub = await storage.getUserSubscription((req.session as any).userId);
     res.json(sub);
   });
 
   app.post("/api/subscriptions/activate", isAuthenticated, rateLimit({ name: "subscription-activate", windowMs: 60 * 60 * 1000, max: 10, key: (req) => String(req.session?.userId || ""), keyOnly: true }), async (req, res) => {
+    if (saasOrganisationDeferred((req as any).organisationId) || await saasUserDeferred((req.session as any)?.userId)) return res.status(403).json({code:"SAAS_ORGANISATION_DEFERRED"});
     if (!(await requireOwnerOrganisation(req, res))) return;
-    if (saasOrganisationEnabled((req as any).organisationId)) return res.status(410).json({ code: "PAYMENT_CONFIRMATION_REQUIRED", message: "Use the SaaS invoice checkout; free activation is disabled." });
+    if (await saasRequestEnabled(req)) return res.status(410).json({ code: "PAYMENT_CONFIRMATION_REQUIRED", message: "Use the SaaS invoice checkout; free activation is disabled." });
     const planId = Number(req.body?.planId);
     if (!Number.isSafeInteger(planId) || planId < 1) return res.status(400).json({ message: "Valid planId required" });
     try {
@@ -2372,7 +2374,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/analytics/advanced", isAuthenticated, async (req: any, res) => {
     const planSlug = await effectivePlanSlug(req);
-    if (!(saasOrganisationEnabled(req.organisationId) ? ["pro", "business"] : ["business", "enterprise"]).includes(planSlug)) {
+    if (!((await saasRequestEnabled(req)) ? ["pro", "business"] : ["business", "enterprise"]).includes(planSlug)) {
       return res.status(403).json({ message: "Business plan required for advanced analytics" });
     }
     const period = (req.query.period as string) || "month";
@@ -2507,7 +2509,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/sites/:id", isAuthenticated, async (req, res) => {
     try {
-      if (saasOrganisationEnabled((req as any).organisationId)) return res.status(409).json({ code: "USE_SCHEDULED_CHANGE", message: "Schedule site removal in the subscription page; historical sites are preserved." });
+      if (await saasRequestEnabled(req)) return res.status(409).json({ code: "USE_SCHEDULED_CHANGE", message: "Schedule site removal in the subscription page; historical sites are preserved." });
       const userId = (req.session as any).userId;
       const org = await storage.getOrganisationByOwner(userId);
       if (!(await canManageSite(req, Number(req.params.id)))) return res.status(403).json({ message: "Forbidden" });

@@ -6,9 +6,11 @@ import {drizzle} from 'drizzle-orm/pglite';
 import {generateDrizzleJson,generateMigration} from 'drizzle-kit/api';
 import * as schema from '../../shared/schema';
 import {saasQuotas} from '../../shared/saas-plans';
+import {deferredSaasOrganisations} from './saas-deferred';
 process.env.DATABASE_URL='postgresql://unused:unused@127.0.0.1:1/normal_opening_memory_only';
 process.env.NODE_ENV='test';process.env.SAAS_BILLING_MODE='sandbox';process.env.SAAS_LIVE_ENABLED='false';
 process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='true';process.env.SAAS_BUSINESS_LAUNCH_ENABLED='true';
+process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
 process.env.PAWAPAY_SANDBOX_API_TOKEN='synthetic-token-never-transmitted';
 process.env.SAAS_SANDBOX_RETURN_ORIGIN='https://normal-opening.example';
 process.env.SAAS_SANDBOX_CALLBACK_ORIGIN='https://normal-opening.example';
@@ -27,7 +29,7 @@ globalThis.fetch=async(input:any,init:any)=>{
  const b=JSON.parse(init.body);requests.push(b);assert.notEqual(b.amounts[0].amount,'50');
  return new Response(JSON.stringify({status:'ACCEPTED',checkoutId:b.checkoutId,checkoutCode:b.checkoutId,redirectUrl:'https://checkout.sandbox.pawapay.io/'+b.checkoutId}));
 };
-const {saasStore}=await import('./saas-runtime');
+const {saasStore,saasForOrganisation}=await import('./saas-runtime');
 let now=new Date('2026-11-02T12:00:00Z');(saasStore as any).clock=()=>new Date(now);
 const {registerSaasRoutes}=await import('./saas-routes');
 const {applySaasAccess}=await import('./saas-access');
@@ -66,6 +68,58 @@ try{
  await testDb.insert(schema.plans).values({id:954,name:'Legacy acquired',slug:'legacy-acquired',price:'0',maxUsers:null,features:['Custom API access']});
  await testDb.insert(schema.subscriptions).values({id:954,userId:'normal-owner-954',planId:954,status:'active',endDate:new Date('2026-11-18T01:51:10.717Z')});
  const legacyBefore=(await query('SELECT * FROM subscriptions')).rows;
+ // Four real-shaped dual roles with synthetic identities; existing tenant
+ // boundary remains the authority, never a scope expanded by the deferral.
+ const deferredCases=[{org:3,host:2,role:'operator'},{org:100,host:93,role:'operator'},{org:112,host:101,role:'operator'},{org:193,host:1,role:'manager'}];
+ for(const c of deferredCases){
+  await testDb.insert(schema.users).values([{id:`deferred-${c.org}`,organisationId:c.host,currentSiteId:c.host,userType:'owner'}, {id:`host-${c.host}`,organisationId:c.host,currentSiteId:c.host,userType:'owner'}]);
+  await testDb.insert(schema.organisations).values([{id:c.org,name:'Deferred owned business',ownerId:`deferred-${c.org}`,createdAt:new Date('2026-01-01')},{id:c.host,name:'Unaffected employer',ownerId:`host-${c.host}`,createdAt:new Date('2026-01-01')}]);
+  await testDb.insert(schema.sites).values([{id:c.org,organisationId:c.org,name:'Owned'}, {id:c.host,organisationId:c.host,name:'Employer'}]);
+  await testDb.insert(schema.siteMembers).values([{siteId:c.org,userId:`deferred-${c.org}`,role:'owner'}, {siteId:c.host,userId:`deferred-${c.org}`,role:c.role}]);
+ }
+ const deferredSnapshot=async()=>({users:(await query("SELECT * FROM users WHERE id LIKE 'deferred-%' ORDER BY id")).rows,memberships:(await query("SELECT * FROM site_members WHERE user_id LIKE 'deferred-%' ORDER BY id")).rows,organisations:(await query('SELECT * FROM organisations WHERE id=ANY($1::int[]) ORDER BY id',[[3,100,112,193]])).rows});
+ const deferredBefore=await deferredSnapshot();
+ for(const c of deferredCases){
+  const req:any={path:'/api/auth/user',method:'GET',session:{userId:`deferred-${c.org}`,currentSiteId:c.host,save:(cb:Function)=>cb()}};
+  let passed=false;await isAuthenticated(req,{status:(n:number)=>{throw Error('DEFERRED_ACCESS_FAILED_'+n);}} as any,()=>{passed=true;});
+  assert.ok(passed);assert.deepEqual(req.authorizedSiteIds,[c.host]);assert.deepEqual(req.siteScope,[c.host]);assert.equal(req.saasSuspended,undefined);
+  await query('BEGIN');
+  try {
+  const cross:any={path:'/api/auth/user',method:'GET',session:{userId:`deferred-${c.org}`,currentSiteId:c.org,save:(cb:Function)=>cb()}};
+  await isAuthenticated(cross,{status:(n:number)=>{throw Error('CROSS_SCOPE_FAILED_'+n);}} as any,()=>{});
+  assert.deepEqual(cross.authorizedSiteIds,[c.host]);assert.ok(!cross.siteScope.includes(c.org),'Deferral must not grant a new owner context');
+  } finally { await query('ROLLBACK'); }
+
+  assert.equal(await saasForOrganisation(c.org),null);
+  assert.equal(await saasForOrganisation(c.host,`deferred-${c.org}`),null);
+  assert.equal((await call('GET','/api/saas/config',c.host,{}, {},`deferred-${c.org}`)).body.enabled,false);
+  for(const org of [c.org,c.host])assert.equal((await call('POST','/api/saas/quote',org,{plan:'pro'}, {},`deferred-${c.org}`)).status,404);
+  assert.equal((await call('POST','/api/saas/invoices/:id/checkout',c.host,{}, {id:crypto.randomUUID()},`deferred-${c.org}`)).status,404);
+  await assert.rejects(saasStore.createQuote(c.org,{plan:'pro',extraSites:0,extraStaff:0}),/SAAS_ORGANISATION_DEFERRED/);
+  await assert.rejects(saasStore.reserveCheckout(c.org,crypto.randomUUID()),/SAAS_ORGANISATION_DEFERRED/);
+  assert.equal((await call('GET','/api/saas/config',c.host,{}, {},`host-${c.host}`)).body.enabled,true,'Do not exclude the whole employer business');
+ }
+ assert.deepEqual(await deferredSnapshot(),deferredBefore);
+ assert.equal((await query('SELECT count(*)::int n FROM saas_accounts WHERE organisation_id=ANY($1::int[])',[[3,100,112,193]])).rows[0].n,0);
+ assert.equal((await query('SELECT count(*)::int n FROM saas_invoices WHERE organisation_id=ANY($1::int[])',[[3,100,112,193]])).rows[0].n,0);
+ for(const value of ['', '3,100,112,193,', '3,3', '3,abc','3, 100','0','9007199254740992'])assert.throws(()=>deferredSaasOrganisations({SAAS_DEFERRED_ORGANISATION_IDS:value}),/INVALID_SAAS_DEFERRED/);
+ assert.deepEqual(deferredSaasOrganisations({}),[]);
+ const deferredInvoicesBefore=(await query('SELECT count(*)::int n FROM saas_invoices')).rows[0].n;
+ process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,not-a-number';
+ assert.equal((await call('GET','/api/saas/config',950)).status,503);
+ assert.equal((await call('POST','/api/saas/quote',950,{plan:'pro'})).status,409);
+ assert.equal((await query('SELECT count(*)::int n FROM saas_invoices')).rows[0].n,deferredInvoicesBefore);
+ process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
+
+ // Even after the employer starts enforcing a free plan (zero staff places),
+ // only the four reviewed identities retain their previous tenant-limited role.
+ await saasStore.current(2);
+ const preservedReq:any={path:'/api/auth/user',method:'GET',session:{userId:'deferred-3',currentSiteId:2,save:(cb:Function)=>cb()}};
+ let kept=false;await isAuthenticated(preservedReq,{status:()=>{throw Error('EXISTING_EMPLOYEE_ACCESS_LOST');}} as any,()=>{kept=true;});
+ assert.ok(kept);assert.deepEqual(preservedReq.authorizedSiteIds,[2]);assert.equal(await applySaasAccess({...preservedReq,path:'/api/orders'},{} as any),true);
+ const hostQuote=await call('POST','/api/saas/quote',2,{plan:'pro'}, {},'host-2');assert.equal(hostQuote.status,201);assert.equal(Number(hostQuote.body.total_xaf),10999);
+ assert.deepEqual(await deferredSnapshot(),deferredBefore);
+
  for(const [org,selection,amount] of [[950,{plan:'pro'},10999],[951,{plan:'business'},18999],[952,{plan:'business',extraSites:1,extraStaff:1},25999]] as const){
   assert.notEqual(org,424);const config=await call('GET','/api/saas/config',org);assert.equal(config.body.enabled,true);assert.equal(config.body.subscriptionPilot,false);assert.equal(config.body.mode,'sandbox');
   const initial=await saasStore.current(org);assert.equal(initial.plan,'starter');
@@ -95,5 +149,5 @@ try{
  assert.equal(await applySaasAccess({...req,path:'/api/orders'},{} as any),true);
  assert.equal(paid950.plan,'pro');assert.equal(process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED,'true');assert.equal(process.env.SAAS_LIVE_ENABLED,'false');
  assert.equal((await query('SELECT count(*)::int n FROM saas_invoices WHERE total_xaf=50')).rows[0].n,0);
- console.log('PASS normal opening: nonpilot Pro 10999, Business 18999, Custom 25999; real quote/checkout handlers with mocked Sandbox only; signed confirmation, duplicate and failure, exact month, offered days retained, old contract protected, employee access and tenant isolation; maintenance suspended, ZERO real payments');
+ console.log('PASS four deferred dual roles: exact identity/organisation exclusion, existing employee scopes preserved, employer owners unaffected, no deferred invoices/states, invalid lists rejected; normal opening: nonpilot Pro 10999, Business 18999, Custom 25999; real quote/checkout handlers with mocked Sandbox only; signed confirmation, duplicate and failure, exact month, offered days retained, old contract protected, employee access and tenant isolation; maintenance suspended, ZERO real payments');
 }finally{await pg.close();await pool.end();}

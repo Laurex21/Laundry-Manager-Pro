@@ -36,7 +36,7 @@ async function buildUserResponse(userId: string) {
   const isOrgOwner = user.userType !== "staff" && (!orgOwnerId || orgOwnerId === userId);
   const subscriptionOwnerId = isOrgOwner ? userId : orgOwnerId;
   const sub = subscriptionOwnerId ? await storage.getUserSubscription(subscriptionOwnerId) : null;
-  const saas = saasEnabled() && user.organisationId ? await saasForOrganisation(user.organisationId) : null;
+  const saas = saasEnabled() && user.organisationId ? await saasForOrganisation(user.organisationId,user.id) : null;
   const planSlug = saas?.plan ?? sub?.plan?.slug ?? "starter";
 
   // Determine effective role: check if user is the org owner or a site member

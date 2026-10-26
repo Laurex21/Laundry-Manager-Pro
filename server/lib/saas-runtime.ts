@@ -1,3 +1,4 @@
+import { saasOrganisationDeferred, saasIdentityDeferred } from "./saas-deferred";
 import { proPilotConfigured } from "./saas-pro-pilot";
 import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import { livePilotConfigured, pilotOrganisationAllowed, collectionPilotConfigured, collectionPilotAllowed } from "./saas-pilot";
@@ -12,13 +13,13 @@ export function saasEnabled() {
   return saasEnvironment() !== null;
 }
 export function saasOrganisationEnabled(org: unknown) {
-  return saasEnabled() && !collectionPilotConfigured() && pilotOrganisationAllowed(org);
+  return saasEnabled() && !saasOrganisationDeferred(org) && !collectionPilotConfigured() && pilotOrganisationAllowed(org);
 }
 export async function saasRequestEnabled(req: any) {
   if (!saasEnabled() || collectionPilotConfigured()) return false;
-  if (!livePilotConfigured()) return true;
+  if (!livePilotConfigured() && process.env.SAAS_DEFERRED_ORGANISATION_IDS === undefined) return true;
   const userId = req.session?.userId;
-  if (!userId) return false;
+  if (!userId || await saasIdentityDeferred(database,userId)) return false;
   const row = (await pool.query("SELECT organisation_id FROM users WHERE id=$1", [userId])).rows[0];
   return saasOrganisationEnabled(row?.organisation_id);
 }
@@ -40,8 +41,8 @@ const database: SaasDatabase = {
   },
 };
 export const saasStore = new SaasStore(database, undefined, process.env.SAAS_BILLING_MODE === "live" ? "live" : "sandbox");
-export async function saasForOrganisation(org: number) {
-  if (!saasOrganisationEnabled(org)) return null;
+export async function saasForOrganisation(org: number, userId?: string) {
+  if (!saasOrganisationEnabled(org) || await saasIdentityDeferred(database,userId)) return null;
   if(proPilotConfigured() && !(await saasStore.db.query("SELECT organisation_id FROM saas_accounts WHERE organisation_id=$1",[org])).rows.length) return null;
   try { return await saasStore.current(org); } catch (error) {
     if (error instanceof SaasError && error.code === "LEGACY_SUBSCRIPTION_REQUIRES_REVIEW") return null;
@@ -71,3 +72,5 @@ export async function collectionPilotRequestEnabled(req: any) {
   const row=(await pool.query("SELECT o.id FROM organisations o WHERE o.owner_id=$1",[req.session.userId])).rows[0];
   return collectionPilotAllowed(row?.id);
 }
+
+export async function saasUserDeferred(userId: unknown) { return saasIdentityDeferred(database,userId); }
