@@ -1,3 +1,4 @@
+import { SaasPlanDetails } from "@/components/saas-plan-details";
 import ProPilot from "./pro-pilot";
 import CollectionPilot from "./collection-pilot";
 import SaasSubscriptions from "./saas-subscriptions";
@@ -50,7 +51,7 @@ function DisabledSubscriptions({ configUnavailable, onRetry }: { configUnavailab
           <p className="text-2xl font-bold">{plan.priceXaf.toLocaleString(i18n.language)} FCFA <span className="text-sm font-normal">{t("per_month")}</span></p>
           <p>{t("billing_sites", { count: plan.sites })}</p>
           <p>{t("billing_staff", { count: plan.staff })}</p>
-          <p>{t("billing_unlimited_orders")}</p>
+          <SaasPlanDetails plan={plan.slug} />
           <p className="text-sm text-muted-foreground">{t("billing_preview_only")}</p>
         </CardContent>
       </Card>)}
