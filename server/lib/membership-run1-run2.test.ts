@@ -38,7 +38,8 @@ assert.match(ordersPage, /subscriber-receipt\?format=a4/);
 assert.match(routes, /innerJoin\(sites, and\(eq\(services\.siteId, sites\.id\), eq\(sites\.organisationId, organisationId\)\)\)/);
 assert.doesNotMatch(routes, /inArray\(services\.id, serviceIds\), eq\(services\.siteId, siteId\)/);
 assert.match(ordersPage, /\/api\/subscriptions\/calculate-coverage/);
-assert.match(ordersPage, /Subscription coverage not applied/);
+assert.match(ordersPage, /message\.coverageTitle/);
+assert.match(ordersPage, /message\.receiptTitle/);
 assert.doesNotMatch(ordersPage, /catch \{\}/);
 assert.match(server, /status >= 500 \? "Internal Server Error"/);
 

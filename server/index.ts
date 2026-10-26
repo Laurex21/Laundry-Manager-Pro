@@ -1,3 +1,4 @@
+import { receiptJsonParser } from "./lib/receipt-json-parser";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { pawapayPrivateDiagnostic } from "./lib/pawapay-private-diagnostic";
 import express, { type Request, Response, NextFunction } from "express";
@@ -46,7 +47,10 @@ const settingsJsonParser = express.json({
 app.use((req, res, next) => {
   const isReturnEvidenceUpload = req.method === "POST" && /^\/api\/orders\/\d+\/garment-returns$/.test(req.path);
   const isBusinessLogoUpdate = req.method === "PUT" && req.path === "/api/settings";
-  const parser = isReturnEvidenceUpload
+  const isReceiptArchive = req.method === "POST" && req.path === "/api/receipt-snapshots";
+  const parser = isReceiptArchive
+    ? receiptJsonParser
+    : isReturnEvidenceUpload
     ? evidenceJsonParser
     : isBusinessLogoUpdate
       ? settingsJsonParser

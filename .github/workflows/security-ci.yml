@@ -28,6 +28,7 @@ jobs:
       - run: npm run test:security-hardening
       - run: npm run test:marketing
       - run: npm run test:order-references
+      - run: npm run test:receipt-export
       - run: npm run test:order-integrity
       - run: npm run test:tenant-isolation
       - run: npm run test:staff-invitation-boundary
