@@ -1,4 +1,5 @@
-import { businessTrialBanner, BUSINESS_LAUNCH_CUTOFF } from "@shared/saas-business-launch";
+import { SaasTrialBanner } from "./saas-trial-banner";
+import { businessTrialBanner } from "@shared/saas-business-launch";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -25,7 +26,7 @@ export function SaasNotice() {
   const archived=(user as any)?.currentSite && !saas.activeSiteIds.includes((user as any).currentSite.id);
   return <>
     {archived&&<p role="status" className="m-4 rounded-xl bg-amber-50 p-4 text-amber-950">{fr?'Cette boutique est en consultation historique. Business est requis pour exploiter plusieurs boutiques.':'This site is available for historical consultation. Business is required to operate multiple sites.'}</p>}
-    {banner&&<div role="status" className="mx-4 my-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950"><span>{fr?"Votre essai Business se termine le ":"Your Business trial ends on "}{new Date(Date.parse(banner.endsAt)-(banner.endsAt===BUSINESS_LAUNCH_CUTOFF?1:0)).toLocaleString(i18n.language,{timeZone:"Africa/Douala",year:"numeric",month:"long",day:"numeric",hour:"2-digit",minute:"2-digit"})} · {banner.days} {fr?"jour(s) restant(s). Ensuite, Starter gratuit sans abonnement confirmé. Vos données sont conservées.":"day(s) left. Then free Starter without a confirmed subscription. Your data is preserved."}</span><Link className="font-semibold underline" href="/subscriptions">{fr?"Découvrir les formules":"Explore plans"}</Link></div>}
+    {banner&&<SaasTrialBanner endsAt={banner.endsAt} days={banner.days} language={i18n.language}/>}
     {!banner&&notice&&<div role="status" className="m-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">{notice.kind==='expired'?(fr?'Votre abonnement est passé à Starter gratuit. Vos données sont conservées.':'Your plan changed to free Starter. Your data is preserved.'):(fr?(saas.plan==='business'?'Votre essai Business se termine le ':'Votre essai Pro se termine le '):(saas.plan==='business'?'Your Business trial ends on ':'Your Pro trial ends on '))}{notice.details.endsAt&&new Date(notice.details.endsAt).toLocaleString(i18n.language)}{' '}<Link className="font-semibold underline" href="/subscriptions">{fr?'Voir les formules':'View plans'}</Link></div>}
   </>;
 }
