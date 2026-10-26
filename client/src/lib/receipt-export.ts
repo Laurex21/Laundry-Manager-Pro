@@ -1,6 +1,23 @@
+import { receiptQuantity } from "./receipt-quantity";
 import { recordOnboardingAction } from "./onboarding-events";
 import { archiveReceiptHtml, type ReceiptArchiveContext } from "./receipt-archive";
 export type ReceiptFormat = "html" | "pdf" | "png";
+
+// Apply display-only corrections after reading the frozen archive too. Never
+// rewrite the stored receipt, its amounts, identity, dates or payment history.
+export function normalizeReceiptPresentation(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (!doc.querySelector(".receipt .items-table")) return html;
+  const french = /Reçu de|Résumé des services|Qté/i.test(doc.body.textContent || "");
+  doc.querySelectorAll(".items-table tbody tr td:nth-child(2), .checklist-table td").forEach(cell => {
+    const text = Array.from(cell.childNodes).find(node => node.nodeType === 3 && /^\s*\d+(?:\.\d+)?\s/.test(node.textContent || ""));
+    if (text) text.textContent = (text.textContent || "").replace(/^(\s*)(\d+(?:\.\d+)?)(?=\s)/, (_match, space, quantity) => space + receiptQuantity(quantity, french ? "fr" : "en"));
+  });
+  const style = doc.createElement("style");
+  style.textContent = ".receipt{font-family:Arial,Helvetica,sans-serif;line-height:1.45}.receipt .items-table,.receipt .checklist-table{line-height:1.45}.receipt .deposit-badge{line-height:1.4}";
+  doc.head.appendChild(style);
+  return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+}
 
 // Keep the same desktop layout on phones; only the output resolution changes.
 export const RECEIPT_VIEWPORT_WIDTH = 820;
@@ -62,10 +79,18 @@ export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasEleme
     })), deadline]);
     const receipt = doc.querySelector<HTMLElement>(".receipt, main");
     if (!receipt) throw new Error("Receipt content is missing");
+    // Export the receipt itself at the document origin, without page chrome.
+    // Non-zero offsets are scaled twice by html2canvas's foreign-object path.
+    doc.body.style.padding = "0";
+    doc.body.style.margin = "0";
+    receipt.style.margin = "0";
     const rect = receipt.getBoundingClientRect();
     const size = receiptExportSize(Math.max(rect.width, receipt.scrollWidth), Math.max(rect.height, receipt.scrollHeight));
     return await html2canvas(receipt, {
       ...size, backgroundColor: "#ffffff", logging: false, useCORS: true,
+      // Let the browser lay out and paint text, borders, flex and grid together.
+      // The manual canvas text renderer shifts baselines relative to the HTML.
+      foreignObjectRendering: true,
       windowWidth: RECEIPT_VIEWPORT_WIDTH, windowHeight: Math.max(1000, size.height),
       scrollX: 0, scrollY: 0,
     });
@@ -76,7 +101,7 @@ export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasEleme
 }
 
 export async function downloadReceiptDocument(html: string, filename: string, format: ReceiptFormat, context?: ReceiptArchiveContext) {
-  html = await archiveReceiptHtml(html, context);
+  html = normalizeReceiptPresentation(await archiveReceiptHtml(html, context));
   const basename = filename.replace(/\.(html?|pdf|png)$/i, "");
   if (format === "html") {
     saveReceiptBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `${basename}.html`);
