@@ -1,3 +1,4 @@
+import { receiptQuantity } from "./receipt-quantity";
 import { downloadReceiptDocument, type ReceiptFormat } from "./receipt-export";
 import { format } from "date-fns";
 import { enUS, fr, pt } from "date-fns/locale";
@@ -118,7 +119,7 @@ function buildPipelineHtml(currentStatus: string, lang: string): string {
     const stageLabel = PIPELINE_LABELS[stage] || { en: stage, fr: stage };
     return `<div style="display:flex;align-items:center;gap:6px;flex:1;">
       <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
-        <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:${border};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${fg};">${i + 1}</div>
+        <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:${border};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${fg};line-height:1;flex-shrink:0;">${i + 1}</div>
         <span style="font-size:9px;font-weight:600;color:${isCurrent ? '#2563eb' : isPast ? '#16a34a' : '#94a3b8'};text-align:center;line-height:1.2;">${escapeHtml(label(stageLabel.en, stageLabel.fr, lang))}</span>
       </div>
       ${i < PIPELINE_ORDER.length - 1 ? `<div style="height:2px;flex:1;min-width:12px;background:${isPast ? '#16a34a' : '#e2e8f0'};"></div>` : ''}
@@ -367,20 +368,20 @@ function buildThermalReceiptHtml(args: {
     const total = quantity * price;
     return `<div class="item">
       <div class="item-name">${escapeHtml(service.name || label("Service", "Service", args.lang))}</div>
-      <div class="item-meta">${escapeHtml(`${quantity} ${unit} x ${thermalMoney(price, args.symbol)}`)}<span>${escapeHtml(thermalMoney(total, args.symbol))}</span></div>
+      <div class="item-meta">${escapeHtml(`${receiptQuantity(quantity, args.lang)} ${unit} x ${thermalMoney(price, args.symbol)}`)}<span>${escapeHtml(thermalMoney(total, args.symbol))}</span></div>
     </div>`;
   }).join("");
 
   const garmentRows = args.garments.length > 0
     ? args.garments.map((garment: any) => {
         const name = garment.itemName || garment.name || label("Item", "Article", args.lang);
-        return `<div class="compact-row">${escapeHtml(`${garment.quantity || 1} x ${name}`)}${receiptGarmentColor(garment.color, 12)}</div>`;
+        return `<div class="compact-row">${escapeHtml(`${receiptQuantity(garment.quantity ?? 1, args.lang)} x ${name}`)}${receiptGarmentColor(garment.color, 12)}</div>`;
       }).join("")
     : args.items.length > 0
       ? args.items.map((item: any) => {
           const service = item.service || {};
           const name = service.name || label("Service", "Service", args.lang);
-          return `<div class="compact-row">${escapeHtml(`${item.quantity || 1} x ${name}`)}</div>`;
+          return `<div class="compact-row">${escapeHtml(`${receiptQuantity(item.quantity ?? 1, args.lang)} x ${name}`)}</div>`;
         }).join("")
     : "";
   const garmentTotal = receiptRegisteredItemTotal(args.garments, args.items);
@@ -555,17 +556,17 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     const lineTotal = qty * price;
     return `<tr>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(svc.name || label("Service", "Service", lang))}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${receiptQuantity(qty, lang)} ${unit}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${price.toFixed(2)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${receiptGarmentColor(g.color)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${receiptQuantity(g.quantity, lang)} x ${escapeHtml(g.itemName)}${receiptGarmentColor(g.color)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : items.length > 0 ? items.map((item: any) => {
     const service = item.service || {};
-    return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
+    return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${receiptQuantity(item.quantity, lang)} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
   }).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
   const garmentTotal = receiptRegisteredItemTotal(garments, items);
 
@@ -596,7 +597,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
   <style>
     ${receiptPrintCss()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
+    body { font-family: Arial, Helvetica, sans-serif; line-height: 1.45; background: #f1f5f9; padding: 24px; color: #1e293b; }
     .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); font-weight: 700; }
     .receipt * { font-weight: 700 !important; }
     .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
@@ -606,20 +607,20 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
     .order-id-inline { margin-top: 12px; }
     .order-id-inline .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
     .order-id-inline .id { font-size: 28px; font-weight: 800; margin-top: 2px; }
-    .deposit-badge { display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
+    .deposit-badge { display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 4px; font-size: 11px; line-height: 1.4; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 32px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
     .meta-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 3px; }
     .meta-item .value { font-size: 14px; font-weight: 600; color: #1e293b; }
     .pipeline-section { padding: 20px 32px; border-bottom: 1px solid #e2e8f0; }
     .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 12px; }
     .items-section { padding: 24px 32px; }
-    .items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.45; }
     .items-table thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
     .items-table thead th:nth-child(2) { text-align: center; }
     .items-table thead th:nth-child(3) { text-align: right; }
     .items-table thead th:last-child { text-align: right; }
     .checklist-section { padding: 0 32px 24px; }
-    .checklist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .checklist-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.45; }
     .summary { padding: 0 32px 24px; }
     .summary-box { background: #f8fafc; border-radius: 6px; padding: 16px 20px; margin-top: 8px; }
     .summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #475569; }
@@ -867,17 +868,17 @@ export function generatePaymentReceipt(
     const lineTotal = qty * price;
     return `<tr>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(svc.name || label("Service", "Service", lang))}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${qty} ${unit}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${receiptQuantity(qty, lang)} ${unit}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${price.toFixed(2)}</td>
       <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${symbol}${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join("");
 
   const garmentHtml = garments.length > 0 ? garments.map((g: any) =>
-    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${g.quantity} x ${escapeHtml(g.itemName)}${receiptGarmentColor(g.color)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
+    `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${receiptQuantity(g.quantity, lang)} x ${escapeHtml(g.itemName)}${receiptGarmentColor(g.color)}${g.details ? `<br><span style="font-size:10px;color:#64748b;">${escapeHtml(g.details)}</span>` : ""}</td></tr>`
   ).join("") : items.length > 0 ? items.map((item: any) => {
     const service = item.service || {};
-    return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${item.quantity} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
+    return `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#334155;">${receiptQuantity(item.quantity, lang)} x ${escapeHtml(service.name || label("Service", "Service", lang))}</td></tr>`;
   }).join("") : `<tr><td style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">${label("No garment items recorded", "Aucun vêtement enregistré", lang)}</td></tr>`;
   const garmentTotal = receiptRegisteredItemTotal(garments, items);
 
@@ -915,7 +916,7 @@ export function generatePaymentReceipt(
   <style>
     ${receiptPrintCss()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f1f5f9; padding: 24px; color: #1e293b; }
+    body { font-family: Arial, Helvetica, sans-serif; line-height: 1.45; background: #f1f5f9; padding: 24px; color: #1e293b; }
     .receipt { max-width: 680px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); font-weight: 700; }
     .receipt * { font-weight: 700 !important; }
     .print-btn { display: block; margin: 16px auto; padding: 10px 32px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
@@ -929,7 +930,7 @@ export function generatePaymentReceipt(
     .meta-item .value { font-size: 14px; font-weight: 600; color: #1e293b; }
     .section { padding: 24px 32px; }
     .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 12px; }
-    .items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.45; }
     .items-table thead th { background: #f1f5f9; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
     .items-table thead th:nth-child(2) { text-align: center; }
     .items-table thead th:nth-child(3) { text-align: right; }
