@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { campaignFromSearch, marketingPage, pixelSafeSearch } from "../../../shared/marketing.ts";
+import { marketingHostAllowed, campaignFromSearch, marketingPage, pixelSafeSearch } from "../../../shared/marketing.ts";
 import { marketingConsent, saveMarketingConsent, setMarketingScope, trackMarketingEvent, trackMarketingPage } from "./marketing.ts";
 
 for (const path of ["/dashboard", "/orders/53", "/customers", "/payments", "/rapport/private-token", "/reset-password/token", "/platform-admin"]) {
@@ -54,3 +54,12 @@ assert.equal(events.length, 2, "authenticated or loading state cannot emit acqui
 saveMarketingConsent("rejected");
 assert.equal(session.size, 0, "withdrawal clears stored campaign");
 console.log("Marketing privacy, attribution and consent tests passed");
+
+assert.equal(marketingHostAllowed("superadmin.xpressclean.cm"),false);
+assert.equal(marketingHostAllowed("SUPERADMIN.example"),false);
+assert.equal(marketingHostAllowed("app.xpressclean.cm"),true);
+
+(location as any).hostname='superadmin.xpressclean.cm';location.pathname='/';location.search='';
+setMarketingScope(true);saveMarketingConsent('accepted');const beforeAdmin=events.length;
+trackMarketingEvent('marketing_visit');trackMarketingEvent('signup_completed');trackMarketingPage();
+assert.equal(events.length,beforeAdmin,'Admin host never emits marketing even with consent and a public path');
