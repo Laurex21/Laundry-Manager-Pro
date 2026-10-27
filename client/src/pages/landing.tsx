@@ -1,3 +1,4 @@
+import FippHomeBanner from "@/components/fipp-home-banner";
 import { SaasPublicPlans, useSaasConfig } from "@/components/saas-public-plans";
 import { trackMarketingEvent } from "@/lib/marketing";
 import { useEffect, useState } from "react";
@@ -176,15 +177,7 @@ export default function LandingPage() {
     </header>
 
     <main id="main-content">
-      <aside aria-label={fipp.accessible} className="mt-16 border-b border-[#cba52a]/40 bg-[#082550] text-white" data-testid="fipp-home-banner">
-        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 px-4 py-4 sm:flex-row sm:items-center sm:gap-6">
-          <div className="min-w-0">
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold"><span className="text-[#f3d574]">FIPP AFRICA</span><time dateTime="2026-12-19">{fipp.date}</time></p>
-            <p className="mt-1 text-sm text-blue-100">{fipp.banner}</p>
-          </div>
-          <Link href="/rencontre" className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-[#f3d574] px-5 py-2 text-sm font-bold text-[#082550] hover:bg-[#ffe49a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white sm:w-auto">{fipp.discover}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
-        </div>
-      </aside>
+      <FippHomeBanner language={i18n.language} />
       <XpressGroupGateway language={i18n.language} />
 
       <section id="fipp-africa" className="scroll-mt-20 border-y border-[#cba52a]/25 bg-[#fffaf0] px-4 py-16 text-[#082550] sm:py-20" aria-labelledby="fipp-home-title">
