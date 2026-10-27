@@ -1,8 +1,9 @@
+import { adminSubscribers, adminSegment, adminBilling, adminAudit, adminGrant } from "./platform-admin-saas";
+import { SAAS_PLANS } from "../../shared/saas-plans";
 import type { Express, RequestHandler } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../db";
-import { isAuthenticated } from "../replit_integrations/auth";
 import { authStorage } from "../replit_integrations/auth/storage";
 import { rateLimit } from "./rate-limit";
 import {
@@ -300,164 +301,40 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/platform-admin/overview", isAuthenticated, requirePlatformAdmin, async (_req, res) => {
+  app.get("/api/platform-admin/overview", requirePlatformAdmin, async (_req, res) => {
     try {
-      const result = await pool.query(`
-        WITH organisation_subscription AS (
-          SELECT o.id, latest_subscription.status, latest_subscription.end_date, latest_subscription.plan_slug, latest_subscription.plan_price
-          FROM organisations o
-          LEFT JOIN LATERAL (
-            SELECT sub.status, sub.end_date, p.slug AS plan_slug, p.price AS plan_price
-            FROM subscriptions sub
-            INNER JOIN plans p ON p.id = sub.plan_id
-            WHERE sub.user_id = o.owner_id
-            ORDER BY sub.created_at DESC, sub.id DESC
-            LIMIT 1
-          ) latest_subscription ON true
-        )
-        SELECT
-          (SELECT count(*)::int FROM organisation_subscription) AS organisation_count,
-          (SELECT count(*)::int FROM sites WHERE is_active = true) AS active_site_count,
-          (SELECT count(*)::int FROM users) AS user_count,
-          (SELECT count(*)::int FROM users WHERE user_type = 'staff') AS staff_count,
-          (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active') AS active_subscription_count,
-          (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active' AND plan_price = 0) AS active_free_plan_count,
-          (SELECT count(*)::int FROM organisation_subscription WHERE status = 'active' AND plan_price > 0) AS active_paid_plan_count,
-          (SELECT count(*)::int FROM organisation_subscription WHERE plan_slug IS NULL) AS without_plan_count,
-          (
-            SELECT COALESCE(sum(amount), 0)::numeric
-            FROM subscription_payments
-            WHERE status = 'completed'
-              AND created_at >= date_trunc('month', now())
-          ) AS subscription_revenue_month,
-          (
-            SELECT count(*)::int
-            FROM organisation_subscription
-            WHERE status = 'active'
-              AND end_date IS NOT NULL
-              AND end_date >= now()
-              AND end_date < now() + interval '14 days'
-          ) AS expiring_soon_count
-      `);
-      const row = result.rows[0] || {};
-      res.json({
-        organisationCount: Number(row.organisation_count || 0),
-        activeSiteCount: Number(row.active_site_count || 0),
-        userCount: Number(row.user_count || 0),
-        staffCount: Number(row.staff_count || 0),
-        activeSubscriptionCount: Number(row.active_subscription_count || 0),
-        activeFreePlanCount: Number(row.active_free_plan_count || 0),
-        activePaidPlanCount: Number(row.active_paid_plan_count || 0),
-        withoutPlanCount: Number(row.without_plan_count || 0),
-        subscriptionRevenueMonth: Number(row.subscription_revenue_month || 0),
-        expiringSoonCount: Number(row.expiring_soon_count || 0),
-      });
+      const now=new Date();
+      const [items,billing,users]=await Promise.all([adminSubscribers(pool,now),adminBilling(pool,undefined,now),pool.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE user_type='staff')::int AS staff FROM users")]);
+      const active=items.filter(i=>i.subscription?.status==='active');
+      res.json({organisationCount:items.length,activeSiteCount:items.reduce((n,i)=>n+i.siteCount,0),userCount:Number(users.rows[0].total),staffCount:Number(users.rows[0].staff),
+        activeSubscriptionCount:active.length,activeFreePlanCount:active.filter(i=>i.subscription!.planPrice===0).length,activePaidPlanCount:active.filter(i=>i.subscription!.planPrice>0).length,
+        withoutPlanCount:items.filter(i=>!i.subscription).length,subscriptionRevenueMonth:billing.subscriptionRevenueMonth,pilotRevenueMonth:billing.pilotRevenueMonth,
+        trialCount:items.filter(i=>i.subscription?.status==='trial').length,excludedCount:items.filter(i=>i.deferred).length,
+        expiringSoonCount:items.filter(i=>adminSegment(i,'expiring',now)).length,attentionCount:items.filter(i=>adminSegment(i,'attention',now)).length});
     } catch (error) {
       console.error("Platform admin overview failed:", error);
       res.status(500).json({ message: "Failed to load platform overview" });
     }
   });
 
-  app.get("/api/platform-admin/subscribers", isAuthenticated, requirePlatformAdmin, async (req, res) => {
+  app.get("/api/platform-admin/subscribers", requirePlatformAdmin, async (req, res) => {
     try {
       const search = String(req.query.search || "").trim().slice(0, 120);
       const segment = String(req.query.segment || "all");
-      if (!["all", "active", "trial", "expiring", "no-plan", "expired", "cancelled"].includes(segment)) {
-        return res.status(400).json({ message: "Invalid subscription status filter" });
-      }
-      const limit = safeLimit(req.query.limit, 25, 100);
-      const parsedOffset = Number(req.query.offset || 0);
-      const offset = Number.isSafeInteger(parsedOffset) && parsedOffset >= 0 ? Math.min(parsedOffset, 1_000_000) : 0;
-      const fromWhere = `
-          FROM organisations o
-          INNER JOIN users owner ON owner.id = o.owner_id
-          LEFT JOIN LATERAL (
-            SELECT sub.status, sub.start_date, sub.end_date, p.slug AS plan_slug, p.name AS plan_name
-            FROM subscriptions sub
-            INNER JOIN plans p ON p.id = sub.plan_id
-            WHERE sub.user_id = o.owner_id
-            ORDER BY sub.created_at DESC, sub.id DESC
-            LIMIT 1
-          ) latest_subscription ON true
-          WHERE (
-            $1 = ''
-            OR o.name ILIKE '%' || $1 || '%'
-            OR COALESCE(owner.email, '') ILIKE '%' || $1 || '%'
-            OR COALESCE(owner.first_name, '') ILIKE '%' || $1 || '%'
-            OR COALESCE(owner.last_name, '') ILIKE '%' || $1 || '%'
-          )
-          AND (
-            $2 = 'all'
-            OR ($2 = 'no-plan' AND latest_subscription.plan_slug IS NULL)
-            OR ($2 = 'expiring' AND latest_subscription.status = 'active'
-                AND latest_subscription.end_date >= now()
-                AND latest_subscription.end_date < now() + interval '14 days')
-            OR ($2 = 'active' AND latest_subscription.status = 'active'
-                AND (latest_subscription.end_date IS NULL
-                     OR latest_subscription.end_date < now()
-                     OR latest_subscription.end_date >= now() + interval '14 days'))
-            OR ($2 IN ('trial', 'expired', 'cancelled') AND latest_subscription.status = $2)
-          )`;
-      const [countResult, result] = await Promise.all([
-        pool.query(`SELECT count(*)::int AS total ${fromWhere}`, [search, segment]),
-        pool.query(`
-          SELECT
-            o.id,
-            o.name,
-            o.created_at,
-            o.owner_id,
-            owner.email AS owner_email,
-            owner.first_name AS owner_first_name,
-            owner.last_name AS owner_last_name,
-            owner.phone AS owner_phone,
-            (SELECT count(*)::int FROM sites s WHERE s.organisation_id = o.id AND s.is_active = true) AS site_count,
-            (SELECT count(*)::int FROM users member WHERE member.organisation_id = o.id AND member.user_type = 'staff') AS staff_count,
-            latest_subscription.status AS subscription_status,
-            latest_subscription.start_date AS subscription_start_date,
-            latest_subscription.end_date AS subscription_end_date,
-            latest_subscription.plan_slug,
-            latest_subscription.plan_name
-          ${fromWhere}
-          ORDER BY CASE WHEN $2 = 'expiring' THEN latest_subscription.end_date END ASC NULLS LAST,
-                   o.created_at DESC, o.id DESC
-          LIMIT $3 OFFSET $4
-        `,
-        [search, segment, limit, offset],
-      )]);
-
-      res.json({
-        total: Number(countResult.rows[0]?.total || 0),
-        limit,
-        offset,
-        items: result.rows.map((row) => ({
-        id: Number(row.id),
-        name: row.name,
-        createdAt: row.created_at,
-        owner: {
-          id: row.owner_id,
-          email: row.owner_email,
-          firstName: row.owner_first_name,
-          lastName: row.owner_last_name,
-          phone: row.owner_phone,
-        },
-        siteCount: Number(row.site_count || 0),
-        staffCount: Number(row.staff_count || 0),
-        subscription: row.plan_slug ? {
-          status: row.subscription_status,
-          startDate: row.subscription_start_date,
-          endDate: row.subscription_end_date,
-          planSlug: row.plan_slug,
-          planName: row.plan_name,
-        } : null,
-        })),
-      });
+      if (!["all","attention","active","trial","expiring","no-plan","expired","cancelled"].includes(segment)) return res.status(400).json({message:"Invalid subscription status filter"});
+      const limit=safeLimit(req.query.limit,25,100),offset=Math.max(0,Math.min(1_000_000,Number(req.query.offset)||0));
+      if(!Number.isSafeInteger(offset))return res.status(400).json({message:"Invalid offset"});
+      const now=new Date();
+      const items=(await adminSubscribers(pool,now)).filter(item=>adminSegment(item,segment,now)&&[item.name,item.owner.email,item.owner.firstName,item.owner.lastName].some(v=>String(v??'').toLowerCase().includes(search.toLowerCase())));
+      if(segment==='expiring')items.sort((a,b)=>Date.parse(a.subscription!.endDate!)-Date.parse(b.subscription!.endDate!));
+      res.json({total:items.length,limit,offset,items:items.slice(offset,offset+limit)});
     } catch (error) {
       console.error("Platform admin subscriber list failed:", error);
       res.status(500).json({ message: "Failed to load subscribers" });
     }
   });
 
-  app.get("/api/platform-admin/organisations/:organisationId", isAuthenticated, requirePlatformAdmin, async (req: any, res) => {
+  app.get("/api/platform-admin/organisations/:organisationId", requirePlatformAdmin, async (req: any, res) => {
     const organisationId = Number(req.params.organisationId);
     if (!Number.isInteger(organisationId) || organisationId < 1) {
       return res.status(400).json({ message: "Invalid organisation identifier" });
@@ -572,35 +449,16 @@ export function registerPlatformAdminRoutes(app: Express): void {
            LIMIT 20`,
           [organisationId],
         ),
-        pool.query(
-          `SELECT
-             event.id,
-             event.action,
-             event.target_type,
-             event.target_id,
-             event.created_at,
-             actor.email AS actor_email
-           FROM security_audit_events event
-           LEFT JOIN users actor ON actor.id = event.actor_user_id
-           WHERE event.organisation_id = $1
-           ORDER BY event.created_at DESC, event.id DESC
-           LIMIT 30`,
-          [organisationId],
-        ),
+        adminAudit(pool,30,organisationId).then(rows=>({rows})),
       ]);
 
       const row = organisationResult.rows[0];
       if (!row) return res.status(404).json({ message: "Organisation not found" });
 
-      const payments = paymentsResult.rows.map((payment) => ({
-        id: Number(payment.id),
-        amount: Number(payment.amount || 0),
-        method: payment.method,
-        status: payment.status,
-        createdAt: payment.created_at,
-        planName: payment.plan_name,
-      }));
-      const completedPayments = payments.filter((payment) => payment.status === "completed");
+      const effective=(await adminSubscribers(pool)).find(item=>item.id===organisationId)!;
+      const billing=await adminBilling(pool,organisationId);
+      const historical=paymentsResult.rows.map(p=>({id:Number(p.id),amount:Number(p.amount),method:p.method,createdAt:p.created_at,planName:p.plan_name,
+        status:['simulate','simulation','sandbox','test'].includes(String(p.method).toLowerCase())?'simulation':'historical',source:'legacy'}));
 
       await recordPlatformAdminEventBestEffort(
         req,
@@ -621,16 +479,9 @@ export function registerPlatformAdminRoutes(app: Express): void {
           lastName: row.owner_last_name,
           phone: row.owner_phone,
         },
-        subscription: row.plan_slug ? {
-          id: Number(row.subscription_id),
-          status: row.subscription_status,
-          startDate: row.subscription_start_date,
-          endDate: row.subscription_end_date,
-          ordersUsed: Number(row.orders_used || 0),
-          planSlug: row.plan_slug,
-          planName: row.plan_name,
-          planPrice: Number(row.plan_price || 0),
-        } : null,
+        subscription: effective.subscription,
+        source:effective.source,deferred:effective.deferred,manualAssignmentAllowed:effective.manualAssignmentAllowed,
+        stateFingerprint:effective.stateFingerprint,stateVersion:effective.stateVersion,
         footprint: {
           sites: sitesResult.rows.map((site) => ({
             id: Number(site.id),
@@ -649,14 +500,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
           customerCount: Number(row.customer_count || 0),
           customersLast30Days: Number(row.customers_last_30_days || 0),
         },
-        billing: {
-          completedRevenue: completedPayments.reduce((total, payment) => total + payment.amount, 0),
-          successfulPaymentCount: completedPayments.length,
-          payments,
-        },
+        billing: {...billing,payments:[...billing.payments,...historical],historicalPaymentsExcluded:true},
         audit: auditResult.rows.map((event) => ({
           id: Number(event.id),
           action: event.action,
+          outcome:event.outcome,
           targetType: event.target_type,
           targetId: event.target_id,
           actorEmail: event.actor_email,
@@ -676,115 +524,39 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/platform-admin/plans", isAuthenticated, requirePlatformAdmin, async (_req, res) => {
+  app.get("/api/platform-admin/plans", requirePlatformAdmin, async (_req, res) => {
     try {
-      const result = await pool.query("SELECT id, name, slug, price FROM plans WHERE active = true ORDER BY price, id");
-      res.json(result.rows.map((row) => ({ id: Number(row.id), name: row.name, slug: row.slug, price: Number(row.price) })));
+      res.json(Object.values(SAAS_PLANS).map(p=>({id:p.slug,slug:p.slug,name:p.name,price:p.priceXaf})));
     } catch (error) {
       console.error("Platform admin plans failed:", error);
       res.status(500).json({ message: "Failed to load plans" });
     }
   });
 
-  app.post("/api/platform-admin/organisations/:organisationId/plan", isAuthenticated, requirePlatformAdmin, platformAdminPlanLimiter, async (req: any, res) => {
-    const organisationId = Number(req.params.organisationId);
-    const planId = Number(req.body?.planId);
-    const expectedSubscriptionId = req.body?.expectedSubscriptionId === null ? null : Number(req.body?.expectedSubscriptionId);
-    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
-    const endDateInput = req.body?.endDate;
-    const endDate = typeof endDateInput === "string" && /^\d{4}-\d{2}-\d{2}$/.test(endDateInput)
-      ? new Date(`${endDateInput}T23:59:59.999Z`) : null;
-    if (!Number.isSafeInteger(organisationId) || organisationId < 1 || !Number.isSafeInteger(planId) || planId < 1 ||
-        !(expectedSubscriptionId === null || (Number.isSafeInteger(expectedSubscriptionId) && expectedSubscriptionId > 0)) ||
-        reason.length < 10 || reason.length > 500 || !endDate || Number.isNaN(endDate.getTime()) ||
-        endDate.toISOString().slice(0, 10) !== endDateInput || endDate <= new Date()) {
-      return res.status(400).json({ message: "Valid organisation, plan, current subscription, future end date and reason (10–500 characters) required" });
-    }
-
-    const client = await pool.connect();
+  const grant= (write:boolean):RequestHandler => async(req:any,res)=>{
+    const org=Number(req.params.organisationId);
+    if(!Number.isSafeInteger(org)||org<1)return res.status(400).json({message:"Invalid organisation identifier"});
+    const client=await pool.connect();
     try {
-      await client.query("BEGIN");
-      const organisation = await client.query("SELECT owner_id FROM organisations WHERE id = $1 FOR UPDATE", [organisationId]);
-      if (!organisation.rowCount) {
-        await client.query("ROLLBACK");
-        return res.status(404).json({ message: "Organisation not found" });
-      }
-      const ownerId = organisation.rows[0].owner_id;
-      const plan = await client.query("SELECT id, name, price FROM plans WHERE id = $1 AND active = true", [planId]);
-      if (!plan.rowCount) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ message: "Plan unavailable" });
-      }
-      const previous = await client.query(
-        "SELECT id, plan_id, status FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE",
-        [ownerId],
-      );
-      const previousId = previous.rows[0]?.id ?? null;
-      if (previousId !== expectedSubscriptionId) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ message: "Subscription changed; refresh and try again" });
-      }
-      await client.query("UPDATE subscriptions SET status = 'cancelled' WHERE user_id = $1 AND status = 'active'", [ownerId]);
-      const created = await client.query(
-        "INSERT INTO subscriptions (user_id, plan_id, status, start_date, end_date, orders_used) VALUES ($1, $2, 'active', now(), $3, 0) RETURNING id",
-        [ownerId, planId, endDate],
-      );
-      const metadata = { organisationId, previousSubscriptionId: previousId, previousPlanId: previous.rows[0]?.plan_id ?? null,
-        newSubscriptionId: created.rows[0].id, newPlanId: planId, endDate: endDateInput, reason, paymentRecorded: false };
-      await client.query(
-        `INSERT INTO platform_admin_audit_events (user_id, action, outcome, request_id, ip_hash, user_agent, metadata)
-         VALUES ($1, $2, 'success', $3, $4, $5, $6::jsonb)`,
-        [req.session.userId, "platform_admin.plan_assign", req.requestId || null,
-          crypto.createHash("sha256").update(requestIp(req)).digest("hex"),
-          String(req.get?.("user-agent") || "").slice(0, 500) || null, JSON.stringify(metadata)],
-      );
+      await client.query(write?"BEGIN":"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const preview=await adminGrant(client,org,req.body,req.session.userId,req.requestId??null,new Date(),write,
+        {ipHash:crypto.createHash('sha256').update(requestIp(req)).digest('hex'),userAgent:String(req.get?.('user-agent')??'').slice(0,500)});
       await client.query("COMMIT");
-      res.json({ subscriptionId: Number(created.rows[0].id), planName: plan.rows[0].name, paymentRecorded: false });
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      console.error("Platform admin plan assignment failed:", error);
-      res.status(500).json({ message: "Failed to assign plan" });
-    } finally {
-      client.release();
-    }
-  });
+      res.json({before:preview.before,after:preview.after,paymentRecorded:false,preview:!write});
+    }catch(error:any){await client.query("ROLLBACK").catch(()=>{});const known=String(error.message).startsWith('ADMIN_')||['INVALID_PLAN','INVALID_OPTIONS','BUSINESS_REQUIRED','PAID_PLAN_REQUIRED'].includes(error.message);
+      if(!known)console.error('Platform administrator grant failed',error);
+      res.status(known?409:500).json({message:known?error.message:'ADMIN_GRANT_FAILED'});
+    }finally{client.release();}
+  };
+  app.post("/api/platform-admin/organisations/:organisationId/plan-preview",requirePlatformAdmin,platformAdminPlanLimiter,grant(false));
+  app.post("/api/platform-admin/organisations/:organisationId/plan",requirePlatformAdmin,platformAdminPlanLimiter,grant(true));
 
-  app.get("/api/platform-admin/audit-events", isAuthenticated, requirePlatformAdmin, async (req, res) => {
+  app.get("/api/platform-admin/audit-events", requirePlatformAdmin, async (req, res) => {
     try {
       const limit = safeLimit(req.query.limit, 30, 100);
-      const result = await pool.query(
-        `
-          SELECT
-            event.id,
-            event.organisation_id,
-            org.name AS organisation_name,
-            event.actor_user_id,
-            actor.email AS actor_email,
-            event.action,
-            event.target_type,
-            event.target_id,
-            event.created_at,
-            event.request_id
-          FROM security_audit_events event
-          LEFT JOIN organisations org ON org.id = event.organisation_id
-          LEFT JOIN users actor ON actor.id = event.actor_user_id
-          ORDER BY event.created_at DESC, event.id DESC
-          LIMIT $1
-        `,
-        [limit],
-      );
-      res.json(result.rows.map((row) => ({
-        id: Number(row.id),
-        organisationId: Number(row.organisation_id),
-        organisationName: row.organisation_name,
-        actorUserId: row.actor_user_id,
-        actorEmail: row.actor_email,
-        action: row.action,
-        targetType: row.target_type,
-        targetId: row.target_id,
-        createdAt: row.created_at,
-        requestId: row.request_id,
-      })));
+      const rows=await adminAudit(pool,limit);
+      res.json(rows.map(row=>({id:row.id,organisationId:row.organisation_id,organisationName:row.organisation_name,actorUserId:row.actor_user_id,
+        actorEmail:row.actor_email,action:row.action,targetType:row.target_type,targetId:row.target_id,createdAt:row.created_at,requestId:row.request_id,outcome:row.outcome})));
     } catch (error) {
       console.error("Platform admin audit event list failed:", error);
       res.status(500).json({ message: "Failed to load audit events" });

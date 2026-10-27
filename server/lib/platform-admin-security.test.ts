@@ -5,7 +5,12 @@ const routes = readFileSync(new URL("./platform-admin-routes.ts", import.meta.ur
 const authRoutes = readFileSync(new URL("../replit_integrations/auth/routes.ts", import.meta.url), "utf8");
 const app = readFileSync(new URL("../../client/src/App.tsx", import.meta.url), "utf8");
 
-assert.match(routes, /isAuthenticated, requirePlatformAdmin/);
+assert.match(routes, /requirePlatformAdmin/);
+assert.doesNotMatch(routes, /isAuthenticated/, "Admin views must not run tenant repair middleware");
+assert.match(routes, /plan-preview/);
+const saasAdmin = readFileSync(new URL("./platform-admin-saas.ts", import.meta.url), "utf8");
+assert.match(saasAdmin, /saasOrganisationDeferred/);
+assert.match(saasAdmin, /saasIdentityDeferred/);
 assert.match(routes, /Platform administrator access required/);
 assert.doesNotMatch(routes, /PLATFORM_ADMIN_EMAILS/);
 assert.match(routes, /\/api\/platform-admin\/login/);

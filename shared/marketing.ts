@@ -37,3 +37,5 @@ export const MARKETING_EVENTS = {
   signup_completed: "CompleteRegistration",
 } as const;
 export type MarketingEvent = keyof typeof MARKETING_EVENTS;
+
+export function marketingHostAllowed(hostname:string):boolean { return !/^superadmin(?:\.|$)/i.test(hostname); }

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
-import { marketingPage, pixelSafeSearch } from "@shared/marketing";
+import { marketingPage, marketingHostAllowed, pixelSafeSearch } from "@shared/marketing";
 import { marketingConsent, saveMarketingConsent, setMarketingScope, trackMarketingEvent, trackMarketingPage } from "@/lib/marketing";
 
 export default function MarketingMeasurement() {
@@ -12,7 +12,7 @@ export default function MarketingMeasurement() {
   const { i18n } = useTranslation();
   const [consent, setConsent] = useState(marketingConsent);
   const [open, setOpen] = useState(consent === null);
-  const publicPage = !isLoading && !user && marketingPage(path, search) !== null;
+  const publicPage = marketingHostAllowed(window.location.hostname) && !isLoading && !user && marketingPage(path, search) !== null;
   const language = i18n.language.startsWith("fr") ? "fr" : i18n.language.startsWith("pt") ? "pt" : "en";
   const copy = {
     fr: { title: "Mesure des visites", body: "Avec votre accord, nous utilisons TikTok et notre outil de mesure pour comprendre les visites, contacts et inscriptions. Ce choix est facultatif et modifiable ici.", accept: "Accepter", reject: "Refuser", settings: "Choix de mesure", privacy: "Confidentialité" },

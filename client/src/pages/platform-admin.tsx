@@ -1,3 +1,4 @@
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -39,10 +40,11 @@ type Overview = {
   activePaidPlanCount: number;
   withoutPlanCount: number;
   subscriptionRevenueMonth: number;
+  pilotRevenueMonth: number; trialCount:number; excludedCount:number; attentionCount:number;
   expiringSoonCount: number;
 };
 
-type AdminPlan = { id: number; name: string; slug: string; price: number };
+type AdminPlan = { id: string; name: string; slug: string; price: number };
 type SandboxCheckout = { checkoutId: string; amountXaf: number; status: string; providerStatus: string | null;
   redirectUrl: string | null; callbackReceivedAt: string | null; createdAt: string };
 
@@ -57,6 +59,7 @@ type Subscriber = {
     lastName: string | null;
     phone: string | null;
   };
+  source:string; deferred:boolean; manualAssignmentAllowed:boolean; stateFingerprint:string|null;
   siteCount: number;
   staffCount: number;
   subscription: {
@@ -71,6 +74,7 @@ type Subscriber = {
 type SubscriberPage = { items: Subscriber[]; total: number; limit: number; offset: number };
 
 type AuditEvent = {
+  outcome?:string;
   id: number;
   organisationName: string | null;
   actorEmail: string | null;
@@ -81,12 +85,13 @@ type AuditEvent = {
 };
 
 type OrganisationDetail = {
+  source:string; deferred:boolean; manualAssignmentAllowed:boolean; stateFingerprint:string|null;
   id: number;
   name: string;
   createdAt: string;
   owner: Subscriber["owner"];
   subscription: (NonNullable<Subscriber["subscription"]> & {
-    id: number;
+    id: number|null;
     ordersUsed: number;
     planPrice: number;
   }) | null;
@@ -107,7 +112,7 @@ type OrganisationDetail = {
     successfulPaymentCount: number;
     payments: Array<{ id: number; amount: number; method: string; status: string; createdAt: string; planName: string }>;
   };
-  audit: Array<{ id: number; action: string; targetType: string; targetId: string | null; actorEmail: string | null; createdAt: string }>;
+  audit: Array<{ outcome?:string; id: number; action: string; targetType: string; targetId: string | null; actorEmail: string | null; createdAt: string }>;
 };
 
 type AdminStatus = {
@@ -120,6 +125,42 @@ type AdminStatus = {
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
+ "pawaPay · pilot":"pawaPay · pilote",
+  "Audited administration": "Administration auditée",
+  "Real pawaPay receipts this month": "Encaissements réels pawaPay du mois",
+  "Including pilots": "Dont paiements pilotes",
+  "Temporarily excluded": "Exclusions temporaires",
+  "Confirmed live receipts · all payments": "Encaissements réels confirmés · tous les paiements",
+  "Confirmed live payments": "Paiements réels confirmés",
+  "Simulation — excluded": "Simulation — exclue",
+  "Historical — review required": "Historique — à vérifier",
+  "Review required": "À vérifier",
+  "Preview protected change": "Prévisualiser le changement protégé",
+  "Confirm protected change": "Confirmer le changement protégé",
+  "Acquired days and access are protected. No payment will be recorded.": "Les jours et accès acquis sont protégés. Aucun paiement ne sera enregistré.",
+  "Sandbox, simulations and unverified historical payments are excluded from real receipts.": "Le Sandbox, les simulations et les paiements historiques non vérifiés sont exclus des encaissements réels.",
+  "Source": "Source",
+  "saas": "Abonnement actuel",
+  "launch-preview": "Essai de lancement · aperçu sans conversion",
+  "legacy": "Contrat historique protégé",
+  "deferred": "Compte temporairement exclu",
+  "success": "Réussi",
+  "denied": "Refusé",
+  "failure": "Échec",
+  "ADMIN_ORGANISATION_EXCLUDED": "Ce compte est exclu des changements administratifs pour préserver ses accès.",
+  "ADMIN_LEGACY_REVIEW_REQUIRED": "Contrat historique ou essai non converti : examen préalable requis. Aucun changement possible ici.",
+  "ADMIN_REASON_REQUIRED": "Indiquez un motif de 10 à 500 caractères.",
+  "ADMIN_STATE_CHANGED": "Le compte a changé. Fermez puis rouvrez la fiche avant de recommencer.",
+  "ADMIN_SCHEDULED_CHANGE_REQUIRES_REVIEW": "Un renouvellement ou changement est déjà prévu. Un examen est nécessaire.",
+  "ADMIN_ACQUIRED_RIGHTS_PROTECTED": "Ce changement réduirait les droits acquis et a été refusé.",
+  "ADMIN_ACQUIRED_DAYS_PROTECTED": "La date choisie ferait perdre des jours acquis et a été refusée.",
+  "ADMIN_FUTURE_DATE_REQUIRED": "Choisissez une date future valide, en heure de Douala.",
+  "ADMIN_GRANT_FAILED": "Le changement a échoué. Aucun changement partiel conservé.",
+  "INVALID_PLAN": "Formule invalide.",
+  "INVALID_OPTIONS": "Options invalides.",
+  "BUSINESS_REQUIRED": "Business est requis pour plusieurs boutiques.",
+  "PAID_PLAN_REQUIRED": "Une formule payante est nécessaire pour ces places.",
+
   "PawaPay sandbox test": "Test PawaPay Sandbox",
   "This 1,000 FCFA sandbox checkout does not activate a plan or record a real payment.": "Ce checkout de 1 000 FCFA en Sandbox n’active aucune formule et n’enregistre aucun paiement réel.",
   "Create test checkout": "Créer un checkout de test",
@@ -168,7 +209,7 @@ const ADMIN_FR: Record<string, string> = {
   "Enable MFA": "Activer la double authentification", "Enter the six-digit code from your authenticator app.": "Saisissez le code à six chiffres de votre application d’authentification.",
   "Executive control centre": "Centre de pilotage", "Expired": "Expiré", "Expiring soon": "Échéance proche", "Expiring within 14 days": "Échéance sous 14 jours",
   "Focus on revenue, activation risk, renewals and audited platform activity.": "Suivez les revenus, les activations, les échéances et l’activité auditée de la plateforme.",
-  "Inactive": "Inactif", "Joined": "Créée le", "Last order": "Dernière commande", "Latest audited actions across organisations. Administration remains read-only.": "Dernières actions auditées. L’administration reste en lecture seule.",
+  "Inactive": "Inactif", "Joined": "Créée le", "Last order": "Dernière commande", "Latest audited actions across organisations. Administrative changes are recorded.": "Dernières actions auditées. Les changements administratifs sont enregistrés.",
   "Loading organisation workspace": "Chargement de la fiche organisation", "Loading organisations": "Chargement des organisations", "Loading renewals…": "Chargement des échéances…",
   "Manage the platform without crossing subscriber boundaries.": "Pilotez la plateforme sans franchir les limites des organisations.",
   "MFA setup failed": "Échec de la configuration de la double authentification", "Monthly subscription revenue": "Revenus des abonnements du mois",
@@ -210,13 +251,14 @@ const ADMIN_FR: Record<string, string> = {
   "Authenticator setup QR code": "QR code de configuration de l’authentification",
 };
 
+const ADMIN_EN:Record<string,string>={"ADMIN_ORGANISATION_EXCLUDED": "This account is temporarily excluded to preserve its access.", "ADMIN_LEGACY_REVIEW_REQUIRED": "Historical contract or unconverted trial: prior review required. No change is available here.", "ADMIN_REASON_REQUIRED": "Enter a reason of 10\u2013500 characters.", "ADMIN_STATE_CHANGED": "This account changed. Close and reopen its details before trying again.", "ADMIN_SCHEDULED_CHANGE_REQUIRES_REVIEW": "A renewal or change is already scheduled and needs review.", "ADMIN_ACQUIRED_RIGHTS_PROTECTED": "This change would reduce acquired access and was refused.", "ADMIN_ACQUIRED_DAYS_PROTECTED": "This date would remove acquired days and was refused.", "ADMIN_FUTURE_DATE_REQUIRED": "Choose a valid future date in Douala time.", "ADMIN_GRANT_FAILED": "The change failed. No partial changes were retained.", "INVALID_PLAN": "Invalid plan.", "INVALID_OPTIONS": "Invalid options.", "BUSINESS_REQUIRED": "Business is required for multiple shops.", "PAID_PLAN_REQUIRED": "A paid plan is required for these seats."};
 function adminText(english: string): string {
-  return i18n.language.startsWith("fr") ? ADMIN_FR[english] || english : english;
+  return i18n.language.startsWith("fr") ? ADMIN_FR[english] || english : ADMIN_EN[english] || english;
 }
 
 function adminStatus(status: string | null | undefined): string {
   if (!status) return adminText("Inactive");
-  const english: Record<string, string> = { active: "Active", trial: "Trial", expired: "Expired", cancelled: "Cancelled", inactive: "Inactive", completed: "Completed" };
+  const english: Record<string, string> = { simulation:"Simulation — excluded",historical:"Historical — review required",paid:"Completed",review:"Review required", active: "Active", trial: "Trial", expired: "Expired", cancelled: "Cancelled", inactive: "Inactive", completed: "Completed" };
   return adminText(english[status] || status);
 }
 
@@ -242,11 +284,11 @@ async function apiJson<T>(url: string): Promise<T> {
 
 function formatDate(value: string | null | undefined) {
   if (!value) return adminText('Not set');
-  return new Intl.DateTimeFormat(i18n.language.startsWith("fr") ? "fr-FR" : undefined, { dateStyle: "medium" }).format(new Date(value));
+  return new Intl.DateTimeFormat(i18n.language.startsWith("fr") ? "fr-FR" : "en-GB", { dateStyle: "medium", timeZone:"Africa/Douala" }).format(new Date(value));
 }
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(i18n.language.startsWith("fr") ? "fr-CM" : "en-CM", {
     style: "currency",
     currency: "XAF",
     maximumFractionDigits: 0,
@@ -481,7 +523,7 @@ function AdminDashboard() {
   });
   const preview = useQuery<SubscriberPage>({
     queryKey: ["/api/platform-admin/subscribers", "preview", searchTerm],
-    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=8&search=${encodeURIComponent(searchTerm)}`),
+    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=8&segment=attention&search=${encodeURIComponent(searchTerm)}`),
   });
   const subscribers = useQuery<SubscriberPage>({
     queryKey: ["/api/platform-admin/subscribers", searchTerm, segment, page],
@@ -501,7 +543,7 @@ function AdminDashboard() {
   const organisations = subscribers.data?.items ?? [];
   const activePlanRate = metrics ? (metrics.organisationCount ? Math.round((metrics.activeSubscriptionCount / metrics.organisationCount) * 100) : 0) : null;
   const noPlanCount = metrics?.withoutPlanCount;
-  const riskCount = metrics ? metrics.withoutPlanCount + metrics.expiringSoonCount : null;
+  const riskCount = metrics?.attentionCount ?? null;
   const submitSearch = () => { setPage(0); setSearchTerm(search.trim()); };
   const changeSegment = (value: string) => { setPage(0); setSegment(value); };
   const openPrioritySegment = (value: "expiring" | "no-plan") => {
@@ -521,7 +563,7 @@ function AdminDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <AdminLanguageSwitch />
-            <Badge variant="outline" className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 sm:flex"><span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />{adminText('Read-only controls')}</Badge>
+            <Badge variant="outline" className="hidden border-emerald-200 bg-emerald-50 text-emerald-700 sm:flex"><span className="mr-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />{adminText('Audited administration')}</Badge>
             <Avatar className="hidden h-9 w-9 border border-slate-200 sm:flex"><AvatarFallback className="bg-slate-100 text-xs font-bold">SA</AvatarFallback></Avatar>
             <Button variant="ghost" size="icon" onClick={() => logout()} aria-label={adminText('Sign out')}><LogOut className="h-4 w-4" /></Button>
           </div>
@@ -546,12 +588,12 @@ function AdminDashboard() {
 
           <TabsContent value="overview" className="mt-5 space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label={adminText('Subscription payments marked completed this month')} value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
+              <MetricCard label={adminText('Real pawaPay receipts this month')} value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
               <MetricCard label={adminText('Organisations with an active plan')} value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
               <MetricCard label={adminText('Registered organisations')} value={metrics?.organisationCount ?? "—"} icon={Building2} />
               <MetricCard label={adminText('Renewals due in 14 days')} value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
             </section>
-            {metrics && <p className="-mt-3 text-sm text-slate-500">{adminText('Active plans by price')}: {adminText('Free')} {metrics.activeFreePlanCount} · {adminText('Paid plan, not necessarily paid')} {metrics.activePaidPlanCount}. {adminText('Plan assignment does not count as a payment.')}</p>}
+            {metrics && <p className="-mt-3 text-sm text-slate-500">{adminText('Active plans by price')}: {adminText('Free')} {metrics.activeFreePlanCount} · {adminText('Paid plan, not necessarily paid')} {metrics.activePaidPlanCount}. {adminText('Plan assignment does not count as a payment.')} · {adminText('Including pilots')}: {formatMoney(metrics.pilotRevenueMonth)} · {adminText('Trial')}: {metrics.trialCount} · {adminText('Temporarily excluded')}: {metrics.excludedCount}</p>}
 
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
               <Card className="border-slate-200/80 shadow-sm">
@@ -598,7 +640,7 @@ function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="security" className="mt-5">
-            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administration remains read-only.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{event.action.replaceAll(".", " ")}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
+            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{event.action.replaceAll(".", " ")} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -609,7 +651,7 @@ function AdminDashboard() {
 }
 
 function OrganisationDirectory({ loading, error, organisations, search, setSearch, submitSearch, segment, setSegment, select, compact = false, page = 0, total = 0, pageSize = 25, onPageChange }: { loading: boolean; error: Error | null; organisations: Subscriber[]; search: string; setSearch: (value: string) => void; submitSearch: () => void; segment: string; setSegment: (value: string) => void; select: (subscriber: Subscriber) => void; compact?: boolean; page?: number; total?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
-  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? adminText('Organisations requiring attention') : adminText('Organisation directory')}</CardTitle><p className="mt-1 text-sm text-slate-500">{adminText('Owner, plan, footprint and renewal status in one place.')}</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder={adminText('Search business or owner')} /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">{adminText('All statuses')}</option><option value="active">{adminText('Active')}</option><option value="trial">{adminText('Trial')}</option><option value="expiring">{adminText('Expiring soon')}</option><option value="no-plan">{adminText('No plan')}</option><option value="expired">{adminText('Expired')}</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">{adminText('Organisation')}</th><th className="px-5 py-3">{adminText('Owner')}</th><th className="px-5 py-3">{adminText('Plan / status')}</th><th className="px-5 py-3">{adminText('Sites / staff')}</th><th className="px-5 py-3">{adminText('Renewal')}</th><th className="px-5 py-3 text-right">{adminText('Details')}</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>{adminText('Loading organisations')}</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">{adminText('No organisations match these filters.')}</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner'); return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">{adminText("Joined")} {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || adminText('No email')}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || adminText('No plan')}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{adminStatus(subscriber.subscription?.status)}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>{adminText('View')} <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? `0 ${adminText("organisations")}` : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} ${adminText("of")} ${total} ${adminText("organisations")}`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>{adminText('Previous')}</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>{adminText('Next')}</Button></div></div>}</CardContent></Card>;
+  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? adminText('Organisations requiring attention') : adminText('Organisation directory')}</CardTitle><p className="mt-1 text-sm text-slate-500">{adminText('Owner, plan, footprint and renewal status in one place.')}</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder={adminText('Search business or owner')} /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">{adminText('All statuses')}</option><option value="active">{adminText('Active')}</option><option value="trial">{adminText('Trial')}</option><option value="expiring">{adminText('Expiring soon')}</option><option value="no-plan">{adminText('No plan')}</option><option value="expired">{adminText('Expired')}</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">{adminText('Organisation')}</th><th className="px-5 py-3">{adminText('Owner')}</th><th className="px-5 py-3">{adminText('Plan / status')}</th><th className="px-5 py-3">{adminText('Sites / staff')}</th><th className="px-5 py-3">{adminText('Renewal')}</th><th className="px-5 py-3 text-right">{adminText('Details')}</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>{adminText('Loading organisations')}</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">{adminText('No organisations match these filters.')}</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner'); return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">{adminText("Joined")} {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || adminText('No email')}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || adminText('No plan')}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{adminStatus(subscriber.subscription?.status)} · {adminText(subscriber.source)}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>{adminText('View')} <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? `0 ${adminText("organisations")}` : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} ${adminText("of")} ${total} ${adminText("organisations")}`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>{adminText('Previous')}</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>{adminText('Next')}</Button></div></div>}</CardContent></Card>;
 }
 
 function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
@@ -618,6 +660,8 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
   const [planId, setPlanId] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
+  const [grantPreview,setGrantPreview]=useState<any>(null);
+  useEffect(()=>setGrantPreview(null),[planId,endDate,reason]);
   const plans = useQuery<AdminPlan[]>({
     queryKey: ["/api/platform-admin/plans"],
     queryFn: () => apiJson("/api/platform-admin/plans"),
@@ -630,10 +674,10 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
     mutationFn: async () => {
       const response = await fetch(`/api/platform-admin/organisations/${subscriber.id}/plan`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: Number(planId), endDate, reason: reason.trim(), expectedSubscriptionId: detail.data?.subscription?.id ?? null }),
+        body: JSON.stringify(grantPreview?.input),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.message || adminText('Plan assignment failed'));
+      if (!response.ok) throw new Error(adminText(result.message || 'Plan assignment failed'));
       return result;
     },
     onSuccess: async () => {
@@ -645,17 +689,16 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
       ]);
     },
   });
-  const submitPlan = (event: FormEvent) => {
-    event.preventDefault();
-    const selected = plans.data?.find((plan) => plan.id === Number(planId));
-    if (!selected || !detail.data || reason.trim().length < 10 || !endDate) return;
-    if (window.confirm(`${adminText('Confirm plan assignment')}\n${subscriber.name} → ${selected.name}\n${adminText('Ends')}: ${endDate}\n${adminText('No payment will be recorded.')}`)) assignPlan.mutate();
-  };
+  const previewPlan=useMutation({mutationFn:async()=>{
+    const input={planId,endDate,reason:reason.trim(),expectedFingerprint:detail.data?.stateFingerprint};
+    const response=await fetch(`/api/platform-admin/organisations/${subscriber.id}/plan-preview`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
+    const result=await response.json();if(!response.ok)throw Error(adminText(result.message));return {...result,input};
+  },onSuccess:setGrantPreview});
+  const submitPlan=(event:FormEvent)=>{event.preventDefault();previewPlan.mutate();};
 
-  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35" onClick={close}>
-    <aside className="h-full w-full max-w-4xl overflow-y-auto bg-white shadow-2xl sm:my-5 sm:h-auto sm:max-h-[calc(100vh-2.5rem)] sm:self-start sm:rounded-l-2xl" onClick={(event) => event.stopPropagation()}>
+  return <Sheet open onOpenChange={open=>{if(!open)close();}}><SheetContent side="right" aria-describedby={undefined} className="h-full w-full overflow-y-auto bg-white p-0 sm:max-w-4xl">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
-        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">{adminText('Organisation workspace')}</p><h2 className="mt-1 text-xl font-bold">{subscriber.name}</h2></div>
+        <div><p className="text-xs font-semibold uppercase tracking-wider text-cyan-700">{adminText('Organisation workspace')}</p><SheetTitle className="mt-1 text-xl font-bold">{subscriber.name}</SheetTitle></div>
         <Button variant="ghost" onClick={close}>{adminText('Close')}</Button>
       </div>
 
@@ -687,21 +730,23 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
           </TabsContent>
 
           <TabsContent value="subscription" className="mt-5">
-            <PanelSection title={adminText('Current subscription')}>
+            <PanelSection title={adminText('Current subscription')}><p className="mb-3 text-xs text-slate-500">{adminText('Source')}: {adminText(detail.data.source)}</p>
               <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || adminText('No plan')}</Badge><span className="text-sm capitalize text-slate-500">{adminStatus(detail.data.subscription?.status)}</span></div>
               <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label={adminText('Plan price')} value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label={adminText("Orders used")} value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label={adminText('Started')} value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label={adminText("Renews / ends")} value={formatDate(detail.data.subscription?.endDate)}/></dl>
             </PanelSection>
             <PanelSection title={adminText('Assign a plan manually')}>
-              <form onSubmit={submitPlan} className="grid gap-4 sm:grid-cols-2">
+              {!detail.data.manualAssignmentAllowed ? <p className="text-sm text-amber-800">{adminText(detail.data.deferred?'ADMIN_ORGANISATION_EXCLUDED':'ADMIN_LEGACY_REVIEW_REQUIRED')}</p> : <form onSubmit={submitPlan} className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-1 text-sm">{adminText('Plan')}<select className="h-10 rounded-md border border-slate-300 px-3" value={planId} onChange={(event) => setPlanId(event.target.value)} required><option value="">{adminText('Select a plan')}</option>{plans.data?.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatMoney(plan.price)}</option>)}</select></label>
                 <label className="grid gap-1 text-sm">{adminText('End date')}<Input type="date" value={endDate} min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)} onChange={(event) => setEndDate(event.target.value)} required /></label>
                 <label className="grid gap-1 text-sm sm:col-span-2">{adminText('Reason')}<Input value={reason} minLength={10} maxLength={500} onChange={(event) => setReason(event.target.value)} required placeholder={adminText('Reason for manual assignment')} /></label>
-                <p className="text-xs text-slate-500 sm:col-span-2">{adminText('The previous active plan will end. No payment will be recorded.')}</p>
+                <p className="text-xs text-slate-500 sm:col-span-2">{adminText('Acquired days and access are protected. No payment will be recorded.')}</p>
                 {plans.error && <p className="text-sm text-red-700 sm:col-span-2">{plans.error.message}</p>}
                 {assignPlan.error && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{assignPlan.error.message}</p>}
                 {assignPlan.isSuccess && <p role="status" className="text-sm text-emerald-700 sm:col-span-2">{adminText('Plan assigned successfully. No payment recorded.')}</p>}
-                <Button type="submit" disabled={assignPlan.isPending || !plans.data?.length || !detail.data}>{assignPlan.isPending ? adminText('Saving…') : adminText('Assign plan')}</Button>
-              </form>
+                {previewPlan.error && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{previewPlan.error.message}</p>}
+                <Button type="submit" disabled={previewPlan.isPending||assignPlan.isPending||!plans.data?.length}>{adminText('Preview protected change')}</Button>
+                {grantPreview && <section aria-label={adminText('Preview protected change')} className="sm:col-span-2 rounded-xl border p-4 space-y-3"><p>{grantPreview.before.plan} → {grantPreview.after.plan}</p><p>{adminText('End date')}: {formatDate(grantPreview.after.endDate)}</p><p>{adminText('Sites / staff')}: {grantPreview.after.sites} / {grantPreview.after.staff}</p><p>{adminText('No payment will be recorded.')}</p><Button type="button" disabled={assignPlan.isPending} onClick={()=>assignPlan.mutate()}>{adminText('Confirm protected change')}</Button></section>}
+              </form>}
             </PanelSection>
             <SandboxCheckoutPanel organisationId={subscriber.id} />
           </TabsContent>
@@ -711,15 +756,14 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
           <TabsContent value="users" className="mt-5"><PanelSection title={adminText('Accounts by role')}><div className="grid gap-3 sm:grid-cols-2">{detail.data.footprint.roles.map((role) => <div key={role.role} className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="font-medium capitalize">{role.role.replaceAll("_", " ")}</span><strong>{role.count}</strong></div>)}{!detail.data.footprint.roles.length && <EmptyPanel text={adminText('No user accounts registered.')}/>}</div><p className="mt-5 text-xs text-slate-400">{adminText('Only aggregate role counts are shown to minimise unnecessary exposure of personal data.')}</p></PanelSection></TabsContent>
 
           <TabsContent value="payments" className="mt-5 space-y-5">
-            <section className="grid gap-3 sm:grid-cols-2"><PanelMetric icon={CircleDollarSign} label={adminText('Completed revenue · latest 20 payments')} value={formatMoney(detail.data.billing.completedRevenue)}/><PanelMetric icon={CreditCard} label={adminText('Successful payments shown')} value={detail.data.billing.successfulPaymentCount}/></section>
-            <PanelSection title={adminText('Recent subscription payments')}><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={payment.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{payment.planName}</p><p className="text-xs text-slate-500">{payment.method} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{adminStatus(payment.status)}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text={adminText('No subscription payment recorded.')}/>}</div></PanelSection>
+            <section className="grid gap-3 sm:grid-cols-2"><PanelMetric icon={CircleDollarSign} label={adminText('Confirmed live receipts · all payments')} value={formatMoney(detail.data.billing.completedRevenue)}/><PanelMetric icon={CreditCard} label={adminText('Confirmed live payments')} value={detail.data.billing.successfulPaymentCount}/></section>
+            <p className="text-sm text-slate-600">{adminText('Sandbox, simulations and unverified historical payments are excluded from real receipts.')}</p><PanelSection title={adminText('Recent subscription payments')}><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={`${payment.method}:${payment.id}`} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{adminText(payment.planName)}</p><p className="text-xs text-slate-500">{adminText(payment.method)} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{adminStatus(payment.status)}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text={adminText('No subscription payment recorded.')}/>}</div></PanelSection>
           </TabsContent>
 
-          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{event.action.replaceAll(".", " ")}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
+          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{event.action.replaceAll(".", " ")} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
         </Tabs>
       </div>}
-    </aside>
-  </div>;
+    </SheetContent></Sheet>;
 }
 
 function SandboxCheckoutPanel({ organisationId }: { organisationId: number }) {

@@ -1,4 +1,4 @@
-import { campaignFromSearch, marketingPage, pixelSafeSearch, MARKETING_EVENTS, TIKTOK_PIXEL_ID, type MarketingEvent } from "@shared/marketing";
+import { marketingHostAllowed, campaignFromSearch, marketingPage, pixelSafeSearch, MARKETING_EVENTS, TIKTOK_PIXEL_ID, type MarketingEvent } from "@shared/marketing";
 
 export const MARKETING_CONSENT_KEY = "xpresspro.marketing-consent.v1";
 const CAMPAIGN_KEY = "xpresspro.marketing-campaign.v1";
@@ -44,7 +44,7 @@ export async function waitForMarketingDispatch(): Promise<void> {
 }
 
 function loadPixel(): void {
-  if (pixelLoaded || import.meta.env?.VITE_TIKTOK_PIXEL_ENABLED !== "true" || !pixelSafeSearch(window.location.search) || window.location.hash) return;
+  if (!marketingHostAllowed(window.location.hostname) || pixelLoaded || import.meta.env?.VITE_TIKTOK_PIXEL_ENABLED !== "true" || !pixelSafeSearch(window.location.search) || window.location.hash) return;
   const q = (window.ttq = [] as unknown as PixelQueue);
   window.TiktokAnalyticsObject = "ttq";
   const methods = ["page", "track", "identify", "instances", "debug", "on", "off", "once", "ready", "alias", "group", "enableCookie", "disableCookie", "holdConsent", "revokeConsent", "grantConsent"];
@@ -96,7 +96,7 @@ export function setMarketingScope(allowed: boolean): void {
 
 export function trackMarketingEvent(event: MarketingEvent): void {
   const page = marketingPage(window.location.pathname, window.location.search);
-  if (!active || !page || !pixelSafeSearch(window.location.search) || window.location.hash || marketingConsent() !== "accepted" || !(event in MARKETING_EVENTS)) return;
+  if (!marketingHostAllowed(window.location.hostname) || !active || !page || !pixelSafeSearch(window.location.search) || window.location.hash || marketingConsent() !== "accepted" || !(event in MARKETING_EVENTS)) return;
   try {
     const attribution = campaign();
     // Never pass form fields, phone numbers, raw URLs, referrers, or record IDs.
@@ -110,7 +110,7 @@ export function trackMarketingEvent(event: MarketingEvent): void {
 
 export function trackMarketingPage(): void {
   const page = marketingPage(window.location.pathname, window.location.search);
-  if (!page || !active || marketingConsent() !== "accepted") return;
+  if (!marketingHostAllowed(window.location.hostname) || !page || !active || marketingConsent() !== "accepted") return;
   const key = `${page}:${window.location.search === "?tab=register" ? "register" : "public"}`;
   if (lastPage === key) return;
   lastPage = key;
