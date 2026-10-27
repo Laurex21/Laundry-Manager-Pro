@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:platform-admin-saas
       - run: npm run test:security-hardening
       - run: npm run test:marketing
+      - run: npm run test:acquisition
       - run: npm run test:order-references
       - run: npm run test:receipt-export
       - run: npm run test:order-integrity

@@ -1,3 +1,4 @@
+import { recordAcquisition, withdrawAcquisition, waitForAcquisition } from "./acquisition";
 import { marketingHostAllowed, campaignFromSearch, marketingPage, pixelSafeSearch, MARKETING_EVENTS, TIKTOK_PIXEL_ID, type MarketingEvent } from "@shared/marketing";
 
 export const MARKETING_CONSENT_KEY = "xpresspro.marketing-consent.v1";
@@ -22,6 +23,7 @@ export function saveMarketingConsent(value: Exclude<Consent, null>): void {
   memoryConsent = value;
   try { window.localStorage.setItem(MARKETING_CONSENT_KEY, value); } catch { /* Optional storage. */ }
   if (value === "rejected") {
+    withdrawAcquisition();
     try { window.sessionStorage.removeItem(CAMPAIGN_KEY); } catch { /* Optional storage. */ }
     window.ttq?.revokeConsent?.();
     // A full reload removes the SDK, its event listeners and pending queues.
@@ -32,6 +34,7 @@ export function saveMarketingConsent(value: Exclude<Consent, null>): void {
 export function pixelWasLoaded(): boolean { return pixelLoaded; }
 
 export async function waitForMarketingDispatch(): Promise<void> {
+  await waitForAcquisition();
   if (!pixelLoaded) return;
   // Give the asynchronous SDK a bounded chance to send a completed signup.
   await new Promise<void>((resolve) => {
@@ -98,6 +101,7 @@ export function trackMarketingEvent(event: MarketingEvent): void {
   const page = marketingPage(window.location.pathname, window.location.search);
   if (!marketingHostAllowed(window.location.hostname) || !active || !page || !pixelSafeSearch(window.location.search) || window.location.hash || marketingConsent() !== "accepted" || !(event in MARKETING_EVENTS)) return;
   try {
+    recordAcquisition(event, page);
     const attribution = campaign();
     // Never pass form fields, phone numbers, raw URLs, referrers, or record IDs.
     const properties = { page, action: event, ...attribution };

@@ -1,3 +1,4 @@
+import { waitForAcquisition, acquisitionRegistrationConsent } from "@/lib/acquisition";
 import { recordWelcomeEligibility } from "@/lib/onboarding-welcome";
 import { SaasTrialInfo } from "@/components/saas-public-plans";
 import { useState, useEffect } from "react";
@@ -68,10 +69,11 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
     setSubmitting(true);
     try {
       const endpoint = tab === "login" ? "/api/auth/login" : "/api/auth/register";
+      if (tab === "register") await waitForAcquisition();
       const body =
         tab === "login"
           ? { email, password }
-          : { email, password, firstName, lastName, phone, businessName, acceptedLegal };
+          : { email, password, firstName, lastName, phone, businessName, acceptedLegal, ...acquisitionRegistrationConsent() };
 
       const res = await fetch(endpoint, {
         method: "POST",

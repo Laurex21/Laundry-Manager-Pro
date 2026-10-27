@@ -1,3 +1,4 @@
+import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
 import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
 import type { Express } from "express";
 import { authStorage } from "./storage";
@@ -311,6 +312,7 @@ const passwordResetConfirmLimiter = rateLimit({
 
 export function registerAuthRoutes(app: Express): void {
   app.post("/api/auth/register", registrationLimiter, passwordHashLimiter, async (req, res) => {
+    const acquisitionJourney = registrationJourney(req);
     try {
       const { email, password, firstName, lastName, phone, businessName, acceptedLegal } = req.body;
       if (!email || !password) {
@@ -373,6 +375,7 @@ export function registerAuthRoutes(app: Express): void {
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
 
+      await recordAcquisitionRegistration(acquisitionJourney).catch(() => console.error("Acquisition registration measurement unavailable"));
       res.status(201).json(response);
     } catch (error) {
       console.error("Registration error:", error);

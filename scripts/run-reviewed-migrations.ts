@@ -18,6 +18,7 @@ async function main() {
   await runReviewedMigration(new URL("../migrations/20261008_pawapay_sandbox_checkouts.sql", import.meta.url));
   await runReviewedMigration(new URL("../migrations/20261019_garment_order_checks.sql", import.meta.url));
   await runReviewedMigration(new URL("../migrations/20261025_order_references.sql", import.meta.url));
+  await runReviewedMigration(new URL("../migrations/20261027-marketing-attribution.sql", import.meta.url));
   console.log("Reviewed application migrations completed.");
 }
 

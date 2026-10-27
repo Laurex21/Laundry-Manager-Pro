@@ -1191,3 +1191,19 @@ export const saasReceiptSnapshots = pgTable("saas_receipt_snapshots", {
   html: text("html").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [uniqueIndex("saas_receipt_unique").on(table.organisationId, table.receiptKey)]);
+
+// Consent-based public acquisition only; deliberately no user/customer/IP columns.
+export const marketingAcquisitionEvents = pgTable("marketing_acquisition_events", {
+  eventId: uuid("event_id").primaryKey(), journeyId: uuid("journey_id").notNull(),
+  occurredAt: timestamp("occurred_at", {withTimezone:true}).notNull().defaultNow(),
+  event:text("event").notNull(), page:text("page").notNull(), source:text("source").notNull(), evidence:text("evidence").notNull(),
+  campaign:varchar("campaign",{length:40}).notNull().default(""), content:varchar("content",{length:40}).notNull().default(""), environment:text("environment").notNull(),
+}, t=>[
+  uniqueIndex("marketing_one_registration_per_journey").on(t.journeyId).where(sql`${t.event} = 'signup_completed'`),
+  index("marketing_acquisition_period").on(t.occurredAt,t.source).where(sql`${t.environment} = 'production'`),
+  check("marketing_acquisition_events_event_check",sql`${t.event} IN ('marketing_visit','whatsapp_clicked','signup_started','demo_started','signup_completed')`),
+  check("marketing_acquisition_events_page_check",sql`${t.page} IN ('/','/xpresspro','/xpress-consulting','/xpress-clean','/rencontre','/auth')`),
+  check("marketing_acquisition_events_source_check",sql`${t.source} IN ('tiktok','facebook','whatsapp','linkedin','youtube','direct_unknown')`),
+  check("marketing_acquisition_events_evidence_check",sql`${t.evidence} IN ('utm','referrer','unknown')`),
+  check("marketing_acquisition_events_environment_check",sql`${t.environment} IN ('production','test')`),
+]);
