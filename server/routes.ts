@@ -1,3 +1,4 @@
+import { registerAcquisitionRoutes } from "./lib/acquisition";
 import { saasOrganisationDeferred } from "./lib/saas-deferred";
 import { getPilotageOverview } from "./lib/pilotage-overview";
 import { registerSaasRoutes } from "./lib/saas-routes";
@@ -44,7 +45,7 @@ import {
   getOrderCorrectionEligibility,
   OrderCorrectionError,
 } from "./lib/order-corrections";
-import { registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
+import { requirePlatformAdmin, registerPlatformAdminRoutes } from "./lib/platform-admin-routes";
 import { registerPawapaySandboxCallback } from "./lib/pawapay-sandbox-callback";
 import { registerPawapaySandboxCheckoutRoutes } from "./lib/pawapay-sandbox-checkout-routes";
 import { rateLimit } from "./lib/rate-limit";
@@ -321,6 +322,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerSubscriptionDashboardRoutes(app);
   registerSubscriptionNotificationRoutes(app);
   registerPlatformAdminRoutes(app);
+  registerAcquisitionRoutes(app, requirePlatformAdmin);
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);
   startTemporalIntelligenceJob();

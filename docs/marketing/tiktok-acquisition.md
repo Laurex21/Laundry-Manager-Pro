@@ -61,3 +61,30 @@ Tableau de revue hebdomadaire : campagne, visites mesurées, clics WhatsApp, dé
 Formules : taux de clic contact = clics WhatsApp / visites mesurées ; taux d’inscription = inscriptions d’acquisition / visites mesurées. Ces ratios portent sur la population consentante mesurée, pas sur tous les visiteurs. Sans dépense publicitaire, ne pas afficher de coût d’acquisition calculé à partir des seules vues.
 
 L’association TikTok reste distincte du pixel : scanner le QR dans l’application sous **@xpressclean6**, examiner les permissions, confirmer, puis vérifier que le compte apparaît dans Business Center. Le mode « Gérer le compte » couvre aussi publications, messages et statistiques ; seul le propriétaire peut approuver cette association.
+
+
+## Attribution par source — 27 octobre 2026
+
+Le rapport **Super Admin → Acquisition** interroge désormais un journal propriétaire,
+indépendant de la présentation des paramètres personnalisés dans TikTok et de la disponibilité d’Umami.
+Les compteurs historiques du pixel restent inchangés : aucune réattribution rétroactive.
+
+- Entrée par lien avec `utm_source=tiktok` autorisé : preuve `utm` (déclaration du lien, pas preuve cryptographique).
+- Sans UTM, domaine référent `tiktok.com` ou sous-domaine exact : preuve `referrer`.
+- Sinon : source reconnue si possible, ou `direct_unknown`. Ne jamais présenter l’inconnu comme TikTok.
+- La campagne est conservée dans la session de l’onglet, au plus 30 minutes d’inactivité. Un nouveau lien balisé différent ouvre une nouvelle visite attribuée.
+- Les visites sont des sessions de navigation, pas des personnes ni un suivi multi-appareil. Les pages vues sont séparées ; les clics répétés sont des clics distincts.
+- L’inscription réussie est écrite côté serveur après succès, en utilisant la session reçue et un consentement encore présent dans la soumission. Le navigateur ne peut pas publier `signup_completed` dans le collecteur.
+- Le domaine `app.xpressclean.cm` entre seul dans les agrégats de production. Replit et localhost sont marqués `test` et exclus.
+- Aucun identifiant du journal n’est transmis au pixel, aucune donnée personnelle de formulaire/IP/user agent/compte/client n’est stockée dans ce journal.
+- Consultation sur 90 jours ; les lignes expirées sont purgées à la prochaine activité de collecte, au plus une purge par heure d’activité. Sur une application autoscale inactive, la purge intervient à la reprise de collecte.
+- Les doublons de livraison sont exclus par identifiant d’événement ; les inscriptions sont uniques par session attribuée.
+
+### Publication
+
+Appliquer **uniquement** `migrations/20261027-marketing-attribution.sql` à la base de production avec un client PostgreSQL dans une transaction, après lecture du SQL. Cette migration ajoute une table et ses index, sans modification des tables métier. Ne pas lancer `db:push` ni une série de migrations historiques pour cette publication.
+Puis compiler/publier la branche vérifiée. Le collecteur doit répondre 204 après consentement sur un parcours valide ; 403 pour une origine étrangère et 400 pour un champ interdit. Le rapport nécessite l’authentification Super Admin et son MFA existants.
+
+### Vérification
+
+`npm run test:acquisition` utilise exclusivement PostgreSQL en mémoire (PGlite), sans base configurée, et une simulation navigateur. Il vérifie la continuité TikTok → inscription, le refus/retrait, l’expiration, le rejet des faux hôtes référents et origines, le filtrage des données personnelles, les doublons, l’exclusion Replit et l’accès administrateur. Faire les essais manuels sur le domaine Replit : ils apparaissent uniquement comme `test` dans le journal, sans contaminer les agrégats de production. Ne pas créer de compte réel pour vérifier un compteur.
