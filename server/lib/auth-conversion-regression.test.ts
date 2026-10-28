@@ -5,7 +5,7 @@ const auth = readFileSync("client/src/pages/auth-page.tsx", "utf8");
 const landing = readFileSync("client/src/pages/landing.tsx", "utf8");
 
 assert.match(auth, /requestedTab === "register"/, "registration deep links must open the registration tab");
-assert.match(auth, /setLocation\(nextTab === "register" \? "\/auth\?tab=register" : "\/auth"\)/, "tab changes must update the URL");
+assert.match(auth, /setLocation\(planIntentUrl\("\/auth", selectedPlan, nextTab\)\)/, "tab changes must update the URL and retain the selected plan");
 assert.match(auth, /minLength=\{tab === "register" \? 10 : undefined\}/, "registration must match the server's ten-character policy without blocking legacy login");
 assert.match(auth, /password !== confirmPassword/, "registration must validate password confirmation");
 assert.match(auth, /data-testid="input-confirm-password"/, "registration must expose a confirmation field");

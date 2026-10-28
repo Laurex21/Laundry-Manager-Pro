@@ -27,7 +27,7 @@ assert.doesNotMatch(source, /AfricaMap|map_eyebrow|map-stats/, "Africa presence 
 assert.match(source, /prefers-reduced-motion/, "landing motion must respect reduced-motion preferences");
 assert.match(source, /id="tools"/, "the free tools anchor must remain available");
 assert.match(gateway, /id="branches"/, "the three businesses must have a navigation anchor");
-assert.match(source, /data-testid="fipp-home-banner"/, "the event promotion must remain available");
+assert.match(readFileSync("client/src/components/fipp-home-banner.tsx", "utf8"), /data-testid="fipp-home-banner"/, "the event promotion must remain available");
 assert.match(source, /href="\/rencontre"/, "the event promotion must open the event page");
 assert.match(source, /id="home-mobile-menu"[\s\S]*\["fr", "en"\][\s\S]*aria-pressed/, "mobile must retain the FR/EN selector");
 

@@ -1,3 +1,4 @@
+import { planIntentUrl } from "@/lib/saas-plan-intent";
 import {useState,useEffect} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Link} from 'wouter';
@@ -24,7 +25,7 @@ export function SaasCustomPlan({onSelect,selection:selected,previewOnly=false}:{
    <p>{quota.sites} {fr?'boutiques au total':'total sites'} · {quota.staff} {fr?'places employés + propriétaire hors quota':'staff places + owner outside quota'}</p>
    <p className="text-2xl font-bold" aria-live="polite">{fr?'Total mensuel : ':'Monthly total: '}{price(saasMonthly(selection))}</p>
    <p className="text-sm">{fr?'Le devis de paiement confirme le montant et la date de début. Aucun prélèvement automatique.':'The payment quote confirms the amount and start date. No automatic debit.'}</p>
-   {previewOnly?<p className="text-sm text-muted-foreground">{fr?'Simulation uniquement. Paiements et changements de formule indisponibles.':'Preview only. Payments and plan changes are unavailable.'}</p>:onSelect?<button type="button" className="rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white" onClick={()=>onSelect(selection)}>{fr?'Choisir cette formule':'Choose this plan'}</button>:<Link href="/auth?tab=register" className="inline-block rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white">{fr?'Créer mon compte':'Create my account'}</Link>}
+   {previewOnly?<p className="text-sm text-muted-foreground">{fr?'Simulation uniquement. Paiements et changements de formule indisponibles.':'Preview only. Payments and plan changes are unavailable.'}</p>:onSelect?<button type="button" className="rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white" onClick={()=>onSelect(selection)}>{fr?'Choisir cette formule':'Choose this plan'}</button>:<Link href={planIntentUrl("/auth",selection,"register")} className="inline-block rounded-lg bg-blue-700 px-4 py-3 font-semibold text-white">{fr?'Continuer avec cette formule':'Continue with this plan'}</Link>}
   </div>
  </article>;
 }

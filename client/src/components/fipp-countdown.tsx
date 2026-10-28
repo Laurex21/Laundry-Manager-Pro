@@ -1,8 +1,9 @@
+import { FIPP_EVENT_START, fippDaysToGo } from "@shared/fipp-event";
 import { useEffect, useState } from "react";
 
 // 19 December 2026, 08:00 in Cameroon (Africa/Douala, UTC+1).
-const EVENT_START = Date.parse("2026-12-19T08:00:00+01:00");
-const remaining = () => Math.max(0, Math.floor((EVENT_START - Date.now()) / 1000));
+
+const remaining = () => Math.max(0, Math.floor((FIPP_EVENT_START - Date.now()) / 1000));
 const twoDigits = (value: number) => String(value).padStart(2, "0");
 
 export default function FippCountdown({ compact = false, translucent = false, language = "fr" }: { compact?: boolean; translucent?: boolean; language?: string }) {
@@ -23,4 +24,13 @@ export default function FippCountdown({ compact = false, translucent = false, la
     <p className="text-center text-xs font-bold uppercase tracking-[.24em] text-[#e5c566]">{seconds ? (french ? "Compte à rebours · 19 décembre 2026" : "Countdown · 19 December 2026") : (french ? "FIPP Africa · 19 décembre 2026" : "FIPP Africa · 19 December 2026")}</p>
     {seconds ? <><div className="mt-5 grid grid-cols-4 gap-1.5 sm:gap-3">{parts.map(part => <div key={part.label} className="rounded-xl border border-white/15 bg-white/[.06] px-1 py-3 text-center sm:py-5"><span className={`block font-black tabular-nums leading-none text-[#e5c566] ${compact ? "text-3xl sm:text-5xl" : "text-4xl sm:text-6xl lg:text-7xl"}`}>{part === parts[0] ? part.value : twoDigits(part.value)}</span><span className="mt-2 block text-[10px] font-semibold uppercase tracking-[.1em] text-blue-100 sm:text-xs">{part.label}</span></div>)}</div><p className="mt-4 text-center text-xs text-blue-100">{french ? "Début visé : 08h, heure de Douala · horaire provisoire" : "Expected start: 08:00, Douala time · provisional schedule"}</p></> : <p className="mt-5 text-center font-serif text-2xl font-bold text-[#e5c566]">{started}</p>}
   </div>;
+}
+
+export function FippDayBadge({ language }: { language: string }) {
+  const [days, setDays] = useState(() => fippDaysToGo());
+  useEffect(() => { const id = window.setInterval(() => setDays(fippDaysToGo()), 60_000); return () => window.clearInterval(id); }, []);
+  const fr = language.startsWith("fr");
+  return <span className="fipp-compact__countdown" aria-label={days > 0 ? (fr ? `${days} jours avant le forum` : `${days} days until the forum`) : undefined}>
+    {days > 0 ? (fr ? `J–${days}` : `${days} days to go`) : days === 0 ? (fr ? "Aujourd’hui" : "Today") : (fr ? "Édition 2026" : "2026 edition")}
+  </span>;
 }

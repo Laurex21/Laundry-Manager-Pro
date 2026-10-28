@@ -1,3 +1,5 @@
+import { readPlanIntent, planIntentUrl } from "@/lib/saas-plan-intent";
+import { SaasPlanIntent } from "@/components/saas-plan-intent";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { waitForAcquisition, acquisitionRegistrationConsent } from "@/lib/acquisition";
 import { recordWelcomeEligibility } from "@/lib/onboarding-welcome";
@@ -28,6 +30,9 @@ const LANGUAGES = [
 function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "login" | "register") => void }) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const search = useSearch();
+  const selectedPlan = readPlanIntent(search);
+  const destination = selectedPlan ? planIntentUrl("/subscriptions", selectedPlan) : "/";
   const [, setLocation] = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -103,8 +108,8 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
       }
       queryClient.setQueryData(["/api/auth/user"], data);
       // Leave the document containing the marketing SDK before entering the app.
-      if (pixelWasLoaded()) window.location.assign("/");
-      else setLocation("/");
+      if (pixelWasLoaded()) window.location.assign(destination);
+      else setLocation(destination);
     } catch {
       setFormError({message: "AUTH_NETWORK_ERROR", status: 0, retryAfter: null});
     } finally {
@@ -385,6 +390,8 @@ export default function AuthPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const requestedTab = new URLSearchParams(search).get("tab");
+  const selectedPlan = readPlanIntent(search);
+  const destination = selectedPlan ? planIntentUrl("/subscriptions", selectedPlan) : "/";
   const [tab, setTab] = useState<"login" | "register">(requestedTab === "register" ? "register" : "login");
 
   useEffect(() => {
@@ -392,12 +399,12 @@ export default function AuthPage() {
   }, [requestedTab]);
 
   useEffect(() => {
-    if (!isLoading && user) setLocation("/");
-  }, [user, isLoading, setLocation]);
+    if (!isLoading && user) setLocation(destination);
+  }, [user, isLoading, setLocation, destination]);
 
   const changeTab = (nextTab: "login" | "register") => {
     setTab(nextTab);
-    setLocation(nextTab === "register" ? "/auth?tab=register" : "/auth");
+    setLocation(planIntentUrl("/auth", selectedPlan, nextTab));
   };
 
   return (
@@ -435,7 +442,7 @@ export default function AuthPage() {
 
         {/* Zone 2: Product promise + Auth form (vertically centered) */}
         <div className="flex-1 px-6 py-4 sm:px-8 lg:py-8">
-          <div className="grid w-full gap-8 lg:grid-cols-2 lg:items-center lg:gap-16">
+          <div className="grid w-full gap-5 lg:grid-cols-2 lg:items-start lg:gap-16">
 
             {/* Product promise */}
             <div className="lg:rounded-3xl lg:bg-primary/5 lg:p-8">
@@ -446,7 +453,7 @@ export default function AuthPage() {
                 {t("auth_hero_title")}{" "}
                 <span className="text-primary">{t("auth_hero_title_accent")}</span>
               </h2>
-              <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              <p className="hidden text-sm text-muted-foreground mt-1.5 leading-relaxed sm:block">
                 {t("auth_hero_subtitle")}
               </p>
               <ul className="mt-8 hidden space-y-4 lg:block">{[[ClipboardList, 'orders'], [Users, 'customers'], [Wallet, 'payments']].map(([Icon, key]) => { const FeatureIcon = Icon as typeof ClipboardList; return <li key={String(key)} className="flex items-center gap-3 rounded-xl bg-background/80 p-4 text-sm font-medium"><FeatureIcon className="h-5 w-5 text-primary" aria-hidden="true" />{t(String(key))}</li>; })}</ul>
@@ -459,6 +466,7 @@ export default function AuthPage() {
                   {tab === "login" ? t("welcome") : t("create_account")}
                 </h1>
             {tab === "register" && <SaasTrialInfo />}
+                <SaasPlanIntent selection={selectedPlan} />
                 <p className="text-muted-foreground text-sm mt-1">
                   {tab === "login" ? t("auth_dashboard_subtitle") : t("auth_setup_subtitle")}
                 </p>

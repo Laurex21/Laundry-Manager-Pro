@@ -1,3 +1,6 @@
+import { useSearch } from "wouter";
+import { readPlanIntent } from "@/lib/saas-plan-intent";
+import { SaasPlanIntent } from "@/components/saas-plan-intent";
 import { SaasPlanDetails } from "@/components/saas-plan-details";
 import ProPilot from "./pro-pilot";
 import CollectionPilot from "./collection-pilot";
@@ -12,12 +15,13 @@ import { SAAS_PLANS } from "@shared/saas-plans";
 import type { SubscriptionWithPlan } from "@shared/schema";
 
 export default function Subscriptions() {
+  const selection = readPlanIntent(useSearch());
   const config = useQuery<{ enabled: boolean; collectionPilot?: boolean; subscriptionPilot?: boolean }>({ queryKey: ["/api/saas/config"] });
   if (config.isLoading) return <Skeleton className="h-48 w-full" />;
-  if (config.isError || !config.data?.enabled) return <DisabledSubscriptions configUnavailable={config.isError} onRetry={() => void config.refetch()} />;
+  if (config.isError || !config.data?.enabled) return <><SaasPlanIntent selection={selection} /><DisabledSubscriptions configUnavailable={config.isError} onRetry={() => void config.refetch()} /></>;
   if (config.data.subscriptionPilot) return <ProPilot />;
   if (config.data.collectionPilot) return <CollectionPilot />;
-  return <SaasSubscriptions />;
+  return <><SaasPlanIntent selection={selection} /><SaasSubscriptions /></>;
 }
 
 function DisabledSubscriptions({ configUnavailable, onRetry }: { configUnavailable: boolean; onRetry: () => void }) {
