@@ -1,3 +1,4 @@
+import { authErrorMessage } from "@/lib/auth-errors";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -30,11 +31,11 @@ export default function StaffLogin() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: credential, password }),
+        body: JSON.stringify({ email: credential.trim().toLowerCase(), password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: t("error"), description: data.message || t("auth_failed"), variant: "destructive" });
+        toast({ title: t("error"), description: authErrorMessage(data.message, res.status, res.headers.get("Retry-After"), t), variant: "destructive" });
         return;
       }
       queryClient.setQueryData(["/api/auth/user"], data);
@@ -67,8 +68,9 @@ export default function StaffLogin() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("email_or_phone")}</label>
+              <label htmlFor="staff-email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("email")}</label>
               <Input
+                id="staff-email" type="email" inputMode="email" autoCapitalize="none" spellCheck={false} className="h-11 text-base"
                 value={credential}
                 onChange={(event) => setCredential(event.target.value)}
                 required
@@ -77,21 +79,20 @@ export default function StaffLogin() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("password")}</label>
+              <label htmlFor="staff-password" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("password")}</label>
               <Input
-                type="password"
+                id="staff-password" type="password" className="h-11 text-base"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
-                minLength={6}
-                autoComplete="current-password"
+                                autoComplete="current-password"
                 data-testid="input-staff-login-password"
               />
             </div>
             <div className="text-right -mt-2">
               <button
                 type="button"
-                className="text-xs text-primary font-semibold hover:underline"
+                className="inline-flex min-h-11 items-center text-sm text-primary font-semibold hover:underline"
                 onClick={() => setLocation("/reset-password?account=staff")}
                 data-testid="button-forgot-staff-password"
               >

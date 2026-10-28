@@ -1,3 +1,4 @@
+import { authUiTranslations } from "./auth-ui-translations";
 import i18n from 'i18next';
 import { subscriptionUiTranslations } from './subscription-ui-translations';
 import { initReactI18next } from 'react-i18next';
@@ -4145,6 +4146,10 @@ Object.entries(validationTranslations).forEach(([lang, translation]) => {
 });
 
 Object.entries(subscriptionUiTranslations).forEach(([lang, translation]) => {
+  Object.assign(resources[lang as keyof typeof resources].translation, translation);
+});
+
+Object.entries(authUiTranslations).forEach(([lang, translation]) => {
   Object.assign(resources[lang as keyof typeof resources].translation, translation);
 });
 

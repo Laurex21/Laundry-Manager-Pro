@@ -1,3 +1,4 @@
+import { authErrorMessage } from "@/lib/auth-errors";
 import { waitForAcquisition, acquisitionRegistrationConsent } from "@/lib/acquisition";
 import { recordWelcomeEligibility } from "@/lib/onboarding-welcome";
 import { SaasTrialInfo } from "@/components/saas-public-plans";
@@ -7,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, ClipboardList, Users, Wallet } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, useSearch } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +32,8 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<{message: unknown; status: number; retryAfter: string | null} | null>(null);
+  useEffect(() => { setFormError(null); setShowPassword(false); }, [tab]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,6 +45,8 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
+    setFormError(null);
     if (tab === "register" && password.length < 10) {
       toast({
         title: t("error"),
@@ -72,8 +77,8 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
       if (tab === "register") await waitForAcquisition();
       const body =
         tab === "login"
-          ? { email, password }
-          : { email, password, firstName, lastName, phone, businessName, acceptedLegal, ...acquisitionRegistrationConsent() };
+          ? { email: email.trim().toLowerCase(), password }
+          : { email: email.trim().toLowerCase(), password, firstName, lastName, phone, businessName, acceptedLegal, ...acquisitionRegistrationConsent() };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -82,9 +87,9 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         credentials: "include",
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: t("error"), description: data.message || t("auth_failed"), variant: "destructive" });
+        setFormError({message: data.message, status: res.status, retryAfter: res.headers.get("Retry-After")});
         return;
       }
 
@@ -101,7 +106,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
       if (pixelWasLoaded()) window.location.assign("/");
       else setLocation("/");
     } catch {
-      toast({ title: t("error"), description: t("network_error_retry"), variant: "destructive" });
+      setFormError({message: "AUTH_NETWORK_ERROR", status: 0, retryAfter: null});
     } finally {
       setSubmitting(false);
     }
@@ -110,24 +115,30 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
   return (
     <div className="w-full space-y-5">
       {/* Tab switcher */}
-      <div className="flex bg-slate-100 dark:bg-muted rounded-lg p-1 gap-1">
+      <div role="tablist" aria-label={t("auth_owner_access")} className="flex bg-slate-100 dark:bg-muted rounded-lg p-1 gap-1">
         <button
-          className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${
+          className={`flex-1 min-h-11 py-2 text-sm font-semibold rounded-md transition-all ${
             tab === "login"
               ? "bg-white dark:bg-card shadow-sm text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
+          role="tab" id="auth-login-tab" aria-selected={tab === "login"} aria-controls="auth-form-panel"
+          tabIndex={tab === "login" ? 0 : -1}
+          onKeyDown={e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { e.preventDefault(); setTab("register"); document.getElementById("auth-register-tab")?.focus(); } }}
           onClick={() => setTab("login")}
           data-testid="tab-login"
         >
           {t("sign_in")}
         </button>
         <button
-          className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${
+          className={`flex-1 min-h-11 py-2 text-sm font-semibold rounded-md transition-all ${
             tab === "register"
               ? "bg-white dark:bg-card shadow-sm text-foreground"
               : "text-muted-foreground hover:text-foreground"
           }`}
+          role="tab" id="auth-register-tab" aria-selected={tab === "register"} aria-controls="auth-form-panel"
+          tabIndex={tab === "register" ? 0 : -1}
+          onKeyDown={e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { e.preventDefault(); setTab("login"); document.getElementById("auth-login-tab")?.focus(); } }}
           onClick={() => setTab("register")}
           data-testid="tab-register"
         >
@@ -135,89 +146,96 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3.5">
+      <form id="auth-form-panel" role="tabpanel" aria-labelledby={tab === "login" ? "auth-login-tab" : "auth-register-tab"} onSubmit={handleSubmit} className="space-y-4">
+        {formError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{authErrorMessage(formError.message, formError.status, formError.retryAfter, t)}</p>}
         {tab === "register" && (
           <>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("first_name")}</label>
+                <label htmlFor="auth-first-name" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("first_name")}</label>
                 <Input
+                  id="auth-first-name" autoComplete="given-name"
                   placeholder={t("first_name_placeholder")}
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   data-testid="input-first-name"
-                  className="h-10 text-sm"
+                  className="h-11 text-base"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("last_name")}</label>
+                <label htmlFor="auth-last-name" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("last_name")}</label>
                 <Input
+                  id="auth-last-name" autoComplete="family-name"
                   placeholder={t("last_name_placeholder")}
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   data-testid="input-last-name"
-                  className="h-10 text-sm"
+                  className="h-11 text-base"
                 />
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("phone_number")}</label>
+              <label htmlFor="auth-phone" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("phone_number")}</label>
               <Input
-                type="tel"
+                id="auth-phone" autoComplete="tel"
+                  type="tel"
                 placeholder="+237 6XX XXX XXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 data-testid="input-phone"
-                className="h-10 text-sm"
+                className="h-11 text-base"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("business_name")}</label>
+              <label htmlFor="auth-business" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("business_name")}</label>
               <Input
-                placeholder={t("business_name_placeholder")}
+                id="auth-business" autoComplete="organization"
+                  placeholder={t("business_name_placeholder")}
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 data-testid="input-business-name"
-                className="h-10 text-sm"
+                className="h-11 text-base"
               />
             </div>
           </>
         )}
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
-            {tab === "login" ? t("email_or_phone") : t("email")}
+          <label htmlFor="auth-email" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+            {t("email")}
           </label>
           <Input
-            type={tab === "login" ? "text" : "email"}
-            placeholder={tab === "login" ? t("email_or_phone_placeholder") : t("email_placeholder")}
+            id="auth-email" name="email" type="email" inputMode="email" autoCapitalize="none" spellCheck={false} aria-describedby="auth-email-hint"
+            placeholder={t("email_placeholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete={tab === "login" ? "username" : "email"}
             data-testid="input-email"
-            className="h-10 text-sm"
+            className="h-11 text-base"
           />
+          <p id="auth-email-hint" className="text-xs text-muted-foreground">{t("auth_email_hint")}</p>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("password")}</label>
+          <label htmlFor="auth-password" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">{t("password")}</label>
           <div className="relative">
             <Input
-              type={showPassword ? "text" : "password"}
+              id="auth-password" name="password" type={showPassword ? "text" : "password"}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={tab === "register" ? 10 : undefined}
-              className="h-10 text-sm pr-10"
+              className="h-11 text-base pr-12"
               autoComplete={tab === "login" ? "current-password" : "new-password"}
               data-testid="input-password"
             />
             <button
               type="button"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute right-0 top-1/2 -translate-y-1/2 min-h-11 min-w-11 grid place-items-center text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowPassword(!showPassword)}
+              aria-pressed={showPassword}
               aria-label={showPassword ? t("hide_password") : t("show_password")}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -232,25 +250,26 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
         {tab === "register" && (
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+            <label htmlFor="auth-confirm-password" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
               {t("confirm_password")}
             </label>
             <div className="relative">
               <Input
-                type={showConfirmPassword ? "text" : "password"}
+                id="auth-confirm-password" type={showConfirmPassword ? "text" : "password"}
                 placeholder="••••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={10}
-                className="h-10 text-sm pr-10"
+                className="h-11 text-base pr-12"
                 autoComplete="new-password"
                 data-testid="input-confirm-password"
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-0 top-1/2 -translate-y-1/2 min-h-11 min-w-11 grid place-items-center text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-pressed={showConfirmPassword}
                 aria-label={showConfirmPassword ? t("hide_password") : t("show_password")}
               >
                 {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -263,7 +282,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
           <div className="text-right -mt-2">
             <button
               type="button"
-              className="text-xs text-primary font-semibold hover:underline"
+              className="inline-flex min-h-11 items-center text-sm text-primary font-semibold hover:underline"
               onClick={() => setLocation("/reset-password?account=owner")}
               data-testid="button-forgot-owner-password"
             >
@@ -324,7 +343,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
             <button
               type="button"
               className="text-primary font-semibold hover:underline"
-              onClick={() => setTab("register")}
+          onClick={() => setTab("register")}
             >
               {t("register")}
             </button>
@@ -335,7 +354,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
             <button
               type="button"
               className="text-primary font-semibold hover:underline"
-              onClick={() => setTab("login")}
+          onClick={() => setTab("login")}
             >
               {t("sign_in")}
             </button>
@@ -343,16 +362,16 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
         )}
       </p>
       {tab === "login" && (
-        <p className="text-xs text-muted-foreground text-center">
-          {t("staff_member_prompt")}{" "}
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center">
+          <p className="mb-2 text-sm text-muted-foreground">{t("staff_member_prompt")}</p>{" "}
           <button
             type="button"
-            className="text-primary font-semibold hover:underline"
+            className="min-h-11 w-full rounded-lg border border-primary/40 px-4 text-sm font-semibold text-primary hover:bg-primary/10"
             onClick={() => setLocation("/staff-login")}
           >
             {t("use_staff_login")}
           </button>
-        </p>
+        </div>
       )}
     </div>
   );
@@ -383,10 +402,10 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="flex flex-col w-full max-w-[460px] min-h-screen bg-background overflow-hidden">
+      <div className="flex flex-col w-full max-w-[1100px] min-h-screen lg:min-h-0 lg:my-8 bg-background overflow-hidden">
 
         {/* Zone 1: Brand + Language */}
-        <div className="flex items-center justify-between px-8 pt-7 pb-5 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-7 pb-5 shrink-0 sm:px-8">
           <div className="flex items-center gap-2.5">
             <img src="/xpresspro-mark.svg" alt="" className="h-8 w-8" />
             <span className="font-display font-bold text-lg tracking-tight text-foreground">XpressPro</span>
@@ -399,8 +418,10 @@ export default function AuthPage() {
               <button
                 key={lang.code}
                 type="button"
+                aria-pressed={i18n.resolvedLanguage === lang.code || i18n.language === lang.code}
+                aria-label={lang.code === "fr" ? "Français" : lang.code === "pt" ? "Português" : "English"}
                 onClick={() => i18n.changeLanguage(lang.code)}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                className={`min-h-11 min-w-11 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
                   i18n.resolvedLanguage === lang.code || i18n.language === lang.code
                     ? "bg-background shadow-sm text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -413,30 +434,31 @@ export default function AuthPage() {
         </div>
 
         {/* Zone 2: Product promise + Auth form (vertically centered) */}
-        <div className="flex-1 flex flex-col justify-center px-8 py-4 overflow-y-auto min-h-0">
-          <div className="space-y-6 w-full">
+        <div className="flex-1 px-6 py-4 sm:px-8 lg:py-8">
+          <div className="grid w-full gap-8 lg:grid-cols-2 lg:items-center lg:gap-16">
 
             {/* Product promise */}
-            <div>
+            <div className="lg:rounded-3xl lg:bg-primary/5 lg:p-8">
               <p className="text-[10px] font-bold text-primary uppercase tracking-[0.15em] mb-2">
                 {t("auth_eyebrow")}
               </p>
-              <h2 className="font-display font-bold text-xl leading-snug text-foreground">
+              <h2 className="font-display font-bold text-2xl lg:text-4xl leading-snug text-foreground">
                 {t("auth_hero_title")}{" "}
                 <span className="text-primary">{t("auth_hero_title_accent")}</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
                 {t("auth_hero_subtitle")}
               </p>
+              <ul className="mt-8 hidden space-y-4 lg:block">{[[ClipboardList, 'orders'], [Users, 'customers'], [Wallet, 'payments']].map(([Icon, key]) => { const FeatureIcon = Icon as typeof ClipboardList; return <li key={String(key)} className="flex items-center gap-3 rounded-xl bg-background/80 p-4 text-sm font-medium"><FeatureIcon className="h-5 w-5 text-primary" aria-hidden="true" />{t(String(key))}</li>; })}</ul>
             </div>
 
             {/* Auth form + heading */}
-            <div>
+            <div className="lg:rounded-2xl lg:border lg:border-border lg:bg-card lg:p-7 lg:shadow-sm">
               <div className="mb-5">
                 <h1 className="font-display font-bold text-2xl text-foreground leading-tight">
                   {tab === "login" ? t("welcome") : t("create_account")}
                 </h1>
-            <SaasTrialInfo />
+            {tab === "register" && <SaasTrialInfo />}
                 <p className="text-muted-foreground text-sm mt-1">
                   {tab === "login" ? t("auth_dashboard_subtitle") : t("auth_setup_subtitle")}
                 </p>
@@ -448,11 +470,12 @@ export default function AuthPage() {
         </div>
 
         {/* Zone 3: Utility tools + copyright */}
-        <div className="shrink-0 px-8 pt-4 pb-6 border-t border-border">
+        <div className="shrink-0 px-6 pt-4 pb-6 border-t border-border sm:px-8">
           <a href="/" className="mb-3 inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-primary hover:underline">
             <ArrowLeft className="h-4 w-4" />
             {t("back_to_public_site")}
           </a>
+          <details className="mb-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold text-muted-foreground">{t("auth_show_tools")}</summary>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2.5">
             {t("auth_tools_heading")}
           </p>
@@ -473,6 +496,7 @@ export default function AuthPage() {
               </Badge>
             </a>
           </div>
+          </details>
           <p className="text-xs text-muted-foreground/60">
             © {new Date().getFullYear()} XpressPro · {t("all_rights_reserved")}
           </p>
