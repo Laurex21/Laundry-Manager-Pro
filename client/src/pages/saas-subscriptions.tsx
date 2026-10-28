@@ -1,3 +1,5 @@
+import { useSearch } from "wouter";
+import { readPlanIntent } from "@/lib/saas-plan-intent";
 import { SaasPlanDetails } from "@/components/saas-plan-details";
 import { SaasCustomPlan } from "@/components/saas-custom-plan";
 import { useState, useEffect } from "react";
@@ -24,6 +26,7 @@ export default function SaasSubscriptions() {
   const text = (a:string,b:string) => fr?a:b;
   const money = (n:number) => `${n.toLocaleString(i18n.language)} FCFA`;
   const qc = useQueryClient();
+  const planSearch = useSearch();
   const current = useQuery<Current>({queryKey:["/api/saas/current"],queryFn:()=>request("/api/saas/current"),refetchInterval:60_000});
   const invoices = useQuery<Invoice[]>({queryKey:["/api/saas/invoices"],queryFn:()=>request("/api/saas/invoices"),refetchInterval:30_000});
   const [selection,setSelection] = useState<SaasSelection>({plan:"pro",extraSites:0,extraStaff:0});
@@ -34,7 +37,7 @@ export default function SaasSubscriptions() {
   const paymentConfigured = current.data?.paymentConfigured ?? current.data?.sandboxConfigured;
   const remainingHours = state?.trialEndsAt ? Math.max(0, Math.ceil((Date.parse(state.trialEndsAt)-Date.now())/3_600_000)) : 0;
   const [initialised,setInitialised] = useState(false);
-  useEffect(()=>{if(state&&!initialised){const chosen=state.renewal?.selection??state;setSelection({plan:chosen.plan==="starter"?"pro":chosen.plan,extraSites:chosen.extraSites,extraStaff:chosen.extraStaff});setInitialised(true);}},[state,initialised]);
+  useEffect(()=>{if(state&&!initialised){const intent=readPlanIntent(planSearch);const chosen=state.renewal?.selection??state;setSelection(intent??{plan:chosen.plan==="starter"?"pro":chosen.plan,extraSites:chosen.extraSites,extraStaff:chosen.extraStaff});setInitialised(true);}},[state,initialised,planSearch]);
   useEffect(()=>{ if(quote){const latest=invoices.data?.find(row=>row.id===quote.id);if(latest&&latest.status!==quote.status)setQuote(latest);} },[invoices.data,quote?.id]);
   const lineLabels = {plan:text("Formule mensuelle","Monthly plan"),sites:text("Boutiques supplémentaires","Additional sites"),staff:text("Places d’employés supplémentaires","Additional staff places"),creditPro:text("Crédit Pro non utilisé","Unused Pro credit"),creditStaff:text("Crédit des places non utilisées","Unused staff credit")};
   const statuses: Record<string,string> = {quoted:text("Devis à confirmer","Quote awaiting confirmation"),pending:text("En attente de confirmation","Awaiting confirmation"),paid:text("Paiement confirmé","Payment confirmed"),failed:text("Paiement non abouti","Payment unsuccessful"),expired:text("Devis expiré","Quote expired"),review:text("Paiement reçu · vérification nécessaire","Payment received · review required")};

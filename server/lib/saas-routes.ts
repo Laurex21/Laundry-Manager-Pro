@@ -1,3 +1,4 @@
+import { saasSignupOffer } from "./saas-public-offer";
 import { saasOrganisationDeferred } from "./saas-deferred";
 import { ProPilotStore, proPilotAllowed, proPilotConfigured } from "./saas-pro-pilot";
 import { automaticMaintenanceSuspended } from "./automatic-maintenance";
@@ -36,7 +37,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
       const pilotOwner=proPilotConfigured() && pilotUserId ? (await saasStore.db.query("SELECT u.organisation_id FROM users u JOIN organisations o ON o.id=u.organisation_id AND o.owner_id=u.id WHERE u.id=$1",[pilotUserId])).rows[0] : null;
       const subscriptionPilot=saasEnabled() && proPilotAllowed(pilotOwner?.organisation_id);
       const enabled = await saasRequestEnabled(req) && (!proPilotConfigured() || subscriptionPilot);
-      res.json({ enabled, subscriptionPilot, mode: enabled ? saasEnvironment()?.mode : "disabled", collectionPilot: await collectionPilotRequestEnabled(req), manualRenewal: true, businessLaunch: process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true", catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) });
+      res.json({ enabled, subscriptionPilot, signupOffer: saasSignupOffer(), mode: enabled ? saasEnvironment()?.mode : "disabled", collectionPilot: await collectionPilotRequestEnabled(req), manualRenewal: true, businessLaunch: process.env.SAAS_BUSINESS_LAUNCH_ENABLED === "true", catalogueVersion: SAAS_CATALOGUE_VERSION, plans: Object.values(SAAS_PLANS) });
     } catch { res.status(503).json({ enabled: false, mode: "disabled" }); }
   });
   const proPilot = new ProPilotStore(saasStore);
