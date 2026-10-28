@@ -1,3 +1,4 @@
+import { normalizeLoginEmail } from "@shared/login-email";
 import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
 import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
 import type { Express } from "express";
@@ -385,27 +386,25 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/login", authAttemptLimiter, async (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ message: "Email or phone number and password are required" });
+      const email = normalizeLoginEmail(req.body.email);
+      const { password } = req.body;
+      if (!email || typeof password !== "string" || !password) {
+        return res.status(400).json({ message: "AUTH_EMAIL_REQUIRED" });
       }
 
-      // Try email first, then phone number if it looks like a phone
-      let user = await authStorage.getUserByEmail(email);
-      if (!user) {
-        user = await authStorage.getUserByPhone(email);
-      }
+      // Email only; matching does not modify historical account records.
+      const user = await authStorage.getUserByLoginEmail(email);
 
       if (!user || !user.passwordHash) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        return res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
       }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        return res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
       }
       if (!(await isOrganisationOwnerUser(user))) {
-        return res.status(403).json({ message: "Staff accounts must use the staff login page" });
+        return res.status(403).json({ message: "AUTH_USE_STAFF_LOGIN" });
       }
 
       await new Promise<void>((resolve, reject) =>
@@ -430,29 +429,29 @@ export function registerAuthRoutes(app: Express): void {
       res.json(response);
     } catch (error) {
       console.error("Login error:", error);
-      res.status(500).json({ message: "Login failed" });
+      res.status(500).json({ message: "AUTH_UNAVAILABLE" });
     }
   });
 
   app.post("/api/staff/login", authAttemptLimiter, async (req, res) => {
     try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ message: "Email or phone number and password are required" });
+      const email = normalizeLoginEmail(req.body.email);
+      const { password } = req.body;
+      if (!email || typeof password !== "string" || !password) {
+        return res.status(400).json({ message: "AUTH_EMAIL_REQUIRED" });
       }
 
-      let user = await authStorage.getUserByEmail(email);
-      if (!user) user = await authStorage.getUserByPhone(email);
+      const user = await authStorage.getUserByLoginEmail(email);
       if (!user || !user.passwordHash) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        return res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
       }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        return res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
       }
       if (await isOrganisationOwnerUser(user)) {
-        return res.status(403).json({ message: "Owner accounts must use the owner login page" });
+        return res.status(403).json({ message: "AUTH_USE_OWNER_LOGIN" });
       }
 
       await new Promise<void>((resolve, reject) =>
@@ -467,7 +466,7 @@ export function registerAuthRoutes(app: Express): void {
       res.json(response);
     } catch (error) {
       console.error("Staff login error:", error);
-      res.status(500).json({ message: "Staff login failed" });
+      res.status(500).json({ message: "AUTH_UNAVAILABLE" });
     }
   });
 
@@ -530,7 +529,7 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/auth/password-reset/request", passwordResetLimiter, async (req, res) => {
     try {
-      const identifier = String(req.body.identifier || req.body.email || "").trim();
+      const identifier = normalizeLoginEmail(req.body.identifier || req.body.email);
       const requestedAccountType = req.body.accountType === "staff" ? "staff" : "owner";
       const genericResponse = {
         message: "If an account exists, a password reset link has been sent.",
@@ -540,8 +539,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(200).json(genericResponse);
       }
 
-      let user = await authStorage.getUserByEmail(identifier);
-      if (!user) user = await authStorage.getUserByPhone(identifier);
+      const user = await authStorage.getUserByLoginEmail(identifier);
 
       if (user) {
         const isOwner = await isOrganisationOwnerUser(user);
@@ -552,7 +550,7 @@ export function registerAuthRoutes(app: Express): void {
           const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
           await authStorage.createPasswordResetToken({ userId: user.id, tokenHash, accountType, expiresAt });
           const resetLink = `${buildBaseUrl(req)}/reset-password/${token}`;
-          const delivered = await sendPasswordResetLink(user, resetLink);
+          const delivered = await sendPasswordResetEmail(user, resetLink);
           return res.json({
             ...genericResponse,
             ...(process.env.NODE_ENV !== "production" ? { resetLink, delivery: delivered ? "configured" : "manual" } : {}),

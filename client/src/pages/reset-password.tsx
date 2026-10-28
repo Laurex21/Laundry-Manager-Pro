@@ -1,3 +1,4 @@
+import { authErrorMessage } from "@/lib/auth-errors";
 import { useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -32,11 +33,11 @@ export default function ResetPasswordPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier, accountType }),
+        body: JSON.stringify({ identifier: identifier.trim().toLowerCase(), accountType }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: t("error"), description: data.message || t("network_error_retry"), variant: "destructive" });
+        toast({ title: t("error"), description: authErrorMessage(data.message, res.status, res.headers.get("Retry-After"), t), variant: "destructive" });
         return;
       }
       setSent(true);
@@ -63,7 +64,7 @@ export default function ResetPasswordPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: t("error"), description: data.message || t("network_error_retry"), variant: "destructive" });
+        toast({ title: t("error"), description: authErrorMessage(data.message, res.status, res.headers.get("Retry-After"), t), variant: "destructive" });
         return;
       }
       setCompletedAccountType(data.accountType === "staff" ? "staff" : "owner");
@@ -87,14 +88,14 @@ export default function ResetPasswordPage() {
           <CardDescription>
             {token
               ? t("reset_password_subtitle", "Créez un nouveau mot de passe pour votre compte XPRESSPRO.")
-              : t("forgot_password_subtitle", "Entrez votre email ou numéro de téléphone pour recevoir un lien sécurisé.")}
+              : t("password_reset_description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {sent ? (
             <div className="space-y-4 text-center">
               <p className="text-sm text-muted-foreground">
-                {t("reset_link_sent", "Si un compte existe, un lien de réinitialisation a été envoyé. Le lien expire dans 30 minutes.")}
+                {t("password_reset_sent")}
               </p>
               <Button className="w-full" onClick={() => setLocation(loginPath)} data-testid="button-back-to-login">
                 <Shirt className="w-4 h-4 mr-2" />
@@ -113,25 +114,27 @@ export default function ResetPasswordPage() {
           ) : token ? (
             <form onSubmit={confirmReset} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("new_password", "Nouveau mot de passe")}</label>
+                <label htmlFor="reset-password" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("new_password", "Nouveau mot de passe")}</label>
                 <Input
-                  type="password"
+                  id="reset-password" type="password" className="h-11 text-base"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  minLength={6}
+                  minLength={10}
+                  aria-describedby="reset-password-rule"
                   autoComplete="new-password"
                   data-testid="input-new-password"
                 />
+                <p id="reset-password-rule" className="text-xs text-muted-foreground">{t("registration_password_rule")}</p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("confirm_password")}</label>
+                <label htmlFor="reset-confirm-password" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("confirm_password")}</label>
                 <Input
-                  type="password"
+                  id="reset-confirm-password" type="password" className="h-11 text-base"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
-                  minLength={6}
+                  minLength={10}
                   autoComplete="new-password"
                   data-testid="input-confirm-new-password"
                 />
@@ -143,9 +146,9 @@ export default function ResetPasswordPage() {
           ) : (
             <form onSubmit={requestReset} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("account_type", "Type de compte")}</label>
+                <label htmlFor="reset-account-type" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("account_type", "Type de compte")}</label>
                 <Select value={accountType} onValueChange={(value) => setAccountType(value === "staff" ? "staff" : "owner")}>
-                  <SelectTrigger data-testid="select-reset-account-type"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="reset-account-type" aria-label={t("account_type")} data-testid="select-reset-account-type"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="owner">{t("owner_account", "Compte propriétaire")}</SelectItem>
                     <SelectItem value="staff">{t("staff_account", "Compte employé")}</SelectItem>
@@ -153,8 +156,9 @@ export default function ResetPasswordPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("email_or_phone")}</label>
+                <label htmlFor="reset-email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("email")}</label>
                 <Input
+                  id="reset-email" type="email" inputMode="email" autoCapitalize="none" spellCheck={false} className="h-11 text-base"
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
                   required

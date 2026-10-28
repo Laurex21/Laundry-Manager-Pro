@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:email-login": "node --import tsx server/lib/email-login.integration.test.ts",
     "test:auth-i18n": "tsx server/lib/auth-login-i18n.test.ts",
     "test:staff-invitation-boundary": "tsx server/lib/staff-invitation-account-boundary.test.ts",
     "test:business-registration-settings": "tsx server/lib/business-registration-settings.test.ts",

@@ -5,6 +5,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByLoginEmail(email: string): Promise<User | undefined>;
   getUserByPhone(phone: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   createPasswordResetToken(data: { userId: string; tokenHash: string; accountType: "owner" | "staff"; expiresAt: Date }): Promise<PasswordResetToken>;
@@ -23,6 +24,13 @@ class AuthStorage implements IAuthStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
+  }
+
+  /** Read-only lookup; ambiguous historical case variants must never select an arbitrary account. */
+  async getUserByLoginEmail(email: string, executor = db): Promise<User | undefined> {
+    const matches = await executor.select().from(users)
+      .where(sql`lower(trim(${users.email})) = ${email}`).limit(2);
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   async getUserByPhone(phone: string): Promise<User | undefined> {
