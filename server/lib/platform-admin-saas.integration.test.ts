@@ -1,3 +1,4 @@
+import { adminDecisionOverview, decisionDays } from "./platform-admin-decision";
 /** Disposable PostgreSQL only. No credentials, network, scheduler or production data. */
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
@@ -25,7 +26,7 @@ const routes = new Map<string, Function>();
 registerPlatformAdminRoutes({ get: (p: string, ...f: Function[]) => routes.set('GET ' + p, f.at(-1)!), post: (p: string, ...f: Function[]) => routes.set('POST ' + p, f.at(-1)!) } as any);
 const now = new Date('2026-10-27T12:00:00Z');
 const clock = new Date(now);
-async function call(method: string, path: string, body: any = {}, params: any = {}, qs: any = {}) { let status = 200, result: any; const res: any = { status: (s: number) => { status = s; return res; }, json: (r: any) => { result = r; return res; } }; await routes.get(method + ' ' + path)!({ params, body, query: qs, session: { userId: 'admin' }, ip: '127.0.0.1', requestId: 'isolated-request', get: () => 'isolated-test' }, res); return { status, body: result }; }
+async function call(method: string, path: string, body: any = {}, params: any = {}, qs: any = {}) { let status = 200, result: any; const res: any = { setHeader: () => {}, status: (s: number) => { status = s; return res; }, json: (r: any) => { result = r; return res; } }; await routes.get(method + ' ' + path)!({ params, body, query: qs, session: { userId: 'admin' }, ip: '127.0.0.1', requestId: 'isolated-request', get: () => 'isolated-test' }, res); return { status, body: result }; }
 try {
     for (const sql of await generateMigration(generateDrizzleJson({}), generateDrizzleJson(schema)))
         await pg.exec(sql);
@@ -127,6 +128,66 @@ try {
     await query("UPDATE platform_admins SET revoked_at=now() WHERE user_id='admin'");
     assert.deepEqual(await gate(Date.now()), { status: 403, next: false });
     assert.equal(process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED, 'true');
+    // The dashboard reads one disposable snapshot and never touches subscription states.
+    await query("UPDATE saas_invoices SET created_at=paid_at");
+    await query("UPDATE organisations SET created_at='2026-10-25T00:00:00Z' WHERE id=4");
+    await database.insert(schema.customers).values({id:1,name:'Synthetic customer',phone:'000',address:'Fictional'});
+    await database.insert(schema.orders).values([
+      {customerId:1,siteId:1,createdAt:new Date('2026-09-01T00:00:00Z')},
+      {customerId:1,siteId:4,createdAt:new Date('2026-10-26T23:30:00Z')},
+      {customerId:1,siteId:3,createdAt:new Date('2026-10-26T23:30:00Z')},
+    ]);
+    await invoice(3,50000,'live',null,'00000000-0000-4000-8000-000000000004');
+    await query("UPDATE saas_invoices SET created_at=paid_at WHERE organisation_id=3");
+    const decisionBefore=await query('SELECT * FROM saas_accounts ORDER BY organisation_id');
+    await query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const dashboard=await adminDecisionOverview({query},7,clock);
+    await query('ROLLBACK');
+    assert.deepEqual(await query('SELECT * FROM saas_accounts ORDER BY organisation_id'),decisionBefore);
+    assert.equal(dashboard.growth.registered,4);
+    assert.equal(dashboard.growth.newAccounts,1);
+    assert.equal(dashboard.growth.activeAccounts,1);
+    assert.equal(dashboard.growth.cohortFirstOrders,1);
+    assert.equal(dashboard.growth.cohortPayers,0);
+    assert.equal(dashboard.revenue.commercial,10999);
+    assert.equal(dashboard.revenue.pilots,50);
+    assert.equal(dashboard.payments.paidWithoutActivation,1);
+    assert.equal(dashboard.support.inactive,1);
+    assert.equal(dashboard.support.neverOrdered,2);
+    assert.equal(dashboard.trials.excluded,4);
+    assert.deepEqual(dashboard.technical.excludedIds,[3,100,112,193]);
+    assert.equal(dashboard.technical.maintenanceSuspended,true);
+    assert.equal(dashboard.technical.backupVerifiedAt,null);
+    await query("INSERT INTO saas_events(organisation_id,action,details) VALUES(1,'payment_applied',$1::jsonb)",[JSON.stringify({invoiceId:'00000000-0000-4000-8000-000000000002'})]);
+    assert.equal((await adminDecisionOverview({query},7,clock)).payments.paidWithoutActivation,0);
+    // A payment on 26 Oct 23:30 UTC belongs to 27 Oct in Cameroon.
+    await query("UPDATE saas_invoices SET paid_at='2026-10-26T23:30:00Z' WHERE id='00000000-0000-4000-8000-000000000002'");
+    const edge=await adminDecisionOverview({query},7,clock);
+    assert.equal(edge.revenue.daily.find(d=>d.date==='2026-10-27')?.amount,10999);
+    await query("UPDATE saas_invoices SET paid_at='2026-10-27T23:30:00Z' WHERE id='00000000-0000-4000-8000-000000000002'");
+    assert.equal((await adminDecisionOverview({query},7,clock)).revenue.commercial,0,'Future payment excluded');
+    assert.throws(()=>decisionDays(365),/INVALID_DECISION_PERIOD/);
+    assert.equal(decisionDays(undefined),30);
+    assert.equal((await call('GET','/api/platform-admin/decision-overview',{}, {},{days:'365'})).status,400);
+    assert.throws(()=>decisionDays(['7']),/INVALID_DECISION_PERIOD/);
+    const routeDashboard=await call('GET','/api/platform-admin/decision-overview',{}, {},{days:'7'});
+    assert.equal(routeDashboard.status,200);
+    assert.equal(routeDashboard.body.technical.maintenanceSuspended,true);
+    assert.deepEqual(routeDashboard.body.technical.excludedIds,[3,100,112,193]);
+    assert.deepEqual(await query('SELECT * FROM saas_accounts ORDER BY organisation_id'),decisionBefore);
+    for(const [suffix,status,provider,created] of [['5','pending',null,'2026-08-01'],['6','failed','FAILED','2026-10-26'],['7','review','COMPLETED','2026-10-26']] as const) {
+      await query("INSERT INTO saas_invoices(id,organisation_id,quote,total_xaf,provider_environment,status,provider_status,created_at) VALUES($1,1,'{}',10999,'live',$2,$3,$4)",['00000000-0000-4000-8000-00000000000'+suffix,status,provider,created]);
+    }
+    await query("INSERT INTO saas_events(organisation_id,action,details) VALUES(1,'payment_failed','{}')");
+    const issues=await adminDecisionOverview({query},7,clock);
+    assert.equal(issues.payments.pending,1,'Unresolved backlog remains visible outside period');
+    assert.equal(issues.payments.failed,1);
+    assert.equal(issues.payments.review,1);
+    assert.equal(issues.payments.issues.length,3);
+    assert.equal(issues.support.returning[0].lastOrderAt,'2026-09-01T00:00:00.000Z');
+    assert.ok(!issues.support.returning[0].endDate,'Follow-up shows last activity instead of subscription expiry');
+    assert.equal((await adminAudit({query},100)).find(e=>e.action==='payment_failed')?.outcome,'failure');
+    console.log('PASS six decision blocks: cohort, activity, pilots, exclusions, read-only, activation events, Douala boundaries, future dates');
     console.log('PASS isolated admin: effective plans, launch/legacy preservation, live-only receipts/pilots, excluded roles, readonly GET, preview/confirm, stale replay, acquired rights/days, rollback, current catalogue, unified audit, host isolation, auth gate');
 }
 finally {

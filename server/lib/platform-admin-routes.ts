@@ -1,9 +1,12 @@
+import { adminDecisionOverview, decisionDays } from "./platform-admin-decision";
+import { readFile } from "node:fs/promises";
 import { adminSubscribers, adminSegment, adminBilling, adminAudit, adminGrant } from "./platform-admin-saas";
 import { SAAS_PLANS } from "../../shared/saas-plans";
 import type { Express, RequestHandler } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../db";
+import type { PoolClient } from "pg";
 import { authStorage } from "../replit_integrations/auth/storage";
 import { rateLimit } from "./rate-limit";
 import {
@@ -299,6 +302,31 @@ export function registerPlatformAdminRoutes(app: Express): void {
       console.error("Platform administrator status failed:", error);
       res.status(500).json({ message: "Unable to verify administrator status" });
     }
+  });
+
+  app.get("/api/platform-admin/decision-overview", requirePlatformAdmin, async (req, res) => {
+    let days:number;
+    try { days=decisionDays(req.query.days); } catch { return res.status(400).json({message:"INVALID_DECISION_PERIOD"}); }
+    let client: PoolClient | undefined;
+    try {
+      client=await pool.connect();
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      await client.query("SET LOCAL TIME ZONE 'UTC'");
+      const result=await adminDecisionOverview(client,days);
+      await client.query("COMMIT");
+      try {
+        if(process.env.NODE_ENV!=="production")throw Error("DEVELOPMENT_BUILD");
+        const manifest=JSON.parse(await readFile("dist/public/build-manifest.json","utf8"));
+        result.technical.buildCommit=/^[a-f0-9]{40}$/i.test(manifest.commit)?manifest.commit:null;
+        result.technical.builtAt=Number.isFinite(Date.parse(manifest.buildCompletedAt))?manifest.buildCompletedAt:null;
+      } catch { /* Development or absent manifest: show unknown, never invent a version. */ }
+      res.setHeader("Cache-Control","no-store");
+      res.json(result);
+    } catch(error) {
+      await client?.query("ROLLBACK").catch(()=>{});
+      console.error("Platform decision overview failed",error);
+      res.status(500).json({message:"ADMIN_DECISION_FAILED"});
+    } finally { client?.release(); }
   });
 
   app.get("/api/platform-admin/overview", requirePlatformAdmin, async (_req, res) => {
