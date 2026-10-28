@@ -23,8 +23,8 @@ assert.match(authModel, /userType: varchar\("user_type"/);
 assert.match(authRoutes, /\/api\/staff\/onboard\/:token/);
 assert.match(authRoutes, /\/api\/staff\/login/);
 assert.match(authRoutes, /userType: "owner"/);
-assert.match(authRoutes, /Staff accounts must use the staff login page/);
-assert.match(authRoutes, /Owner accounts must use the owner login page/);
+assert.match(authRoutes, /if \(!\(await isOrganisationOwnerUser\(user\)\)\)\s*\{\s*return res\.status\(403\)\.json\(\{ message: "AUTH_USE_STAFF_LOGIN" \}\)/);
+assert.match(authRoutes, /if \(await isOrganisationOwnerUser\(user\)\)\s*\{\s*return res\.status\(403\)\.json\(\{ message: "AUTH_USE_OWNER_LOGIN" \}\)/);
 assert.match(authRoutes, /storage\.getUserSubscription\(subscriptionOwnerId\)/);
 
 assert.match(routes, /function scopedSites/);
