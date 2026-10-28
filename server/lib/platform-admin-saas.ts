@@ -6,7 +6,7 @@ import { saasOrganisationDeferred, saasIdentityDeferred } from './saas-deferred'
 import type { SaasExecutor } from './saas-store';
 /** Projection only: never call SaasStore.current/ensure (they can write on GET). */
 export async function adminSubscribers(db: SaasExecutor, now = new Date()) {
-    const { rows } = await db.query(`SELECT o.id,o.name,o.created_at,o.owner_id,
+    const { rows } = await db.query(`SELECT o.id,o.name,o.created_at AT TIME ZONE 'UTC' AS created_at,o.owner_id,
     owner.email,owner.first_name,owner.last_name,owner.phone,
     account.state,
     COALESCE((SELECT jsonb_agg(s.id ORDER BY s.id) FROM sites s WHERE s.organisation_id=o.id AND s.is_active=true),'[]') AS site_ids,
@@ -38,7 +38,7 @@ export async function adminSubscribers(db: SaasExecutor, now = new Date()) {
         const subscription = state ? {
             id: null, status: state.phase === 'trialing' ? 'trial' : 'active', startDate: state.phase === 'trialing' ? state.trialStartedAt : state.cycleStart,
             endDate: state.phase === 'trialing' ? state.trialEndsAt : state.phase === 'active' ? state.cycleEnd : null,
-            planSlug: state.plan, planName: SAAS_PLANS[state.plan].name, planPrice: saasMonthly(state), ordersUsed: 0,
+            planSlug: state.plan, planName: SAAS_PLANS[state.plan].name, planPrice: saasMonthly(state), ordersUsed: null,
         } : row.legacy_id ? { id: Number(row.legacy_id), status: legacyStatus, startDate: row.legacy_start, endDate: end,
             planSlug: row.plan_slug, planName: row.plan_name, planPrice: Number(row.plan_price), ordersUsed: Number(row.orders_used ?? 0) } : null;
         return { id: Number(row.id), name: row.name, createdAt: row.created_at,
@@ -81,7 +81,7 @@ export async function adminAudit(db: SaasExecutor, limit: number, org?: number) 
       a.user_id AS actor_user_id,a.action,'platform_admin' AS target_type,NULL::text AS target_id,a.created_at,a.request_id,a.outcome
       FROM platform_admin_audit_events a
     UNION ALL SELECT 'business:'||s.id::text,s.organisation_id,s.actor_user_id,s.action,s.target_type,s.target_id,s.created_at,s.request_id,'success' FROM security_audit_events s
-    UNION ALL SELECT 'saas:'||e.id::text,e.organisation_id,NULL,e.action,'saas',e.details->>'invoiceId',e.created_at,NULL,'success' FROM saas_events e)
+    UNION ALL SELECT 'saas:'||e.id::text,e.organisation_id,NULL,e.action,'saas',e.details->>'invoiceId',e.created_at,NULL,CASE WHEN e.action LIKE '%failed%' THEN 'failure' WHEN e.action LIKE '%review%' THEN 'review' ELSE 'success' END FROM saas_events e)
     SELECT e.*,o.name AS organisation_name,u.email AS actor_email FROM events e
     LEFT JOIN organisations o ON o.id=e.organisation_id LEFT JOIN users u ON u.id=e.actor_user_id
     WHERE ($1::int IS NULL OR e.organisation_id=$1) ORDER BY e.created_at DESC,e.id DESC LIMIT $2`, [org ?? null, limit])).rows;

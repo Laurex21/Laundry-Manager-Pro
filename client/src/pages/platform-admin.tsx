@@ -1,3 +1,4 @@
+import PlatformAdminDecision from "@/components/platform-admin-decision";
 import AcquisitionReport from "@/components/acquisition-report";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
@@ -93,7 +94,7 @@ type OrganisationDetail = {
   owner: Subscriber["owner"];
   subscription: (NonNullable<Subscriber["subscription"]> & {
     id: number|null;
-    ordersUsed: number;
+    ordersUsed: number|null;
     planPrice: number;
   }) | null;
   footprint: {
@@ -286,6 +287,28 @@ async function apiJson<T>(url: string): Promise<T> {
 function formatDate(value: string | null | undefined) {
   if (!value) return adminText('Not set');
   return new Intl.DateTimeFormat(i18n.language.startsWith("fr") ? "fr-FR" : "en-GB", { dateStyle: "medium", timeZone:"Africa/Douala" }).format(new Date(value));
+}
+
+function formatAuditDate(value:string) {
+  return new Intl.DateTimeFormat(i18n.language.startsWith('fr')?'fr-FR':'en-GB',{dateStyle:'medium',timeStyle:'medium',timeZone:'Africa/Douala'}).format(new Date(value));
+}
+function auditAction(value:string) {
+  const labels:Record<string,[string,string]>={
+    'platform_admin.login':['Connexion administrateur','Administrator sign-in'],
+    'platform_admin.mfa_verification':['Vérification à deux facteurs','Two-factor verification'],
+    'platform_admin.organisation_view':['Consultation de la fiche','Organisation viewed'],
+    'platform_admin.saas_grant':['Attribution manuelle de formule','Manual plan grant'],
+    payment_applied:['Paiement appliqué à l’abonnement','Payment applied to subscription'],
+    payment_failed:['Paiement échoué','Payment failed'],
+    payment_requires_review:['Paiement à examiner','Payment requires review'],
+    trial_started:['Début de période d’essai','Trial started'],
+    access_selected:['Accès sélectionnés','Access selected'],
+    collection_pilot_failed:['Paiement pilote échoué','Pilot payment failed'],
+    collection_pilot_paid:['Paiement pilote confirmé','Pilot payment confirmed'],
+    subscription_pilot_paid:['Abonnement pilote activé','Pilot subscription activated'],
+    admin_grant:['Attribution manuelle enregistrée','Manual grant recorded'],
+  };
+  return labels[value]?.[i18n.language.startsWith('fr')?0:1]??value.replaceAll('.', ' ').replaceAll('_',' ');
 }
 
 function formatMoney(value: number) {
@@ -516,15 +539,11 @@ function AdminDashboard() {
   const [segment, setSegment] = useState("all");
   const [page, setPage] = useState(0);
   const [renewalPage, setRenewalPage] = useState(0);
-  const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
+  const [selectedSubscriber, setSelectedSubscriber] = useState<Pick<Subscriber,"id"|"name"> | null>(null);
 
   const overview = useQuery<Overview>({
     queryKey: ["/api/platform-admin/overview"],
     queryFn: () => apiJson("/api/platform-admin/overview"),
-  });
-  const preview = useQuery<SubscriberPage>({
-    queryKey: ["/api/platform-admin/subscribers", "preview", searchTerm],
-    queryFn: () => apiJson(`/api/platform-admin/subscribers?limit=8&segment=attention&search=${encodeURIComponent(searchTerm)}`),
   });
   const subscribers = useQuery<SubscriberPage>({
     queryKey: ["/api/platform-admin/subscribers", searchTerm, segment, page],
@@ -574,13 +593,13 @@ function AdminDashboard() {
       <main className="mx-auto max-w-[1560px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div><p className="text-sm font-semibold text-cyan-700">{adminText('Executive control centre')}</p><h1 className="mt-1 font-display text-3xl font-bold tracking-tight">{adminText('Platform health and subscriber growth')}</h1><p className="mt-2 max-w-2xl text-slate-500">{adminText('Focus on revenue, activation risk, renewals and audited platform activity.')}</p></div>
-          <div className="grid grid-cols-2 gap-2 sm:flex"><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">{adminText('Active plan rate')}</p><p className="font-bold">{activePlanRate === null ? "—" : `${activePlanRate}%`}</p></div><div className="rounded-xl border border-slate-200 bg-white px-4 py-2"><p className="text-xs text-slate-500">{adminText('Attention needed')}</p><p className="font-bold text-amber-700">{riskCount ?? "—"}</p></div></div>
+          <p className="max-w-sm text-sm text-slate-500">{adminText('Plan assignment does not count as a payment.')} · {adminText('Temporarily excluded')}: {metrics?.excludedCount ?? "—"}</p>
         </div>
 
         {overview.error && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{overview.error.message}</p>}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-7">
-          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
+          <TabsList className="h-auto w-full flex-wrap justify-start rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
             <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />{adminText('Overview')}</TabsTrigger>
             <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />{adminText('Organisations')}</TabsTrigger>
             <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />{adminText('Renewals')}</TabsTrigger>
@@ -589,37 +608,7 @@ function AdminDashboard() {
           </TabsList>
 
           <TabsContent value="overview" className="mt-5 space-y-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label={adminText('Real pawaPay receipts this month')} value={metrics ? formatMoney(metrics.subscriptionRevenueMonth) : "—"} icon={Activity} />
-              <MetricCard label={adminText('Organisations with an active plan')} value={metrics?.activeSubscriptionCount ?? "—"} icon={CreditCard} />
-              <MetricCard label={adminText('Registered organisations')} value={metrics?.organisationCount ?? "—"} icon={Building2} />
-              <MetricCard label={adminText('Renewals due in 14 days')} value={metrics?.expiringSoonCount ?? "—"} icon={CalendarClock} />
-            </section>
-            {metrics && <p className="-mt-3 text-sm text-slate-500">{adminText('Active plans by price')}: {adminText('Free')} {metrics.activeFreePlanCount} · {adminText('Paid plan, not necessarily paid')} {metrics.activePaidPlanCount}. {adminText('Plan assignment does not count as a payment.')} · {adminText('Including pilots')}: {formatMoney(metrics.pilotRevenueMonth)} · {adminText('Trial')}: {metrics.trialCount} · {adminText('Temporarily excluded')}: {metrics.excludedCount}</p>}
-
-            <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-              <Card className="border-slate-200/80 shadow-sm">
-                <CardHeader><CardTitle className="text-lg">{adminText('Activation snapshot')}</CardTitle><p className="text-sm text-slate-500">{adminText('Separate registered organisations from organisations with active plans.')}</p></CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-xl bg-slate-950 p-5 text-white"><p className="text-sm text-slate-400">{adminText('Registered')}</p><p className="mt-2 text-3xl font-bold">{metrics?.organisationCount ?? "—"}</p><p className="mt-2 text-xs text-slate-400">{adminText('All organisations created')}</p></div>
-                  <div className="rounded-xl bg-emerald-50 p-5"><p className="text-sm text-emerald-700">{adminText('Active plans')}</p><p className="mt-2 text-3xl font-bold text-emerald-950">{metrics?.activeSubscriptionCount ?? "—"}</p><p className="mt-2 text-xs text-emerald-700">{activePlanRate === null ? "—" : `${activePlanRate}%`} {adminText("of registered")}</p></div>
-                  <div className="rounded-xl bg-amber-50 p-5"><p className="text-sm text-amber-700">{adminText('Without plan')}</p><p className="mt-2 text-3xl font-bold text-amber-950">{noPlanCount ?? "—"}</p><p className="mt-2 text-xs text-amber-700">{adminText('Requires activation review')}</p></div>
-                </CardContent>
-              </Card>
-              <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
-                <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><AlertTriangle className="h-5 w-5 text-amber-600" />{adminText('Priority queue')}</CardTitle></CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <button type="button" onClick={() => openPrioritySegment("expiring")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label={adminText("View organisations expiring within 14 days")}>
-                    <span>{adminText('Expiring within 14 days')}</span><span className="flex items-center gap-2"><strong>{metrics?.expiringSoonCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
-                  </button>
-                  <button type="button" onClick={() => openPrioritySegment("no-plan")} className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600" aria-label={adminText("View organisations without plan")}>
-                    <span>{adminText('Organisations without plan')}</span><span className="flex items-center gap-2"><strong>{noPlanCount ?? "—"}</strong><ArrowRight className="h-4 w-4" aria-hidden="true" /></span>
-                  </button>
-                </CardContent>
-              </Card>
-            </section>
-
-            <OrganisationDirectory loading={preview.isLoading} error={preview.error as Error | null} organisations={preview.data?.items ?? []} search={search} setSearch={setSearch} submitSearch={submitSearch} segment="all" setSegment={changeSegment} select={setSelectedSubscriber} compact />
+            <PlatformAdminDecision open={setSelectedSubscriber} />
           </TabsContent>
 
           <TabsContent value="organisations" className="mt-5">
@@ -643,7 +632,7 @@ function AdminDashboard() {
 
           <TabsContent value="acquisition" className="mt-5"><AcquisitionReport /></TabsContent>
           <TabsContent value="security" className="mt-5">
-            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{event.action.replaceAll(".", " ")} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
+            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -654,11 +643,10 @@ function AdminDashboard() {
 }
 
 function OrganisationDirectory({ loading, error, organisations, search, setSearch, submitSearch, segment, setSegment, select, compact = false, page = 0, total = 0, pageSize = 25, onPageChange }: { loading: boolean; error: Error | null; organisations: Subscriber[]; search: string; setSearch: (value: string) => void; submitSearch: () => void; segment: string; setSegment: (value: string) => void; select: (subscriber: Subscriber) => void; compact?: boolean; page?: number; total?: number; pageSize?: number; onPageChange?: (page: number) => void }) {
-  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? adminText('Organisations requiring attention') : adminText('Organisation directory')}</CardTitle><p className="mt-1 text-sm text-slate-500">{adminText('Owner, plan, footprint and renewal status in one place.')}</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative w-full sm:w-80" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder={adminText('Search business or owner')} /></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">{adminText('All statuses')}</option><option value="active">{adminText('Active')}</option><option value="trial">{adminText('Trial')}</option><option value="expiring">{adminText('Expiring soon')}</option><option value="no-plan">{adminText('No plan')}</option><option value="expired">{adminText('Expired')}</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">{adminText('Organisation')}</th><th className="px-5 py-3">{adminText('Owner')}</th><th className="px-5 py-3">{adminText('Plan / status')}</th><th className="px-5 py-3">{adminText('Sites / staff')}</th><th className="px-5 py-3">{adminText('Renewal')}</th><th className="px-5 py-3 text-right">{adminText('Details')}</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>{adminText('Loading organisations')}</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">{adminText('No organisations match these filters.')}</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner'); return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">{adminText("Joined")} {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || adminText('No email')}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || adminText('No plan')}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{adminStatus(subscriber.subscription?.status)} · {adminText(subscriber.source)}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>{adminText('View')} <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? `0 ${adminText("organisations")}` : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} ${adminText("of")} ${total} ${adminText("organisations")}`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>{adminText('Previous')}</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>{adminText('Next')}</Button></div></div>}</CardContent></Card>;
+  return <Card className="overflow-hidden border-slate-200/80 shadow-sm"><CardHeader className="border-b border-slate-100"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><CardTitle className="text-lg">{compact ? adminText('Organisations requiring attention') : adminText('Organisation directory')}</CardTitle><p className="mt-1 text-sm text-slate-500">{adminText('Owner, plan, footprint and renewal status in one place.')}</p></div><div className="flex flex-col gap-2 sm:flex-row"><form className="relative flex w-full gap-2 sm:w-96" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/><Input aria-label={adminText('Search business or owner')} value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder={adminText('Search business or owner')} /><Button type="submit" variant="outline" aria-label={i18n.language.startsWith('fr')?'Rechercher':'Search'}><Search className="h-4 w-4" aria-hidden="true" /></Button></form>{!compact && <select value={segment} onChange={(event) => setSegment(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"><option value="all">{adminText('All statuses')}</option><option value="active">{adminText('Active')}</option><option value="trial">{adminText('Trial')}</option><option value="expiring">{adminText('Expiring soon')}</option><option value="no-plan">{adminText('No plan')}</option><option value="expired">{adminText('Expired')}</option></select>}</div></div></CardHeader><CardContent className="p-0"><div className="divide-y md:hidden">{loading&&<p className="p-4">{adminText('Loading organisations')}</p>}{error&&<p role="alert" className="p-4 text-red-600">{error.message}</p>}{!loading&&!error&&!organisations.length&&<p className="p-4">{adminText('No organisations match these filters.')}</p>}{!loading&&!error&&organisations.map(item=><article key={item.id} className="space-y-2 p-4"><h3 className="font-semibold">{item.name}</h3><p className="break-all text-sm text-slate-600">{item.owner.email}</p><p className="text-sm">{item.subscription?.planName??adminText('No plan')} · {adminStatus(item.subscription?.status)}</p><p className="text-xs text-slate-500">{adminText(item.source)} · {formatDate(item.subscription?.endDate)}</p><Button variant="outline" onClick={()=>select(item)}>{adminText('View')} →</Button></article>)}</div><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">{adminText('Organisation')}</th><th className="px-5 py-3">{adminText('Owner')}</th><th className="px-5 py-3">{adminText('Plan / status')}</th><th className="px-5 py-3">{adminText('Sites / staff')}</th><th className="px-5 py-3">{adminText('Renewal')}</th><th className="px-5 py-3 text-right">{adminText('Details')}</th></tr></thead><tbody className="divide-y divide-slate-100">{loading && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>{adminText('Loading organisations')}</td></tr>}{!loading && error && <tr><td colSpan={6} className="px-5 py-10 text-center text-red-600">{error.message}</td></tr>}{!loading && !error && organisations.length === 0 && <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">{adminText('No organisations match these filters.')}</td></tr>}{!loading && !error && organisations.map((subscriber) => { const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner'); return <tr key={subscriber.id} className="hover:bg-slate-50/80"><td className="px-5 py-4"><p className="font-semibold">{subscriber.name}</p><p className="mt-1 text-xs text-slate-500">{adminText("Joined")} {formatDate(subscriber.createdAt)}</p></td><td className="px-5 py-4"><p className="font-medium">{ownerName}</p><p className="mt-1 text-xs text-slate-500">{subscriber.owner.email || adminText('No email')}</p></td><td className="px-5 py-4"><Badge variant="outline" className={statusTone(subscriber.subscription?.status)}>{subscriber.subscription?.planName || adminText('No plan')}</Badge><p className="mt-1 text-xs capitalize text-slate-500">{adminStatus(subscriber.subscription?.status)} · {adminText(subscriber.source)}</p></td><td className="px-5 py-4 text-slate-600">{subscriber.siteCount} / {subscriber.staffCount}</td><td className="px-5 py-4 text-slate-600">{formatDate(subscriber.subscription?.endDate)}</td><td className="px-5 py-4 text-right"><Button variant="ghost" size="sm" onClick={() => select(subscriber)}>{adminText('View')} <ArrowRight className="ml-1 h-4 w-4"/></Button></td></tr>; })}</tbody></table></div>{!compact && !loading && !error && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-600"><span>{total === 0 ? `0 ${adminText("organisations")}` : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} ${adminText("of")} ${total} ${adminText("organisations")}`}</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => onPageChange?.(page - 1)}>{adminText('Previous')}</Button><Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= total} onClick={() => onPageChange?.(page + 1)}>{adminText('Next')}</Button></div></div>}</CardContent></Card>;
 }
 
-function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; close: () => void }) {
-  const ownerName = [subscriber.owner.firstName, subscriber.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner');
+function OrganisationPanel({ subscriber, close }: { subscriber: Pick<Subscriber,"id"|"name">; close: () => void }) {
   const queryClient = useQueryClient();
   const [planId, setPlanId] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -673,6 +661,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
     queryKey: ["/api/platform-admin/organisations", subscriber.id],
     queryFn: () => apiJson(`/api/platform-admin/organisations/${subscriber.id}`),
   });
+  const ownerName = [detail.data?.owner.firstName, detail.data?.owner.lastName].filter(Boolean).join(" ") || adminText('Account owner');
   const assignPlan = useMutation({
     mutationFn: async () => {
       const response = await fetch(`/api/platform-admin/organisations/${subscriber.id}/plan`, {
@@ -687,6 +676,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
       setPlanId(""); setEndDate(""); setReason("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/decision-overview"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/subscribers"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/platform-admin/organisations", subscriber.id] }),
       ]);
@@ -763,7 +753,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Subscriber; clos
             <p className="text-sm text-slate-600">{adminText('Sandbox, simulations and unverified historical payments are excluded from real receipts.')}</p><PanelSection title={adminText('Recent subscription payments')}><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={`${payment.method}:${payment.id}`} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{adminText(payment.planName)}</p><p className="text-xs text-slate-500">{adminText(payment.method)} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{adminStatus(payment.status)}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text={adminText('No subscription payment recorded.')}/>}</div></PanelSection>
           </TabsContent>
 
-          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{event.action.replaceAll(".", " ")} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
+          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
         </Tabs>
       </div>}
     </SheetContent></Sheet>;
