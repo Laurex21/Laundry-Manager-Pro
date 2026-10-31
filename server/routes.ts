@@ -1,3 +1,4 @@
+import { garmentControlReportHandler } from "./lib/garment-control-report";
 import { STARTER_SETTINGS_FIELDS } from "../shared/starter-receipt";
 import { registerAcquisitionRoutes } from "./lib/acquisition";
 import { saasOrganisationDeferred } from "./lib/saas-deferred";
@@ -1197,6 +1198,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const data = await storage.getReportData(startDate, endDate, reportSites, timeZone);
     res.json(data);
   });
+
+  app.get("/api/reports/garment-controls", isAuthenticated, garmentControlReportHandler(pool, reportSiteScope));
 
   app.get("/api/reports/business-evolution", isAuthenticated, async (req: any, res) => {
     const reportSites = reportSiteScope(req);

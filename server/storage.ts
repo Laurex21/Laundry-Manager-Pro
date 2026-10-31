@@ -1,3 +1,4 @@
+import { canDeliverGarments } from "@shared/garment-delivery";
 import { currentCustomerRisk } from "./lib/customer-risk";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { requireExistingColumns } from "./lib/existing-schema-check";
@@ -35,7 +36,7 @@ import { formatReportingDay, reportingDateRange, reportingDateString, reportingW
 import { refreshCustomerAnalyticsFromHistory } from "./lib/temporal-intelligence";
 import { ensureOrderItemQuantitySupportsDecimals } from "./lib/order-item-quantity-schema";
 import { aggregateCustomerReportMetrics } from "./lib/customer-report-metrics";
-import { canCheckQuality, canCheckHandover, handoverComplete, GarmentVerificationError } from "./lib/garment-verification";
+import { canCheckQuality, canCheckHandover, GarmentVerificationError } from "./lib/garment-verification";
 
 let businessSettingsSchemaReady = false;
 
@@ -375,7 +376,7 @@ export class DatabaseStorage implements IStorage {
         if (order.status === "delivered") return order;
         if (order.requiresGarmentVerification) {
           const garments = await tx.select().from(garmentItems).where(eq(garmentItems.orderId, id));
-          if (!handoverComplete(garments)) throw new GarmentVerificationError("Complete all garment checks with the customer before delivery");
+          if (!canDeliverGarments(garments)) throw new GarmentVerificationError("Resolve the garment return before delivery");
         }
         const [updated] = await tx.update(orders).set({ status, paymentStatus: paymentStatus || order.paymentStatus, deliveredAt: order.deliveredAt ?? new Date(), updatedAt: new Date() }).where(eq(orders.id, id)).returning();
         if (updated) await tx.insert(orderStatusHistory).values({ orderId: id, status, changedBy: changedBy || null });
@@ -467,7 +468,7 @@ export class DatabaseStorage implements IStorage {
     if (order.status === "delivered") return order;
     if (order.requiresGarmentVerification) {
       const garments = await tx.select().from(garmentItems).where(eq(garmentItems.orderId, id));
-      if (!handoverComplete(garments)) throw new GarmentVerificationError("Complete all garment checks with the customer before delivery");
+      if (!canDeliverGarments(garments)) throw new GarmentVerificationError("Resolve the garment return before delivery");
     }
     const serverDeliveredAt = new Date();
 
@@ -721,14 +722,12 @@ export class DatabaseStorage implements IStorage {
       if (item.returnedForTreatment && !item.resolvedAt) throw new GarmentVerificationError("Resolve the garment return before verification");
       if (phase === "quality") {
         if (!canCheckQuality(order.status)) throw new GarmentVerificationError("Quality checks open at the ironing stage");
-        if (quantity < item.handedOverQuantity) throw new GarmentVerificationError("Quality count cannot be below handed-over count");
         const [updated] = await tx.update(garmentItems).set({
           qualityCheckedQuantity: quantity, qualityCheckedAt: new Date(), qualityCheckedBy: actor,
         }).where(eq(garmentItems.id, id)).returning();
         return updated;
       }
       if (!canCheckHandover(order.status)) throw new GarmentVerificationError("Customer handover opens when the order is ready");
-      if (item.qualityCheckedQuantity !== item.quantity) throw new GarmentVerificationError("Complete internal quality and quantity control first");
       const [updated] = await tx.update(garmentItems).set({
         handedOverQuantity: quantity, handedOverAt: new Date(), handedOverBy: actor,
       }).where(eq(garmentItems.id, id)).returning();

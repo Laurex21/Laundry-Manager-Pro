@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import { PGlite } from '@electric-sql/pglite';
+import { drizzle } from 'drizzle-orm/pglite';
+import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
+import { eq } from 'drizzle-orm';
+import * as schema from '../../shared/schema';
+import { garmentControlReportHandler } from './garment-control-report';
+import { canDeliverGarments } from '../../shared/garment-delivery';
+process.env.DATABASE_URL='postgresql://isolated-only:unused@127.0.0.1:1/test';
+const pg=new PGlite();const testDb=drizzle(pg,{schema});
+const {db,pool}=await import('../db');
+for(const method of ['select','insert','update','delete','execute','transaction'] as const)(db as any)[method]=testDb[method].bind(testDb);
+(pool as any).query=(sql:string,params?:any[])=>pg.query(sql,params);
+(pool as any).connect=()=>{throw Error('External database access forbidden');};
+const {storage}=await import('../storage');
+async function report(query:any,sites:number[]|null=[1]){
+ let status=200,body:any;let calls=0;
+ const handler=garmentControlReportHandler({query:async(sql,params)=>{calls++;return pg.query(sql,params);}},()=>sites);
+ await handler({query:{start:'2026-11-01',end:'2026-11-01',...query},get:()=> 'Africa/Douala'} as any,{status(n:number){status=n;return this;},json(b:any){body=b;return this;}} as any,(e:any)=>{throw e;});
+ return {status,body,calls};
+}
+try{
+ for(const sql of await generateMigration(generateDrizzleJson({}),generateDrizzleJson(schema)))await pg.exec(sql);
+ await testDb.insert(schema.users).values([{id:'owner-1',firstName:'Test',lastName:'Owner',organisationId:1},{id:'staff-1',firstName:'Test',lastName:'User',organisationId:1},{id:'owner-2',organisationId:2}]);
+ await testDb.insert(schema.organisations).values([{id:1,name:'Fictional A',ownerId:'owner-1'},{id:2,name:'Fictional B',ownerId:'owner-2'}]);
+ await testDb.insert(schema.sites).values([{id:1,name:'Fictional site A',organisationId:1},{id:2,name:'Other tenant',organisationId:2}]);
+ await testDb.insert(schema.employees).values([{userId:'staff-1',siteId:1,name:'Fictional checker',role:'operator'}]);
+ await testDb.insert(schema.customers).values({id:1,name:'Fictional customer',phone:'000',address:'Test',siteId:1});
+ await testDb.insert(schema.orders).values([1,2,3,4,5].map(id=>({id,customerId:1,siteId:id===5?2:1,status:'ready',requiresGarmentVerification:true,entryDate:new Date('2025-01-01Z')})));
+ await testDb.insert(schema.garmentItems).values([1,2,3,4,5].map(id=>({id,orderId:id,itemName:'Fictional shirt '+id,quantity:3})));
+ assert.equal(canDeliverGarments([]),true);
+ assert.equal((await storage.updateOrderStatus(1,'delivered'))?.status,'delivered','Pipeline delivery without any control');
+ assert.equal((await storage.markDelivered(2,new Date()))?.status,'delivered','Delivery dialog without any control');
+ let item=await storage.updateGarmentVerification(3,'handover',2,'staff-1');
+ assert.equal(item.qualityCheckedQuantity,0,'Customer control independent of internal control');
+ item=await storage.updateGarmentVerification(3,'quality',1,'owner-1');
+ assert.equal(item.handedOverQuantity,2,'Internal control can be partial independently');
+ await assert.rejects(()=>storage.updateGarmentVerification(3,'quality',4,'owner-1'),/Invalid verified quantity/);
+ await assert.rejects(()=>storage.updateGarmentVerification(3,'handover',-1,'owner-1'),/Invalid verified quantity/);
+ assert.equal((await storage.markDelivered(3,new Date()))?.status,'delivered','Partial controls do not block delivery');
+ const preserved=await storage.getGarmentItem(3);assert.equal(preserved?.qualityCheckedQuantity,1);assert.equal(preserved?.handedOverQuantity,2);
+ await testDb.update(schema.garmentItems).set({returnedForTreatment:true}).where(eq(schema.garmentItems.id,4));
+ await assert.rejects(()=>storage.updateOrderStatus(4,'delivered'),/Resolve the garment return/);
+ await assert.rejects(()=>storage.markDelivered(4,new Date()),/Resolve the garment return/);
+ await testDb.update(schema.garmentItems).set({resolvedAt:new Date()}).where(eq(schema.garmentItems.id,4));
+ assert.equal((await storage.markDelivered(4,new Date()))?.status,'delivered','Resolved return permits delivery');
+ // Check date is independent of the old order entry date. Local midnight is UTC 23:00.
+ await testDb.update(schema.garmentItems).set({qualityCheckedQuantity:1,qualityCheckedAt:new Date('2026-10-31T23:15:00Z'),qualityCheckedBy:'staff-1',handedOverQuantity:2,handedOverAt:new Date('2026-11-01T12:00:00Z'),handedOverBy:'owner-1'}).where(eq(schema.garmentItems.id,3));
+ await testDb.update(schema.garmentItems).set({qualityCheckedQuantity:3,qualityCheckedAt:new Date('2026-11-01T12:00:00Z'),qualityCheckedBy:'owner-2'}).where(eq(schema.garmentItems.id,5));
+ const all=await report({});assert.equal(all.status,200);assert.equal(all.body.total,2);assert.equal(all.body.items.length,2);
+ assert.equal(all.body.items.find((x:any)=>x.phase==='quality').actorName,'Fictional checker');
+ assert.equal(all.body.items.find((x:any)=>x.phase==='handover').actorName,'Test Owner');
+ assert.ok(all.body.items.every((x:any)=>x.siteId===1&&x.orderId===3));
+ assert.equal((await report({phase:'quality'})).body.total,1);
+ assert.equal((await report({phase:'handover'})).body.items[0].checkedQuantity,2);
+ assert.equal((await report({},null)).status,403);
+ assert.equal((await report({},[])).calls,0);
+ for(const query of [{start:'2026-02-30'},{end:'2026-10-01'},{phase:'forged'},{page:'-1'},{page:'1;DROP'}])assert.equal((await report(query)).status,400);
+ await testDb.insert(schema.garmentItems).values(Array.from({length:51},(_,n)=>({id:100+n,orderId:1,itemName:'Page test '+n,quantity:1,qualityCheckedQuantity:1,qualityCheckedAt:new Date('2026-11-01T14:00:00Z'),qualityCheckedBy:'staff-1'})));
+ const first=await report({});const second=await report({page:'2'});assert.equal(first.body.total,53);assert.equal(first.body.items.length,50);assert.equal(second.body.items.length,3);
+ assert.equal(new Set([...first.body.items,...second.body.items].map(x=>x.garmentItemId+'-'+x.phase)).size,53,'No duplicate rows across pages');
+ console.log('PASS optional controls: both delivery paths, independent/partial controls, return protection, preserved actors/quantities; report date/timezone, tenant scope, actor names, filters and pagination');
+}finally{await pool.end();await pg.close();}

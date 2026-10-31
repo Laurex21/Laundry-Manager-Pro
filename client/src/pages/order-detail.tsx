@@ -1,3 +1,4 @@
+import { canDeliverGarments } from "@shared/garment-delivery";
 import { ReceiptDownloadMenu } from "@/components/receipt-download-menu";
 import { downloadReceiptDocument, type ReceiptFormat } from "@/lib/receipt-export";
 import { useState } from "react";
@@ -153,7 +154,7 @@ export default function OrderDetail() {
   }, 0);
   const qualityCheckedCount = (order.garmentItems || []).reduce((sum: number, g: any) => sum + Number(g.qualityCheckedQuantity || 0), 0);
   const handedOverCount = (order.garmentItems || []).reduce((sum: number, g: any) => sum + Number(g.handedOverQuantity || 0), 0);
-  const customerHandoverComplete = !order.requiresGarmentVerification || (totalRegisteredGarments > 0 && handedOverCount === totalRegisteredGarments && qualityCheckedCount === totalRegisteredGarments && !hasReturnedItems);
+  const deliveryAllowed = !order.requiresGarmentVerification || canDeliverGarments(order.garmentItems || []);
   const qualityCheckOpen = currentStageIndex >= getStageIndex("ironing") && !["delivered", "cancelled", "cancellation_requested"].includes(order.status);
   const customerHandoverOpen = order.status === "ready";
   const totalPaid = (order.payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
@@ -638,7 +639,7 @@ export default function OrderDetail() {
               </>
             ) : order.status === "ready" ? (
               <>
-                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} disabled={!customerHandoverComplete} data-testid="button-mark-delivered">
+                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} disabled={!deliveryAllowed || isUpdating} data-testid="button-mark-delivered">
                   <CalendarCheck className="w-4 h-4 mr-1" /> {t("mark_as_delivered")}
                 </Button>
               </>
@@ -840,6 +841,7 @@ export default function OrderDetail() {
                 {order.requiresGarmentVerification && (
                   <div className="rounded-lg border bg-primary/5 p-3 text-sm" data-testid="garment-verification-summary">
                     <p className="font-semibold">{t("garment_internal_qc", "Internal quality and quantity control")}: {qualityCheckedCount}/{totalRegisteredGarments}</p>
+                    <p className="text-muted-foreground">{t("garment_controls_optional")}</p>
                     <p>{t("garment_customer_handover", "Counted with customer")}: {handedOverCount}/{totalRegisteredGarments}</p>
                     {!qualityCheckOpen && <p className="text-muted-foreground">{t("garment_qc_wait", "Checks open at the ironing stage")}</p>}
                   </div>
@@ -865,7 +867,7 @@ export default function OrderDetail() {
                       <div className="flex flex-wrap gap-3" data-testid={`garment-verification-${g.id}`}>
                         {(["quality", "handover"] as const).map((phase) => {
                           const value = Number(phase === "quality" ? g.qualityCheckedQuantity : g.handedOverQuantity) || 0;
-                          const enabled = phase === "quality" ? qualityCheckOpen : customerHandoverOpen && Number(g.qualityCheckedQuantity) === Number(g.quantity);
+                          const enabled = phase === "quality" ? qualityCheckOpen : customerHandoverOpen;
                           const blocked = !enabled || checkingGarment !== null || (g.returnedForTreatment && !g.resolvedAt);
                           return <div key={phase} className="rounded-md border bg-background px-2 py-1" aria-label={phase === "quality" ? t("garment_internal_qc", "Internal QC") : t("garment_customer_handover", "With customer")}>
                             <span className="mr-2 text-xs font-medium">{phase === "quality" ? t("garment_internal_qc_short", "Internal QC") : t("garment_customer_handover_short", "With customer")}</span>
@@ -1103,7 +1105,7 @@ export default function OrderDetail() {
 
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>{t("cancel")}</Button>
-              <Button onClick={handleMarkDelivered} disabled={!customerHandoverComplete} data-testid="button-confirm-deliver">
+              <Button onClick={handleMarkDelivered} disabled={!deliveryAllowed || isUpdating} data-testid="button-confirm-deliver">
                 <CalendarCheck className="w-4 h-4 mr-1" /> {t("confirm_delivery")}
               </Button>
             </div>
