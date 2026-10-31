@@ -1,3 +1,4 @@
+import { GarmentControlReport } from "@/components/garment-control-report";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -787,6 +788,7 @@ export default function Reports({ embedded = false }: { embedded?: boolean }) {
           )}
         </CardContent>
       </Card>
+      <GarmentControlReport start={queryParams.start} end={queryParams.end} site={queryParams.site} validRange={evolutionRangeValid} />
     </div>
   );
 }
