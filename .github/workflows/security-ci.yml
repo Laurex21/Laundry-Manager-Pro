@@ -53,3 +53,5 @@ jobs:
       - run: npm run test:saas-pilot
       - run: npm run test:pawapay-private-diagnostic
       - run: npm run build
+      - name: Starter receipt and access rules
+        run: npm run test:starter-receipts

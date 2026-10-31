@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:starter-receipts": "node --import tsx server/lib/starter-receipt-rules.test.ts && node --import tsx server/lib/saas-access.integration.test.ts",
     "test:public-journey": "node --import tsx client/src/lib/public-journey.test.tsx",
     "test:email-login": "node --import tsx server/lib/email-login.integration.test.ts",
     "test:auth-i18n": "tsx server/lib/auth-login-i18n.test.ts",

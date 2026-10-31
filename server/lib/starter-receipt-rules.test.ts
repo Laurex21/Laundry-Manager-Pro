@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {starterReceiptSettings,STARTER_SETTINGS_FIELDS} from '../../shared/starter-receipt';
+import {generateDepositReceipt} from '../../client/src/lib/receipt';
+import {DEFAULT_SETTINGS} from '../../client/src/lib/receipt-settings';
+const saved={...DEFAULT_SETTINGS,businessName:'Pressing fictif',receiptLanguage:'fr',showTerms:true,termsOfService:'CONDITIONS_TEST_NEVER_DISPLAY',phone:'PRIVATE_PHONE',address:'PRIVATE_ADDRESS',logoBase64:'PRIVATE_LOGO'};
+const standard=starterReceiptSettings(saved);
+assert.equal(saved.businessName,'Pressing fictif');assert.equal(saved.showTerms,true);
+assert.equal(standard.businessName,'XpressPro');assert.equal(standard.showTerms,false);assert.equal(standard.starterServiceProvider,'Pressing fictif');assert.match(standard.logoBase64!,/^data:image\/svg\+xml;base64,/);
+assert.ok(!STARTER_SETTINGS_FIELDS.includes('logoBase64' as any));
+let html='';(globalThis as any).__captureReceiptHtml=(value:string)=>{html=value;};
+generateDepositReceipt({id:999,customer:{name:'Client test',phone:'000'},items:[{quantity:'2',priceAtOrder:'1000',total:'2000',service:{name:'Chemise',price:'1000',unit:'piece'}}],totalAmount:'2000',createdAt:'2026-10-31T09:00:00Z',paymentStatus:'unpaid',garmentItems:[{itemName:'Chemise',quantity:2}]},' FCFA',standard,'html');
+assert.doesNotMatch(html,/NaN|undefined/);assert.match(html,/Votre plateforme de gestion de pressing/);assert.match(html,/Service assuré par Pressing fictif/);assert.doesNotMatch(html,/Conditions Générales|CONDITIONS_TEST|PRIVATE_PHONE|PRIVATE_ADDRESS|PRIVATE_LOGO/);
+assert.equal((html.match(/Pressing fictif/g)||[]).length,1);
+fs.writeFileSync('/tmp/starter-rules-receipt.html',html);
+console.log('PASS Starter branding: XpressPro logo, fixed signature, one discreet provider mention, no conditions or custom contact details, saved identity preserved. Common HTML export source validated.');

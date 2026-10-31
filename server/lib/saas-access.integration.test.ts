@@ -39,7 +39,7 @@ try{
  assert.equal(routeFeature('/api/customers/3/subscription','POST'),'memberships');
  assert.equal(routeFeature('/api/subscriptions/3/renew','POST'),'memberships');
  const settings={businessName:'Company',phone:'000',logoBase64:'saved-logo',receiptHeaderColor:'#123456',receiptQrCodeBase64:'saved-qr',receiptFooterNote:'Saved note'};
- assert.equal(standardSaasSettings(settings,'starter').logoBase64,null);assert.equal(settings.logoBase64,'saved-logo');assert.equal(standardSaasSettings(settings,'pro').logoBase64,'saved-logo');
+ assert.match(standardSaasSettings(settings,'starter').logoBase64!,/^data:image\/svg\+xml;base64,/);assert.equal(settings.logoBase64,'saved-logo');assert.equal(standardSaasSettings(settings,'pro').logoBase64,'saved-logo');
  // Quotas are enforced inside the actual existing site's storage transaction.
  await assert.rejects(storage.createSite(1,{name:'Blocked',address:'',city:'',phone:''}),/BUSINESS_REQUIRED/);
  assert.equal((await query('SELECT * FROM sites WHERE organisation_id=1')).rows.length,2);
