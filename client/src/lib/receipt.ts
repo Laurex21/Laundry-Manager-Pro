@@ -715,7 +715,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
+      <p>${settings.starterServiceProvider ? escapeHtml(label("Service provided by ", "Service assuré par ", lang) + settings.starterServiceProvider) : settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
       ${buildReceiptQrHtml(settings)}
     </div>
   </div>
@@ -1028,7 +1028,7 @@ export function generatePaymentReceipt(
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
+      <p>${settings.starterServiceProvider ? escapeHtml(label("Service provided by ", "Service assuré par ", lang) + settings.starterServiceProvider) : settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
       ${buildReceiptQrHtml(settings)}
     </div>
   </div>

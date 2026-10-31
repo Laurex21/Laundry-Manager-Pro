@@ -1,3 +1,4 @@
+import { STARTER_SETTINGS_FIELDS } from "../shared/starter-receipt";
 import { registerAcquisitionRoutes } from "./lib/acquisition";
 import { saasOrganisationDeferred } from "./lib/saas-deferred";
 import { getPilotageOverview } from "./lib/pilotage-overview";
@@ -2407,6 +2408,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
       }
       if ((req as any).saas?.plan === "starter") {
+        const disallowed = Object.keys(parsed.data).filter(key => !(STARTER_SETTINGS_FIELDS as readonly string[]).includes(key));
+        if (disallowed.length) return res.status(403).json({code:"SAAS_CUSTOMIZATION_REQUIRED",message:"Starter only allows basic account information. Receipt customization requires Pro or Business."});
+
         const visible = standardSaasSettings(await storage.getSettings(userId), "starter");
         for (const field of SAAS_CUSTOM_FIELDS) {
           if (!Object.hasOwn(parsed.data, field)) continue;

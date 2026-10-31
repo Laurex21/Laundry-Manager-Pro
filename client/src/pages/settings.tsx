@@ -1049,10 +1049,11 @@ function TeamTab() {
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
 export default function Settings() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { isOwner } = useAuth();
+  const { isOwner, user } = useAuth();
+  const starter = user?.saas?.plan === "starter" || user?.planSlug === "starter";
 
   const { data: settings, isLoading } = useQuery<any>({
     queryKey: ["/api/settings"],
@@ -1119,7 +1120,10 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="identity">
+      {starter ? <Card data-testid="starter-settings-basic"><CardHeader><CardTitle>{t("business_name")}</CardTitle><CardDescription>{i18n.language.startsWith("fr") ? "Starter : informations de base uniquement. Les reçus utilisent le modèle XpressPro ; personnalisation disponible avec Pro ou Business." : "Starter: basic account information only. Receipts use the XpressPro template; customization is available with Pro or Business."}</CardDescription></CardHeader><CardContent><form className="space-y-4" onSubmit={e=>{e.preventDefault(); const data=new FormData(e.currentTarget);saveMut.mutate(Object.fromEntries(data.entries()));}}>
+        <Label htmlFor="starter-business-name">{t("business_name")}</Label><Input id="starter-business-name" name="businessName" defaultValue={settings?.starterServiceProvider || settings?.businessName || ""} required maxLength={255}/>
+        <Button type="submit" disabled={saveMut.isPending}>{t("save_changes")}</Button>
+        </form></CardContent></Card> : <Tabs defaultValue="identity">
         <TabsList className="flex h-auto w-full max-w-full gap-1 overflow-x-auto rounded-xl border border-primary/10 bg-card p-1.5 shadow-sm sm:grid sm:max-w-2xl sm:grid-cols-5" data-testid="settings-tabs">
           <TabsTrigger value="identity" className="min-w-[3rem] shrink-0 gap-2 sm:min-w-0" data-testid="tab-identity">
             <Building2 className="w-4 h-4" />
@@ -1203,7 +1207,7 @@ export default function Settings() {
             </Card>
           </TabsContent>
         </div>
-      </Tabs>
+      </Tabs>}
     </div>
   );
 }

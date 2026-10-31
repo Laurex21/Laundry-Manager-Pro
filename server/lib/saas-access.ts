@@ -1,3 +1,4 @@
+import {starterReceiptSettings} from "../../shared/starter-receipt";
 import { hasSaasFeature, type SaasFeature, type SaasState } from "../../shared/saas-plans";
 import { saasEnabled, saasStore, saasForOrganisation } from "./saas-runtime";
 import { SaasError } from "./saas-store";
@@ -5,8 +6,7 @@ import { SaasError } from "./saas-store";
 export const SAAS_CUSTOM_FIELDS = ["logoBase64", "receiptHeaderColor", "receiptFooterNote", "receiptQrCodeBase64", "receiptQrCodeTarget", "receiptQrCodeLabel", "showLogo", "showPickupDate", "showGarmentList", "showPaymentHistory", "showTerms", "termsOfService"];
 export function standardSaasSettings<T extends Record<string, any>>(settings: T, plan: string): T {
   if (plan !== "starter") return settings;
-  return { ...settings, logoBase64: null, receiptHeaderColor: "#1e3a5f", receiptFooterNote: "", receiptQrCodeBase64: null, receiptQrCodeTarget: "", receiptQrCodeLabel: "",
-    showLogo: false, showPickupDate: true, showGarmentList: true, showPaymentHistory: true, showTerms: true, termsOfService: null };
+  return starterReceiptSettings(settings);
 }
 export async function applySaasAccess(req: any, res: any): Promise<boolean> {
   if (!saasEnabled() || !req.organisationId) return true;

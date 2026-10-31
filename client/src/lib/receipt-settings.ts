@@ -1,4 +1,5 @@
 export interface ReceiptSettings {
+  starterServiceProvider?: string;
   businessName: string;
   companyRegistrationNumber?: string | null;
   tagline?: string | null;
