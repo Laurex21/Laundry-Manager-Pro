@@ -1,3 +1,4 @@
+import { createSalesRegistrationUser, completeSalesRegistration, SalesReferralError } from "../../lib/sales-referrals";
 import { normalizeLoginEmail } from "@shared/login-email";
 import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
 import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
@@ -333,7 +334,7 @@ export function registerAuthRoutes(app: Express): void {
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      const user = await authStorage.upsertUser({
+      const user = await createSalesRegistrationUser({
         email,
         passwordHash,
         firstName: firstName || null,
@@ -342,7 +343,7 @@ export function registerAuthRoutes(app: Express): void {
         businessName: businessName || null,
         userType: "owner",
         role: "owner",
-      });
+      }, req.body.salesReferralCode);
 
       await new Promise<void>((resolve, reject) =>
         req.session.regenerate((err) => (err ? reject(err) : resolve()))
@@ -376,9 +377,12 @@ export function registerAuthRoutes(app: Express): void {
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
 
+      if (req.body.salesReferralCode) await completeSalesRegistration(user.id, userAfterOrg?.organisationId);
+
       await recordAcquisitionRegistration(acquisitionJourney).catch(() => console.error("Acquisition registration measurement unavailable"));
       res.status(201).json(response);
     } catch (error) {
+      if (error instanceof SalesReferralError) return res.status(409).json({ message: "SALES_REFERRAL_UNAVAILABLE" });
       console.error("Registration error:", error);
       res.status(500).json({ message: "Registration failed" });
     }

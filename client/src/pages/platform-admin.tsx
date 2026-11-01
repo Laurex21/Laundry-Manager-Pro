@@ -1,3 +1,4 @@
+import SalesDirectory from "@/components/sales-directory";
 import PlatformAdminDecision from "@/components/platform-admin-decision";
 import AcquisitionReport from "@/components/acquisition-report";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -127,6 +128,7 @@ type AdminStatus = {
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
+  "Sales representatives": "Commerciaux",
  "pawaPay · pilot":"pawaPay · pilote",
   "Audited administration": "Administration auditée",
   "Real pawaPay receipts this month": "Encaissements réels pawaPay du mois",
@@ -604,6 +606,7 @@ function AdminDashboard() {
             <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />{adminText('Organisations')}</TabsTrigger>
             <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />{adminText('Renewals')}</TabsTrigger>
             <TabsTrigger value="acquisition">Acquisition</TabsTrigger>
+            <TabsTrigger value="sales">{adminText("Sales representatives")}</TabsTrigger>
             <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />{adminText('Security')}</TabsTrigger>
           </TabsList>
 
@@ -631,6 +634,7 @@ function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="acquisition" className="mt-5"><AcquisitionReport /></TabsContent>
+          <TabsContent value="sales" className="mt-5"><SalesDirectory /></TabsContent>
           <TabsContent value="security" className="mt-5">
             <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
           </TabsContent>
