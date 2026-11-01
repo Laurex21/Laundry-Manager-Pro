@@ -1,3 +1,4 @@
+import { AccessNotice } from "./access-notice";
 import { SaasTrialBanner } from "./saas-trial-banner";
 import { businessTrialBanner } from "@shared/saas-business-launch";
 import { useEffect, useState } from "react";
@@ -25,7 +26,7 @@ export function SaasNotice() {
   if(!saas)return null;
   const archived=(user as any)?.currentSite && !saas.activeSiteIds.includes((user as any).currentSite.id);
   return <>
-    {archived&&<p role="status" className="m-4 rounded-xl bg-amber-50 p-4 text-amber-950">{fr?'Cette boutique est en consultation historique. Business est requis pour exploiter plusieurs boutiques.':'This site is available for historical consultation. Business is required to operate multiple sites.'}</p>}
+    {archived&&<div className="m-4"><AccessNotice kind="historical"/></div>}
     {banner&&<SaasTrialBanner endsAt={banner.endsAt} days={banner.days} language={i18n.language}/>}
     {!banner&&notice&&<div role="status" className="m-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">{notice.kind==='expired'?(fr?'Votre abonnement est passé à Starter gratuit. Vos données sont conservées.':'Your plan changed to free Starter. Your data is preserved.'):(fr?(saas.plan==='business'?'Votre essai Business se termine le ':'Votre essai Pro se termine le '):(saas.plan==='business'?'Your Business trial ends on ':'Your Pro trial ends on '))}{notice.details.endsAt&&new Date(notice.details.endsAt).toLocaleString(i18n.language)}{' '}<Link className="font-semibold underline" href="/subscriptions">{fr?'Voir les formules':'View plans'}</Link></div>}
   </>;

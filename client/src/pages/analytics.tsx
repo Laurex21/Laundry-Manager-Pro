@@ -1,3 +1,5 @@
+import { AccessNotice } from "@/components/access-notice";
+import { requireOk } from "@/lib/access-feedback";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -83,18 +85,19 @@ function ExecutiveDecisionCockpit({ period }: { period: string }) {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
-  const { data, isLoading, isError } = useQuery<any>({
+  const { data, isLoading, isError, error } = useQuery<any>({
     queryKey: ["/api/analytics/decision-cockpit", period, costBasis, fixedCategories, variableCategories],
     staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 60_000,
     queryFn: async () => {
       const response = await fetch(`/api/analytics/decision-cockpit?period=${period}&costBasis=${costBasis}&fixedCategories=${encodeURIComponent(fixedCategories)}&variableCategories=${encodeURIComponent(variableCategories)}`, { credentials: "include", headers: {"X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone} });
-      if (!response.ok) throw new Error("Unable to load decision cockpit");
+      await requireOk(response);
       return response.json();
     },
   });
 
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-40 rounded-xl" /><Skeleton className="h-72 rounded-xl" /></div>;
-  if (isError || !data?.metrics) return <Card><CardContent className="p-6 text-destructive" role="alert">{t("decision_cockpit_error")}</CardContent></Card>;
+  if (isError) return <AccessNotice error={error}/>;
+  if (!data?.metrics) return <Card><CardContent className="p-6 text-destructive" role="alert">{t("decision_cockpit_error")}</CardContent></Card>;
 
   const m = data.metrics;
   const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
@@ -797,10 +800,10 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   const money = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 0 })} ${symbol}`;
   const churnRiskRef = useRef<HTMLDivElement>(null);
   const { currentSite } = useAuth();
-  const { data, isLoading, isError } = useQuery<any>({
+  const { data, isLoading, isError, error } = useQuery<any>({
     queryKey: ["/api/analytics/customer-behavior", period, currentSite?.id ?? "all"],
     staleTime:0, refetchOnWindowFocus:true, refetchInterval:60_000,
-    queryFn: async () => { const res=await fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }); if(!res.ok) throw new Error("Customer analytics unavailable"); return res.json(); },
+    queryFn: async () => { const res=await fetch(`/api/analytics/customer-behavior?period=${period}`, { credentials: "include" }); await requireOk(res); return res.json(); },
   });
 
   useEffect(() => {
@@ -812,7 +815,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
   }, [data]);
 
   if (isLoading) return <Skeleton className="h-96 rounded-xl" />;
-  if (isError) return <p role="alert">{t("decision_load_error")}</p>;
+  if (isError) return <AccessNotice error={error}/>;
   if (!data) return null;
 
   const depositData = (data.depositActivityByHour || []).map((row: any) => ({ ...row, label: `${row.hour}h` }));
@@ -1024,7 +1027,8 @@ function getAlertRecommendation(alert: any, t: (key: string) => string): string 
 
 function WasteAlerts() {
   const { t } = useTranslation();
-  const { data: alerts } = useQuery<any[]>({ queryKey: ["/api/analytics/waste"] });
+  const { data: alerts, error } = useQuery<any[]>({ queryKey: ["/api/analytics/waste"] });
+  if(error) return <AccessNotice error={error}/>;
 
   return (
     <Card className="shadow-sm" data-testid="card-waste-detection">
@@ -1075,10 +1079,10 @@ function AdvancedAnalytics({ period }: { period: string }) {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
-  const { data, isLoading } = useQuery<any>({
+  const { data, isLoading, error } = useQuery<any>({
     queryKey: ["/api/analytics/advanced", period],
-    queryFn: () => fetch(`/api/analytics/advanced?period=${period}`, { credentials: "include" }).then(r => {
-      if (!r.ok) throw new Error("Failed to load advanced analytics");
+    queryFn: () => fetch(`/api/analytics/advanced?period=${period}`, { credentials: "include" }).then(async r => {
+      await requireOk(r);
       return r.json();
     }),
   });
@@ -1087,6 +1091,7 @@ function AdvancedAnalytics({ period }: { period: string }) {
     return <Skeleton className="h-96 rounded-xl" />;
   }
 
+  if(error) return <AccessNotice error={error}/>;
   const summary = data?.summary || {};
   const employee = data?.employeeInsights || {};
   const machine = data?.machineInsights || {};
@@ -1323,7 +1328,8 @@ function ProductionDelaysSection() {
   const { t } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
-  const { data: delays } = useQuery<any[]>({ queryKey: ["/api/analytics/production-delays"] });
+  const { data: delays, error } = useQuery<any[]>({ queryKey: ["/api/analytics/production-delays"] });
+  if(error) return <AccessNotice error={error}/>;
 
   if (!delays || delays.length === 0) return null;
 

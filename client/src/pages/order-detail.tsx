@@ -1,3 +1,6 @@
+import { OrderIdentity } from "@/components/order-identity";
+import { formatExactDecimal, addDecimals } from "@shared/exact-decimal";
+import { historicalSite } from "@/lib/access-feedback";
 import { canDeliverGarments } from "@shared/garment-delivery";
 import { ReceiptDownloadMenu } from "@/components/receipt-download-menu";
 import { downloadReceiptDocument, type ReceiptFormat } from "@/lib/receipt-export";
@@ -102,8 +105,8 @@ export default function OrderDetail() {
   const symbol = getSymbol();
   const { toast } = useToast();
   const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
-  const { data: machines } = useQuery<any[]>({ queryKey: ["/api/machines"] });
-  const { isOwner, userRole } = useAuth();
+  const { isOwner, userRole, user, hasFeature } = useAuth();
+  const { data: machines } = useQuery<any[]>({ queryKey: ["/api/machines"], enabled: !!user && hasFeature("machines") && !historicalSite(user, order?.siteId) });
   const isManager = userRole === "manager" || isOwner;
 
   const [returnGarmentId, setReturnGarmentId] = useState<number | null>(null);
@@ -138,17 +141,18 @@ export default function OrderDetail() {
     );
   }
 
+  const readOnly = historicalSite(user, order.siteId);
   const currentStageIndex = getStageIndex(order.status);
   const nextPipelineStage = PIPELINE_STAGES[currentStageIndex + 1];
   const activeMachines = machines?.filter((machine: any) => machine.status !== "inactive") ?? [];
   const shouldShowMachineAssignment = !!nextPipelineStage && isMachineStage(nextPipelineStage.key) && activeMachines.length > 0;
   const hasReturnedItems = order.garmentItems?.some((g: any) => g.returnedForTreatment && !g.resolvedAt);
-  const serviceQuantityTotals: Map<string, number> = (order.items || []).reduce((totals: Map<string, number>, item: any) => {
+  const serviceQuantityTotals: Map<string, string> = (order.items || []).reduce((totals: Map<string, string>, item: any) => {
     const unit = item.service?.unit === "kg" ? "kg" : t("pieces", "pieces");
-    totals.set(unit, (totals.get(unit) || 0) + Math.max(0, Number(item.quantity) || 0));
+    totals.set(unit, addDecimals(totals.get(unit) || "0", item.quantity || "0"));
     return totals;
-  }, new Map<string, number>());
-  const serviceQuantitySummary = Array.from(serviceQuantityTotals.entries()).map(([unit, quantity]) => `${quantity} ${unit}`).join(" · ");
+  }, new Map<string, string>());
+  const serviceQuantitySummary = Array.from(serviceQuantityTotals.entries()).map(([unit, quantity]) => `${formatExactDecimal(quantity, i18n.language)} ${unit}`).join(" · ");
   const totalRegisteredGarments = (order.garmentItems || []).reduce((sum: number, garment: any) => {
     return sum + Math.max(0, Number(garment.quantity) || 0);
   }, 0);
@@ -454,7 +458,7 @@ export default function OrderDetail() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: orderDisplayLabel(order) })}</h1>
+          <h1 className="text-2xl font-display font-bold"><OrderIdentity order={order}/></h1>
           <p className="text-muted-foreground text-sm">
             {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>
@@ -639,14 +643,14 @@ export default function OrderDetail() {
               </>
             ) : order.status === "ready" ? (
               <>
-                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} disabled={!deliveryAllowed || isUpdating} data-testid="button-mark-delivered">
+                <Button size="sm" onClick={() => setDeliverDialogOpen(true)} disabled={!deliveryAllowed || isUpdating || readOnly} data-testid="button-mark-delivered">
                   <CalendarCheck className="w-4 h-4 mr-1" /> {t("mark_as_delivered")}
                 </Button>
               </>
             ) : order.status !== "delivered" && order.status !== "cancelled" && order.status !== "cancellation_requested" ? (
               <>
                 {currentStageIndex < PIPELINE_STAGES.length - 1 && (
-                  <Button size="sm" className="w-full md:w-auto" onClick={handleAdvanceStatus} disabled={isUpdating} data-testid="button-advance-status">
+                  <Button size="sm" className="w-full md:w-auto" onClick={handleAdvanceStatus} disabled={isUpdating || readOnly} data-testid="button-advance-status">
                     {t("advance_to", { stage: t("stage_" + PIPELINE_STAGES[currentStageIndex + 1]?.key) })}
                   </Button>
                 )}
@@ -656,7 +660,7 @@ export default function OrderDetail() {
               </>
             ) : null}
             {order.status !== "delivered" && order.status !== "cancelled" && (
-              <Select onValueChange={handleSetStatus}>
+              <Select onValueChange={handleSetStatus} disabled={readOnly}>
                 <SelectTrigger className="hidden w-[170px] h-9 md:flex" data-testid="select-set-status">
                   <SelectValue placeholder={t("jump_to_stage")} />
                 </SelectTrigger>
@@ -802,7 +806,7 @@ export default function OrderDetail() {
                 <div key={item.id} className="flex justify-between items-center p-2 bg-muted/30 rounded-lg text-sm">
                   <div>
                     <span className="font-medium">{item.service?.name}</span>
-                    <span className="text-muted-foreground ml-2">x{item.quantity}</span>
+                    <span className="text-muted-foreground ml-2">x{formatExactDecimal(item.quantity, i18n.language)}</span>
                   </div>
                   <span className="font-mono font-semibold">{symbol}{(Number(item.priceAtOrder) * item.quantity).toFixed(2)}</span>
                 </div>
@@ -853,7 +857,7 @@ export default function OrderDetail() {
                   )} data-testid={`garment-item-${g.id}`}>
                     <div className="flex items-center gap-2">
                       {g.color && <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" style={{ background: garmentColorSwatch(g.color) || "transparent" }} aria-hidden="true" />}
-                      <span>{g.quantity}x {g.itemName}{g.color ? ` · ${GARMENT_COLOR_VALUES.has(g.color) ? t(`color_${g.color}`) : g.color}` : ""}</span>
+                      <span>{formatExactDecimal(g.quantity, i18n.language)}x {g.itemName}{g.color ? ` · ${GARMENT_COLOR_VALUES.has(g.color) ? t(`color_${g.color}`) : g.color}` : ""}</span>
                       {g.returnedForTreatment && !g.resolvedAt && (
                         <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-600">
                           <RotateCcw className="w-3 h-3 mr-1" /> {t("returned_label")} {g.returnStage}
@@ -872,7 +876,7 @@ export default function OrderDetail() {
                           return <div key={phase} className="rounded-md border bg-background px-2 py-1" aria-label={phase === "quality" ? t("garment_internal_qc", "Internal QC") : t("garment_customer_handover", "With customer")}>
                             <span className="mr-2 text-xs font-medium">{phase === "quality" ? t("garment_internal_qc_short", "Internal QC") : t("garment_customer_handover_short", "With customer")}</span>
                             <Button size="icon" variant="outline" className="h-7 w-7" disabled={blocked || value === 0} onClick={() => handleGarmentVerification(g.id, phase, value - 1)} aria-label={`${phase} ${g.itemName}: -1`}>−</Button>
-                            <span className="inline-block min-w-12 text-center font-mono">{value}/{g.quantity}</span>
+                            <span className="inline-block min-w-12 text-center font-mono">{value}/{formatExactDecimal(g.quantity, i18n.language)}</span>
                             <Button size="icon" variant="outline" className="h-7 w-7" disabled={blocked || value >= Number(g.quantity)} onClick={() => handleGarmentVerification(g.id, phase, value + 1)} aria-label={`${phase} ${g.itemName}: +1`}>+</Button>
                           </div>;
                         })}
@@ -1105,7 +1109,7 @@ export default function OrderDetail() {
 
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setDeliverDialogOpen(false)}>{t("cancel")}</Button>
-              <Button onClick={handleMarkDelivered} disabled={!deliveryAllowed || isUpdating} data-testid="button-confirm-deliver">
+              <Button onClick={handleMarkDelivered} disabled={!deliveryAllowed || isUpdating || readOnly} data-testid="button-confirm-deliver">
                 <CalendarCheck className="w-4 h-4 mr-1" /> {t("confirm_delivery")}
               </Button>
             </div>

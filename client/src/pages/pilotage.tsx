@@ -1,3 +1,5 @@
+import { AccessNotice } from "@/components/access-notice";
+import { ApiResponseError, requireOk } from "@/lib/access-feedback";
 import { Overview360, type OverviewData } from "@/components/pilotage/overview-360";
 import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest } from "@/lib/queryClient";
@@ -30,11 +32,11 @@ function Overview({ onSelect }: { onSelect: (view: PilotageView) => void }) {
   const { currentSite, canAccess } = useAuth();
   const symbol = useCurrency(state => state.getSymbol());
   const managerView = canAccess("reports");
-  const { data, isLoading, isError, refetch } = useQuery<DailySummary>({
+  const { data, isLoading, isError, refetch, error } = useQuery<DailySummary>({
     queryKey: ["/api/pilotage/today", currentSite?.id ?? "all"],
     queryFn: async () => {
       const response = await fetch("/api/pilotage/today", { credentials: "include", headers: { "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone } });
-      if (!response.ok) throw new Error("Daily summary unavailable");
+      await requireOk(response);
       return response.json();
     },
     staleTime: 0, refetchInterval: 60_000,
@@ -57,6 +59,7 @@ function Overview({ onSelect }: { onSelect: (view: PilotageView) => void }) {
     queryFn: () => apiRequest("GET", "/api/pilotage/overview").then(response=>response.json()),
     staleTime: 0, refetchInterval: 60_000, refetchOnWindowFocus: true,
   });
+  if ((error instanceof ApiResponseError && error.status === 403) || (overview.error instanceof ApiResponseError && overview.error.status === 403)) return <AccessNotice error={error || overview.error}/>;
   if (isLoading || overview.isLoading) return <div className="space-y-3"><Skeleton className="h-28"/><Skeleton className="h-64"/></div>;
   if (isError || !data || overview.isError || !overview.data) return <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive"><p>{t("pilotage_today_error")}</p><button className="min-h-11 underline" onClick={()=>{overview.refetch(); refetch();}}>{t("decision_retry")}</button></div>;
   return <Overview360 showRisk={canAccess("analytics")} risk={riskQuery.data?.churn} riskError={riskQuery.isError} data={overview.data} today={data} money={money} openReturns={openReturns} reportsToReview={reportsToReview} partialError={returnsQuery.isError || (managerView && reportsQuery.isError)} onSelect={onSelect}/>;

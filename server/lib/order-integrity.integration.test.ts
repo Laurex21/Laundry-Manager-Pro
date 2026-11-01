@@ -133,6 +133,15 @@ try {
     const rows = await storage.getOrdersBySite(req.siteScope);
     assert.ok(rows.length > 0);
     assert.ok(rows.every(row => req.siteScope.includes(row.siteId)));
+    for (const row of rows) {
+      assert.ok(Number.isInteger(row.legacyOrderNumber) && row.legacyOrderNumber > 0);
+      if (row.orderReference) assert.equal(row.orderNumber, row.orderReference, 'Primary code stays unchanged');
+    }
+    for (const siteId of req.siteScope) {
+      const siteRows = rows.filter(row => row.siteId === siteId);
+      const numbers = siteRows.map(row => row.legacyOrderNumber).sort((a,b)=>a-b);
+      assert.deepEqual(numbers, numbers.map((_,index)=>index+1), 'Classic numbering is a site sequence, not a global database ID');
+    }
     const customers = await storage.getCustomersBySite(req.organisationSiteScope);
     assert.ok(customers.every(row => req.organisationSiteScope.includes(row.siteId)));
   }

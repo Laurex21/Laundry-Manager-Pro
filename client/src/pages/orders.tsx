@@ -1,3 +1,5 @@
+import { OrderIdentity } from "@/components/order-identity";
+import { historicalSite, accessCopy } from "@/lib/access-feedback";
 import { orderReceiptMessages } from "@/lib/order-receipt-messages";
 import { downloadReceiptDocument } from "@/lib/receipt-export";
 import { useState, useMemo, useEffect } from "react";
@@ -692,7 +694,7 @@ export default function Orders() {
                 filteredOrders.map((order: any) => (
                   <tr key={order.id} className="group transition-colors hover:bg-primary/[0.035]">
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-muted-foreground">
-                      #{orderDisplayLabel(order)}
+                      <OrderIdentity order={order}/>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-foreground leading-tight">{order.customer?.name || t("unknown")}</div>
@@ -771,7 +773,7 @@ export default function Orders() {
                           {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="font-mono font-medium">#{orderDisplayLabel(order)}</span>
+                          <span className="font-mono font-medium"><OrderIdentity order={order}/></span>
                           <span>·</span>
                           <span>{format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</span>
                         </div>
@@ -797,7 +799,9 @@ export default function Orders() {
 }
 
 function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const readOnly = historicalSite(user, order.siteId);
   const { mutate: updateStatus, isPending } = useUpdateOrderStatus();
   const [confirmationStatus, setConfirmationStatus] = useState<string | null>(null);
   const normalizedCurrentStatus = normalizeProductionStatus(order.status);
@@ -828,13 +832,14 @@ function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boo
 
   return (
     <>
-      <Select value={normalizedCurrentStatus} onValueChange={requestStatusChange} disabled={isPending}>
+      <Select value={normalizedCurrentStatus} onValueChange={requestStatusChange} disabled={isPending || readOnly}>
         <SelectTrigger
           className={cn(
             "h-9 rounded-full border px-2.5 text-xs font-semibold focus:ring-2 focus:ring-ring",
             mobile ? "w-[154px]" : "w-[142px]",
             STATUS_SELECT_COLORS[order.status] || "border-border bg-muted text-foreground",
           )}
+          title={readOnly ? accessCopy(i18n.language).historical : undefined}
           aria-label={t("change_order_status", { order: orderDisplayId(order) })}
           data-testid={`select-inline-status-${order.id}`}
         >
