@@ -19,7 +19,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm audit --omit=dev --audit-level=low
+      - run: npm audit --audit-level=low
       - run: npm run check
       - run: npm run test:public-journey
       - run: npm run test:email-login
