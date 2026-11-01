@@ -35,7 +35,7 @@ import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt, generateThermalDepositReceipt, renderReceiptInPrintWindow, reserveReceiptPrintWindow } from "@/lib/receipt";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
-import { orderDisplayId } from "@/lib/order-display";
+import { orderDisplayId, orderDisplayLabel } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
 import { OrderCorrectionActions } from "@/components/order-correction-actions";
@@ -454,7 +454,7 @@ export default function OrderDetail() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: orderDisplayId(order) })}</h1>
+          <h1 className="text-2xl font-display font-bold">{t("order_number", { id: orderDisplayLabel(order) })}</h1>
           <p className="text-muted-foreground text-sm">
             {order.customer?.name} &bull; {order.entryDate ? formatLocalDate(order.entryDate, "MMM d, yyyy") : t("not_available_short")}
           </p>
