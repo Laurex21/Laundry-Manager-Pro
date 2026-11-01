@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:admin-user-access": "node --import tsx server/lib/admin-user-access.integration.test.ts && node --import tsx client/src/lib/admin-user-access.test.tsx",
     "test:order-access-feedback": "node --import tsx client/src/lib/access-feedback.test.tsx && node --import tsx server/lib/inline-order-status.test.ts",
     "test:starter-receipts": "node --import tsx server/lib/starter-receipt-rules.test.ts && node --import tsx server/lib/saas-access.integration.test.ts",
     "test:public-journey": "node --import tsx client/src/lib/public-journey.test.tsx",

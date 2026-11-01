@@ -78,12 +78,13 @@ export async function adminBilling(db: SaasExecutor, org?: number, now = new Dat
 export async function adminAudit(db: SaasExecutor, limit: number, org?: number) {
     return (await db.query(`WITH events AS (
     SELECT 'admin:'||a.id::text AS id,CASE WHEN a.metadata->>'organisationId' ~ '^[0-9]+$' THEN (a.metadata->>'organisationId')::int END AS organisation_id,
-      a.user_id AS actor_user_id,a.action,'platform_admin' AS target_type,NULL::text AS target_id,a.created_at,a.request_id,a.outcome
+      a.user_id AS actor_user_id,a.action,CASE WHEN a.action='platform_admin.user_password_reset' THEN 'user' ELSE 'platform_admin' END AS target_type,CASE WHEN a.action='platform_admin.user_password_reset' THEN a.metadata->>'targetUserId' END AS target_id,a.created_at,a.request_id,a.outcome,CASE WHEN a.action='platform_admin.user_password_reset' THEN a.metadata->>'mode' END AS reset_mode
       FROM platform_admin_audit_events a
-    UNION ALL SELECT 'business:'||s.id::text,s.organisation_id,s.actor_user_id,s.action,s.target_type,s.target_id,s.created_at,s.request_id,'success' FROM security_audit_events s
-    UNION ALL SELECT 'saas:'||e.id::text,e.organisation_id,NULL,e.action,'saas',e.details->>'invoiceId',e.created_at,NULL,CASE WHEN e.action LIKE '%failed%' THEN 'failure' WHEN e.action LIKE '%review%' THEN 'review' ELSE 'success' END FROM saas_events e)
-    SELECT e.*,o.name AS organisation_name,u.email AS actor_email FROM events e
+    UNION ALL SELECT 'business:'||s.id::text,s.organisation_id,s.actor_user_id,s.action,s.target_type,s.target_id,s.created_at,s.request_id,'success',NULL::text FROM security_audit_events s
+    UNION ALL SELECT 'saas:'||e.id::text,e.organisation_id,NULL,e.action,'saas',e.details->>'invoiceId',e.created_at,NULL,CASE WHEN e.action LIKE '%failed%' THEN 'failure' WHEN e.action LIKE '%review%' THEN 'review' ELSE 'success' END,NULL::text FROM saas_events e)
+    SELECT e.*,o.name AS organisation_name,u.email AS actor_email,target_user.email AS target_email FROM events e
     LEFT JOIN organisations o ON o.id=e.organisation_id LEFT JOIN users u ON u.id=e.actor_user_id
+    LEFT JOIN users target_user ON e.target_type='user' AND target_user.id=e.target_id
     WHERE ($1::int IS NULL OR e.organisation_id=$1) ORDER BY e.created_at DESC,e.id DESC LIMIT $2`, [org ?? null, limit])).rows;
 }
 /** Manual gifts preserve acquired time, seats and payments; downgrades require a separate scheduled flow. */

@@ -28,6 +28,7 @@ jobs:
       - run: npm run test:customer-risk
       - run: npm run test:decision-support
       - run: npm run test:zod-migration
+      - run: npm run test:admin-user-access
       - run: npm run test:platform-admin-security
       - run: npm run test:platform-admin-saas
       - run: npm run test:security-hardening

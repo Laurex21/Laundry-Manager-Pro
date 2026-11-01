@@ -1,3 +1,4 @@
+import AdminUserAccess from "@/components/admin-user-access";
 import SalesDirectory from "@/components/sales-directory";
 import PlatformAdminDecision from "@/components/platform-admin-decision";
 import AcquisitionReport from "@/components/acquisition-report";
@@ -77,8 +78,9 @@ type Subscriber = {
 type SubscriberPage = { items: Subscriber[]; total: number; limit: number; offset: number };
 
 type AuditEvent = {
+  targetEmail?:string|null; resetMode?:string|null;
   outcome?:string;
-  id: number;
+  id: string|number;
   organisationName: string | null;
   actorEmail: string | null;
   action: string;
@@ -115,7 +117,7 @@ type OrganisationDetail = {
     successfulPaymentCount: number;
     payments: Array<{ id: number; amount: number; method: string; status: string; createdAt: string; planName: string }>;
   };
-  audit: Array<{ outcome?:string; id: number; action: string; targetType: string; targetId: string | null; actorEmail: string | null; createdAt: string }>;
+  audit: Array<{ targetEmail?:string|null; resetMode?:string|null; outcome?:string; id: string|number; action: string; targetType: string; targetId: string | null; actorEmail: string | null; createdAt: string }>;
 };
 
 type AdminStatus = {
@@ -129,6 +131,8 @@ type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
   "Sales representatives": "Commerciaux",
+  "User access": "Accès utilisateurs",
+  "preview": "Simulation", "requested": "Demandée", "sent": "Envoi accepté", "delivery_failed": "Échec d’envoi",
  "pawaPay · pilot":"pawaPay · pilote",
   "Audited administration": "Administration auditée",
   "Real pawaPay receipts this month": "Encaissements réels pawaPay du mois",
@@ -296,6 +300,7 @@ function formatAuditDate(value:string) {
 }
 function auditAction(value:string) {
   const labels:Record<string,[string,string]>={
+    'platform_admin.user_password_reset':['Demande de réinitialisation du mot de passe','Password reset request'],
     'platform_admin.login':['Connexion administrateur','Administrator sign-in'],
     'platform_admin.mfa_verification':['Vérification à deux facteurs','Two-factor verification'],
     'platform_admin.organisation_view':['Consultation de la fiche','Organisation viewed'],
@@ -606,6 +611,7 @@ function AdminDashboard() {
             <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />{adminText('Organisations')}</TabsTrigger>
             <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />{adminText('Renewals')}</TabsTrigger>
             <TabsTrigger value="acquisition">Acquisition</TabsTrigger>
+            <TabsTrigger value="user-access">{adminText("User access")}</TabsTrigger>
             <TabsTrigger value="sales">{adminText("Sales representatives")}</TabsTrigger>
             <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />{adminText('Security')}</TabsTrigger>
           </TabsList>
@@ -614,6 +620,7 @@ function AdminDashboard() {
             <PlatformAdminDecision open={setSelectedSubscriber} />
           </TabsContent>
 
+          <TabsContent value="user-access" className="mt-5"><AdminUserAccess/></TabsContent>
           <TabsContent value="organisations" className="mt-5">
             <OrganisationDirectory loading={subscribers.isLoading} error={subscribers.error as Error | null} organisations={organisations} search={search} setSearch={setSearch} submitSearch={submitSearch} segment={segment} setSegment={changeSegment} select={setSelectedSubscriber} page={page} total={subscribers.data?.total ?? 0} pageSize={25} onPageChange={setPage} />
           </TabsContent>
@@ -636,7 +643,7 @@ function AdminDashboard() {
           <TabsContent value="acquisition" className="mt-5"><AcquisitionReport /></TabsContent>
           <TabsContent value="sales" className="mt-5"><SalesDirectory /></TabsContent>
           <TabsContent value="security" className="mt-5">
-            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
+            <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetEmail || event.targetType}{event.targetEmail ? '' : event.targetId ? ` · ${event.targetId}` : ''}{event.resetMode ? ` · ${adminText(event.resetMode)}` : ''}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -750,14 +757,14 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Pick<Subscriber,
 
           <TabsContent value="sites" className="mt-5"><PanelSection title={`${adminText("Sites")} (${detail.data.footprint.sites.length})`}><div className="divide-y divide-slate-100">{detail.data.footprint.sites.map((site) => <div key={site.id} className="flex items-center justify-between gap-4 py-3"><div><p className="font-medium">{site.name}</p><p className="text-xs text-slate-500">{site.city || adminText('City not set')} · {adminText("Added")} {formatDate(site.createdAt)}</p></div><Badge variant="outline" className={site.active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>{site.active ? adminText('Active') : adminText('Inactive')}</Badge></div>)}{!detail.data.footprint.sites.length && <EmptyPanel text={adminText('No sites registered.')}/>}</div></PanelSection></TabsContent>
 
-          <TabsContent value="users" className="mt-5"><PanelSection title={adminText('Accounts by role')}><div className="grid gap-3 sm:grid-cols-2">{detail.data.footprint.roles.map((role) => <div key={role.role} className="flex items-center justify-between rounded-xl bg-slate-50 p-4"><span className="font-medium capitalize">{role.role.replaceAll("_", " ")}</span><strong>{role.count}</strong></div>)}{!detail.data.footprint.roles.length && <EmptyPanel text={adminText('No user accounts registered.')}/>}</div><p className="mt-5 text-xs text-slate-400">{adminText('Only aggregate role counts are shown to minimise unnecessary exposure of personal data.')}</p></PanelSection></TabsContent>
+          <TabsContent value="users" className="mt-5"><AdminUserAccess organisationId={detail.data.id}/></TabsContent>
 
           <TabsContent value="payments" className="mt-5 space-y-5">
             <section className="grid gap-3 sm:grid-cols-2"><PanelMetric icon={CircleDollarSign} label={adminText('Confirmed live receipts · all payments')} value={formatMoney(detail.data.billing.completedRevenue)}/><PanelMetric icon={CreditCard} label={adminText('Confirmed live payments')} value={detail.data.billing.successfulPaymentCount}/></section>
             <p className="text-sm text-slate-600">{adminText('Sandbox, simulations and unverified historical payments are excluded from real receipts.')}</p><PanelSection title={adminText('Recent subscription payments')}><div className="divide-y divide-slate-100">{detail.data.billing.payments.map((payment) => <div key={`${payment.method}:${payment.id}`} className="grid gap-2 py-3 sm:grid-cols-[1fr_150px_100px] sm:items-center"><div><p className="font-medium">{adminText(payment.planName)}</p><p className="text-xs text-slate-500">{adminText(payment.method)} · {formatDate(payment.createdAt)}</p></div><p className="font-semibold sm:text-right">{formatMoney(payment.amount)}</p><Badge variant="outline" className={`${statusTone(payment.status)} justify-self-start capitalize sm:justify-self-end`}>{adminStatus(payment.status)}</Badge></div>)}{!detail.data.billing.payments.length && <EmptyPanel text={adminText('No subscription payment recorded.')}/>}</div></PanelSection>
           </TabsContent>
 
-          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="text-xs text-slate-500">{event.targetType}{event.targetId ? ` · ${event.targetId}` : ""} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
+          <TabsContent value="audit" className="mt-5"><PanelSection title={adminText('Organisation audit activity')}><div className="divide-y divide-slate-100">{detail.data.audit.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_180px] sm:items-center"><div><p className="font-medium capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="text-xs text-slate-500">{event.targetEmail || event.targetType}{event.targetEmail ? '' : event.targetId ? ` · ${event.targetId}` : ''}{event.resetMode ? ` · ${adminText(event.resetMode)}` : ''} · {event.actorEmail || adminText("System")}</p></div><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!detail.data.audit.length && <EmptyPanel text={adminText("No audited organisation activity yet.")}/>}</div></PanelSection></TabsContent>
         </Tabs>
       </div>}
     </SheetContent></Sheet>;

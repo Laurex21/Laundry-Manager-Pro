@@ -1,3 +1,4 @@
+import { adminUserDirectory, requestAdminPasswordReset, AdminUserError } from "./admin-password-reset";
 import { adminDecisionOverview, decisionDays } from "./platform-admin-decision";
 import { readFile } from "node:fs/promises";
 import { adminSubscribers, adminSegment, adminBilling, adminAudit, adminGrant } from "./platform-admin-saas";
@@ -179,6 +180,29 @@ function safeLimit(value: unknown, fallback = 100, maximum = 200): number {
 }
 
 export function registerPlatformAdminRoutes(app: Express): void {
+  app.get("/api/platform-admin/users", requirePlatformAdmin, async (req:any,res) => {
+    res.setHeader("Cache-Control","no-store");
+    try {
+      const page=await adminUserDirectory(pool,{search:String(req.query.search||""),organisationId:req.query.organisationId===undefined?undefined:Number(req.query.organisationId),offset:Number(req.query.offset||0),limit:25});
+      res.json(page);
+    } catch(error) {res.status(error instanceof AdminUserError?error.status:503).json({message:error instanceof AdminUserError?error.code:"ADMIN_USERS_UNAVAILABLE"});}
+  });
+  app.post("/api/platform-admin/users/:userId/password-reset", requirePlatformAdmin, async (req:any,res,next) => {
+    res.setHeader("Cache-Control","no-store");
+    try {
+      const origin=new URL(req.get("origin")||"");
+      if(origin.origin!==`${req.protocol}://${req.get("host")}` || req.get("sec-fetch-site")==="cross-site") return res.status(403).json({message:"ADMIN_RESET_ORIGIN_REQUIRED"});
+    } catch {return res.status(403).json({message:"ADMIN_RESET_ORIGIN_REQUIRED"});}
+    if(!isFreshTimestamp(req.session.platformAdminVerifiedAt,5*60*1000))return res.status(401).json({message:"ADMIN_RESET_REAUTH_REQUIRED"});
+    next();
+  }, rateLimit({name:"admin-password-reset",windowMs:60*60*1000,max:10,key:req=>String(req.session?.userId||""),keyOnly:true}), async (req:any,res) => {
+    try {res.json(await requestAdminPasswordReset(pool,req.session.userId,String(req.params.userId),req.body||{},{ip:requestIp(req),requestId:req.requestId,userAgent:req.get("user-agent")}));}
+    catch(error){
+      await recordPlatformAdminEventBestEffort(req,"platform_admin.user_password_reset",error instanceof AdminUserError&&error.status<500?"denied":"failure",req.session.userId,{targetUserId:String(req.params.userId),code:error instanceof AdminUserError?error.code:"ADMIN_RESET_UNAVAILABLE"});
+      res.status(error instanceof AdminUserError?error.status:503).json({message:error instanceof AdminUserError?error.code:"ADMIN_RESET_UNAVAILABLE"});
+    }
+  });
+
   app.post("/api/platform-admin/login", platformAdminLoginLimiter, async (req: any, res) => {
     const identifier = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
@@ -530,11 +554,11 @@ export function registerPlatformAdminRoutes(app: Express): void {
         },
         billing: {...billing,payments:[...billing.payments,...historical],historicalPaymentsExcluded:true},
         audit: auditResult.rows.map((event) => ({
-          id: Number(event.id),
+          id: event.id,
           action: event.action,
           outcome:event.outcome,
           targetType: event.target_type,
-          targetId: event.target_id,
+          targetId: event.target_id, targetEmail:event.target_email, resetMode:event.reset_mode,
           actorEmail: event.actor_email,
           createdAt: event.created_at,
         })),
@@ -584,7 +608,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
       const limit = safeLimit(req.query.limit, 30, 100);
       const rows=await adminAudit(pool,limit);
       res.json(rows.map(row=>({id:row.id,organisationId:row.organisation_id,organisationName:row.organisation_name,actorUserId:row.actor_user_id,
-        actorEmail:row.actor_email,action:row.action,targetType:row.target_type,targetId:row.target_id,createdAt:row.created_at,requestId:row.request_id,outcome:row.outcome})));
+        actorEmail:row.actor_email,action:row.action,targetType:row.target_type,targetId:row.target_id,targetEmail:row.target_email,resetMode:row.reset_mode,createdAt:row.created_at,requestId:row.request_id,outcome:row.outcome})));
     } catch (error) {
       console.error("Platform admin audit event list failed:", error);
       res.status(500).json({ message: "Failed to load audit events" });

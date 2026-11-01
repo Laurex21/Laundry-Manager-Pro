@@ -1,3 +1,5 @@
+import { passwordResetTokens } from "@shared/models/auth";
+import { adminResetTokenMatchesEmail, adminResetTargetExcluded, adminResetLockedTargetMatches } from "../../lib/admin-password-reset";
 import { createSalesRegistrationUser, completeSalesRegistration, SalesReferralError } from "../../lib/sales-referrals";
 import { normalizeLoginEmail } from "@shared/login-email";
 import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
@@ -6,9 +8,9 @@ import type { Express } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
-import { db } from "../../db";
+import { db, pool } from "../../db";
 import { organisations, siteMembers, sites } from "@shared/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { ReplitConnectors } from "@replit/connectors-sdk";
@@ -591,6 +593,9 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ message: "Invalid or expired reset link" });
       }
 
+      if (!adminResetTokenMatchesEmail(token,user.email) || (token.startsWith("adm1.") && await adminResetTargetExcluded(pool,user))) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
       const isOwner = await isOrganisationOwnerUser(user);
       const accountType = isOwner ? "owner" : "staff";
       if (accountType !== resetToken.accountType) {
@@ -599,12 +604,14 @@ export function registerAuthRoutes(app: Express): void {
 
       const passwordHash = await bcrypt.hash(password, 10);
       const consumed = await db.transaction(async (tx) => {
+        if(token.startsWith("adm1.") && !await adminResetLockedTargetMatches(tx,user,token)) return false;
         const claimedToken = await authStorage.consumeValidPasswordResetToken(hashResetToken(token), tx);
         if (!claimedToken || claimedToken.id !== resetToken.id || claimedToken.userId !== user.id) {
           return false;
         }
         await authStorage.updatePassword(user.id, passwordHash, tx);
         await authStorage.revokeUserSessions(user.id, tx);
+        await tx.update(passwordResetTokens).set({usedAt:new Date()}).where(and(eq(passwordResetTokens.userId,user.id),isNull(passwordResetTokens.usedAt)));
         return true;
       });
       if (!consumed) {
