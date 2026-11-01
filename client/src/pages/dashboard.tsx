@@ -1,3 +1,5 @@
+import { AccessNotice } from "@/components/access-notice";
+import { historicalSite, requireOk } from "@/lib/access-feedback";
 import { useStats } from "@/hooks/use-stats";
 import { useOrders } from "@/hooks/use-orders";
 import { useQuery } from "@tanstack/react-query";
@@ -49,13 +51,17 @@ const QUEUE_STAGES = [
 
 export default function Dashboard() {
   const { openWhatsApp } = useWhatsAppLauncher();
-  const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite } = useAuth();
+  const { currentSite, allSites, isOwner, userRole, switchSite, isSwitchingSite, hasFeature, user } = useAuth();
+  const historical = historicalSite(user);
+  const canAnalyze = hasFeature("reports") && !historical;
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
-  const { data: behaviorData } = useQuery<any>({ queryKey: ["/api/analytics/customer-behavior", "month"], queryFn: () => fetch("/api/analytics/customer-behavior?period=month", { credentials: "include" }).then((res) => res.json()) });
-  const { data: storageWaiting } = useQuery<any[]>({
-    queryKey: ["/api/analytics/storage-occupancy"],
+  const behavior = useQuery<any>({ queryKey: ["/api/analytics/customer-behavior", "month", currentSite?.id ?? "all"], enabled: canAnalyze, queryFn: async () => {const res=await fetch("/api/analytics/customer-behavior?period=month", {credentials:"include"}); await requireOk(res); return res.json();} });
+  const behaviorData = canAnalyze ? behavior.data : undefined;
+  const storage = useQuery<any[]>({
+    enabled: canAnalyze,
+    queryKey: ["/api/analytics/storage-occupancy", currentSite?.id ?? "all"],
     // Storage alerts are operational data shared by the whole team. Refresh
     // them while the dashboard is open so pickups recorded elsewhere disappear
     // without requiring a manual page reload.
@@ -95,7 +101,7 @@ export default function Dashboard() {
   const siteCount = dashData?.siteCount ?? allSites.length;
   const latestOrders = recentOrders?.slice().sort((a: any, b: any) => b.id - a.id).slice(0, 6) || [];
   const readyForPickup: any[] = dashData?.readyForPickup ?? [];
-  const overduePickupById = new Map((storageWaiting ?? []).map((order: any) => [order.id, order]));
+  const overduePickupById = new Map(((canAnalyze ? storage.data : undefined) ?? []).map((order: any) => [order.id, order]));
   const overduePickupCount = overduePickupById.size;
   const churnCount = behaviorData?.churn?.atRiskCount ?? 0;
   const openReturnCount = garmentReturns.filter((item) => !["rejected", "resolved"].includes(item.returnCase.status)).length;
@@ -214,6 +220,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {!historical && (!canAnalyze || behavior.isError || storage.isError) && <AccessNotice kind={!canAnalyze ? (historical ? "historical" : "premium") : undefined} error={behavior.error || storage.error}/> }
 
       {/* Workflow queue strip */}
       {ordersByStatus && (

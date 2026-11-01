@@ -35,6 +35,7 @@ jobs:
       - run: npm run test:acquisition
       - run: npm run test:order-references
       - run: npm run test:receipt-export
+      - run: npm run test:order-access-feedback
       - run: npm run test:order-integrity
       - run: npm run test:tenant-isolation
       - run: npm run test:staff-invitation-boundary

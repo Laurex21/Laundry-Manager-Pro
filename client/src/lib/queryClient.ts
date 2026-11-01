@@ -1,15 +1,9 @@
+import { requireOk } from "./access-feedback";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 function clientTimeZoneHeaders(): Record<string, string> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return timeZone ? { "X-Client-Timezone": timeZone } : {};
-}
-
-async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
-  }
 }
 
 export async function apiRequest(
@@ -24,7 +18,7 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  await throwIfResNotOk(res);
+  await requireOk(res);
   return res;
 }
 
@@ -43,7 +37,7 @@ export const getQueryFn: <T>(options: {
       return null;
     }
 
-    await throwIfResNotOk(res);
+    await requireOk(res);
     return await res.json();
   };
 

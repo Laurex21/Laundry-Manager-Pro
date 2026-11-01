@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { accessCopy, failureKind, requireOk } from "@/lib/access-feedback";
 import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type createOrderWithItemsSchema } from "@shared/routes";
@@ -64,6 +66,8 @@ export function useCreateOrder() {
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { i18n } = useTranslation();
+  const copy = accessCopy(i18n.language);
 
   return useMutation({
     mutationFn: async ({
@@ -89,7 +93,7 @@ export function useUpdateOrderStatus() {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error("Failed to update status");
+      await requireOk(res);
       return api.orders.updateStatus.responses[200].parse(await res.json());
     },
     onSuccess: (data) => {
@@ -99,10 +103,10 @@ export function useUpdateOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/storage-occupancy"] });
-      toast({ title: "Updated", description: "Order status updated" });
+      toast({ title: copy.updated });
     },
     onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: copy.error, description: copy[failureKind(error)], variant: "destructive" });
     },
   });
 }

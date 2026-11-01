@@ -1,3 +1,5 @@
+import { OrderIdentity } from "@/components/order-identity";
+import { historicalSite, accessCopy } from "@/lib/access-feedback";
 import { orderReceiptMessages } from "@/lib/order-receipt-messages";
 import { downloadReceiptDocument } from "@/lib/receipt-export";
 import { useState, useMemo, useEffect } from "react";
@@ -17,7 +19,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { generateDepositReceipt } from "@/lib/receipt";
 import { useQuery, useQuery as useSettingsQuery } from "@tanstack/react-query";
 import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
-import { orderDisplayId } from "@/lib/order-display";
+import { orderDisplayId, orderDisplayLabel } from "@/lib/order-display";
 import {
   Plus,
   Search,
@@ -431,7 +433,7 @@ export default function Orders() {
       const q = search.toLowerCase();
       result = result.filter((o: any) =>
         o.id.toString().includes(q) ||
-        String(orderDisplayId(o)).toLowerCase().includes(q) ||
+        String(orderDisplayLabel(o)).toLowerCase().includes(q) ||
         (o.customer?.name || "").toLowerCase().includes(q)
       );
     }
@@ -499,7 +501,7 @@ export default function Orders() {
         <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next && correctionOrderId) window.history.replaceState({}, "", "/orders"); }}>
           <DialogContent data-testid="new-order-dialog" className="inset-0 top-0 left-0 h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 gap-3 overflow-x-hidden overflow-y-auto overscroll-contain border-0 bg-[#F8FAFC] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[94dvh] sm:w-full sm:max-w-[700px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:p-6 sm:[scrollbar-gutter:stable] lg:h-[calc(100dvh-1.5rem)] lg:max-h-none lg:max-w-[1080px] lg:gap-2 lg:overflow-y-auto lg:px-5 lg:py-3">
             <DialogHeader className="sticky top-0 z-20 -mx-2 rounded-xl border border-primary/10 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-sm lg:mb-1">
-              <DialogTitle className="text-[#082D5B]">{correctionOrder ? `${t("correct_order")} #${orderDisplayId(correctionOrder)}` : t("create_new_order")}</DialogTitle>
+              <DialogTitle className="text-[#082D5B]">{correctionOrder ? `${t("correct_order")} #${orderDisplayLabel(correctionOrder)}` : t("create_new_order")}</DialogTitle>
               <DialogClose asChild><Button type="button" variant="ghost" size="icon" className="absolute right-3 top-2.5 h-9 w-9 rounded-full" aria-label={t("close", "Fermer")} title={t("close", "Fermer")}><X className="h-5 w-5" /></Button></DialogClose>
             </DialogHeader>
             {correctionOrderId > 0 && correctionOrderIsLoading ? (
@@ -551,7 +553,7 @@ export default function Orders() {
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                 <div className="font-semibold">{createdOrder.customer?.name || t("unknown")}</div>
                 <div className="text-muted-foreground">
-                  #{orderDisplayId(createdOrder)} &bull; {symbol}{Number(createdOrder.totalAmount).toFixed(2)}
+                  #{orderDisplayLabel(createdOrder)} &bull; {symbol}{Number(createdOrder.totalAmount).toFixed(2)}
                 </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -692,7 +694,7 @@ export default function Orders() {
                 filteredOrders.map((order: any) => (
                   <tr key={order.id} className="group transition-colors hover:bg-primary/[0.035]">
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-muted-foreground">
-                      #{orderDisplayId(order)}
+                      <OrderIdentity order={order}/>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-foreground leading-tight">{order.customer?.name || t("unknown")}</div>
@@ -771,7 +773,7 @@ export default function Orders() {
                           {order.hasReturnedItems && <AlertTriangle className="w-3 h-3 text-orange-500 shrink-0" />}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="font-mono font-medium">#{orderDisplayId(order)}</span>
+                          <span className="font-mono font-medium"><OrderIdentity order={order}/></span>
                           <span>·</span>
                           <span>{format(new Date(order.entryDate || order.createdAt), "MMM d, yyyy")}</span>
                         </div>
@@ -797,7 +799,9 @@ export default function Orders() {
 }
 
 function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const readOnly = historicalSite(user, order.siteId);
   const { mutate: updateStatus, isPending } = useUpdateOrderStatus();
   const [confirmationStatus, setConfirmationStatus] = useState<string | null>(null);
   const normalizedCurrentStatus = normalizeProductionStatus(order.status);
@@ -828,13 +832,14 @@ function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boo
 
   return (
     <>
-      <Select value={normalizedCurrentStatus} onValueChange={requestStatusChange} disabled={isPending}>
+      <Select value={normalizedCurrentStatus} onValueChange={requestStatusChange} disabled={isPending || readOnly}>
         <SelectTrigger
           className={cn(
             "h-9 rounded-full border px-2.5 text-xs font-semibold focus:ring-2 focus:ring-ring",
             mobile ? "w-[154px]" : "w-[142px]",
             STATUS_SELECT_COLORS[order.status] || "border-border bg-muted text-foreground",
           )}
+          title={readOnly ? accessCopy(i18n.language).historical : undefined}
           aria-label={t("change_order_status", { order: orderDisplayId(order) })}
           data-testid={`select-inline-status-${order.id}`}
         >

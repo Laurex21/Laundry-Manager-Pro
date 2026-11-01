@@ -27,6 +27,10 @@ try{
  async function access(path:string,method='GET',userId='owner',siteId:number|null=10){const req:any={userId,organisationId:1,method,path,siteId,authorizedSiteIds:[10,11],organisationSiteIds:[10,11],siteScope:siteId?[siteId]:[10,11],organisationSiteScope:[10,11]};let code=200;let payload:any;const res:any={status:(c:number)=>{code=c;return res;},json:(p:any)=>{payload=p;return res;}};const passed=await applySaasAccess(req,res);return{req,code,payload,passed};}
  assert.equal((await access('/api/orders','GET','owner',11)).passed,true); // Historical reads survive.
  assert.equal((await access('/api/orders','POST','owner',11)).code,403);
+ const historicStatus=await access('/api/orders/1/status','PATCH','owner',11);assert.equal(historicStatus.payload.code,'SAAS_SITE_READ_ONLY');
+ const activeStatus=await access('/api/orders/1/status','PATCH','owner',10);assert.equal(activeStatus.passed,true);
+ assert.equal((await access('/api/analytics/customer-behavior')).payload.code,'SAAS_FEATURE_REQUIRED');
+ assert.equal((await access('/api/analytics/storage-occupancy','GET','owner',11)).payload.code,'SAAS_SITE_READ_ONLY');
  const scope=await access('/api/orders/old/status','PATCH');assert.deepEqual(scope.req.authorizedSiteIds,[10]);
  assert.equal((await access('/api/orders','GET','staff')).code,403); // Existing staff session revoked.
  assert.equal((await access('/api/auth/user','GET','staff')).req.saasSuspended,true);
@@ -45,6 +49,13 @@ try{
  assert.equal((await query('SELECT * FROM sites WHERE organisation_id=1')).rows.length,2);
  await testDb.insert(schema.customers).values({id:1,siteId:11,name:'Demo',phone:'000',address:'Test'});
  await testDb.insert(schema.orders).values({id:1,customerId:1,siteId:11});
+ await testDb.insert(schema.customers).values({id:2,siteId:10,name:'Synthetic active customer',phone:'000',address:'Test'});
+ await testDb.insert(schema.orders).values({id:2,customerId:2,siteId:10,status:'received'});
+ const untouched=await storage.getOrder(1);
+ if(historicStatus.passed) await storage.updateOrderStatus(1,'washing',undefined,'owner');
+ assert.deepEqual(await storage.getOrder(1),untouched,'Read-only refusal leaves the historical order unchanged');
+ const moved=await storage.updateOrderStatus(2,'washing',undefined,'owner');assert.equal(moved?.status,'washing','Active Starter site can advance a genuine order');
+ assert.equal((await storage.getOrder(2))?.status,'washing');
  const {privateKey,publicKey}=crypto.generateKeyPairSync('ec',{namedCurve:'P-256'});
  globalThis.fetch=async(input:any)=>{if(String(input)==='https://api.sandbox.pawapay.io/v2/public-key/http')return new Response(JSON.stringify([{id:'route-test',key:publicKey.export({type:'spki',format:'pem'}).toString()}]));throw Error('Unexpected external request in isolated test');};
  const {registerSaasRoutes}=await import('./saas-routes');
