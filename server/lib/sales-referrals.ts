@@ -131,3 +131,17 @@ export function registerSalesRoutes(app:Express, admin:RequestHandler) {
   }catch{res.status(503).json({message:'Representative update unavailable'});}
  });
 }
+
+// Commercial self-service always passes the representative from its authenticated session.
+export async function salesOwnSummary(representativeId:number){
+ const rep=(await pool.query('SELECT id,name,country,code,active FROM sales_representatives WHERE id=$1 AND environment=$2',[representativeId,salesEnvironment()])).rows[0];
+ if(!rep)return null;
+ const r=await pool.query(`${paidCte} SELECT count(r.user_id)::int AS registrations,count(r.user_id) FILTER(WHERE t.payments>0)::int AS paying_accounts,COALESCE(sum(t.payments),0)::int AS payments,COALESCE(sum(t.amount_xaf),0)::float8 AS amount_xaf FROM registrations r JOIN totals t ON t.user_id=r.user_id WHERE r.representative_id=$4`,[...reportArgs(),representativeId]);
+ return {representative:rep,...r.rows[0],environment:salesEnvironment()};
+}
+export async function salesOwnRegistrations(representativeId:number,page:number){
+ const r=await pool.query(`${paidCte}, selected AS (
+ SELECT r.organisation_id,r.business_name,r.created_at,t.payments,t.amount_xaf,t.last_paid_at FROM registrations r JOIN totals t ON t.user_id=r.user_id WHERE r.representative_id=$4
+ ) SELECT (SELECT count(*)::int FROM selected) AS total,COALESCE((SELECT json_agg(p) FROM (SELECT * FROM selected ORDER BY created_at DESC,organisation_id DESC LIMIT 25 OFFSET $5) p),'[]'::json) AS items`,[...reportArgs(),representativeId,(page-1)*25]);
+ return {...r.rows[0],page,pageSize:25};
+}

@@ -20,6 +20,7 @@ async function main() {
   await runReviewedMigration(new URL("../migrations/20261025_order_references.sql", import.meta.url));
   await runReviewedMigration(new URL("../migrations/20261027-marketing-attribution.sql", import.meta.url));
   await runReviewedMigration(new URL("../migrations/20261101_sales_referrals.sql", import.meta.url));
+  await runReviewedMigration(new URL("../migrations/20261101_sales_portal.sql", import.meta.url));
   console.log("Reviewed application migrations completed.");
 }
 

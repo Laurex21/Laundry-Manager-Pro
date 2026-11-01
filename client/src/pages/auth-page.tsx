@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { SALES_CODE } from "@shared/sales-referrals";
 import { SalesReferralNotice } from "@/components/sales-referral-notice";
 import { readPlanIntent, planIntentUrl } from "@/lib/saas-plan-intent";
@@ -475,6 +476,7 @@ export default function AuthPage() {
                   {tab === "login" ? t("welcome") : t("create_account")}
                 </h1>
             {tab === "register" && <SaasTrialInfo />}
+            <p className="mt-4 text-center text-sm"><Link href="/commercial" className="underline">{i18n.language.startsWith("fr") ? "Espace commercial" : "Sales portal"}</Link></p>
                 <SaasPlanIntent selection={selectedPlan} />
                 <p className="text-muted-foreground text-sm mt-1">
                   {tab === "login" ? t("auth_dashboard_subtitle") : t("auth_setup_subtitle")}
