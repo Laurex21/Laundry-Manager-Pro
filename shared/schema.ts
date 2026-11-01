@@ -1207,3 +1207,22 @@ export const marketingAcquisitionEvents = pgTable("marketing_acquisition_events"
   check("marketing_acquisition_events_evidence_check",sql`${t.evidence} IN ('utm','referrer','unknown')`),
   check("marketing_acquisition_events_environment_check",sql`${t.environment} IN ('production','test')`),
 ]);
+
+
+// Sales attribution is independent of marketing measurement and public statistics.
+export const salesRepresentatives = pgTable("sales_representatives", {
+ id: serial("id").primaryKey(), name: varchar("name", {length:120}).notNull(), country: varchar("country", {length:2}).notNull(),
+ code: varchar("code", {length:23}).notNull().unique(), active: boolean("active").notNull().default(true),
+ environment: text("environment").notNull(), createdBy: varchar("created_by").notNull().references(()=>users.id),
+ createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+},t=>[check("sales_rep_environment",sql`${t.environment} IN ('test','production')`),check("sales_rep_country",sql`${t.country} ~ '^[A-Z]{2}$'`),check("sales_rep_code",sql`${t.code} ~ '^[A-Z]{2}-[A-F0-9]{20}$'`)]);
+export const salesRegistrations = pgTable("sales_registrations", {
+ userId: varchar("user_id").primaryKey().references(()=>users.id), representativeId: integer("representative_id").notNull().references(()=>salesRepresentatives.id),
+ organisationId: integer("organisation_id").unique().references(()=>organisations.id), country:varchar("country",{length:2}).notNull(), environment:text("environment").notNull(),
+ createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[index("sales_registrations_representative").on(t.representativeId,t.createdAt),check("sales_registration_environment",sql`${t.environment} IN ('test','production')`)]);
+export const salesAdminEvents = pgTable("sales_admin_events", {
+ id:bigserial("id",{mode:"number"}).primaryKey(), actorId:varchar("actor_id").notNull().references(()=>users.id),
+ representativeId:integer("representative_id").notNull().references(()=>salesRepresentatives.id), action:text("action").notNull(),
+ createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[check("sales_admin_action",sql`${t.action} IN ('created','activated','disabled')`)]);

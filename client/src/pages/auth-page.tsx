@@ -1,3 +1,5 @@
+import { SALES_CODE } from "@shared/sales-referrals";
+import { SalesReferralNotice } from "@/components/sales-referral-notice";
 import { readPlanIntent, planIntentUrl } from "@/lib/saas-plan-intent";
 import { SaasPlanIntent } from "@/components/saas-plan-intent";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -28,9 +30,13 @@ const LANGUAGES = [
 // ── Auth Form ──────────────────────────────────────────────────────────────────
 
 function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "login" | "register") => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const search = useSearch();
+  const rawSalesCode = new URLSearchParams(search).get("sales") || "";
+  const salesCode = SALES_CODE.test(rawSalesCode) ? rawSalesCode : "";
+  const [ignoredSalesCode, setIgnoredSalesCode] = useState("");
+  const salesReferralCode = salesCode && ignoredSalesCode !== salesCode ? salesCode : undefined;
   const selectedPlan = readPlanIntent(search);
   const destination = selectedPlan ? planIntentUrl("/subscriptions", selectedPlan) : "/";
   const [, setLocation] = useLocation();
@@ -83,7 +89,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
       const body =
         tab === "login"
           ? { email: email.trim().toLowerCase(), password }
-          : { email: email.trim().toLowerCase(), password, firstName, lastName, phone, businessName, acceptedLegal, ...acquisitionRegistrationConsent() };
+          : { email: email.trim().toLowerCase(), password, firstName, lastName, phone, businessName, acceptedLegal, salesReferralCode, ...acquisitionRegistrationConsent() };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -94,7 +100,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setFormError({message: data.message, status: res.status, retryAfter: res.headers.get("Retry-After")});
+        setFormError({message: data.message === "SALES_REFERRAL_UNAVAILABLE" ? (i18n.language.startsWith("fr") ? "Lien commercial indisponible. Choisissez « Continuer sans recommandation », puis réessayez." : "Referral unavailable. Choose ‘Continue without a referral’ and try again.") : data.message, status: res.status, retryAfter: res.headers.get("Retry-After")});
         return;
       }
 
@@ -153,6 +159,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
       <form id="auth-form-panel" role="tabpanel" aria-labelledby={tab === "login" ? "auth-login-tab" : "auth-register-tab"} onSubmit={handleSubmit} className="space-y-4">
         {formError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{authErrorMessage(formError.message, formError.status, formError.retryAfter, t)}</p>}
+        {tab === "register" && salesReferralCode && <SalesReferralNotice code={salesReferralCode} remove={() => setIgnoredSalesCode(salesCode)} />}
         {tab === "register" && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -404,7 +411,9 @@ export default function AuthPage() {
 
   const changeTab = (nextTab: "login" | "register") => {
     setTab(nextTab);
-    setLocation(planIntentUrl("/auth", selectedPlan, nextTab));
+    const next = planIntentUrl("/auth", selectedPlan, nextTab);
+    const sales = new URLSearchParams(search).get("sales") || "";
+    setLocation(SALES_CODE.test(sales) ? `${next}${next.includes("?") ? "&" : "?"}sales=${encodeURIComponent(sales)}` : next);
   };
 
   return (

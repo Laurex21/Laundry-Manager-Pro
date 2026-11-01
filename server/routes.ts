@@ -1,3 +1,4 @@
+import { registerSalesRoutes } from "./lib/sales-referrals";
 import { garmentControlReportHandler } from "./lib/garment-control-report";
 import { STARTER_SETTINGS_FIELDS } from "../shared/starter-receipt";
 import { registerAcquisitionRoutes } from "./lib/acquisition";
@@ -325,6 +326,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerSubscriptionNotificationRoutes(app);
   registerPlatformAdminRoutes(app);
   registerAcquisitionRoutes(app, requirePlatformAdmin);
+  registerSalesRoutes(app, requirePlatformAdmin);
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);
   startTemporalIntelligenceJob();
