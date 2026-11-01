@@ -1,3 +1,5 @@
+import { salesReferralUrl } from "@/lib/sales-links";
+import { SalesAccountAccess } from "./sales-account-access";
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -8,10 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 
 type Page<T>={items:T[];total:number;page:number;pageSize:number;environment?:string};
 async function api(path:string,options?:RequestInit){const r=await fetch(path,{credentials:'same-origin',...options});if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json();}
-export function salesReferralUrl(code:string,origin=window.location.origin){
- const base=new URL(origin);if(base.hostname==='superadmin.xpressclean.cm')base.hostname='app.xpressclean.cm';
- return `${base.origin}/r/${encodeURIComponent(code)}`;
-}
 export default function SalesDirectory(){
  const {i18n}=useTranslation();const fr=i18n.language.startsWith('fr');const text=(a:string,b:string)=>fr?a:b;
  const queryClient=useQueryClient();
@@ -44,6 +42,7 @@ export default function SalesDirectory(){
    <label className="block text-xs text-muted-foreground">{text('Lien personnel à partager','Personal link to share')}<Input className="mt-1" readOnly value={salesReferralUrl(rep.code)} onFocus={e=>e.target.select()}/></label>
    <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={async()=>{try{await navigator.clipboard.writeText(salesReferralUrl(rep.code));setFeedback(text('Lien copié.','Link copied.'));}catch{setFeedback(text('Sélectionnez et copiez le lien dans le champ.','Select and copy the link from its field.'));}}}>{text('Copier le lien','Copy link')}</Button><Button size="sm" variant="outline" disabled={toggle.isPending} onClick={()=>toggle.mutate(rep)}>{rep.active?text('Désactiver le lien','Disable link'):text('Réactiver le lien','Reactivate link')}</Button></div>
    <dl className="grid grid-cols-2 gap-3 text-sm"><div><dt className="text-muted-foreground">{text('Inscriptions','Registrations')}</dt><dd className="text-xl font-semibold">{rep.registrations}</dd></div><div><dt className="text-muted-foreground">{text('Comptes ayant payé','Paying accounts')}</dt><dd className="text-xl font-semibold">{rep.paying_accounts}</dd></div><div><dt className="text-muted-foreground">{text('Paiements confirmés','Confirmed payments')}</dt><dd className="font-semibold">{rep.payments}</dd></div><div><dt className="text-muted-foreground">{text('Montant confirmé','Confirmed amount')}</dt><dd className="font-semibold">{money(rep.amount_xaf)}</dd></div></dl>
+   <SalesAccountAccess representativeId={rep.id} name={rep.name} />
    <Button size="sm" onClick={()=>{setSelected(rep);setDetailPage(1);}}>{text('Voir les inscriptions et paiements','View registrations and payments')}</Button>
   </CardContent></Card>)}</div>
   {!list.isLoading&&!list.error&&!list.data?.items.length&&<p>{text('Aucun commercial pour cette sélection.','No representatives for this selection.')}</p>}

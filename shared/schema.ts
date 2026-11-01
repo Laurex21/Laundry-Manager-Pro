@@ -1226,3 +1226,20 @@ export const salesAdminEvents = pgTable("sales_admin_events", {
  representativeId:integer("representative_id").notNull().references(()=>salesRepresentatives.id), action:text("action").notNull(),
  createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
 },t=>[check("sales_admin_action",sql`${t.action} IN ('created','activated','disabled')`)]);
+
+
+// Separate authentication realm: sales accounts are never merchant users or site members.
+export const salesAccounts = pgTable("sales_accounts", {
+ id:uuid("id").primaryKey(), representativeId:integer("representative_id").notNull().unique().references(()=>salesRepresentatives.id),
+ email:text("email").notNull().unique(), passwordHash:text("password_hash"), active:boolean("active").notNull().default(false),
+ authVersion:integer("auth_version").notNull().default(1),environment:text("environment").notNull(),
+ createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),activatedAt:timestamp("activated_at",{withTimezone:true}),
+},t=>[check("sales_account_email",sql`${t.email}=lower(trim(${t.email}))`),check("sales_account_environment",sql`${t.environment} IN ('test','production')`)]);
+export const salesInvitations = pgTable("sales_invitations", {
+ id:uuid("id").primaryKey(),accountId:uuid("account_id").notNull().references(()=>salesAccounts.id), tokenHash:varchar("token_hash",{length:64}).notNull().unique(),
+ expiresAt:timestamp("expires_at",{withTimezone:true}).notNull(),usedAt:timestamp("used_at",{withTimezone:true}),revokedAt:timestamp("revoked_at",{withTimezone:true}),
+ deliveryStatus:text("delivery_status").notNull().default("pending"),createdBy:varchar("created_by").notNull().references(()=>users.id),createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[index("sales_invitations_account").on(t.accountId,t.createdAt),check("sales_invitation_delivery",sql`${t.deliveryStatus} IN ('pending','preview','sent','failed')`)]);
+export const salesAccessEvents = pgTable("sales_access_events", {
+ id:bigserial("id",{mode:"number"}).primaryKey(),accountId:uuid("account_id").notNull().references(()=>salesAccounts.id),adminId:varchar("admin_id").references(()=>users.id),action:text("action").notNull(),createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[check("sales_access_action",sql`${t.action} IN ('invited','invitation_failed','accepted','suspended','reactivated','login','logout')`)]);

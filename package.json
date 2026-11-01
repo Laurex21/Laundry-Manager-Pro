@@ -71,7 +71,7 @@
     "test:customer-risk": "node --import tsx server/lib/customer-risk.integration.test.ts",
     "test:saas-pro-pilot": "node --import tsx server/lib/saas-pro-pilot.integration.test.ts",
     "test:platform-admin-saas": "tsx server/lib/platform-admin-saas.integration.test.ts",
-    "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts"
+    "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
