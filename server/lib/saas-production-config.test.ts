@@ -24,7 +24,7 @@ for (const origin of ["http://laundry.example.com", "https://localhost", "https:
 
 // Exercise the live adapter with injected transport only. No real provider call.
 const calls: { url: string; options: any }[] = [];
-const invoice: any = { id: "invoice", checkout_id: "checkout", status: "pending", total_xaf: 10999, newlyReserved: true };
+const invoice: any = { id: "invoice", checkout_id: "checkout", status: "pending", total_xaf: 10999, quote: {}, newlyReserved: true };
 let redirect = PAWAPAY_ENDPOINTS.live.checkout + "/live-code";
 let source = "";
 const store: any = {
@@ -40,6 +40,9 @@ const provider = new SaasPawapay(store, () => "fake-live-key", fake, "live");
 await provider.start(1, invoice.id, config.returnOrigin! + "/subscriptions");
 await provider.refresh(1, invoice.id);
 assert.equal(source, "pawapay_live");
+const checkoutRequest = calls.find(call => call.options.method === "POST")!;
+assert.deepEqual(JSON.parse(checkoutRequest.options.body).countries, ["CMR"]);
+assert.deepEqual(JSON.parse(checkoutRequest.options.body).amounts, [{ country: "CMR", currency: "XAF", amount: "10999" }]);
 assert.ok(calls.every(call => call.url.startsWith("https://api.pawapay.io/v2/checkouts")));
 assert.ok(calls.every(call => call.options.headers.Authorization === "Bearer fake-live-key"));
 redirect = PAWAPAY_ENDPOINTS.sandbox.checkout + "/wrong-environment";
