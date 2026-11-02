@@ -1,3 +1,4 @@
+import { CustomerFollowUpList } from "@/components/customer-follow-up-notice";
 import { AccessNotice } from "@/components/access-notice";
 import { requireOk } from "@/lib/access-feedback";
 import { useEffect, useRef, useState } from "react";
@@ -906,20 +907,7 @@ function CustomerBehaviorSection({ period }: { period: string }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">{i18n.language.startsWith("fr") ? "Au moins 3 visites ; risque à partir d’un délai d’environ 1,8 fois la fréquence habituelle. Historique insuffisant : " : "At least 3 visits; risk starts at roughly 1.8 times the usual visit interval. Insufficient history: "}{churn.insufficientHistoryCount ?? "—"}</p>
-            <div className="space-y-2">
-              {(churn.customers || []).slice(0, 6).map((customer: any) => (
-                <div key={customer.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{customer.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t("last_visit")}: {formatBusinessDateTime(customer.lastVisitAt)} · {t("cycle")}: {customer.avgDaysBetweenVisits ? t("days_value", { count: Math.round(customer.avgDaysBetweenVisits) }) : "-"}
-                    </p>
-                  </div>
-                  <Badge variant={Number(customer.churnRiskScore || 0) >= 86 ? "destructive" : "secondary"}>{riskLabel(customer.churnRiskScore, t)}</Badge>
-                </div>
-              ))}
-              {!(churn.customers || []).length && <p className="text-sm text-muted-foreground">{t("no_churn_risk_detected")}</p>}
-            </div>
+            <CustomerFollowUpList key={currentSite?.id??"all"} customers={churn.customers || []} />
           </CardContent>
         </Card>
         <Card className="shadow-sm">

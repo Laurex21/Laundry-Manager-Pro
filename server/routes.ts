@@ -1,3 +1,4 @@
+import { customerFollowUpSummary } from "./lib/customer-risk";
 import { registerSalesPortalRoutes } from "./lib/sales-portal-routes";
 import { registerSalesRoutes } from "./lib/sales-referrals";
 import { garmentControlReportHandler } from "./lib/garment-control-report";
@@ -2369,6 +2370,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/analytics/production-delays", isAuthenticated, async (req: any, res) => {
     const delays = await storage.getProductionDelays(scopedSites(req));
     res.json(delays);
+  });
+
+  // Starter sees only a scoped count; the detailed customer analysis remains premium.
+  app.get("/api/analytics/customer-follow-up-summary", isAuthenticated, async (req: any, res) => {
+    const data = await storage.getCustomerBehaviorAnalytics("month", scopedSites(req));
+    res.json(customerFollowUpSummary(data));
   });
 
   app.get("/api/analytics/customer-behavior", isAuthenticated, async (req: any, res) => {

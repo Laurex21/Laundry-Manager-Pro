@@ -12,3 +12,10 @@ export function currentCustomerRisk<T extends RiskHistory>(customer: T, now: Dat
     : ['at_risk','lost'].includes(customer.segment??'') ? 'regular' : customer.segment;
   return {...customer,churnRiskScore:score,segment,riskHistorySufficient:enough,atRisk:enough && score!=null && score>=55};
 }
+
+/** Public-to-the-tenant teaser: never expose names, phones, revenue or individual scores. */
+export function customerFollowUpSummary(data: {churn:{atRiskCount:number}}) {
+  const count=data.churn.atRiskCount;
+  if(!Number.isSafeInteger(count)||count<0)throw new Error('INVALID_CUSTOMER_FOLLOW_UP_COUNT');
+  return {count};
+}

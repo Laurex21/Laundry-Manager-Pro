@@ -36,7 +36,7 @@ export function Overview360({showRisk,risk,riskError,data:d,today,openReturns,re
         {tile(text('Forfaits expirant sous 7 jours','Memberships expiring within 7 days'),d.memberships.expiring,memberships)}
       </div>
       {showRisk&&<div className="rounded-lg border border-amber-300 bg-amber-50/40 p-3" data-testid="pilotage-customer-risk">
-        {tile(text('Clients à risque de perte','Customers at risk of leaving'),riskError?text('Indisponible','Unavailable'):risk?.atRiskCount??'…','/analytics?view=customers#churn-risk')}
+        {tile(text('Clients qui tardent à revenir','Customers overdue for a visit'),riskError?text('Indisponible','Unavailable'):risk?.atRiskCount??'…','/analytics?view=customers#churn-risk')}
         <p className="mt-2 text-xs text-muted-foreground">{riskError ? text('Le risque client n’a pas pu être chargé ; aucune valeur zéro n’est supposée.','Customer risk could not be loaded; zero is not assumed.') : text('Même calcul qu’Analytique : au moins 3 visites et un retour attendu dépassé d’environ 1,8 fois la fréquence habituelle.','Same calculation as Analytics: at least 3 visits and elapsed time of roughly 1.8 times the usual visit interval.')} {risk&&!riskError&&<>{risk.insufficientHistoryCount} {text('clients avec historique insuffisant, exclus du risque.','customers with insufficient history, excluded from risk.')}</>}</p>
         <Link href="/analytics?view=customers#churn-risk" className="inline-flex min-h-11 items-center text-sm text-primary underline">{text('Voir les clients à relancer','View customers to follow up')}</Link>
       </div>}
