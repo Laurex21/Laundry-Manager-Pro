@@ -1,4 +1,5 @@
 import './customer-risk.test';
+import {customerFollowUpSummary} from './customer-risk';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {drizzle} from 'drizzle-orm/pglite';
@@ -22,6 +23,7 @@ try{
  {id:4,name:'Other site',phone:'000',address:'Test',siteId:2,visitCount:3,avgDaysBetweenVisits:'10',lastVisitAt:ago(30),churnRiskScore:100,segment:'lost'},
  ]);
  const result=await storage.getCustomerBehaviorAnalytics('month',[1]);
+ assert.deepEqual(customerFollowUpSummary(result),{count:1},'Starter receives only an aggregate count, never the detailed customer records');
  assert.equal(result.churn.atRiskCount,1);assert.equal(result.churn.insufficientHistoryCount,1);assert.deepEqual(result.churn.customers.map((x:any)=>x.id),[1]);
  assert.equal((await storage.getCustomerBehaviorAnalytics('month',[])).churn.atRiskCount,0);
  const before=await isolated.select().from(schema.customers);

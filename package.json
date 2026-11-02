@@ -70,7 +70,7 @@
     "test:decision-support": "tsx server/lib/decision-support.integration.test.ts",
     "test:zod-migration": "tsx server/lib/zod-migration.test.ts",
     "test:pilotage-overview": "node --import tsx server/lib/pilotage-overview.integration.test.ts",
-    "test:customer-risk": "node --import tsx server/lib/customer-risk.integration.test.ts",
+    "test:customer-risk": "node --import tsx server/lib/customer-risk.integration.test.ts && node --import tsx client/src/lib/customer-follow-up.test.tsx",
     "test:saas-pro-pilot": "node --import tsx server/lib/saas-pro-pilot.integration.test.ts",
     "test:platform-admin-saas": "tsx server/lib/platform-admin-saas.integration.test.ts",
     "test:payment-journey": "node --import tsx client/src/lib/saas-payment-journey.test.tsx",

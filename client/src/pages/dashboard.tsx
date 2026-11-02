@@ -1,3 +1,4 @@
+import { CustomerFollowUpNotice } from "@/components/customer-follow-up-notice";
 import { AccessNotice } from "@/components/access-notice";
 import { historicalSite, requireOk } from "@/lib/access-feedback";
 import { useStats } from "@/hooks/use-stats";
@@ -57,8 +58,12 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: recentOrders, isLoading: ordersLoading } = useOrders();
   const { data: dashData } = useQuery<any>({ queryKey: ["/api/analytics/dashboard"] });
-  const behavior = useQuery<any>({ queryKey: ["/api/analytics/customer-behavior", "month", currentSite?.id ?? "all"], enabled: canAnalyze, queryFn: async () => {const res=await fetch("/api/analytics/customer-behavior?period=month", {credentials:"include"}); await requireOk(res); return res.json();} });
-  const behaviorData = canAnalyze ? behavior.data : undefined;
+
+  const followUp = useQuery<{count:number}>({
+    queryKey:["/api/analytics/customer-follow-up-summary",currentSite?.id??"all"], enabled:!historical,
+    queryFn:async()=>{const res=await fetch("/api/analytics/customer-follow-up-summary",{credentials:"include"});await requireOk(res);return res.json();},
+    refetchInterval:60_000,refetchOnWindowFocus:true,
+  });
   const storage = useQuery<any[]>({
     enabled: canAnalyze,
     queryKey: ["/api/analytics/storage-occupancy", currentSite?.id ?? "all"],
@@ -103,7 +108,7 @@ export default function Dashboard() {
   const readyForPickup: any[] = dashData?.readyForPickup ?? [];
   const overduePickupById = new Map(((canAnalyze ? storage.data : undefined) ?? []).map((order: any) => [order.id, order]));
   const overduePickupCount = overduePickupById.size;
-  const churnCount = behaviorData?.churn?.atRiskCount ?? 0;
+  const churnCount = historical ? 0 : (followUp.data?.count ?? 0);
   const openReturnCount = garmentReturns.filter((item) => !["rejected", "resolved"].includes(item.returnCase.status)).length;
   const unacknowledgedReportCount = dailyReports.filter((item) => item.report.status === "submitted").length;
 
@@ -208,20 +213,12 @@ export default function Dashboard() {
               </div>
             );
           })}
-          {churnCount > 0 && (
-            <Link href="/analytics#churn-risk">
-              <div className="flex cursor-pointer items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-3.5 py-2 text-orange-800 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300" data-testid="banner-churn-risk">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="font-medium">{churnCount} clients à risque de perte</span>
-                <ChevronRight className="ml-auto h-4 w-4" />
-              </div>
-            </Link>
-          )}
+          <CustomerFollowUpNotice count={churnCount} canAnalyze={canAnalyze} />
           </div>
         </div>
       )}
 
-      {!historical && (!canAnalyze || behavior.isError || storage.isError) && <AccessNotice kind={!canAnalyze ? (historical ? "historical" : "premium") : undefined} error={behavior.error || storage.error}/> }
+      {!historical && (!canAnalyze || followUp.isError || storage.isError) && <AccessNotice kind={!canAnalyze ? (historical ? "historical" : "premium") : undefined} error={followUp.error || storage.error}/> }
 
       {/* Workflow queue strip */}
       {ordersByStatus && (

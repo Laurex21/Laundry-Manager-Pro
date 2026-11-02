@@ -33,11 +33,12 @@ export async function applySaasAccess(req: any, res: any): Promise<boolean> {
     }
   }
   // Premium routes remain guarded by the server, even when a caller skips the UI.
+  const followUpSummary = req.method === "GET" && req.path === "/api/analytics/customer-follow-up-summary";
   const feature = routeFeature(req.path, req.method);
-  if (feature && req.siteId && !activeSites.includes(req.siteId)) {
+  if ((feature || followUpSummary) && req.siteId && !activeSites.includes(req.siteId)) {
     res.status(403).json({ code: "SAAS_SITE_READ_ONLY", message: "Only previously stored history is available for this site." }); return false;
   }
-  if (state.plan !== "business" && (feature || req.path === "/api/analytics/dashboard")) {
+  if (state.plan !== "business" && (feature || followUpSummary || req.path === "/api/analytics/dashboard")) {
     // Historical order/customer reads remain available; consolidated analytics do not.
     req.siteScope = req.siteScope.filter((id: number) => activeSites.includes(id));
     req.organisationSiteScope = activeSites;
@@ -48,6 +49,7 @@ export async function applySaasAccess(req: any, res: any): Promise<boolean> {
   return true;
 }
 export function routeFeature(path: string, method: string): SaasFeature | null {
+  if (method === "GET" && path === "/api/analytics/customer-follow-up-summary") return null; // Count only; customer identities and analysis stay premium.
   if (method === "GET" && path.startsWith("/api/daily-site-reports")) return null; // Stored historical snapshots, not new calculations.
   if (/^\/api\/(analytics\/(?!dashboard|credit-summary)|reports|performance|daily-site-reports|machines|production-cycles|pilotage\/(?:today|overview)|attendance|employees)/.test(path)) return path.startsWith("/api/employees") || path.startsWith("/api/attendance") ? "team" : path.startsWith("/api/machines") || path.startsWith("/api/production-cycles") || path.includes("pilotage") ? "machines" : "reports";
   // Existing customer contracts, their balances, receipts and history remain readable.
