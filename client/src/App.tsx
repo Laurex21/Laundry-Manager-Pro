@@ -27,6 +27,7 @@ const DiagnosticPage    = lazy(() => import("@/pages/diagnostic"));
 const RentabilitePage   = lazy(() => import("@/pages/rentabilite"));
 const PublicReportPage  = lazy(() => import("@/pages/report-public"));
 const Customers         = lazy(() => import("@/pages/customers"));
+const CustomerFollowUps = lazy(() => import("@/pages/customer-follow-ups"));
 const CustomerDetail    = lazy(() => import("@/pages/customer-detail"));
 const Orders            = lazy(() => import("@/pages/orders"));
 const OrderDetail       = lazy(() => import("@/pages/order-detail"));
@@ -200,6 +201,12 @@ function Router() {
         </Route>
         <Route path="/customers">
           <ProtectedRoute component={Customers} page="customers" />
+        </Route>
+        <Route path="/customer-follow-ups/:id">
+          <ProtectedRoute component={CustomerFollowUps} page="customers" />
+        </Route>
+        <Route path="/customer-follow-ups">
+          <ProtectedRoute component={CustomerFollowUps} page="customers" />
         </Route>
         <Route path="/customers/:id">
           <ProtectedRoute component={CustomerDetail} page="customers" />

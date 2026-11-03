@@ -27,6 +27,7 @@ jobs:
       - run: npm run test:auth-i18n
       - run: npm run test:pilotage-overview
       - run: npm run test:customer-risk
+      - run: npm run test:customer-follow-ups
       - run: npm run test:decision-support
       - run: npm run test:zod-migration
       - run: npm run test:admin-user-access

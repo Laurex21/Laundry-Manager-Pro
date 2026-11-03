@@ -49,6 +49,7 @@ export async function applySaasAccess(req: any, res: any): Promise<boolean> {
   return true;
 }
 export function routeFeature(path: string, method: string): SaasFeature | null {
+  if (/^\/api\/customer-follow-ups(?:\/|$)/.test(path)) return "reports";
   if (method === "GET" && path === "/api/analytics/customer-follow-up-summary") return null; // Count only; customer identities and analysis stay premium.
   if (method === "GET" && path.startsWith("/api/daily-site-reports")) return null; // Stored historical snapshots, not new calculations.
   if (/^\/api\/(analytics\/(?!dashboard|credit-summary)|reports|performance|daily-site-reports|machines|production-cycles|pilotage\/(?:today|overview)|attendance|employees)/.test(path)) return path.startsWith("/api/employees") || path.startsWith("/api/attendance") ? "team" : path.startsWith("/api/machines") || path.startsWith("/api/production-cycles") || path.includes("pilotage") ? "machines" : "reports";
