@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useLocation } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { useCustomer, useUpdateCustomer } from "@/hooks/use-customers";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -95,7 +95,7 @@ export default function CustomerDetail() {
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const { openWhatsApp } = useWhatsAppLauncher();
-  const { userRole } = useAuth();
+  const { userRole, hasFeature } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const symbol = getSymbol();
@@ -243,6 +243,7 @@ export default function CustomerDetail() {
           >
             <MessageCircle className="w-4 h-4 mr-1.5" /> WhatsApp
           </Button>
+          {hasFeature("analytics")&&<Button variant="outline" size="sm" asChild><Link href={`/customer-follow-ups/${customer.id}`}>{i18n.language.startsWith("fr")?"Suivi des relances":"Follow-up history"}</Link></Button>}
           <a href={callLink}>
             <Button variant="outline" size="sm" data-testid="button-call">
               <Phone className="w-4 h-4 mr-1.5" /> {t("call")}

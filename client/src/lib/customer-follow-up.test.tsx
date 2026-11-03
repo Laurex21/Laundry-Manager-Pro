@@ -18,6 +18,6 @@ for(const lang of ['fr','en']){
  assert.ok(starter.includes('47'));assert.ok(starter.includes('/subscriptions?plan=pro'));assert.ok(!starter.includes('Fictional customer'));assert.ok(!starter.includes(CUSTOMER_FOLLOW_UP_URL));
  const paid=render(<CustomerFollowUpNotice count={47} canAnalyze/>);assert.ok(paid.includes(CUSTOMER_FOLLOW_UP_URL.replaceAll('&','&amp;')));assert.ok(!paid.includes('/subscriptions'));
  assert.equal(render(<CustomerFollowUpNotice count={0} canAnalyze={false}/>),'');
- const list=render(<CustomerFollowUpList customers={rows}/>);assert.ok(list.includes('1–20'));assert.ok(list.includes('/customers/20'));assert.ok(list.includes(lang==='fr'?'Suivant':'Next'));
+ const list=render(<CustomerFollowUpList customers={rows}/>);assert.ok(list.includes('1–20'));assert.ok(list.includes('/customer-follow-ups/20'));assert.ok(list.includes(lang==='fr'?'Suivant':'Next'));
 }
 console.log('PASS customer follow-up: Starter count-only teaser, paid direct customer view, FR/EN, all 47 results reachable, empty/error counts, scoped privacy projection; no network');

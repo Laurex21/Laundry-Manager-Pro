@@ -11,6 +11,7 @@ const resources = {
   en: {
     translation: {
       "dashboard": "Dashboard",
+      "customer_follow_up": "Customer follow-up",
       "dashboard_alert_pending_orders": "You have {{count}} pending orders",
       "dashboard_alert_pending_orders_detail": "Consider processing them soon",
       "dashboard_alert_expenses_exceed_revenue": "Expenses exceed revenue this month",
@@ -985,6 +986,7 @@ const resources = {
   fr: {
     translation: {
       "dashboard": "Tableau de bord",
+      "customer_follow_up": "Suivi des relances",
       "dashboard_alert_pending_orders": "Vous avez {{count}} commandes en attente",
       "dashboard_alert_pending_orders_detail": "Traitez-les prochainement",
       "dashboard_alert_expenses_exceed_revenue": "Les dépenses dépassent le chiffre d’affaires ce mois-ci",
@@ -1959,6 +1961,7 @@ const resources = {
   pt: {
     translation: {
       "dashboard": "Painel",
+      "customer_follow_up": "Acompanhamento de clientes",
       "dashboard_alert_pending_orders": "Você tem {{count}} pedidos pendentes",
       "dashboard_alert_pending_orders_detail": "Considere processá-los em breve",
       "dashboard_alert_expenses_exceed_revenue": "As despesas superam a receita deste mês",

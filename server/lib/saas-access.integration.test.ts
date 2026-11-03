@@ -30,6 +30,9 @@ try{
  const historicStatus=await access('/api/orders/1/status','PATCH','owner',11);assert.equal(historicStatus.payload.code,'SAAS_SITE_READ_ONLY');
  const activeStatus=await access('/api/orders/1/status','PATCH','owner',10);assert.equal(activeStatus.passed,true);
  assert.equal((await access('/api/analytics/customer-behavior')).payload.code,'SAAS_FEATURE_REQUIRED');
+ assert.equal((await access('/api/customer-follow-ups')).payload.code,'SAAS_FEATURE_REQUIRED');
+ assert.equal((await access('/api/customer-follow-ups/1/events','POST')).payload.code,'SAAS_FEATURE_REQUIRED');
+ assert.equal((await access('/api/customer-follow-ups/1','GET','owner',11)).payload.code,'SAAS_SITE_READ_ONLY');
  const followUp=await access('/api/analytics/customer-follow-up-summary','GET','owner',null);assert.equal(followUp.passed,true);assert.deepEqual(followUp.req.siteScope,[10]);
  assert.equal((await access('/api/analytics/customer-follow-up-summary','GET','owner',11)).payload.code,'SAAS_SITE_READ_ONLY');
  assert.equal((await access('/api/analytics/customer-follow-up-summary/extra')).code,403);

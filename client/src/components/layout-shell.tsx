@@ -99,6 +99,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/orders": "orders",
   "/pilotage": "pilotage",
   "/customers": "customers",
+  "/customer-follow-ups": "customer_follow_up",
   "/services": "services",
   "/expenses": "expenses",
   "/inventory": "inventory",
@@ -399,6 +400,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const pageTitleKey = PAGE_TITLES[currentPath]
     || (currentPath.startsWith("/orders/") ? "orders" : undefined)
     || (currentPath.startsWith("/customers/") ? "customers" : undefined)
+    || (currentPath.startsWith("/customer-follow-ups/") ? "customer_follow_up" : undefined)
     || "dashboard";
   const planColor = PLAN_COLORS[planSlug] || PLAN_COLORS.free;
 
@@ -431,7 +433,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </p>
               <div className="space-y-0.5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:space-y-0">
                 {items.map((item) => {
-                  const isActive = location === item.href;
+                  const isActive = location === item.href || (item.href === "/customers" && currentPath.startsWith("/customer-follow-ups"));
                   return (
                     <Link key={item.href} href={item.href} className="lg:flex lg:min-h-0 lg:flex-1">
                       <div
@@ -594,7 +596,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         data-testid="bottom-nav"
       >
         {bottomNavItems.map((item) => {
-          const isActive = location === item.href;
+          const isActive = location === item.href || (item.href === "/customers" && currentPath.startsWith("/customer-follow-ups"));
           return (
             <Link key={item.href} href={item.href} className="flex-1">
               <div
