@@ -24,17 +24,16 @@ async function call(method:string,path:string,body:any={},params:any={},query:an
 }
 try{
  for(const sql of await generateMigration(generateDrizzleJson({}),generateDrizzleJson(schema)))await pg.exec(sql);
- for(const file of ['20260912_platform_admin_mfa.sql','20261021_saas_billing_v5.sql','20261101_sales_referrals.sql','20261101_sales_referrals.sql'])await pg.exec(await readFile('migrations/'+file,'utf8'));
+ for(const file of ['20260912_platform_admin_mfa.sql','20261021_saas_billing_v5.sql','20261101_sales_referrals.sql','20261104_ambassador_user_access.sql'])await pg.exec(await readFile('migrations/'+file,'utf8'));
  await testDb.insert(schema.users).values([{id:'admin',email:'admin@example.invalid'},{id:'ordinary',email:'ordinary@example.invalid'}]);
  await pg.query(`INSERT INTO platform_admins(user_id,mfa_enabled_at,is_active) VALUES('admin',now(),true)`);
  assert.ok(SALES_COUNTRIES.includes('CM')&&SALES_COUNTRIES.includes('CI'));
  assert.equal((await call('GET','/api/platform-admin/sales',{}, {}, {},'ordinary')).code,403);
  assert.equal((await call('GET','/api/platform-admin/sales',{}, {}, {},'expired')).code,401);
  assert.equal((await call('POST','/api/platform-admin/sales',{name:'Denied',country:'CM'}, {}, {},'ordinary')).code,403);
- assert.equal((await call('POST','/api/platform-admin/sales',{name:'Bad',country:'ZZ'})).code,400);
- assert.equal((await call('POST','/api/platform-admin/sales',{name:'Bad',country:'CM',admin:true})).code,400);
- const created=await call('POST','/api/platform-admin/sales',{name:'Commercial fictif CM',country:'CM'});assert.equal(created.code,201);const rep=created.data;assert.match(rep.code,SALES_CODE);
- const other=(await call('POST','/api/platform-admin/sales',{name:'Commercial fictif CI',country:'CI'})).data;
+ assert.equal((await call('POST','/api/platform-admin/sales',{name:'Retired',country:'CM'})).code,410);
+ const [rep,other]=(await pg.query<any>(`INSERT INTO sales_representatives(name,country,code,environment,created_by) VALUES('Commercial fictif CM','CM',$1,'test','admin'),('Commercial fictif CI','CI',$2,'test','admin') RETURNING *`,['CM-'+'A'.repeat(20),'CI-'+'B'.repeat(20)])).rows;
+ assert.match(rep.code,SALES_CODE);
  assert.notEqual(rep.code,other.code);
  assert.equal((await call('GET','/r/:code',{}, {code:rep.code})).data,`/auth?tab=register&sales=${rep.code}`);
  assert.equal((await call('GET','/r/:code',{}, {code:'https://evil.example'})).data,'/auth?tab=register&salesUnavailable=1');
@@ -46,13 +45,13 @@ try{
  await assert.rejects(()=>completeSalesRegistration(user.id,4),/SALES_REFERRAL_UNAVAILABLE/);
  await assert.rejects(()=>createSalesRegistrationUser({id:user.id},other.code));
  assert.equal((await pg.query<any>('SELECT representative_id FROM sales_registrations WHERE user_id=$1',[user.id])).rows[0].representative_id,rep.id,'Attribution cannot be overwritten');
- await call('PATCH','/api/platform-admin/sales/:id',{active:false},{id:rep.id});
+ await pg.query('UPDATE sales_representatives SET active=false WHERE id=$1',[rep.id]);
  assert.equal((await call('GET','/r/:code',{}, {code:rep.code})).data,'/auth?tab=register&salesUnavailable=1');
  await assert.rejects(()=>createSalesRegistrationUser({id:'rejected'},rep.code),/SALES_REFERRAL_UNAVAILABLE/);
  assert.equal((await pg.query<any>("SELECT count(*)::int n FROM users WHERE id='rejected'")).rows[0].n,0,'Rejected code leaves no user');
  // Disabling a referral does not remove its historical attribution or account access.
  assert.equal((await call('GET','/api/platform-admin/sales')).data.items.find((r:any)=>r.id===rep.id).registrations,1);
- await call('PATCH','/api/platform-admin/sales/:id',{active:true},{id:rep.id});
+ await pg.query('UPDATE sales_representatives SET active=true WHERE id=$1',[rep.id]);
  // Plain signup is untouched and does not require an attribution.
  await createSalesRegistrationUser({id:'direct',email:'direct@example.invalid'},undefined);
  assert.equal((await pg.query<any>("SELECT count(*)::int n FROM sales_registrations WHERE user_id='direct'")).rows[0].n,0);
@@ -86,8 +85,8 @@ try{
  process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
  assert.equal((await call('GET','/api/platform-admin/sales',{}, {}, {page:'2'})).data.items.length,0);
  assert.equal((await call('GET','/api/platform-admin/sales',{}, {}, {page:'0'})).code,400);
- assert.equal((await call('PATCH','/api/platform-admin/sales/:id',{active:true,code:'forged'},{id:rep.id})).code,400);
- assert.equal((await pg.query<any>('SELECT count(*)::int n FROM sales_admin_events')).rows[0].n,4);
+ assert.equal((await call('PATCH','/api/platform-admin/sales/:id',{active:true,code:'forged'},{id:rep.id})).code,410);
+ assert.equal((await pg.query<any>('SELECT count(*)::int n FROM sales_admin_events')).rows[0].n,0,'Retired mutations cannot change records');
  const auth=await readFile('server/replit_integrations/auth/routes.ts','utf8');assert.match(auth,/createSalesRegistrationUser/);assert.match(auth,/completeSalesRegistration/);
- console.log('PASS sales: country validation, MFA admin boundaries, audited mutations, fixed referral redirect, atomic user attribution, first attribution retained, disable/reactivate, direct signup, environment separation, verified payments only, duplicate-safe totals, pilot exclusions and deferred organisations');
+ console.log('PASS sales: MFA admin boundaries, retired mutations, fixed referral redirect, atomic user attribution, first attribution retained, disable/reactivate, direct signup, environment separation, verified payments only, duplicate-safe totals, pilot exclusions and deferred organisations');
 }finally{await pool.end();await pg.close();}

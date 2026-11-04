@@ -43,6 +43,7 @@ const Subscriptions     = lazy(() => import("@/pages/subscriptions"));
 const MembershipPlans   = lazy(() => import("@/pages/membership-plans"));
 const SettingsPage      = lazy(() => import("@/pages/settings"));
 const AcceptInvitation  = lazy(() => import("@/pages/accept-invitation"));
+const AmbassadorPage    = lazy(() => import("@/pages/ambassador"));
 const SalesPortal       = lazy(() => import("@/pages/sales-portal"));
 const PlatformAdmin     = lazy(() => import("@/pages/platform-admin"));
 
@@ -183,6 +184,7 @@ function Router() {
         <Route path="/rapport/:leadId" component={PublicReportPage} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/commercial" component={SalesPortal} />
+        <Route path="/ambassador"><ProtectedRoute component={AmbassadorPage} /></Route>
         <Route path="/terms" component={LegalPage} />
         <Route path="/privacy" component={LegalPage} />
         <Route path="/cookies" component={LegalPage} />

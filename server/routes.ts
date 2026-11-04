@@ -1,6 +1,7 @@
 import {CustomerFollowUps} from "./lib/customer-follow-ups";
 import {registerCustomerFollowUpRoutes} from "./lib/customer-follow-up-routes";
 import { customerFollowUpSummary } from "./lib/customer-risk";
+import { registerAmbassadorRoutes } from "./lib/ambassador-routes";
 import { registerSalesPortalRoutes } from "./lib/sales-portal-routes";
 import { registerSalesRoutes } from "./lib/sales-referrals";
 import { garmentControlReportHandler } from "./lib/garment-control-report";
@@ -333,6 +334,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerAcquisitionRoutes(app, requirePlatformAdmin);
   registerSalesRoutes(app, requirePlatformAdmin);
   registerSalesPortalRoutes(app, requirePlatformAdmin);
+  registerAmbassadorRoutes(app, requirePlatformAdmin, isAuthenticated);
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);
   startTemporalIntelligenceJob();

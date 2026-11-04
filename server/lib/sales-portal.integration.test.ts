@@ -1,105 +1,137 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import bcrypt from 'bcryptjs';
 import {PGlite} from '@electric-sql/pglite';
 import {drizzle} from 'drizzle-orm/pglite';
 import {generateDrizzleJson,generateMigration} from 'drizzle-kit/api';
 import * as schema from '../../shared/schema';
 process.env.DATABASE_URL='postgresql://isolated:unused@127.0.0.1:1/test';
-process.env.NODE_ENV='development';process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
-delete process.env.SALES_EMAIL_ENABLED;delete process.env.RESEND_API_KEY;
-const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('External HTTP is forbidden in this isolated test');};
+process.env.NODE_ENV='development';
+process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
+process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='true';
+process.env.SAAS_BILLING_MODE='disabled';process.env.SAAS_LIVE_ENABLED='false';process.env.SALES_EMAIL_ENABLED='false';
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async()=>{throw Error('External HTTP/email/payments forbidden');};
 const pg=new PGlite(),testDb=drizzle(pg,{schema});
 const {db,pool}=await import('../db');
 for(const method of ['select','insert','update','delete','execute','transaction'] as const)(db as any)[method]=testDb[method].bind(testDb);
-(pool as any).query=(s:string,v?:any[])=>pg.query(s,v);(pool as any).connect=()=>{throw Error('Network database access forbidden');};
+(pool as any).query=(s:string,v?:any[])=>pg.query(s,v);
+(pool as any).connect=()=>{throw Error('External database forbidden');};
+const {AmbassadorAccess}=await import('./ambassador-access');
+const {registerAmbassadorRoutes}=await import('./ambassador-routes');
 const {registerSalesPortalRoutes}=await import('./sales-portal-routes');
+const {registerSalesRoutes}=await import('./sales-referrals');
 const {requirePlatformAdmin}=await import('./platform-admin-routes');
 const {isAuthenticated}=await import('../replit_integrations/auth/replitAuth');
-const {sendSalesInvitationEmail,invitationEmailContent}=await import('./sales-invitation-email');
-const {invitationHash}=await import('./sales-account-store');
-let failLoginAudit=false;
-const database={query:(s:string,v?:any[])=>{if(failLoginAudit&&s.includes("VALUES($1,'login')"))throw Error('Simulated audit failure');return pg.query(s,v);},transaction:async<T>(fn:(q:any)=>Promise<T>)=>{await pg.exec('BEGIN');try{const r=await fn({query:(s:string,v?:any[])=>pg.query(s,v)});await pg.exec('COMMIT');return r;}catch(e){await pg.exec('ROLLBACK');throw e;}}};
-const routes=new Map<string,any[]>();const app:any={get:(p:string,...h:any[])=>routes.set('GET '+p,h),post:(p:string,...h:any[])=>routes.set('POST '+p,h),patch:(p:string,...h:any[])=>routes.set('PATCH '+p,h)};
-let emailFailure=false,mailCalls=0,lastMail:any;
-registerSalesPortalRoutes(app,requirePlatformAdmin,{db:database,sendEmail:async mail=>{mailCalls++;lastMail=mail;if(emailFailure)throw Error('Simulated unavailable provider');return sendSalesInvitationEmail(mail);}});
-function request(body:any={},params:any={},session:any={userId:'admin',platformAdminVerifiedAt:Date.now()}){
- const q:any={body,params,query:{},protocol:'https',ip:crypto.randomUUID(),get:(name:string)=>({'host':'isolated.replit.dev',origin:'https://isolated.replit.dev','sec-fetch-site':'same-origin'}[name])};
- const make=(data:any)=>({...data,cookie:{},save:(cb:any)=>cb(),destroy:(cb:any)=>{q.session=null;cb();},regenerate:(cb:any)=>{q.session=make({});cb();}});q.session=make(session);return q;
+const {routeFeature}=await import('./saas-access');
+let failAudit=false;
+// Embedded PostgreSQL, serialized transactions; no network or real accounts.
+const database={query:(s:string,v?:any[])=>pg.query(s,v),transaction:<T>(fn:(tx:any)=>Promise<T>)=>pg.transaction(tx=>fn({query:(s:string,v?:any[])=>{if(failAudit&&s.includes('INSERT INTO sales_user_access_events'))throw Error('Audit failure');return tx.query(s,v);}}))};
+const store=new AmbassadorAccess(database);
+const routes=new Map<string,any[]>();
+const app:any={get:(p:string,...h:any[])=>routes.set('GET '+p,h),post:(p:string,...h:any[])=>routes.set('POST '+p,h),patch:(p:string,...h:any[])=>routes.set('PATCH '+p,h)};
+// Real application tenant/subscription/legal middleware, not a mock of its access rules.
+registerAmbassadorRoutes(app,requirePlatformAdmin,isAuthenticated,store);
+registerSalesPortalRoutes(app,requirePlatformAdmin);registerSalesRoutes(app,requirePlatformAdmin);
+function request(body:any={},params:any={},userId='admin',query:any={}){
+ const q:any={body,params,query,protocol:'https',method:'GET',path:'',ip:crypto.randomUUID(),get:(name:string)=>({host:'isolated.replit.dev',origin:'https://isolated.replit.dev','sec-fetch-site':'same-origin'}[name])};
+ q.session={userId,platformAdminVerifiedAt:Date.now(),save:(cb:any)=>cb()};return q;
 }
-async function call(method:string,path:string,q:any){
- const r:any={code:200,data:null,headers:{},setHeader(k:string,v:string){this.headers[k]=v;},status(n:number){this.code=n;return this;},json(b:any){this.data=b;return this;},clearCookie(){},};
+async function call(method:string,path:string,q=request()){
+ q.method=method;q.path=path;
+ const r:any={code:200,data:null,headers:{},setHeader(k:string,v:string){this.headers[k]=v;},status(n:number){this.code=n;return this;},json(v:any){this.data=v;return this;},send(v:any){this.data=v;return this;},redirect(n:number,v:string){this.code=n;this.data=v;},end(){}};
  for(const h of routes.get(method+' '+path)!){let next=false;await h(q,r,()=>{next=true;});if(!next)break;}return r;
 }
-const password='Secure-Fictional!2026';
-const tokenFrom=(r:any)=>new URLSearchParams(new URL(r.data.previewUrl).hash.slice(1)).get('invite')!;
+const activate=(userId:string,representativeId?:number)=>call('POST','/api/platform-admin/ambassadors',request({userId,name:'Ambassadeur fictif',country:'CM',...(representativeId?{representativeId}:{})}));
+const snapshot=async()=>{
+ const tables=['users','organisations','sites','site_members','saas_accounts','saas_invoices','sales_accounts','sales_invitations','sales_registrations'];
+ const result:Record<string,any>={}; for(const table of tables)result[table]=(await pg.query(`SELECT * FROM ${table} ORDER BY 1`)).rows; return result;
+};
 try{
  for(const sql of await generateMigration(generateDrizzleJson({}),generateDrizzleJson(schema)))await pg.exec(sql);
- for(const file of ['20260912_platform_admin_mfa.sql','20261021_saas_billing_v5.sql','20261101_sales_referrals.sql','20261101_sales_portal.sql','20261101_sales_portal.sql'])await pg.exec(await readFile('migrations/'+file,'utf8'));
- await testDb.insert(schema.users).values([{id:'admin',email:'admin@example.invalid'},{id:'owner-a',email:'a@example.invalid',passwordHash:'merchant-hash',organisationId:1},{id:'owner-b',email:'b@example.invalid',organisationId:2}]);
- await testDb.insert(schema.organisations).values([{id:1,name:'Only pressing A',ownerId:'owner-a'},{id:2,name:'Other pressing B',ownerId:'owner-b'}]);
+ await pg.exec('DROP TABLE sales_user_access_events; DROP TABLE sales_user_access; ALTER TABLE sales_representatives DROP COLUMN public_code;');
+ for(const file of ['20260912_platform_admin_mfa.sql','20261021_saas_billing_v5.sql','20261101_sales_referrals.sql','20261101_sales_portal.sql'])await pg.exec(await readFile('migrations/'+file,'utf8'));
+ await testDb.insert(schema.users).values([
+  {id:'admin',email:'admin@example.invalid',organisationId:1},
+  {id:'owner-a',email:'a@example.invalid',businessName:'Pressing fictif A',passwordHash:'unchanged-merchant-hash',organisationId:1},
+  {id:'owner-b',email:'b@example.invalid',businessName:'Pressing fictif B',organisationId:2},
+  {id:'staff-a',email:'staff@example.invalid',userType:'staff',organisationId:1},
+  {id:'unlinked',email:'unlinked@example.invalid',organisationId:1},
+  ...[3,100,112,193].map(id=>({id:'deferred-'+id,email:`deferred-${id}@example.invalid`,organisationId:id})),
+ ]);
+ await testDb.insert(schema.organisations).values([{id:1,name:'A',ownerId:'owner-a'},{id:2,name:'B',ownerId:'owner-b'},...[3,100,112,193].map(id=>({id,name:'Excluded '+id,ownerId:'deferred-'+id}))]);
+ await testDb.insert(schema.sites).values([{id:1,name:'Site A',organisationId:1},{id:2,name:'Site B',organisationId:2}]);
+ await testDb.insert(schema.siteMembers).values({siteId:1,userId:'staff-a',role:'staff'});
  await pg.query("INSERT INTO platform_admins(user_id,mfa_enabled_at,is_active) VALUES('admin',now(),true)");
- await pg.query(`INSERT INTO sales_representatives(id,name,country,code,environment,created_by) VALUES(11,'Representative A','CM',$1,'test','admin'),(22,'Representative B','CI',$2,'test','admin')`,['CM-'+'A'.repeat(20),'CI-'+'B'.repeat(20)]);
+ const {CURRENT_LEGAL_DOCUMENTS}=await import('./legal');
+ await pg.query(`INSERT INTO legal_acceptances(user_id,terms_version,privacy_version,cookie_version,document_hash,source) SELECT id,$1,$2,$3,$4,'admin' FROM users`,[CURRENT_LEGAL_DOCUMENTS.termsVersion,CURRENT_LEGAL_DOCUMENTS.privacyVersion,CURRENT_LEGAL_DOCUMENTS.cookieVersion,CURRENT_LEGAL_DOCUMENTS.documentHash]);
+ // Existing links/legacy passwords and recorded referrals are preserved during explicit linking.
+ await pg.query(`INSERT INTO sales_representatives(id,name,country,code,environment,created_by) VALUES(11,'Legacy A','CM',$1,'test','admin'),(22,'Legacy B','CI',$2,'test','admin')`,['CM-'+'A'.repeat(20),'CI-'+'B'.repeat(20)]);
+ await pg.query(`INSERT INTO sales_accounts(id,representative_id,email,password_hash,active,environment) VALUES($1,11,'a@example.invalid','legacy-hash',true,'test')`,[crypto.randomUUID()]);
  await pg.query(`INSERT INTO sales_registrations(user_id,organisation_id,representative_id,country,environment,created_at) VALUES('owner-a',1,11,'CM','test',now()-interval '2 days'),('owner-b',2,22,'CI','test',now()-interval '2 days')`);
  for(const org of [1,2]){const id=crypto.randomUUID();await pg.query(`INSERT INTO saas_invoices(id,organisation_id,provider_environment,quote,total_xaf,status,provider_status,paid_at) VALUES($1,$2,'sandbox','{}',$3,'paid','COMPLETED',now()-interval '1 hour')`,[id,org,org*10999]);await pg.query("INSERT INTO saas_events(organisation_id,action,details) VALUES($1,'payment_applied',$2)",[org,{invoiceId:id}]);}
- const usersBefore=JSON.stringify((await pg.query('SELECT * FROM users ORDER BY id')).rows);
- const denied=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:11},{userId:'owner-a'}));assert.equal(denied.code,403);assert.equal(mailCalls,0);
- assert.equal((await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:11},{userId:'admin',platformAdminVerifiedAt:0}))).code,401);
- const csrf=request({email:'sales-a@example.invalid'},{id:11});csrf.get=(n:string)=>({host:'isolated.replit.dev',origin:'https://evil.example','sec-fetch-site':'cross-site'}[n]);assert.equal((await call('POST','/api/platform-admin/sales/:id/invitation',csrf)).code,403);
- let sent=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'Sales-A@example.invalid'},{id:11}));assert.equal(sent.code,201);assert.equal(sent.data.status,'preview');assert.ok(sent.data.previewUrl.includes('/commercial#invite='));const revoked=tokenFrom(sent);
- assert.equal((await pg.query<any>('SELECT token_hash FROM sales_invitations')).rows[0].token_hash,invitationHash(revoked));assert.ok(!JSON.stringify((await pg.query('SELECT * FROM sales_invitations')).rows).includes(revoked),'Only token hash stored');
- sent=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:11}));const token=tokenFrom(sent);
- assert.equal((await call('POST','/api/sales/invitations/inspect',request({token:revoked},{},{}))).code,409);
- assert.equal((await call('POST','/api/sales/invitations/inspect',request({token},{},{}))).data.name,'Representative A');
- assert.equal((await call('POST','/api/sales/invitations/accept',request({token,password:'weak'},{},{}))).code,400);
- assert.equal((await call('POST','/api/sales/invitations/accept',request({token,password},{},{}))).code,200);
- assert.equal((await call('POST','/api/sales/invitations/accept',request({token,password},{},{}))).code,409,'Invitation is single-use');
- failLoginAudit=true;const blockedLogin=request({email:'sales-a@example.invalid',password},{},{userId:'owner-a'});assert.equal((await call('POST','/api/sales/login',blockedLogin)).code,503);assert.equal(blockedLogin.session.salesAccountId,undefined,'No new session without an audit record');assert.equal(blockedLogin.session.userId,'owner-a');failLoginAudit=false;
- const login=request({email:'SALES-A@example.invalid',password},{},{userId:'owner-a',platformAdminVerifiedAt:Date.now()});assert.equal((await call('POST','/api/sales/login',login)).code,200);assert.equal(login.session.userId,undefined);assert.equal(login.session.platformAdminVerifiedAt,undefined);assert.ok(login.session.salesAccountId);
- const aSession={...login.session};
- const summary=await call('GET','/api/sales/summary',request({}, {}, aSession));assert.equal(summary.code,200);assert.equal(summary.data.representative.id,11);assert.equal(summary.data.amount_xaf,10999);
- const scoped=request({}, {}, aSession);scoped.query={representativeId:22};assert.equal((await call('GET','/api/sales/summary',scoped)).data.amount_xaf,10999);
- const leads=await call('GET','/api/sales/registrations',request({}, {}, aSession));assert.equal(leads.data.items.length,1);assert.equal(leads.data.items[0].business_name,null);assert.equal(leads.data.items[0].organisation_id,1);assert.equal(leads.data.items[0].user_id,undefined);
- const forged=request({}, {}, aSession);forged.query={representativeId:22};assert.equal((await call('GET','/api/sales/registrations',forged)).code,400);
- assert.equal((await call('GET','/api/platform-admin/sales/:id/account',request({}, {id:22},aSession))).code,403);
- let businessStatus=0;await isAuthenticated(request({}, {}, aSession),{status(n:number){businessStatus=n;return this;},json(){}} as any,()=>{throw Error('Sales principal entered merchant APIs');});assert.equal(businessStatus,401);
- assert.equal((await call('GET','/api/sales/session',request({}, {}, {...aSession,userId:'admin'}))).code,401);
- assert.equal((await call('GET','/api/sales/session',request({}, {}, {...aSession,salesLoginAt:Date.now()-8*3600000-1}))).code,401);
- await pg.query('UPDATE sales_representatives SET active=false WHERE id=11');assert.equal((await call('GET','/api/sales/summary',request({}, {}, aSession))).code,200,'Link status independent of login');
- assert.equal((await call('PATCH','/api/platform-admin/sales/:id/account',request({active:false},{id:11}))).code,200);
- assert.equal((await call('GET','/api/sales/summary',request({}, {}, aSession))).code,401,'Suspension immediately invalidates sessions');
- assert.equal((await call('POST','/api/sales/login',request({email:'sales-a@example.invalid',password},{},{}))).code,401);
- assert.equal((await call('PATCH','/api/platform-admin/sales/:id/account',request({active:true},{id:11}))).code,200);
- assert.equal((await call('GET','/api/sales/session',request({}, {}, aSession))).code,401,'Old sessions stay invalid after reactivation');
- const again=request({email:'sales-a@example.invalid',password},{},{});assert.equal((await call('POST','/api/sales/login',again)).code,200);
- assert.equal((await pg.query<any>('SELECT active FROM sales_representatives WHERE id=11')).rows[0].active,false,'Account status does not change referral link');
- assert.equal((await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'changed@example.invalid'},{id:11}))).code,409,'Activated login email cannot be replaced');
- assert.equal((await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:22}))).code,409);
- emailFailure=true;assert.equal((await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:11}))).code,503);emailFailure=false;
- assert.equal((await call('GET','/api/sales/session',request({}, {}, again.session))).code,200,'Failed delivery preserves existing account access');
- assert.equal((await call('POST','/api/sales/invitations/inspect',request({token:new URLSearchParams(new URL(lastMail.url).hash.slice(1)).get('invite')},{},{}))).code,409,'Failed delivery revokes token');
- const reset=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:11}));const resetToken=tokenFrom(reset);
- await pg.query("UPDATE sales_invitations SET expires_at=now()-interval '1 second' WHERE token_hash=$1",[invitationHash(resetToken)]);assert.equal((await call('POST','/api/sales/invitations/accept',request({token:resetToken,password},{},{}))).code,409);
- const finalReset=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-a@example.invalid'},{id:11}));assert.equal((await call('POST','/api/sales/invitations/accept',request({token:tokenFrom(finalReset),password:'Another-Fictional!2026'},{},{}))).code,200);
- assert.equal((await call('GET','/api/sales/session',request({}, {}, again.session))).code,401,'Password reset revokes all older sessions');
- assert.equal(usersBefore,JSON.stringify((await pg.query('SELECT * FROM users ORDER BY id')).rows),'Merchant and admin records untouched');
- const stored=(await pg.query<any>('SELECT password_hash FROM sales_accounts')).rows[0].password_hash;assert.ok(await bcrypt.compare('Another-Fictional!2026',stored));assert.notEqual(stored,'Another-Fictional!2026');
- // A separate second commercial never sees A's registrations/payments.
- const bInvite=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-b@example.invalid'},{id:22}));await call('POST','/api/sales/invitations/accept',request({token:tokenFrom(bInvite),password},{},{}));const b=request({email:'sales-b@example.invalid',password},{},{});await call('POST','/api/sales/login',b);assert.equal((await call('GET','/api/sales/summary',request({}, {}, b.session))).data.amount_xaf,21998);
- await call('PATCH','/api/platform-admin/sales/:id/account',request({active:false},{id:22}));
- const pausedReset=await call('POST','/api/platform-admin/sales/:id/invitation',request({email:'sales-b@example.invalid'},{id:22}));
- assert.equal((await call('POST','/api/sales/invitations/accept',request({token:tokenFrom(pausedReset),password:'Paused-Reset-Only!2026'},{},{}))).code,200);
- assert.equal((await call('POST','/api/sales/login',request({email:'sales-b@example.invalid',password:'Paused-Reset-Only!2026'},{},{}))).code,401,'Reset must not reactivate a suspended account');
- await call('PATCH','/api/platform-admin/sales/:id/account',request({active:true},{id:22}));const resumed=request({email:'sales-b@example.invalid',password:'Paused-Reset-Only!2026'},{},{});assert.equal((await call('POST','/api/sales/login',resumed)).code,200);b.session=resumed.session;
- process.env.NODE_ENV='production';process.env.SAAS_DATABASE_ENVIRONMENT='production';assert.equal((await call('GET','/api/sales/session',request({}, {}, b.session))).code,401,'Test accounts cannot enter production realm');
- await assert.rejects(()=>sendSalesInvitationEmail({to:'nobody@example.invalid',representativeName:'Test',url:'https://app.xpressclean.cm/commercial#invite=test',expiresAt:''}),/SALES_EMAIL_NOT_CONFIGURED/);process.env.NODE_ENV='development';
- const previousFetch=globalThis.fetch;let deliveries=0;globalThis.fetch=async(url:any,options:any)=>{deliveries++;assert.equal(url,'https://api.resend.com/emails');assert.deepEqual(JSON.parse(options.body).to,['nobody@example.invalid']);return new Response('{}',{status:200});};
- process.env.RESEND_API_KEY='fictitious-provider-key';
- const mail={to:'nobody@example.invalid',representativeName:'Fictitious only',url:'https://app.xpressclean.cm/commercial#invite=safe',expiresAt:''};
- assert.equal((await sendSalesInvitationEmail(mail)).status,'preview');assert.equal(deliveries,0,'Development preview never calls a real provider, even with a key');
- process.env.NODE_ENV='production';process.env.SALES_EMAIL_ENABLED='true';assert.deepEqual(await sendSalesInvitationEmail(mail),{status:'sent'});assert.equal(deliveries,1);
- process.env.NODE_ENV='development';delete process.env.SALES_EMAIL_ENABLED;delete process.env.RESEND_API_KEY;globalThis.fetch=previousFetch;
- const html=invitationEmailContent({to:'test@example.invalid',representativeName:'<script>alert(1)</script>',url:'https://app.xpressclean.cm/commercial#invite=safe',expiresAt:''}).html;assert.ok(!html.includes('<script>'));
- assert.equal((await call('POST','/api/sales/logout',request({}, {}, b.session))).code,200);
- console.log('PASS secure sales portal: MFA invitations, CSRF, token hashes/expiry/revocation/single-use, password hashing, isolated sessions, owner/admin denial, representative-scoped results, independent link/account suspension, immediate session revocation, reset, failed-email safety, preview-only development and production/test separation');
-}finally{globalThis.fetch=originalFetch;await pool.end();await pg.close();}
+ const beforeMigration=await snapshot();
+ for(let i=0;i<2;i++)await pg.exec(await readFile('migrations/20261104_ambassador_user_access.sql','utf8'));
+ assert.deepEqual(await snapshot(),beforeMigration,'Additive migration preserves existing data, including repeated execution');
+ const before=await snapshot();
+ assert.equal(await store.principal('owner-a'),null,'Legacy matching email does not grant new access');
+ assert.equal((await call('GET','/api/ambassador/summary',request({}, {}, 'owner-a'))).code,403);
+ const denied=request({userId:'owner-a',name:'Denied',country:'CM'},{},'owner-b');
+ assert.equal((await call('POST','/api/platform-admin/ambassadors',denied)).code,403);
+ const expired=request({userId:'owner-a',name:'Denied',country:'CM'});expired.session.platformAdminVerifiedAt=0;
+ assert.equal((await call('POST','/api/platform-admin/ambassadors',expired)).code,401);
+ const csrf=request({userId:'owner-a',name:'Denied',country:'CM'});csrf.get=(n:string)=>({host:'isolated.replit.dev',origin:'https://evil.example','sec-fetch-site':'cross-site'}[n]);
+ assert.equal((await call('POST','/api/platform-admin/ambassadors',csrf)).code,403);
+ for(const bad of [{userId:'owner-a',name:'Bad',country:'ZZ'},{userId:'owner-a',name:'Bad',country:'CM',role:'admin'}])assert.equal((await call('POST','/api/platform-admin/ambassadors',request(bad))).code,400);
+ assert.equal((await activate('does-not-exist')).code,404);
+ for(const id of [3,100,112,193])assert.equal((await activate('deferred-'+id)).code,403);
+ const candidates=await call('GET','/api/platform-admin/ambassadors/users',request({}, {}, 'admin',{search:'a@example.invalid'}));
+ assert.equal(candidates.code,200);assert.ok(!JSON.stringify(candidates.data).includes('password'));assert.equal(candidates.data.items[0].id,'owner-a');
+ assert.equal((await call('GET','/api/platform-admin/ambassadors/users',request({}, {}, 'owner-a',{search:'a@'}))).code,403);
+ assert.equal((await call('GET','/api/platform-admin/ambassadors/users',request({}, {}, 'admin',{search:'%_'}))).data.items.length,0,'Search wildcard escaping');
+ const bound=await activate('owner-a',11);assert.equal(bound.code,200,JSON.stringify(bound.data));assert.equal(bound.data.code,'CM-'+'A'.repeat(20));
+ assert.equal((await activate('owner-a',11)).code,200);
+ assert.equal((await pg.query<any>('SELECT count(*)::int n FROM sales_user_access_events')).rows[0].n,1,'Activation retries are idempotent');
+ assert.equal((await activate('owner-b',11)).code,409,'Cannot steal existing link');
+ assert.equal((await activate('owner-a',22)).code,409,'Cannot switch existing personal history');
+ assert.equal((await activate('owner-b',22)).code,200);
+ const staff=await activate('staff-a');assert.equal(staff.code,200,JSON.stringify(staff.data));assert.match(staff.data.code,/^CM-[A-F0-9]{8}$/);
+ const canonical=(await pg.query<any>('SELECT code FROM sales_representatives WHERE id=$1',[staff.data.id])).rows[0].code;
+ assert.equal((await call('GET','/r/:code',request({}, {code:staff.data.code}))).data,`/auth?tab=register&sales=${canonical}`);
+ assert.equal((await call('GET','/api/public/sales-referral/:code',request({}, {code:staff.data.code}))).data.name,'Ambassadeur fictif');
+ assert.equal((await call('GET','/r/:code',request({}, {code:'CM-'+'A'.repeat(20)}))).data,'/auth?tab=register&sales=CM-'+'A'.repeat(20));
+ assert.equal((await call('GET','/api/ambassador/access',request({}, {}, 'owner-a'))).data.enabled,true);
+ const own=await call('GET','/api/ambassador/summary',request({}, {}, 'owner-a'));assert.equal(own.code,200,JSON.stringify(own.data));assert.equal(own.data.amount_xaf,10999);
+ assert.equal((await call('GET','/api/ambassador/summary',request({}, {}, 'owner-b'))).data.amount_xaf,21998);
+ const rows=(await call('GET','/api/ambassador/registrations',request({}, {}, 'owner-a'))).data.items;assert.equal(rows.length,1);assert.equal(rows[0].organisation_id,1);assert.equal(rows[0].user_id,undefined);assert.ok(!JSON.stringify(rows).includes('email'));
+ for(const path of ['/api/ambassador/summary','/api/ambassador/registrations'])assert.equal((await call('GET',path,request({}, {}, 'owner-a',{representativeId:22}))).code,400);
+ assert.equal((await call('GET','/api/ambassador/summary',request({}, {}, 'staff-a'))).data.registrations,0,'Same organisation never shares ambassador results');
+ assert.equal((await call('GET','/api/ambassador/access',request({}, {}, 'unlinked'))).data.enabled,false);
+ const noUser=request();delete noUser.session.userId;noUser.session.salesAccountId=crypto.randomUUID();
+ assert.equal((await call('GET','/api/ambassador/summary',noUser)).code,401,'Old commercial session is not a user session');
+ // Starter/Business feature rules are unchanged; the new workspace is not a paid entitlement.
+ assert.equal(routeFeature('/api/ambassador/summary','GET'),null);assert.equal(routeFeature('/api/analytics/customers','GET'),'reports');
+ const suspended=await call('PATCH','/api/platform-admin/ambassadors/:id',request({active:false},{id:11}));assert.equal(suspended.code,200);
+ assert.equal((await call('GET','/api/ambassador/summary',request({}, {}, 'owner-a'))).code,403,'No cached session bypass after suspension');
+ assert.equal((await call('GET','/api/ambassador/access',request({}, {}, 'owner-a'))).data.enabled,false);
+ assert.equal((await call('GET','/r/:code',request({}, {code:'CM-'+'A'.repeat(20)}))).data,'/auth?tab=register&salesUnavailable=1');
+ assert.deepEqual(await snapshot(),before,'Merchant identity, seats, history, invoices and legacy credentials unchanged');
+ assert.equal((await activate('owner-a',11)).data.code,bound.data.code,'Reactivation preserves link');
+ failAudit=true;const failed=await activate('unlinked');assert.equal(failed.code,503);failAudit=false;
+ assert.equal(await store.principal('unlinked'),null,'Audit failure rolls back role and link creation');
+ process.env.SAAS_DEFERRED_ORGANISATION_IDS='1,3,100,112,193';
+ assert.equal((await call('GET','/api/ambassador/summary',request({}, {}, 'owner-a'))).code,403,'Exclusion also blocks an already granted role');
+ process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
+ process.env.NODE_ENV='production';process.env.SAAS_DATABASE_ENVIRONMENT='production';
+ assert.equal(await store.principal('owner-a'),null,'Test role is not available in production');
+ assert.equal((await activate('unlinked',11)).code,404,'Cannot link a representative across environments');
+ process.env.NODE_ENV='development';
+ // Every old authentication/invitation API is inert, even with valid old credentials.
+ for(const [key] of routes){if(key.startsWith('GET /api/sales/')||key.startsWith('POST /api/sales/')||key.includes('/sales/:id/account')||key.includes('/sales/:id/invitation')){
+  const [method,path]=key.split(' ');const q=request({email:'a@example.invalid',password:'legacy',token:'irrelevant'},{id:11});
+  const sessionBefore={...q.session};assert.equal((await call(method,path,q)).code,410,key);assert.deepEqual(q.session,sessionBefore);
+ }}
+ assert.deepEqual(await snapshot(),before,'Retired routes do not mutate merchant/legacy records or send emails');
+ const directory=await call('GET','/api/platform-admin/sales');assert.equal(directory.data.items.find((r:any)=>r.id===11).user_email,'a@example.invalid');
+ assert.equal((await call('GET','/api/ambassador/summary',request({}, {}, 'owner-a'))).headers['Cache-Control'],'no-store');
+ console.log('PASS ambassadors: MFA + CSRF, explicit binding, no email matching, existing user login, legacy link preservation, short links, own results, immutable attribution, Starter feature boundary, staff seats unchanged, idempotency, immediate suspension, audit rollback, four exclusions, environment isolation, retired email/password endpoints and zero external calls');
+}catch(error){console.error(error);throw error;}finally{globalThis.fetch=originalFetch;await pool.end();await pg.close();}
