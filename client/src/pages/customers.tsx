@@ -43,8 +43,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrency } from "@/hooks/use-currency";
+import { useAuth } from "@/hooks/use-auth";
+import { CustomerFollowUpEntry } from "@/components/customer-follow-up-revenue";
 
 export default function Customers() {
+  const { hasFeature } = useAuth();
   const { data: customers, isLoading } = useCustomers();
   const searchParams = new URLSearchParams(useSearch());
   const [search, setSearch] = useState("");
@@ -115,6 +118,8 @@ export default function Customers() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <CustomerFollowUpEntry canAnalyze={hasFeature('analytics')} />
 
       <div className="space-y-3 rounded-2xl border border-primary/10 bg-card p-3 shadow-sm">
         <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(260px,1fr)_190px_auto]">

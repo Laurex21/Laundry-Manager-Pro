@@ -5,12 +5,18 @@ import {Router} from 'wouter';
 import i18n from './i18n';
 import {CustomerFollowUpNotice,CustomerFollowUpList,followUpPage,CUSTOMER_FOLLOW_UP_URL} from '../components/customer-follow-up-notice';
 import {customerFollowUpSummary} from '../../../server/lib/customer-risk';
+import {CustomerFollowUpEntry,followUpRevenueSummary,FollowUpRevenueSummary,FollowUpRevenueAmount} from '../components/customer-follow-up-revenue';
+import type {FollowUpCustomer} from '../../../shared/customer-follow-up';
 Object.assign(globalThis,{React});globalThis.fetch=async()=>{throw Error('NO_NETWORK')};
 const rows=Array.from({length:47},(_,id)=>({id:id+1,name:`Fictional customer ${id+1}`,lastVisitAt:null,avgDaysBetweenVisits:10}));
 assert.deepEqual([0,1,2].flatMap(p=>followUpPage(rows,p).rows).map(c=>c.id),rows.map(c=>c.id),'Every matching customer is reachable without truncation');
 assert.equal(followUpPage(rows,99).current,2);assert.equal(followUpPage([],99).rows.length,0);
 assert.deepEqual(customerFollowUpSummary({churn:{atRiskCount:47,customers:rows,revenueAtRisk:123} } as any),{count:47});
 assert.throws(()=>customerFollowUpSummary({churn:{atRiskCount:NaN}}));
+const moneyRows=[{atRisk:true,monthlyRevenueAtRisk:6000},{atRisk:true,monthlyRevenueAtRisk:9000},{atRisk:true,monthlyRevenueAtRisk:null},{atRisk:false,monthlyRevenueAtRisk:99999}] as FollowUpCustomer[];
+assert.deepEqual(followUpRevenueSummary(moneyRows),{total:15000,estimated:2,missing:1,overdue:3});
+assert.equal(followUpRevenueSummary(Array.from({length:47},()=>moneyRows[0])).total,282000,'total covers all pages');
+assert.equal(followUpRevenueSummary(moneyRows.slice(0,1)).total,6000,'a filtered subset has its own matching total');
 for(const lang of ['fr','en']){
  await i18n.changeLanguage(lang);const hook=()=>['/dashboard',()=>{}] as [string,(to:string)=>void];
  const render=(node:React.ReactNode)=>renderToStaticMarkup(<Router hook={hook}>{node}</Router>);
@@ -19,5 +25,14 @@ for(const lang of ['fr','en']){
  const paid=render(<CustomerFollowUpNotice count={47} canAnalyze/>);assert.ok(paid.includes(CUSTOMER_FOLLOW_UP_URL.replaceAll('&','&amp;')));assert.ok(!paid.includes('/subscriptions'));
  assert.equal(render(<CustomerFollowUpNotice count={0} canAnalyze={false}/>),'');
  const list=render(<CustomerFollowUpList customers={rows}/>);assert.ok(list.includes('1–20'));assert.ok(list.includes('/customer-follow-ups/20'));assert.ok(list.includes(lang==='fr'?'Suivant':'Next'));
+ const entryStarter=render(<CustomerFollowUpEntry canAnalyze={false}/>),entryPaid=render(<CustomerFollowUpEntry canAnalyze/>);
+ assert.ok(entryStarter.includes('/subscriptions?plan=pro'));assert.ok(!entryStarter.includes(CUSTOMER_FOLLOW_UP_URL));assert.ok(!entryStarter.includes('FCFA'));
+ assert.ok(entryPaid.includes(CUSTOMER_FOLLOW_UP_URL));
+ const summary=render(<FollowUpRevenueSummary customers={moneyRows} symbol="FCFA"/>);
+ assert.ok(summary.includes('FCFA'));assert.ok(summary.includes(lang==='fr'?'non inclus':'excluded'));assert.ok(summary.includes(lang==='fr'?'30 jours':'30-day'));assert.ok(summary.includes(lang==='fr'?'pas d’une dette':'not customer debt'));
+ const missing=render(<FollowUpRevenueSummary customers={[moneyRows[2]]} symbol="FCFA"/>);
+ assert.ok(missing.includes(lang==='fr'?'Non estimable':'Not enough data'));assert.ok(!missing.includes('0 FCFA'));
+ const amount=render(<FollowUpRevenueAmount customer={moneyRows[0]} symbol="FCFA"/>);assert.ok(amount.includes(lang==='fr'?'/ mois':'/ month'));
+ const returned=render(<FollowUpRevenueAmount customer={moneyRows[3]} symbol="FCFA"/>);assert.ok(returned.includes(lang==='fr'?'aucun retard':'no current delay'));assert.ok(!returned.includes('99999'));
 }
 console.log('PASS customer follow-up: Starter count-only teaser, paid direct customer view, FR/EN, all 47 results reachable, empty/error counts, scoped privacy projection; no network');

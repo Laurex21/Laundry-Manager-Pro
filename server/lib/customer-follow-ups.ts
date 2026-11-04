@@ -2,10 +2,17 @@ import {currentCustomerRisk} from './customer-risk';
 import {followUpInput,followUpStatus,type FollowUpEvent,type FollowUpCustomer,type FollowUpDetail} from '../../shared/customer-follow-up';
 type Database={query:(sql:string,args?:any[])=>Promise<{rows:any[]}>};
 export class FollowUpError extends Error{constructor(readonly code:string,readonly status:number){super(code)}}
-const customerSql=`SELECT c.*, COALESCE(f.contact_count,0)::int AS contact_count,
+const customerSql=`WITH order_value_history AS (
+ SELECT customer_id,site_id,COUNT(*)::int AS priced_order_count,AVG(total_amount) AS average_order_amount,
+ MAX(created_at AT TIME ZONE 'UTC') AS latest_order_at
+ FROM orders WHERE site_id=ANY($1::int[]) AND status<>'cancelled'
+ AND (created_at AT TIME ZONE 'UTC')<=$2 AND total_amount>=0
+ GROUP BY customer_id,site_id
+ ) SELECT c.*, h.priced_order_count,h.average_order_amount,h.latest_order_at, COALESCE(f.contact_count,0)::int AS contact_count,
  f.last_contact_at, f.last_outcome, f.next_reminder_date,
  CASE WHEN f.last_contact_at IS NOT NULL THEN (SELECT MIN(o.created_at AT TIME ZONE 'UTC') FROM orders o WHERE o.customer_id=c.id AND o.site_id=ANY($1::int[]) AND o.status<>'cancelled' AND (o.created_at AT TIME ZONE 'UTC')>f.last_contact_at AND (o.created_at AT TIME ZONE 'UTC')<=$2) END AS returned_at
  FROM customers c
+ LEFT JOIN order_value_history h ON h.customer_id=c.id AND h.site_id=c.site_id
  LEFT JOIN LATERAL (SELECT COUNT(*)::int AS contact_count,MAX(created_at) AS last_contact_at,
   (array_agg(outcome ORDER BY created_at DESC,id DESC))[1] AS last_outcome,
   (array_agg(next_reminder_date ORDER BY created_at DESC,id DESC))[1] AS next_reminder_date
@@ -14,10 +21,14 @@ const customerSql=`SELECT c.*, COALESCE(f.contact_count,0)::int AS contact_count
 const iso=(v:any)=>v==null?null:new Date(v).toISOString();
 const day=(v:any)=>v==null?null:typeof v==='string'?v.slice(0,10):new Date(v).toISOString().slice(0,10);
 function customerDto(row:any,now:Date):FollowUpCustomer{
- const candidates=[row.last_visit_at,row.returned_at].filter(Boolean).map(v=>new Date(v)).filter(d=>Number.isFinite(d.getTime())&&d.getTime()<=now.getTime());
+ const candidates=[row.last_visit_at,row.returned_at,row.latest_order_at].filter(Boolean).map(v=>new Date(v)).filter(d=>Number.isFinite(d.getTime())&&d.getTime()<=now.getTime());
  const lastVisit=candidates.length?new Date(Math.max(...candidates.map(d=>d.getTime()))):null;
  const risk=currentCustomerRisk({visitCount:row.visit_count,avgDaysBetweenVisits:row.avg_days_between_visits,lastVisitAt:lastVisit,segment:row.segment,churnRiskScore:row.churn_risk_score},now);
- return {id:row.id,siteId:row.site_id,name:row.name,phone:row.phone,email:row.email,lastVisitAt:iso(lastVisit),avgDaysBetweenVisits:row.avg_days_between_visits==null?null:Number(row.avg_days_between_visits),visitCount:row.visit_count,daysSinceLastVisit:lastVisit?Math.max(0,Math.floor((now.getTime()-lastVisit.getTime())/86400000)):null,atRisk:risk.atRisk,status:followUpStatus(row.last_outcome?{outcome:row.last_outcome}:null,!!row.returned_at),contactCount:row.contact_count,lastContactAt:iso(row.last_contact_at),nextReminderDate:day(row.next_reminder_date),returnedAt:iso(row.returned_at)};
+ const average=Number(row.average_order_amount),interval=Number(row.avg_days_between_visits);
+ const enough=Number(row.priced_order_count)>=3&&row.average_order_amount!=null&&Number.isFinite(average)&&average>=0&&risk.riskHistorySufficient;
+ // A 30-day revenue opportunity, not a debt, profit or cumulative historical loss.
+ const monthly=enough?Math.round(average*30/interval):null;
+ return {id:row.id,siteId:row.site_id,name:row.name,phone:row.phone,email:row.email,lastVisitAt:iso(lastVisit),avgDaysBetweenVisits:row.avg_days_between_visits==null?null:Number(row.avg_days_between_visits),visitCount:row.visit_count,daysSinceLastVisit:lastVisit?Math.max(0,Math.floor((now.getTime()-lastVisit.getTime())/86400000)):null,atRisk:risk.atRisk,status:followUpStatus(row.last_outcome?{outcome:row.last_outcome}:null,!!row.returned_at),contactCount:row.contact_count,lastContactAt:iso(row.last_contact_at),nextReminderDate:day(row.next_reminder_date),returnedAt:iso(row.returned_at),averageOrderAmount:enough?average:null,monthlyRevenueAtRisk:!risk.atRisk?0:monthly!==null&&Number.isSafeInteger(monthly)?monthly:null};
 }
 function eventDto(r:any):FollowUpEvent{return{id:r.id,customerId:r.customer_id,actorName:r.actor_name,channel:r.channel,outcome:r.outcome,note:r.note,nextReminderDate:day(r.next_reminder_date),createdAt:iso(r.created_at)!};}
 export class CustomerFollowUps{
