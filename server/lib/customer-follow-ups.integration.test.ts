@@ -12,6 +12,7 @@ process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='true';
 process.env.SAAS_BILLING_MODE='disabled';
 process.env.DATABASE_URL='postgresql://unused:unused@127.0.0.1:1/follow_up_isolated';
 process.env.SALES_EMAIL_ENABLED='false';
+process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
 globalThis.fetch=async()=>{throw Error('NETWORK_FORBIDDEN')};
 const {routeFeature}=await import('./saas-access');
 const pg=new PGlite(),db=drizzle(pg,{schema});let calls=0;
@@ -24,12 +25,27 @@ try{
  const ago=(n:number)=>new Date(Date.now()-n*86400000);
  await db.insert(schema.customers).values([{id:1,name:'Overdue',phone:'000',address:'Test',siteId:10,visitCount:8,avgDaysBetweenVisits:'10',lastVisitAt:ago(30)},
  {id:2,name:'Foreign',phone:'000',address:'Test',siteId:20,visitCount:8,avgDaysBetweenVisits:'10',lastVisitAt:ago(30)},
- {id:3,name:'Recent',phone:'000',address:'Test',siteId:10,visitCount:8,avgDaysBetweenVisits:'10',lastVisitAt:ago(1)}]);
+ {id:3,name:'Recent',phone:'000',address:'Test',siteId:10,visitCount:8,avgDaysBetweenVisits:'10',lastVisitAt:ago(1)},
+ {id:4,name:'Unpriced history',phone:'000',address:'Test',siteId:10,visitCount:8,avgDaysBetweenVisits:'10',lastVisitAt:ago(30)}]);
+ await db.insert(schema.orders).values([
+  ...[1000,2000,3000].map((amount,i)=>({id:100+i,customerId:1,siteId:10,status:'delivered',totalAmount:String(amount),createdAt:ago(50-i*10)})),
+  {id:103,customerId:1,siteId:10,status:'cancelled',totalAmount:'9000000',createdAt:ago(1)},
+  {id:104,customerId:1,siteId:20,status:'delivered',totalAmount:'9000000',createdAt:ago(1)},
+  {id:105,customerId:1,siteId:10,status:'received',totalAmount:'9000000',createdAt:ago(-10)},
+  {id:106,customerId:4,siteId:10,status:'delivered',totalAmount:'500',createdAt:ago(30)},
+ ]);
  const before=await db.select().from(schema.customers);const usersBefore=await db.select().from(schema.users);const ordersBefore=await db.select().from(schema.orders);
  const migration=readFileSync('migrations/20261103_customer_follow_ups.sql','utf8');await pg.exec(migration);await pg.exec(migration);
  assert.deepEqual(await db.select().from(schema.customers),before,'migration is additive and repeatable');
  assert.deepEqual(await db.select().from(schema.users),usersBefore);assert.deepEqual(await db.select().from(schema.orders),ordersBefore);
- assert.deepEqual((await store.list([10])).map(c=>c.id),[1]);assert.deepEqual(await store.list([]),[]);
+ assert.deepEqual((await store.list([10])).map(c=>c.id),[1,4]);assert.deepEqual(await store.list([]),[]);
+ const estimate=(await store.detail([10],1)).customer;
+ assert.equal(estimate.averageOrderAmount,2000);
+ assert.equal(estimate.monthlyRevenueAtRisk,6000,'individual basket × 30 / interval, excluding cancelled/future/foreign orders');
+ assert.equal((await store.detail([10,20],1)).customer.monthlyRevenueAtRisk,6000,'all-sites view does not mix another site into this customer estimate');
+ assert.equal((await store.detail([10],4)).customer.monthlyRevenueAtRisk,null,'partial history is unknown, not zero');
+ assert.equal((await store.detail([10],3)).customer.monthlyRevenueAtRisk,0,'recent customers have no current revenue at risk');
+ assert.deepEqual(await db.select().from(schema.orders),ordersBefore,'estimation reads do not modify orders');
  await assert.rejects(store.detail([10],2),/CUSTOMER_NOT_FOUND/);
  const input={id:crypto.randomUUID(),channel:'call',outcome:'return_planned',note:'Customer plans a return this week.',nextReminderDate:null};
  await assert.rejects(store.record([10],null,1,'owner',input),/SELECT_SITE_REQUIRED/);
@@ -54,6 +70,7 @@ try{
  assert.equal((await store.detail([10],1,now)).customer.status,'returned');
  assert.equal((await store.detail([10],1,now)).customer.daysSinceLastVisit,0,'a confirmed fresh return cannot display a stale absence');
  assert.equal((await store.detail([10],1,now)).customer.atRisk,false);assert.ok((await store.list([10],now)).some(c=>c.status==='returned'),'returned contacts remain in history');
+ assert.equal((await store.detail([10],1,now)).customer.monthlyRevenueAtRisk,0,'a confirmed return removes the current opportunity without erasing history');
  await pg.exec("SET TIME ZONE 'Africa/Douala'");assert.equal((await store.detail([10],1,now)).customer.status,'returned','UTC order timestamps are compared correctly in the business timezone');
  const nextDay=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
  const employeeEvent=await store.record([10],10,1,'employee',{...input,id:crypto.randomUUID(),outcome:'unavailable',note:'Fictional customer unavailable; call back later.',nextReminderDate:nextDay});
@@ -75,6 +92,7 @@ try{
  plan='pro';assert.equal((await request('GET /api/customer-follow-ups',req)).code,200);
  assert.equal((await request('GET /api/customer-follow-ups/:id',{...req,params:{id:'2'}})).code,404);
  plan='business';assert.equal((await request('POST /api/customer-follow-ups/:id/events',{...req,siteId:null})).code,400);
+ assert.equal((await request('GET /api/customer-follow-ups',req)).code,200);
  const {pool}=await import('../db');await pool.end();
  console.log('PASS follow-up workspace: repeatable additive migration, scoped SQL, audit identity and timestamp, strict input, duplicate retry, immutable customer data, actual-order return, cancelled/future/foreign refusal, Starter/API/auth boundaries and all-sites read-only; no production/network/email');
 }finally{await pg.close()}
