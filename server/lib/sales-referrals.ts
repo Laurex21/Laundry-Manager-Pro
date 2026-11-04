@@ -1,10 +1,8 @@
-import crypto from 'node:crypto';
 import type { Express, RequestHandler } from 'express';
-import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { db, pool } from '../db';
 import { users, type UpsertUser } from '../../shared/models/auth';
-import { SALES_CODE, SALES_COUNTRIES } from '../../shared/sales-referrals';
+import { SALES_CODE, SALES_PUBLIC_CODE, SALES_COUNTRIES } from '../../shared/sales-referrals';
 import { authStorage } from '../replit_integrations/auth/storage';
 import { rateLimit } from './rate-limit';
 import { deferredSaasOrganisations } from './saas-deferred';
@@ -35,10 +33,7 @@ export async function completeSalesRegistration(userId:string, organisationId:nu
  if(!result.rows.length)throw new SalesReferralError('SALES_REFERRAL_UNAVAILABLE');
 }
 
-const createSchema=z.object({name:z.string().trim().min(2).max(120),country:z.string().refine(v=>SALES_COUNTRIES.includes(v))}).strict();
-const updateSchema=z.object({active:z.boolean()}).strict();
 const publicLimit=rateLimit({name:'sales-referral-public',windowMs:60_000,max:60});
-const adminLimit=rateLimit({name:'sales-referral-admin',windowMs:60_000,max:30,key:req=>String(req.session?.userId||''),keyOnly:true});
 const pageOf=(value:unknown)=>typeof value==='string'&&/^\d+$/.test(value)&&Number(value)>=1&&Number(value)<=100000?Number(value):value===undefined?1:null;
 
 // One invoice contributes once; verified live/sandbox payments are selected separately.
@@ -62,16 +57,16 @@ export function registerSalesRoutes(app:Express, admin:RequestHandler) {
   res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
   const code=String(req.params.code);
   try {
-   const valid=SALES_CODE.test(code)&&(await pool.query('SELECT id FROM sales_representatives WHERE code=$1 AND active AND environment=$2',[code,salesEnvironment()])).rows.length>0;
+   const rep=SALES_PUBLIC_CODE.test(code)?(await pool.query('SELECT code FROM sales_representatives WHERE (code=$1 OR public_code=$1) AND active AND environment=$2',[code,salesEnvironment()])).rows[0]:null;
    // Fixed local destination: referral links never serve as credentials or open redirects.
-   res.redirect(302,valid?`/auth?tab=register&sales=${encodeURIComponent(code)}`:'/auth?tab=register&salesUnavailable=1');
+   res.redirect(302,rep?`/auth?tab=register&sales=${encodeURIComponent(rep.code)}`:'/auth?tab=register&salesUnavailable=1');
   } catch {res.status(503).send('Referral unavailable');}
  });
  app.get('/api/public/sales-referral/:code',publicLimit,async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
-  if(!SALES_CODE.test(String(req.params.code)))return void res.status(404).json({message:'Not found'});
+  if(!SALES_PUBLIC_CODE.test(String(req.params.code)))return void res.status(404).json({message:'Not found'});
   try {
-   const r=await pool.query('SELECT name,country FROM sales_representatives WHERE code=$1 AND active AND environment=$2',[req.params.code,salesEnvironment()]);
+   const r=await pool.query('SELECT name,country FROM sales_representatives WHERE (code=$1 OR public_code=$1) AND active AND environment=$2',[req.params.code,salesEnvironment()]);
    if(!r.rows[0])return void res.status(404).json({message:'Not found'});
    res.json(r.rows[0]);
   }catch{res.status(503).json({message:'Referral unavailable'});}
@@ -88,7 +83,13 @@ export function registerSalesRoutes(app:Express, admin:RequestHandler) {
     WHERE s.environment=$1 AND ($4::text IS NULL OR s.country=$4) GROUP BY s.id
    ) SELECT (SELECT count(*)::int FROM reps) AS total,COALESCE((SELECT json_agg(p) FROM (SELECT * FROM reps ORDER BY id DESC LIMIT 25 OFFSET $5) p),'[]'::json) AS items`,[...reportArgs(),country||null,(page-1)*25]);
    // Never return administrator identities in this directory.
-   for(const r of result.rows[0].items)delete r.created_by;
+   const bindings=await pool.query(`SELECT a.representative_id,a.user_id,u.email FROM sales_user_access a JOIN users u ON u.id=a.user_id WHERE a.environment=$1 AND a.representative_id=ANY($2::int[])`,[salesEnvironment(),result.rows[0].items.map((r:any)=>r.id)]);
+   for(const r of result.rows[0].items){
+    delete r.created_by;
+    const bound=bindings.rows.find((a:any)=>a.representative_id===r.id);
+    r.user_id=bound?.user_id||null;r.user_email=bound?.email||null;
+    r.code=r.public_code||r.code;delete r.public_code;
+   }
    res.json({...result.rows[0],page,pageSize:25,environment:salesEnvironment()});
   }catch{res.status(503).json({message:'Sales report unavailable'});}
  });
@@ -106,35 +107,15 @@ export function registerSalesRoutes(app:Express, admin:RequestHandler) {
    res.json({...result.rows[0],page,pageSize:25});
   }catch{res.status(503).json({message:'Sales registrations unavailable'});}
  });
- app.post('/api/platform-admin/sales',admin,adminLimit,async(req:any,res)=>{
-  const parsed=createSchema.safeParse(req.body);
-  if(!parsed.success)return void res.status(400).json({message:'Invalid representative'});
-  try {
-   const code=parsed.data.country+'-'+crypto.randomBytes(10).toString('hex').toUpperCase();
-   const result=await pool.query(`WITH created AS (
-    INSERT INTO sales_representatives(name,country,code,environment,created_by) VALUES($1,$2,$3,$4,$5) RETURNING id,name,country,code,active
-   ), audited AS (INSERT INTO sales_admin_events(actor_id,representative_id,action) SELECT $5,id,'created' FROM created)
-   SELECT * FROM created`,[parsed.data.name,parsed.data.country,code,salesEnvironment(),req.session.userId]);
-   res.status(201).json(result.rows[0]);
-  }catch{res.status(503).json({message:'Representative creation unavailable'});}
- });
- app.patch('/api/platform-admin/sales/:id',admin,adminLimit,async(req:any,res)=>{
-  const parsed=updateSchema.safeParse(req.body),id=Number(req.params.id);
-  if(!parsed.success||!Number.isSafeInteger(id)||id<1)return void res.status(400).json({message:'Invalid representative'});
-  try {
-   const result=await pool.query(`WITH changed AS (
-    UPDATE sales_representatives SET active=$2 WHERE id=$1 AND environment=$3 RETURNING id,name,country,code,active
-   ), audited AS (INSERT INTO sales_admin_events(actor_id,representative_id,action) SELECT $4,id,CASE WHEN $2 THEN 'activated' ELSE 'disabled' END FROM changed)
-   SELECT * FROM changed`,[id,parsed.data.active,salesEnvironment(),req.session.userId]);
-   if(!result.rows.length)return void res.status(404).json({message:'Not found'});
-   res.json(result.rows[0]);
-  }catch{res.status(503).json({message:'Representative update unavailable'});}
- });
+ // Retired mutations cannot create another separate commercial identity.
+ const retired:RequestHandler=(_req,res)=>{res.setHeader('Cache-Control','no-store');res.status(410).json({code:'USE_EXISTING_USER_AMBASSADOR'});};
+ app.post('/api/platform-admin/sales',admin,retired);
+ app.patch('/api/platform-admin/sales/:id',admin,retired);
 }
 
 // Commercial self-service always passes the representative from its authenticated session.
 export async function salesOwnSummary(representativeId:number){
- const rep=(await pool.query('SELECT id,name,country,code,active FROM sales_representatives WHERE id=$1 AND environment=$2',[representativeId,salesEnvironment()])).rows[0];
+ const rep=(await pool.query('SELECT id,name,country,COALESCE(public_code,code) AS code,active FROM sales_representatives WHERE id=$1 AND environment=$2 AND active',[representativeId,salesEnvironment()])).rows[0];
  if(!rep)return null;
  const r=await pool.query(`${paidCte} SELECT count(r.user_id)::int AS registrations,count(r.user_id) FILTER(WHERE t.payments>0)::int AS paying_accounts,COALESCE(sum(t.payments),0)::int AS payments,COALESCE(sum(t.amount_xaf),0)::float8 AS amount_xaf FROM registrations r JOIN totals t ON t.user_id=r.user_id WHERE r.representative_id=$4`,[...reportArgs(),representativeId]);
  return {representative:rep,...r.rows[0],environment:salesEnvironment()};

@@ -130,7 +130,7 @@ type AdminStatus = {
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
-  "Sales representatives": "Commerciaux",
+  "Ambassadors": "Ambassadeurs",
   "User access": "Accès utilisateurs",
   "preview": "Simulation", "requested": "Demandée", "sent": "Envoi accepté", "delivery_failed": "Échec d’envoi",
  "pawaPay · pilot":"pawaPay · pilote",
@@ -612,7 +612,7 @@ function AdminDashboard() {
             <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />{adminText('Renewals')}</TabsTrigger>
             <TabsTrigger value="acquisition">Acquisition</TabsTrigger>
             <TabsTrigger value="user-access">{adminText("User access")}</TabsTrigger>
-            <TabsTrigger value="sales">{adminText("Sales representatives")}</TabsTrigger>
+            <TabsTrigger value="sales">{adminText("Ambassadors")}</TabsTrigger>
             <TabsTrigger value="security" className="gap-2"><ShieldCheck className="h-4 w-4" />{adminText('Security')}</TabsTrigger>
           </TabsList>
 

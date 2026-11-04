@@ -10,6 +10,7 @@ import { validationTranslations } from './validation-translations';
 const resources = {
   en: {
     translation: {
+      "ambassador": "Ambassador",
       "dashboard": "Dashboard",
       "customer_follow_up": "Customer follow-up",
       "dashboard_alert_pending_orders": "You have {{count}} pending orders",
@@ -985,6 +986,7 @@ const resources = {
   },
   fr: {
     translation: {
+      "ambassador": "Ambassadeur",
       "dashboard": "Tableau de bord",
       "customer_follow_up": "Suivi des relances",
       "dashboard_alert_pending_orders": "Vous avez {{count}} commandes en attente",
@@ -1960,6 +1962,7 @@ const resources = {
   },
   pt: {
     translation: {
+      "ambassador": "Embaixador",
       "dashboard": "Painel",
       "customer_follow_up": "Acompanhamento de clientes",
       "dashboard_alert_pending_orders": "Você tem {{count}} pedidos pendentes",

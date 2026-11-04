@@ -1212,10 +1212,11 @@ export const marketingAcquisitionEvents = pgTable("marketing_acquisition_events"
 // Sales attribution is independent of marketing measurement and public statistics.
 export const salesRepresentatives = pgTable("sales_representatives", {
  id: serial("id").primaryKey(), name: varchar("name", {length:120}).notNull(), country: varchar("country", {length:2}).notNull(),
+ publicCode: varchar("public_code",{length:16}),
  code: varchar("code", {length:23}).notNull().unique(), active: boolean("active").notNull().default(true),
  environment: text("environment").notNull(), createdBy: varchar("created_by").notNull().references(()=>users.id),
  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
-},t=>[check("sales_rep_environment",sql`${t.environment} IN ('test','production')`),check("sales_rep_country",sql`${t.country} ~ '^[A-Z]{2}$'`),check("sales_rep_code",sql`${t.code} ~ '^[A-Z]{2}-[A-F0-9]{20}$'`)]);
+},t=>[uniqueIndex("sales_representatives_public_code").on(t.publicCode),check("sales_rep_environment",sql`${t.environment} IN ('test','production')`),check("sales_rep_country",sql`${t.country} ~ '^[A-Z]{2}$'`),check("sales_rep_code",sql`${t.code} ~ '^[A-Z]{2}-[A-F0-9]{20}$'`)]);
 export const salesRegistrations = pgTable("sales_registrations", {
  userId: varchar("user_id").primaryKey().references(()=>users.id), representativeId: integer("representative_id").notNull().references(()=>salesRepresentatives.id),
  organisationId: integer("organisation_id").unique().references(()=>organisations.id), country:varchar("country",{length:2}).notNull(), environment:text("environment").notNull(),
@@ -1228,7 +1229,19 @@ export const salesAdminEvents = pgTable("sales_admin_events", {
 },t=>[check("sales_admin_action",sql`${t.action} IN ('created','activated','disabled')`)]);
 
 
-// Separate authentication realm: sales accounts are never merchant users or site members.
+// Additional personal capability. Merchant identity, seats and access remain unchanged.
+export const salesUserAccess = pgTable("sales_user_access", {
+ representativeId:integer("representative_id").primaryKey().references(()=>salesRepresentatives.id),
+ userId:varchar("user_id").notNull().references(()=>users.id),environment:text("environment").notNull(),
+ createdBy:varchar("created_by").notNull().references(()=>users.id),createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[uniqueIndex("sales_user_access_user_environment").on(t.userId,t.environment),check("sales_user_access_environment",sql`${t.environment} IN ('test','production')`)]);
+export const salesUserAccessEvents = pgTable("sales_user_access_events", {
+ id:bigserial("id",{mode:"number"}).primaryKey(),representativeId:integer("representative_id").notNull().references(()=>salesRepresentatives.id),
+ userId:varchar("user_id").notNull().references(()=>users.id),actorId:varchar("actor_id").notNull().references(()=>users.id),
+ action:text("action").notNull(),createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
+},t=>[check("sales_user_access_action",sql`${t.action} IN ('linked','activated','disabled')`)]);
+
+// Retained legacy records only. No separate login or invitation endpoint accepts them.
 export const salesAccounts = pgTable("sales_accounts", {
  id:uuid("id").primaryKey(), representativeId:integer("representative_id").notNull().unique().references(()=>salesRepresentatives.id),
  email:text("email").notNull().unique(), passwordHash:text("password_hash"), active:boolean("active").notNull().default(false),

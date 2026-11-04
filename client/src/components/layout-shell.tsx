@@ -11,10 +11,11 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight, ArrowLeft,
-  ListChecks, CircleHelp, Download, Boxes,
+  ListChecks, CircleHelp, Download, Boxes, Handshake,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
+import { useAmbassador } from "@/hooks/use-ambassador";
 import { useAuth } from "@/hooks/use-auth";
 import { LegalAcceptanceGate } from "@/components/legal-acceptance-gate";
 import { GettingStartedGuide } from "@/components/getting-started-guide";
@@ -72,6 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
     fallback: "Administration",
     items: [
       { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
+      { icon: Handshake, labelKey: "ambassador", href: "/ambassador", page: "ambassador" },
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
   },
@@ -110,12 +112,13 @@ const PAGE_TITLES: Record<string, string> = {
   "/subscriptions": "subscription",
   "/membership-plans": "subscription_plans",
   "/settings": "settings",
+  "/ambassador": "ambassador",
 };
 
 const ROOT_APP_ROUTES = new Set([
   "/", "/dashboard", "/orders", "/pilotage", "/customers", "/services",
   "/expenses", "/inventory", "/payments", "/machines", "/employees", "/analytics",
-  "/subscriptions", "/membership-plans", "/settings",
+  "/subscriptions", "/membership-plans", "/settings", "/ambassador",
 ]);
 
 function BackButton({ location }: { location: string }) {
@@ -350,6 +353,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const [location] = useLocation();
   const { openWhatsApp } = useWhatsAppLauncher();
   const { user, logout, planSlug, canAccess } = useAuth();
+  const ambassador = useAmbassador();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -424,7 +428,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       {/* Nav items */}
       <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 lg:flex lg:flex-col lg:overflow-y-hidden" data-testid="grouped-navigation">
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => canAccess(item.page));
+          const items = group.items.filter((item) => item.page === "ambassador" ? ambassador.enabled : canAccess(item.page));
           if (!items.length) return null;
           return (
             <div key={group.key} style={{ flexGrow: items.length, flexBasis: 0 }} className="mb-2.5 last:mb-0 lg:mb-1.5 lg:flex lg:min-h-0 lg:flex-col">
