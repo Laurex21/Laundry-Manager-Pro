@@ -1,3 +1,4 @@
+import { TRAINING_VISIBLE } from "@/lib/training-availability";
 import { consumeRegistrationWelcome } from "@/lib/onboarding-welcome";
 import { OnboardingIntroduction } from "@/components/onboarding-introduction";
 import { SaasNotice } from "./saas-notice";
@@ -74,7 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
       { icon: Handshake, labelKey: "ambassador", href: "/ambassador", page: "ambassador" },
-      ...(import.meta.env.DEV ? [{ icon: GraduationCap, labelKey: "Formation", href: "/formation", page: "training" }] : []),
+      ...(TRAINING_VISIBLE ? [{ icon: GraduationCap, labelKey: "Formation", href: "/formation", page: "training" }] : []),
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
   },
@@ -561,7 +562,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
-                {import.meta.env.DEV && <DropdownMenuItem asChild><Link href="/formation" data-testid="help-training"><GraduationCap className="mr-2 h-4 w-4" />Formation vidéo</Link></DropdownMenuItem>}
+                {TRAINING_VISIBLE && <DropdownMenuItem asChild><Link href="/formation" data-testid="help-training"><GraduationCap className="mr-2 h-4 w-4" />Formation vidéo</Link></DropdownMenuItem>}
                 {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { setGuideIntro(null); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}

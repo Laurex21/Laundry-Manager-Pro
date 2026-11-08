@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Client } from '@replit/object-storage';
+import { trainingEnabled } from '../../shared/training-availability';
 import { TRAINING_LESSONS } from '../../shared/training';
 
 export function byteRange(header: string | undefined, size: number): {start:number;end:number}|null|false {
@@ -14,9 +15,9 @@ export function byteRange(header: string | undefined, size: number): {start:numb
   return Number.isSafeInteger(start) && Number.isSafeInteger(end) && start >= 0 && start <= end && start < size ? {start,end} : false;
 }
 
-// Training remains development-only until release approval.
+// Production activation is explicit and never bypasses authentication.
 export function registerTrainingRoutes(app: Express, authenticate: RequestHandler, loader?: (mode:'pc'|'mobile')=>Promise<Buffer>, adminAuthenticate?: RequestHandler) {
-  const enabled: RequestHandler = (_req,res,next) => process.env.NODE_ENV === 'development' ? next() : res.sendStatus(404);
+  const enabled: RequestHandler = (_req,res,next) => trainingEnabled(process.env.NODE_ENV, process.env.TRAINING_ENABLED) ? next() : res.sendStatus(404);
   const cache = new Map<string,Promise<Buffer>>();
   async function media(lesson:typeof TRAINING_LESSONS[number],mode:'pc'|'mobile') {
     const cacheKey=lesson.id+':'+mode;
