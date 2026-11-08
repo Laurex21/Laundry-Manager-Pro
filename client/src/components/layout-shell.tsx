@@ -11,7 +11,7 @@ import {
   LayoutDashboard, ShoppingBag, Users, Menu, LogOut, Shirt, DollarSign,
   Globe, Banknote, CreditCard, BarChart3, Check, Cog, UserCheck, TrendingUp,
   Settings, Building2, ChevronDown, MoreHorizontal, ChevronRight, ArrowLeft,
-  ListChecks, CircleHelp, Download, Boxes, Handshake,
+  ListChecks, CircleHelp, Download, Boxes, Handshake, GraduationCap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa";
@@ -74,6 +74,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
       { icon: Handshake, labelKey: "ambassador", href: "/ambassador", page: "ambassador" },
+      ...(import.meta.env.DEV ? [{ icon: GraduationCap, labelKey: "Formation", href: "/formation", page: "training" }] : []),
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
   },
@@ -113,6 +114,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/membership-plans": "subscription_plans",
   "/settings": "settings",
   "/ambassador": "ambassador",
+  "/formation": "Formation",
 };
 
 const ROOT_APP_ROUTES = new Set([
@@ -428,7 +430,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       {/* Nav items */}
       <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 lg:flex lg:flex-col lg:overflow-y-hidden" data-testid="grouped-navigation">
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => item.page === "ambassador" ? ambassador.enabled : canAccess(item.page));
+          const items = group.items.filter((item) => item.page === "training" ? true : item.page === "ambassador" ? ambassador.enabled : canAccess(item.page));
           if (!items.length) return null;
           return (
             <div key={group.key} style={{ flexGrow: items.length, flexBasis: 0 }} className="mb-2.5 last:mb-0 lg:mb-1.5 lg:flex lg:min-h-0 lg:flex-col">
@@ -559,6 +561,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
+                {import.meta.env.DEV && <DropdownMenuItem asChild><Link href="/formation" data-testid="help-training"><GraduationCap className="mr-2 h-4 w-4" />Formation vidéo</Link></DropdownMenuItem>}
                 {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { setGuideIntro(null); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}

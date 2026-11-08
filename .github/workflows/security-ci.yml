@@ -21,6 +21,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --audit-level=low
       - run: npm run check
+      - run: npm run test:training
       - run: npm run test:payment-journey
       - run: npm run test:public-journey
       - run: npm run test:email-login

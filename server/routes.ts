@@ -1,3 +1,4 @@
+import { registerTrainingRoutes } from "./lib/training";
 import {CustomerFollowUps} from "./lib/customer-follow-ups";
 import {registerCustomerFollowUpRoutes} from "./lib/customer-follow-up-routes";
 import { customerFollowUpSummary } from "./lib/customer-risk";
@@ -317,6 +318,7 @@ async function effectivePlanSlug(req: any): Promise<string> {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerTrainingRoutes(app, isAuthenticated, undefined, requirePlatformAdmin);
   registerCustomerFollowUpRoutes(app,isAuthenticated,new CustomerFollowUps(pool),effectivePlanSlug);
   registerSaasRoutes(app);
   registerPawapayNotificationReceivers(app);
