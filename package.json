@@ -76,7 +76,7 @@
     "test:platform-admin-saas": "tsx server/lib/platform-admin-saas.integration.test.ts",
     "test:payment-journey": "node --import tsx client/src/lib/saas-payment-journey.test.tsx",
     "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts",
-    "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-storage-dependencies.test.ts"
+    "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-storage-dependencies.test.ts client/src/lib/training-catalogue.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

@@ -5,12 +5,13 @@ import { Monitor, Smartphone, Play, RotateCcw, GraduationCap, CheckCircle2, Arro
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { TRAINING_LESSONS } from '@shared/training';
+import { loadTrainingCatalogue } from '@/lib/training-catalogue';
 
 type Mode='pc'|'mobile';
 type Progress={position:number;completed:boolean};
 export default function TrainingPage(){
  const {user}=useAuth();
- const {data,isLoading,error,refetch}=useQuery<{lessons:typeof TRAINING_LESSONS}>({queryKey:[user?.isPlatformAdmin?'/api/training/admin':'/api/training'],retry:false});
+ const {data,isLoading,error,refetch}=useQuery({queryKey:['training-catalogue',user?.id,Boolean(user?.isPlatformAdmin)],queryFn:()=>loadTrainingCatalogue(Boolean(user?.isPlatformAdmin)),retry:false});
  const [lessonId,setLessonId]=useState<string>(TRAINING_LESSONS[0].id);
  const selectedLesson=TRAINING_LESSONS.find(x=>x.id===lessonId)!;
  const [mode,setMode]=useState<Mode>(()=>window.matchMedia('(max-width:767px)').matches?'mobile':'pc');
@@ -39,7 +40,7 @@ export default function TrainingPage(){
  function restart(){if(video.current){video.current.currentTime=0;currentProgress.current={position:0,completed:false};save(false,true);void play();}}
  if(isLoading)return <p role="status">Chargement de votre formation…</p>;
  if(error||!data?.lessons.length)return <div role="alert" className="rounded-2xl border p-6"><p>La formation est momentanément indisponible.</p><Button className="mt-3" onClick={()=>refetch()}>Réessayer</Button></div>;
- const lesson=data.lessons.find(x=>x.id===lessonId)!;
+ const lesson=data.lessons.find(x=>x.id===lessonId) ?? data.lessons[0];
  const number=lesson.number;
  const duration=lesson.variants[mode].duration;
  const pct=progress.completed?100:Math.min(100,Math.round(progress.position/duration*100));
@@ -49,6 +50,7 @@ export default function TrainingPage(){
    <h1 className="font-display text-2xl font-bold md:text-3xl">Votre formation, à votre rythme</h1>
    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">Regardez chaque geste, mettez en pause, puis essayez dans votre compte.</p>
   </div>
+  {data.adminUnavailable&&<p role="status" className="rounded-xl border bg-card p-4 text-sm">Les leçons ordinaires sont disponibles. La leçon Super Admin reste protégée et nécessite une session Super Admin avec authentification renforcée.</p>}
   <div className="rounded-2xl border bg-card p-4"><label htmlFor="training-lesson" className="mb-2 block text-sm font-semibold">Choisir une leçon · {data.lessons.length} disponibles</label><select id="training-lesson" value={lessonId} className="w-full min-w-0 rounded-lg border bg-background p-3 text-sm" onChange={e=>{video.current?.pause();save(false,true);setLessonId(e.target.value);}}>{data.lessons.map(item=><option key={item.id} value={item.id}>{item.number}. {item.title}</option>)}</select><p className="mt-2 text-xs text-muted-foreground">Les démonstrations utilisent des données fictives. Les fonctionnalités accessibles dans votre compte dépendent de votre formule et de vos droits.</p></div>
   <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
    <section className="min-w-0 rounded-2xl border bg-card p-4 md:p-6" aria-labelledby="lesson-title">
