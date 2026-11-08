@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "NODE_ENV=development SAAS_BILLING_MODE=disabled SAAS_LIVE_ENABLED=false XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true tsx server/index.ts",
+    "dev": "TRAINING_BUCKET_ID=replit-objstore-4f8b19e6-9284-45ab-b71e-5a5c8d64df8f NODE_ENV=development SAAS_BILLING_MODE=disabled SAAS_LIVE_ENABLED=false XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true tsx server/index.ts",
     "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
@@ -75,7 +75,8 @@
     "test:saas-pro-pilot": "node --import tsx server/lib/saas-pro-pilot.integration.test.ts",
     "test:platform-admin-saas": "tsx server/lib/platform-admin-saas.integration.test.ts",
     "test:payment-journey": "node --import tsx client/src/lib/saas-payment-journey.test.tsx",
-    "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts"
+    "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts",
+    "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-storage-dependencies.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
@@ -110,6 +111,7 @@
     "@radix-ui/react-toggle-group": "^1.1.3",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@replit/connectors-sdk": "^0.4.3",
+    "@replit/object-storage": "^1.0.0",
     "@tanstack/react-query": "^5.60.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/memoizee": "^0.4.12",
@@ -190,6 +192,12 @@
     "postcss-selector-parser": "6.1.5",
     "drizzle-kit": {
       "@esbuild-kit/esm-loader": "npm:tsx@^4.20.4"
+    },
+    "gaxios": {
+      "uuid": "11.1.1"
+    },
+    "teeny-request": {
+      "uuid": "11.1.1"
     }
   },
   "optionalDependencies": {

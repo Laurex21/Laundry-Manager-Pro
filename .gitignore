@@ -5,3 +5,7 @@ server/public
 vite.config.ts.*
 *.tar.gz
 visual-test/
+
+# Local training verification assets (not application deployment files)
+.local/training-media/
+qa-training/

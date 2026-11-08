@@ -1,3 +1,4 @@
+import TrainingPage from "@/pages/training";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -261,6 +262,7 @@ function Router() {
         <Route path="/subscription-dashboard">
           <ProtectedRoute component={LegacySubscriptionDashboardRoute} page="customers" />
         </Route>
+        {import.meta.env.DEV && <Route path="/formation"><ProtectedRoute component={TrainingPage} /></Route>}
         <Route path="/settings">
           <ProtectedRoute component={SettingsPage} page="settings" />
         </Route>
