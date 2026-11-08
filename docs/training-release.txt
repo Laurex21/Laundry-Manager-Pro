@@ -1,0 +1,18 @@
+Formation : préparation du déploiement (sans activation de production)
+
+Variables à configurer seulement lors de la publication autorisée :
+VITE_TRAINING_ENABLED=true (doit être présente pendant npm run build)
+TRAINING_ENABLED=true (serveur)
+TRAINING_BUCKET_ID=replit-objstore-4f8b19e6-9284-45ab-b71e-5a5c8d64df8f
+Ne pas définir TRAINING_LOCAL_MEDIA_DIR sur le déploiement.
+
+Sans activation explicite, production reste fermée. Une valeur autre que "true" désactive la formation ; "false" la désactive aussi en développement.
+Le drapeau navigateur règle uniquement la visibilité. Les API imposent toujours une session authentifiée. La leçon Super Admin impose requirePlatformAdmin et sa vérification MFA, y compris pour les liens directs vidéo.
+
+Conserver SALES_EMAIL_ENABLED=false, XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true, SAAS_DEFERRED_ORGANISATION_IDS=3,100,112,193.
+Ne pas copier la base de développement en production. Aucune migration nécessaire.
+
+Avant publication : fusion GitHub, synchronisation Replit, tests formation, TypeScript, build avec VITE_TRAINING_ENABLED=true, accès au bucket vérifié.
+Après publication autorisée : tester catalogue, lecture PC/mobile et recherche temporelle, refus sans session et refus Super Admin sans MFA ; vérifier les journaux.
+Retour arrière : TRAINING_ENABLED=false ferme immédiatement les routes dès redémarrage/republication. VITE_TRAINING_ENABLED=false puis reconstruction masque le menu ; ne pas modifier NODE_ENV pour activer la formation.
+Les changements de Secrets ne sont pas présumés appliqués au processus déjà en ligne : vérifier après redémarrage/republication.
