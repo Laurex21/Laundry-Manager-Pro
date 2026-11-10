@@ -1,3 +1,4 @@
+import { registerPromoRoutes } from "./lib/saas-promo-routes";
 import { registerTrainingRoutes } from "./lib/training";
 import {CustomerFollowUps} from "./lib/customer-follow-ups";
 import {registerCustomerFollowUpRoutes} from "./lib/customer-follow-up-routes";
@@ -337,6 +338,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerSalesRoutes(app, requirePlatformAdmin);
   registerSalesPortalRoutes(app, requirePlatformAdmin);
   registerAmbassadorRoutes(app, requirePlatformAdmin, isAuthenticated);
+  registerPromoRoutes(app, requirePlatformAdmin, isAuthenticated);
   registerPawapaySandboxCallback(app);
   registerPawapaySandboxCheckoutRoutes(app);
   startTemporalIntelligenceJob();

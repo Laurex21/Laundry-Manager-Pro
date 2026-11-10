@@ -1,3 +1,4 @@
+import PromoDirectory from "@/components/promo-directory";
 import AdminUserAccess from "@/components/admin-user-access";
 import SalesDirectory from "@/components/sales-directory";
 import PlatformAdminDecision from "@/components/platform-admin-decision";
@@ -641,7 +642,7 @@ function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="acquisition" className="mt-5"><AcquisitionReport /></TabsContent>
-          <TabsContent value="sales" className="mt-5"><SalesDirectory /></TabsContent>
+          <TabsContent value="sales" className="mt-5"><SalesDirectory /><div className="mt-6"><PromoDirectory /></div></TabsContent>
           <TabsContent value="security" className="mt-5">
             <Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle>{adminText('Security and audit activity')}</CardTitle><p className="text-sm text-slate-500">{adminText('Latest audited actions across organisations. Administrative changes are recorded.')}</p></CardHeader><CardContent className="divide-y divide-slate-100 p-0">{auditEvents.isLoading && <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}{auditEvents.error && <p className="p-6 text-sm text-red-600">{auditEvents.error.message}</p>}{auditEvents.data?.map((event) => <div key={event.id} className="grid gap-2 px-6 py-4 sm:grid-cols-[1fr_220px_140px] sm:items-center"><div><p className="font-semibold capitalize">{auditAction(event.action)} {event.outcome ? `· ${adminText(event.outcome)}` : ""}</p><p className="mt-1 text-xs text-slate-500">{event.targetEmail || event.targetType}{event.targetEmail ? '' : event.targetId ? ` · ${event.targetId}` : ''}{event.resetMode ? ` · ${adminText(event.resetMode)}` : ''}</p></div><p className="text-sm text-slate-600">{event.organisationName || adminText("Platform")}<br/><span className="text-xs text-slate-400">{event.actorEmail || adminText("System")}</span></p><p className="text-xs text-slate-500 sm:text-right">{formatAuditDate(event.createdAt)}</p></div>)}{!auditEvents.isLoading && !auditEvents.data?.length && <p className="p-8 text-center text-sm text-slate-500">{adminText('No audited activity yet.')}</p>}</CardContent></Card>
           </TabsContent>

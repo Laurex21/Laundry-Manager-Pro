@@ -1,3 +1,4 @@
+import PromoDirectory from "@/components/promo-directory";
 import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useTranslation} from 'react-i18next';
@@ -27,6 +28,7 @@ export default function AmbassadorPage(){
   const data=summary.data,link=data?salesReferralUrl(data.representative.code):'';
   return <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8" data-testid="ambassador-workspace">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="mb-1 text-sm font-medium text-primary">XpressPro · {text('Mon réseau','My network')}</p><h1 className="flex items-center gap-2 text-2xl font-bold sm:text-3xl"><Handshake aria-hidden="true"/>{text('Mon espace Ambassadeur','My Ambassador workspace')}</h1><p className="mt-2 text-muted-foreground">{text('Partagez votre lien. Retrouvez vos inscriptions et leurs paiements confirmés.','Share your link. Follow your registrations and their confirmed payments.')}</p></div><Button variant="outline" onClick={refresh} disabled={summary.isFetching||registrations.isFetching}><RefreshCw className="mr-2 h-4 w-4" aria-hidden="true"/>{text('Actualiser','Refresh')}</Button></header>
+    <PromoDirectory ambassador />
     {!data?<p role="status">{text('Chargement de vos résultats…','Loading your results…')}</p>:<>
       <section className="rounded-2xl bg-gradient-to-br from-[#102f59] to-[#4532a4] p-5 text-white sm:p-7" aria-label={text('Mon lien personnel','My personal link')}>
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-xl font-semibold"><Link2 aria-hidden="true"/>{text('Mon lien personnel','My personal link')}</h2><span className="rounded-full bg-white/15 px-3 py-1 text-sm">{data.representative.name} · {data.representative.country}</span></div>

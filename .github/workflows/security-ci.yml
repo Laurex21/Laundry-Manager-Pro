@@ -50,6 +50,7 @@ jobs:
       - run: npm run test:saas-billing
       - run: npm run test:saas-business-launch
       - run: npm run test:saas-legacy-protection
+      - run: npm run test:saas-promos
       - run: npm run test:saas-normal-opening
       - run: npm run test:dual-role-atomic
       - run: npm run test:saas-full-journey

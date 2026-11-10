@@ -1,3 +1,4 @@
+import { applyPromo, validatePromoReservation, attributePromo } from "./saas-promos";
 import { saasOrganisationDeferred } from "./saas-deferred";
 import { ProPilotStore, isProPilotInvoice } from "./saas-pro-pilot";
 import { businessLaunchTrial } from "../../shared/saas-business-launch";
@@ -78,21 +79,23 @@ export class SaasStore {
     await this.ensure(org);
     return this.db.transaction(async tx => this.read(tx, org));
   }
-  async createQuote(org: number, selection: SaasSelection): Promise<SaasInvoice> {
+  async createQuote(org: number, selection: SaasSelection, code?: string): Promise<SaasInvoice> {
     await this.ensure(org);
     return this.db.transaction(async tx => {
       const state = await this.read(tx, org);
-      const quote = quoteSaas(state, selection, this.clock());
+      let quote = quoteSaas(state, selection, this.clock());
       // One outstanding invoice prevents two different checkouts consuming the same credit.
       const open = (await tx.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND status IN ('quoted','pending','review') FOR UPDATE", [org, this.environment])).rows as SaasInvoice[];
       for (const invoice of open) {
         if (invoice.status !== "quoted" || (new Date(invoice.quote.expiresAt) > this.clock() && invoice.quote.version === state.version)) {
-          if (sameSaasSelection(invoice.quote.selection, quote.selection) && invoice.status !== "review") return invoice;
+          if (sameSaasSelection(invoice.quote.selection, quote.selection) && invoice.status !== "review" && (invoice.quote.promo?.code || "") === (code?.trim().toUpperCase() || "")) return invoice;
+          if(invoice.status === "quoted" && sameSaasSelection(invoice.quote.selection, quote.selection)) { await tx.query("UPDATE saas_invoices SET status='expired' WHERE id=$1",[invoice.id]); continue; }
           throw new SaasError("PAYMENT_ALREADY_PENDING");
         }
         await tx.query("UPDATE saas_invoices SET status='expired' WHERE id=$1", [invoice.id]);
       }
 
+      if(code) quote = await applyPromo(tx,org,this.environment,quote,code,this.clock());
       const id = crypto.randomUUID();
       const invoice = (await tx.query(`INSERT INTO saas_invoices (id,organisation_id,quote,total_xaf,provider_environment) VALUES ($1,$2,$3::jsonb,$4,$5) RETURNING *`, [id, org, JSON.stringify(quote), quote.totalXaf, this.environment])).rows[0];
       await this.log(tx, org, "quote_created", { invoiceId: id, totalXaf: quote.totalXaf });
@@ -186,6 +189,7 @@ export class SaasStore {
       if (invoice.status === "pending") return invoice; // UUID saved before any outbound call.
       if (invoice.status !== "quoted" || new Date(invoice.quote.expiresAt) <= this.clock()) throw new SaasError("QUOTE_EXPIRED");
       if (invoice.quote.version !== state.version) throw new SaasError("QUOTE_STALE");
+      await validatePromoReservation(tx,invoice,this.environment,this.clock());
       return { ...(await tx.query("UPDATE saas_invoices SET checkout_id=$2,status='pending' WHERE id=$1 RETURNING *", [id, crypto.randomUUID()])).rows[0], newlyReserved: true };
     });
   }
@@ -260,6 +264,15 @@ export class SaasStore {
         Object.assign(next, target, { phase: "active", cycleStart: now.toISOString(), cycleEnd: nextSaasMonth(now).toISOString(), anchorDay: now.getUTCDate(),
           paidBaseXaf: SAAS_PLANS[target.plan].priceXaf, paidStaffXaf: target.extraStaff * SAAS_OPTION_PRICES.staffXaf, paidSiteXaf: target.extraSites * SAAS_OPTION_PRICES.siteXaf,
           pending: null, renewal: null });
+      }
+      if(quote.promo){
+        // Future upgrade credits reflect the amount actually paid, not the list price.
+        const paid = next.renewal && quote.kind==='renewal' ? next.renewal : next;
+        const ratio=invoice.total_xaf/quote.promo.originalXaf;
+        paid.paidBaseXaf=Math.floor(paid.paidBaseXaf*ratio);
+        paid.paidStaffXaf=Math.floor(paid.paidStaffXaf*ratio);
+        paid.paidSiteXaf=Math.floor((paid.paidSiteXaf||0)*ratio);
+        await attributePromo(tx,invoice,this.environment);
       }
       await this.write(tx, org, next);
       await tx.query("UPDATE saas_notices SET delivered_at=now() WHERE organisation_id=$1 AND delivered_at IS NULL", [org]);

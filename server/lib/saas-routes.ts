@@ -1,3 +1,4 @@
+import { promoCode } from "../../shared/saas-promos";
 import { saasSignupOffer } from "./saas-public-offer";
 import { saasOrganisationDeferred } from "./saas-deferred";
 import { ProPilotStore, proPilotAllowed, proPilotConfigured } from "./saas-pro-pilot";
@@ -133,13 +134,13 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
   });
   route("get", "/api/saas/invoices", async (org, _req, res) => res.json((await saasStore.db.query("SELECT * FROM saas_invoices WHERE organisation_id=$1 AND provider_environment=$2 AND COALESCE(quote->>'purpose','subscription')<>'collection_pilot' ORDER BY created_at DESC LIMIT 100", [org, saasStore.environment])).rows));
   route("post", "/api/saas/quote", async (org, req, res) => {
-    const target = selectionSchema.parse(req.body);
+    const target = selectionSchema.extend({promoCode:promoCode.optional()}).parse(req.body);
     if (livePilotConfigured()) {
       if (!pilotSelectionAllowed(target)) throw new SaasError("PILOT_PRO_ONLY", 403);
       const paid = await saasStore.db.query("SELECT id FROM saas_invoices WHERE organisation_id=$1 AND provider_environment='live' AND status='paid' LIMIT 1", [org]);
       if (paid.rows.length) throw new SaasError("PILOT_ALREADY_PAID", 409);
     }
-    res.status(201).json(await saasStore.createQuote(org, saasSelection(target.plan, target.extraSites, target.extraStaff)));
+    res.status(201).json(await saasStore.createQuote(org, saasSelection(target.plan, target.extraSites, target.extraStaff), target.promoCode));
   });
   route("post", "/api/saas/schedule", async (org, req, res) => {
     if (livePilotConfigured()) throw new SaasError("PILOT_CHANGE_NOT_ALLOWED", 403);
