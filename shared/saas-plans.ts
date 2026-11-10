@@ -70,6 +70,7 @@ export function saasProrata(amount: number, start: string, end: string, now: Dat
   return Number((BigInt(amount) * BigInt(remaining) * 2n + BigInt(duration)) / (2n * BigInt(duration)));
 }
 export type SaasQuote = {
+  promo?: import("./saas-promos").PromoSnapshot;
   kind: "cycle" | "upgrade" | "options" | "renewal"; selection: SaasSelection; version: number;
   lines: { label: "plan" | "sites" | "staff" | "creditPro" | "creditStaff"; amountXaf: number; quantity: number }[];
   totalXaf: number; nextMonthlyXaf: number; quotedAt: string; expiresAt: string;
