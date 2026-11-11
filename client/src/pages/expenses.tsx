@@ -273,10 +273,11 @@ export default function Expenses() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t("delete_expense")}</AlertDialogTitle>
             <AlertDialogDescription>{t("delete_expense_confirmation")}</AlertDialogDescription>
+            {import.meta.env.DEV && deleteMutation.error && <p role="alert" className="text-sm text-destructive">{deleteMutation.error.message}</p>}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteExpense && deleteMutation.mutate(deleteExpense.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={(event) => { if (import.meta.env.DEV) event.preventDefault(); if (deleteExpense) deleteMutation.mutate(deleteExpense.id); }} disabled={deleteMutation.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -386,6 +387,7 @@ function ExpenseForm({ onSuccess, expense }: { onSuccess: () => void; expense?: 
         </div>
         <FormField control={form.control} name="category" render={({ field }) => <FormItem><FormLabel>{t("category")}</FormLabel><Select value={field.value} onValueChange={field.onChange}><FormControl><SelectTrigger data-testid="select-expense-category"><SelectValue placeholder={t("select_category")} /></SelectTrigger></FormControl><SelectContent>{EXPENSE_CATEGORIES.map((item) => <SelectItem key={item.value} value={item.value}>{t(item.labelKey)}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
         <FormField control={form.control} name="description" render={({ field }) => <FormItem><FormLabel>{t("description")}</FormLabel><FormControl><Textarea placeholder={t("expense_description_placeholder")} className="min-h-24 resize-none" {...field} data-testid="input-expense-description" /></FormControl><FormMessage /></FormItem>} />
+        {import.meta.env.DEV && editMutation.error && <p role="alert" className="text-sm text-destructive">{editMutation.error.message}</p>}
         <Button type="submit" className="w-full" disabled={isPending} data-testid="button-save-expense">{isPending ? t("saving") : isEdit ? t("update_expense") : t("record_expense")}</Button>
       </form>
     </Form>

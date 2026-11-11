@@ -1,3 +1,4 @@
+import { Wallet as CashbookWallet } from "lucide-react";
 import { AccessNotice } from "@/components/access-notice";
 import { ApiResponseError, requireOk } from "@/lib/access-feedback";
 import { Overview360, type OverviewData } from "@/components/pilotage/overview-360";
@@ -11,11 +12,12 @@ import { BarChart3, CheckCircle2, ClipboardList, FileText, RotateCcw } from "luc
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 
+const Cashbook = lazy(() => import("@/pages/cashbook"));
 const Reports = lazy(() => import("@/pages/reports"));
 const QualityOperations = lazy(() => import("@/pages/quality-operations"));
 const DailySiteReports = lazy(() => import("@/pages/daily-site-reports"));
 
-type PilotageView = "overview" | "reports" | "quality" | "daily";
+type PilotageView = "cashbook" | "overview" | "reports" | "quality" | "daily";
 
 type DailySummary = {
   date: string;
@@ -70,9 +72,10 @@ export default function Pilotage() {
   const { t } = useTranslation(); const { canAccess, user } = useAuth(); const [, setLocation] = useLocation();
   const basicSaas = (user as any)?.saas?.plan === "starter";
   const requested = new URLSearchParams(useSearch()).get("view") as PilotageView | null;
-  const allowed: PilotageView[] = [...(!basicSaas ? ["overview" as const] : []), ...(canAccess("reports") ? ["reports" as const] : []), "quality", "daily"];
+  const allowed: PilotageView[] = [...(import.meta.env.DEV && canAccess("reports") ? ["cashbook" as const] : []),...(!basicSaas ? ["overview" as const] : []), ...(canAccess("reports") ? ["reports" as const] : []), "quality", "daily"];
   const active = requested && allowed.includes(requested) ? requested : basicSaas ? "quality" : "overview";
   const tabs = [
+    ...(import.meta.env.DEV && canAccess("reports") ? [{ value: "cashbook" as const, label: "Suivi de caisse", icon: CashbookWallet }] : []),
     ...(!basicSaas ? [{ value: "overview" as const, label: t("pilotage_overview"), icon: ClipboardList }] : []),
     ...(canAccess("reports") ? [{ value: "reports" as const, label: t("reports"), icon: BarChart3 }] : []),
     { value: "quality" as const, label: t("quality_operations"), icon: RotateCcw },
@@ -94,6 +97,7 @@ export default function Pilotage() {
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-32"/><Skeleton className="h-48"/></div>}>
         {active === "overview" && <Overview onSelect={select} />}
         {active === "reports" && <Reports embedded />}
+        {import.meta.env.DEV && active === "cashbook" && <Cashbook />}
         {active === "quality" && <QualityOperations embedded />}
         {active === "daily" && <DailySiteReports embedded />}
       </Suspense>

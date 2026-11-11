@@ -8,6 +8,7 @@ export async function requireOk(response: Response): Promise<void> {
   const text = await response.text();
   let body: any = null;
   try { body = JSON.parse(text); } catch {}
+  if (import.meta.env.DEV && body?.code?.startsWith('CASHBOOK_') && typeof body.message === 'string') throw new ApiResponseError(response.status, body.code, body.message);
   // Keep the existing queryClient message envelope for consumers parsing validation bodies.
   throw new ApiResponseError(response.status, body?.code, `${response.status}: ${body ? JSON.stringify(body) : response.statusText}`, body?.feature);
 }

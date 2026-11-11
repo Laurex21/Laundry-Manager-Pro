@@ -1,3 +1,4 @@
+import { respondCashbookDatabaseError } from './lib/cashbook-errors';
 import { registerPromoRoutes } from "./lib/saas-promo-routes";
 import { registerTrainingRoutes } from "./lib/training";
 import {CustomerFollowUps} from "./lib/customer-follow-ups";
@@ -11,6 +12,7 @@ import { STARTER_SETTINGS_FIELDS } from "../shared/starter-receipt";
 import { registerAcquisitionRoutes } from "./lib/acquisition";
 import { saasOrganisationDeferred } from "./lib/saas-deferred";
 import { getPilotageOverview } from "./lib/pilotage-overview";
+import { registerCashbookRoutes } from "./lib/cashbook-routes";
 import { registerSaasRoutes } from "./lib/saas-routes";
 import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
 import { saasEnabled, saasRequestEnabled, saasStore, saasForOrganisation, saasUserDeferred } from "./lib/saas-runtime";
@@ -319,6 +321,7 @@ async function effectivePlanSlug(req: any): Promise<string> {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerCashbookRoutes(app, { db: pool, auth: isAuthenticated, siteIds: orgScopedSites, role: effectiveSiteRole });
   registerTrainingRoutes(app, isAuthenticated, undefined, requirePlatformAdmin);
   registerCustomerFollowUpRoutes(app,isAuthenticated,new CustomerFollowUps(pool),effectivePlanSlug);
   registerSaasRoutes(app);
@@ -956,6 +959,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         collectedByEmployeeId: employee?.id ?? null,
       });
     } catch (error) {
+      if (respondCashbookDatabaseError(res, error)) return;
       if (error instanceof CreditOperationError) {
         return res.status(error.statusCode).json({ message: error.message });
       }
@@ -1162,6 +1166,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!updated) return res.status(404).json({ message: "Expenditure not found" });
       res.json(updated);
     } catch (err) {
+      if (respondCashbookDatabaseError(res, err)) return;
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.issues[0].message });
       throw err;
     }

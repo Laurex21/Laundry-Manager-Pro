@@ -1,3 +1,4 @@
+import { requireOk } from "@/lib/access-feedback";
 import { recordOnboardingAction } from "@/lib/onboarding-events";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
@@ -35,6 +36,7 @@ export function useCreatePayment() {
         body: JSON.stringify(data),
         credentials: "include",
       });
+      if (import.meta.env.DEV) await requireOk(res);
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err || "Failed to create payment");
