@@ -8,3 +8,5 @@ HTTP request logs use Express route templates. Requests blocked before routing a
 
 Tests: npm run test:security-hardening; isolated local TLS handshake test in Security CI. The latter proves rejection of untrusted certificates and wrong hostnames and acceptance of an explicitly trusted CA. No production database, email or payment is involved.
 Emails remain disabled, automatic maintenance suspended, excluded organisations 3,100,112,193 unchanged. Cashbook remains development-only.
+
+Helium development compatibility: only NODE_ENV=development, an absent/empty REPLIT_DEPLOYMENT, a REPLIT_DEV_DOMAIN ending in .replit.dev, host helium, database heliumdb, and default/5432 port qualify for the internal non-TLS development proxy. Explicit TLS requests still require certificate verification. Any nonempty REPLIT_DEPLOYMENT requires verified TLS even if NODE_ENV is mistakenly development. Host/hostaddr query overrides remain forbidden.
