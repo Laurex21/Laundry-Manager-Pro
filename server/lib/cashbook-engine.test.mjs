@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { money, decimal, report, paymentAccount, prepareClose } from './cashbook-engine.mjs';
+const account = { organisationId:1, siteId:10, id:'cash', currency:'XAF', openedAt:'2026-10-01T00:00:00+01:00', openingBalance:'50000', openingValidated:true };
+const base = { organisationId:1, authorisedSiteIds:[10], siteIds:[10], currency:'XAF', month:'2026-11', timeZone:'Africa/Douala', accounts:[account] };
+const move = (id, kind, amount, at='2026-11-02T12:00:00Z', other={}) => ({organisationId:1,siteId:10,accountId:'cash',currency:'XAF',sourceKey:id,kind,amount,at,...other});
+const receipts = move('payments:1','receipt','300000');
+const movements = [move('past','receipt','10000','2026-10-31T12:00:00Z'),receipts,receipts,move('e','expense','120000'),move('w','withdrawal','40000'),move('foreign','receipt','999999',undefined,{organisationId:2}),move('other','receipt','999999',undefined,{siteId:20})];
+const r = report({...base,movements});
+assert.equal(r.totals.opening,'60000'); assert.equal(r.totals.receipts,'300000'); assert.equal(r.totals.closing,'200000');
+assert.equal(report({...base,month:'2026-12',movements}).totals.opening,'200000');
+assert.throws(()=>report({...base,siteIds:[20],movements}),/FORBIDDEN/);
+assert.throws(()=>report({...base,movements:[receipts,{...receipts,amount:'4'}]}),/CONFLICTING/);
+assert.equal(paymentAccount('Client Credit'),null); assert.equal(paymentAccount('Wave'),'wave'); assert.equal(paymentAccount('mystery'),'unallocated');
+assert.equal(decimal(money('0.100001')+money('0.200002')),'0.300003');
+assert.throws(()=>money('NaN')); assert.throws(()=>money('0.0000001'));
+assert.equal(report({...base,movements:[move('boundary','receipt','1','2026-10-31T23:30:00Z')]}).totals.receipts,'1');
+assert.throws(()=>report({...base,movements:[move('date','receipt','1','2026-11-02')]}),/TIMEZONE/);
+const unknown=report({...base,movements:[move('missing','expense','2',undefined,{accountId:'unallocated'})]});
+assert.equal(unknown.unallocatedCount,1); assert.throws(()=>prepareClose(unknown,{},'owner','Clôture'),/RECONCILIATION/);
+assert.equal(report({...base,accounts:[{...account,openingValidated:false}],movements:[]}).canClose,false);
+const close=prepareClose(r,{'10:cash':'199000'},'owner','Écart à expliquer'); assert.equal(close.rows[0].variance,'-1000'); assert.equal(close.status,'preview_only');
+assert.throws(()=>prepareClose(r,{},'owner','Clôture'),/COUNT_REQUIRED/);
+// Paired transfer leaves consolidated money unchanged, preserves each wallet.
+const bank={...account,id:'bank',openingBalance:'0'};
+const t=report({...base,accounts:[account,bank],movements:[move('t:out','transfer_out','5000'),move('t:in','transfer_in','5000',undefined,{accountId:'bank'})]});
+assert.equal(t.totals.closing,'50000'); assert.equal(t.rows[0].closing,'45000'); assert.equal(t.rows[1].closing,'5000');
+assert.equal(report({...base,movements:[move('refund','refund','60000')]}).totals.closing,'-10000');
+console.log('PASS: report, month carry, source deduplication/conflicts, tenant/site isolation, exact decimals, timezone boundary, noncash credit exclusion, unallocated blocking, opening validation, counted variance, transfer conservation, negative balance. No database contacted.');

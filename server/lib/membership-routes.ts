@@ -21,6 +21,24 @@ import { invalidateSubscriptionDashboard } from "./subscription-dashboard";
 import { currentCycleFinancials, isReceivedSubscriptionPayment } from "./subscription-dashboard-metrics";
 import { addDecimals } from "@shared/exact-decimal";
 
+// Capture the receiving shop at payment time, within the same database transaction.
+type SubscriptionTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function insertCashbookSubscriptionPayment(
+  tx: SubscriptionTx, req: any, values: typeof membershipSubscriptionPayments.$inferInsert,
+) {
+  const rows = await tx.insert(membershipSubscriptionPayments).values(values).returning();
+  const deferred = (process.env.SAAS_DEFERRED_ORGANISATION_IDS ?? "").split(",").map(Number);
+  if (process.env.NODE_ENV === "development" && process.env.XPRESSPRO_CASHBOOK_DEVELOPMENT === "true" &&
+      !deferred.includes(values.organisationId) && Number(rows[0].amount) > 0 &&
+      isReceivedSubscriptionPayment(rows[0].status)) {
+    const allowed = siteScope(req);
+    const site = selectedSiteId(req) ?? (allowed.length === 1 ? allowed[0] : null);
+    const authorizedSite = site !== null && allowed.includes(site) ? site : null;
+    await tx.execute(sql`SELECT cashbook_development.cashbook_capture_membership_receipt(${rows[0].id},${values.organisationId},${authorizedSite})`);
+  }
+  return rows;
+}
+
 const cycles = ["weekly", "monthly", "quarterly", "annual"] as const;
 const statuses = ["active", "inactive", "archived"] as const;
 const optionalPositive = z.preprocess((value) => value == null || value === "" || Number(value) === 0 ? null : value, z.coerce.number().positive().nullable().optional());
@@ -712,7 +730,7 @@ export function registerMembershipRoutes(app: Express) {
     const hasConfirmedAdvance = paymentStatus !== "pending";
     const subscription = await db.transaction(async (tx) => {
       const [created] = await tx.insert(customerSubscriptions).values({ organisationId, customerId, subscriptionPlanId: plan.id, membershipNumber, startDate: input.startDate, expiryDate, renewalDate: expiryDate, nextBillingDate: expiryDate, remainingKg: plan.includedWeightKg, remainingPieces: plan.includedPieces, remainingOrders: plan.maxOrders, autoRenew: plan.autoRenew, notes: input.notes, status: hasConfirmedAdvance ? "active" : "pending" }).returning();
-      await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: created.id, organisationId, amount: String(input.paymentAmount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: paymentStatus, notes: input.notes || null });
+      await insertCashbookSubscriptionPayment(tx, req, { subscriptionId: created.id, organisationId, amount: String(input.paymentAmount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: paymentStatus, notes: input.notes || null });
       await tx.insert(membershipCards).values({ customerSubscriptionId: created.id, cardNumber: membershipNumber, barcode: membershipNumber, expiryDate });
       return created;
     });
@@ -750,7 +768,7 @@ export function registerMembershipRoutes(app: Express) {
       if (cycle.due > 0) {
         if (input.amount > cycle.due) return { overpaymentRemaining: cycle.due };
         const status = input.amount >= cycle.due ? cycle.completedPaymentStatus : cycle.nextPaymentStatus;
-        const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes: input.notes || "Subscription balance payment" }).returning();
+        const [payment] = await insertCashbookSubscriptionPayment(tx, req, { subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes: input.notes || "Subscription balance payment" });
         if (cycle.cycle === "initial" && status === "completed" && row.subscription.status === "pending") {
           const [subscription] = await tx.update(customerSubscriptions).set({ status: "active", updatedAt: new Date() }).where(and(eq(customerSubscriptions.id, id), eq(customerSubscriptions.organisationId, organisationId), eq(customerSubscriptions.status, "pending"))).returning();
           if (!subscription) return null;
@@ -768,7 +786,7 @@ export function registerMembershipRoutes(app: Express) {
       }
       const nextCharge = Number(row.plan.recurringPrice);
       if (input.amount + availableAdvance > nextCharge) return { overpaymentRemaining: nextCharge - availableAdvance };
-      const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "advance_available", notes: input.notes || "Advance subscription payment" }).returning();
+      const [payment] = await insertCashbookSubscriptionPayment(tx, req, { subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status: "advance_available", notes: input.notes || "Advance subscription payment" });
       return { payment, availableForRenewal: true };
     });
     if (!result) return res.status(409).json({ message: "Subscription was already renewed; refresh and try again" });
@@ -794,7 +812,7 @@ export function registerMembershipRoutes(app: Express) {
       const renewalCost = Number(row.plan.recurringPrice);
       const paymentCycle = currentSubscriptionPaymentCycle(payments, initialCost, renewalCost);
       const createPayment = async (status: string, notes: string | null = input.notes || null) => {
-        const [payment] = await tx.insert(membershipSubscriptionPayments).values({ subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes }).returning();
+        const [payment] = await insertCashbookSubscriptionPayment(tx, req, { subscriptionId: id, organisationId, amount: String(input.amount), paymentMethod: input.paymentMethod, paymentDate: input.paymentDate ?? new Date(), reference: input.paymentReference || null, status, notes });
         return payment;
       };
       const completeRenewal = async (payment: any) => {

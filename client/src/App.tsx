@@ -35,6 +35,7 @@ const Orders            = lazy(() => import("@/pages/orders"));
 const OrderDetail       = lazy(() => import("@/pages/order-detail"));
 const Pilotage          = lazy(() => import("@/pages/pilotage"));
 const Services          = lazy(() => import("@/pages/services"));
+const Cashbook = lazy(() => import("@/pages/cashbook"));
 const Expenses          = lazy(() => import("@/pages/expenses"));
 const Inventory         = lazy(() => import("@/pages/inventory"));
 const Payments          = lazy(() => import("@/pages/payments"));
@@ -239,6 +240,7 @@ function Router() {
         <Route path="/inventory">
           <ProtectedRoute component={Inventory} page="inventory" />
         </Route>
+        {import.meta.env.DEV && <Route path="/cashbook"><ProtectedRoute component={Cashbook} page="reports" /></Route>}
         <Route path="/payments">
           <ProtectedRoute component={Payments} page="payments" />
         </Route>

@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "TRAINING_BUCKET_ID=replit-objstore-4f8b19e6-9284-45ab-b71e-5a5c8d64df8f NODE_ENV=development SAAS_BILLING_MODE=disabled SAAS_LIVE_ENABLED=false XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true tsx server/index.ts",
-    "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts",
+    "build": "tsx script/build.ts && tsx scripts/verify-production-build.ts && npm run test:cashbook-isolation",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:admin-user-access": "node --import tsx server/lib/admin-user-access.integration.test.ts && node --import tsx client/src/lib/admin-user-access.test.tsx",
@@ -77,7 +77,8 @@
     "test:payment-journey": "node --import tsx client/src/lib/saas-payment-journey.test.tsx",
     "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts",
     "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-storage-dependencies.test.ts server/lib/training-availability.test.ts client/src/lib/training-catalogue.test.ts",
-    "test:saas-promos": "node --import tsx server/lib/saas-promos.integration.test.ts"
+    "test:saas-promos": "node --import tsx server/lib/saas-promos.integration.test.ts",
+    "test:cashbook-isolation": "node --test scripts/cashbook-development-schema.test.mjs && node server/lib/cashbook-engine.test.mjs && node --import tsx server/lib/cashbook-production-boundary.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

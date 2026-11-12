@@ -1,3 +1,4 @@
+import { requireOk } from "@/lib/access-feedback";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { type InsertExpenditure } from "@shared/schema";
@@ -27,7 +28,8 @@ export function useCreateExpenditure() {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error("Failed to record expenditure");
+      if (import.meta.env.DEV) await requireOk(res);
+      else if (!res.ok) throw new Error("Failed to record expenditure");
       return api.expenditures.create.responses[201].parse(await res.json());
     },
     onSuccess: () => {
