@@ -1,0 +1,10 @@
+PostgreSQL TLS and request-log hardening
+
+Remote databases and production require verified TLS. sslmode/ssl URL options cannot override certificate validation. Explicit remote TLS disabling fails closed. Loopback development/test databases remain usable without TLS.
+If the provider requires a private CA, set DATABASE_SSL_CA to its trusted PEM chain. Do not use an unverified certificate copied from an untrusted connection. Existing sslcert/sslkey/sslrootcert URL file options fail explicitly; client-certificate deployments require a separate reviewed configuration before rollout. Query host overrides are rejected.
+Before publishing, verify the effective deployment URL and trusted CA compatibility without logging credentials. No production variables or data are changed by this PR.
+
+HTTP request logs use Express route templates. Requests blocked before routing and unknown paths are logged as /api/[unmatched-or-blocked]. Incoming X-Request-Id is replaced with a generated UUID. This change is not a universal console.error scrubber and does not remove historical logs.
+
+Tests: npm run test:security-hardening; isolated local TLS handshake test in Security CI. The latter proves rejection of untrusted certificates and wrong hostnames and acceptance of an explicitly trusted CA. No production database, email or payment is involved.
+Emails remain disabled, automatic maintenance suspended, excluded organisations 3,100,112,193 unchanged. Cashbook remains development-only.

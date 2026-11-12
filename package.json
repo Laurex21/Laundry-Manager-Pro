@@ -45,7 +45,7 @@
     "test:garment-colors": "tsx server/lib/garment-colors.test.ts",
     "test:african-currencies": "tsx server/lib/african-currency-registry.test.ts",
     "test:company-receipt-qr": "tsx server/lib/company-receipt-qr.test.ts",
-    "test:security-hardening": "tsx server/lib/security-hardening.test.ts",
+    "test:security-hardening": "tsx server/lib/security-hardening.test.ts && tsx server/lib/database-tls.test.ts",
     "test:auth-organisation-boundary": "tsx server/lib/auth-organisation-boundary.test.ts",
     "test:platform-admin-security": "tsx server/lib/platform-admin-security.test.ts && tsx server/lib/totp.test.ts",
     "diag:tenant": "tsx scripts/tenant-diagnostics.ts",

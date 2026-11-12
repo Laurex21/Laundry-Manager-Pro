@@ -1,3 +1,4 @@
+import { safeRequestLogPath } from "./lib/request-log";
 import { receiptJsonParser } from "./lib/receipt-json-parser";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { pawapayPrivateDiagnostic } from "./lib/pawapay-private-diagnostic";
@@ -74,14 +75,14 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  const requestId = req.get("x-request-id") || crypto.randomUUID();
+  const requestId = crypto.randomUUID();
   (req as any).requestId = requestId;
   res.setHeader("X-Request-Id", requestId);
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms requestId=${requestId}`);
+      log(`${req.method} ${safeRequestLogPath(req.route?.path, path)} ${res.statusCode} in ${duration}ms requestId=${requestId}`);
     }
   });
 
