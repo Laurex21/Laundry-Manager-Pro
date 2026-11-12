@@ -23,3 +23,25 @@ for(const route of ['/api/invitations/join/:token','/api/invitations/accept/:tok
 assert.equal(safeRequestLogPath('/api/orders/:id','/api/orders/123'),'/api/orders/:id');
 assert.equal(safeRequestLogPath(undefined,'/api/unknown/SECRET?token=SECRET'),'/api/[unmatched-or-blocked]');
 console.log('PASS: effective pg TLS settings, local isolation, unsafe overrides refused, CA configuration, matched/blocked/unknown log redaction');
+
+const heliumUrl = 'postgresql://test:fake@helium/heliumdb?sslmode=disable';
+const workspace = { REPLIT_DEV_DOMAIN: 'test.workspace.replit.dev' };
+assert.equal((new pg.Client(make(heliumUrl, workspace)) as any).connectionParameters.ssl, false);
+assert.equal(make(heliumUrl.replace('helium/','helium:5432/'), workspace).ssl, false);
+for (const extra of [
+ {}, { REPLIT_DEV_DOMAIN: 'replit.dev.evil.invalid' },
+ { ...workspace, NODE_ENV: 'production' }, { ...workspace, NODE_ENV: 'test' },
+ { ...workspace, NODE_ENV: undefined }, { ...workspace, REPLIT_DEPLOYMENT: '1' },
+ { ...workspace, REPLIT_DEPLOYMENT: 'true' }, { ...workspace, DATABASE_SSL: 'true' },
+]) assert.throws(() => make(heliumUrl, extra));
+for (const url of [heliumUrl.replace('helium/', 'remote.invalid/'),
+ heliumUrl.replace('/heliumdb', '/production'), heliumUrl.replace('helium/', 'helium:5433/'),
+ heliumUrl + '&host=remote.invalid', heliumUrl + '&hostaddr=127.0.0.1']) {
+ assert.throws(() => make(url, workspace));
+}
+for (const extra of [workspace, {...workspace, NODE_ENV: 'production'}, {...workspace, REPLIT_DEPLOYMENT: '1'}]) {
+ const config = make(heliumUrl.replace('disable', 'require'), extra);
+ assert.equal((new pg.Client(config) as any).connectionParameters.ssl.rejectUnauthorized, true);
+}
+assert.throws(() => make('postgresql://test:fake@localhost/test?sslmode=disable', { REPLIT_DEPLOYMENT: '1' }));
+console.log('PASS: Helium restricted to Replit development; production, deployments and explicit TLS remain verified');
