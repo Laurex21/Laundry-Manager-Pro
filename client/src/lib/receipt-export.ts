@@ -1,3 +1,4 @@
+import { safeReceiptDocument } from "./receipt-safety";
 import { receiptQuantity } from "./receipt-quantity";
 import { recordOnboardingAction } from "./onboarding-events";
 import { archiveReceiptHtml, type ReceiptArchiveContext } from "./receipt-archive";
@@ -46,7 +47,7 @@ export function saveReceiptBlob(blob: Blob, filename: string) {
 /** One rendering shared by PDF and PNG: no print CSS, pagination or JPEG compression. */
 export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasElement> {
   const { default: html2canvas } = await import("html2canvas");
-  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const parsed = new DOMParser().parseFromString(safeReceiptDocument(html), "text/html");
   parsed.querySelectorAll("script, iframe, object, embed, base, meta[http-equiv], .no-print").forEach(node => node.remove());
   parsed.querySelectorAll("*").forEach(node => {
     for (const attr of Array.from(node.attributes)) {
@@ -101,7 +102,7 @@ export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasEleme
 }
 
 export async function downloadReceiptDocument(html: string, filename: string, format: ReceiptFormat, context?: ReceiptArchiveContext) {
-  html = normalizeReceiptPresentation(await archiveReceiptHtml(html, context));
+  html = safeReceiptDocument(normalizeReceiptPresentation(await archiveReceiptHtml(html, context)));
   const basename = filename.replace(/\.(html?|pdf|png)$/i, "");
   if (format === "html") {
     saveReceiptBlob(new Blob([html], { type: "text/html;charset=utf-8" }), `${basename}.html`);

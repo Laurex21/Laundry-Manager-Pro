@@ -9,7 +9,7 @@ import bcrypt from "bcryptjs";
 import { pool } from "../db";
 import type { PoolClient } from "pg";
 import { authStorage } from "../replit_integrations/auth/storage";
-import { rateLimit } from "./rate-limit";
+import { rateLimit, loginRateLimits } from "./rate-limit";
 import {
   buildTotpUri,
   decryptTotpSecret,
@@ -30,12 +30,7 @@ type PlatformAdminRecord = {
   last_totp_step: string | number | null;
 };
 
-const platformAdminLoginLimiter = rateLimit({
-  name: "platform-admin-login",
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  key: (req) => String(req.body?.email || "").trim().toLowerCase(),
-});
+const platformAdminLoginLimiter = loginRateLimits("platform-admin-login", 5);
 
 const platformAdminMfaLimiter = rateLimit({
   name: "platform-admin-mfa",
@@ -203,7 +198,7 @@ export function registerPlatformAdminRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/platform-admin/login", platformAdminLoginLimiter, async (req: any, res) => {
+  app.post("/api/platform-admin/login", ...platformAdminLoginLimiter, async (req: any, res) => {
     const identifier = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
     if (!identifier || !password) return res.status(400).json({ message: "Email and password are required" });

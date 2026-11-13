@@ -1,5 +1,6 @@
 export const authUiTranslations = {
   "en": {
+    "auth_password_too_long": "Use a password of at most 72 UTF-8 bytes. Accents and emoji can count as several bytes.",
     "auth_email_required": "Enter a valid email address and your password.",
     "auth_invalid_credentials": "Email or password incorrect.",
     "auth_use_staff": "This is a staff account. Use the staff sign-in below.",
@@ -29,6 +30,7 @@ export const authUiTranslations = {
     "login_as_admin": "Owner sign-in"
   },
   "fr": {
+    "auth_password_too_long": "Choisissez un mot de passe de 72 octets UTF-8 maximum. Les accents et emoji peuvent compter pour plusieurs octets.",
     "auth_email_required": "Saisissez une adresse email valide et votre mot de passe.",
     "auth_invalid_credentials": "Email ou mot de passe incorrect.",
     "auth_use_staff": "Ce compte est un compte employé. Utilisez la connexion du personnel ci-dessous.",
@@ -58,6 +60,7 @@ export const authUiTranslations = {
     "login_as_admin": "Connexion propriétaire"
   },
   "pt": {
+    "auth_password_too_long": "Use uma palavra-passe com no máximo 72 bytes UTF-8. Acentos e emoji podem ocupar vários bytes.",
     "auth_email_required": "Introduza um email válido e a sua palavra-passe.",
     "auth_invalid_credentials": "Email ou palavra-passe incorretos.",
     "auth_use_staff": "Esta conta é de um funcionário. Utilize o acesso da equipa abaixo.",

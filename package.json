@@ -78,7 +78,8 @@
     "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts",
     "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-storage-dependencies.test.ts server/lib/training-availability.test.ts client/src/lib/training-catalogue.test.ts",
     "test:saas-promos": "node --import tsx server/lib/saas-promos.integration.test.ts",
-    "test:cashbook-isolation": "node --test scripts/cashbook-development-schema.test.mjs && node server/lib/cashbook-engine.test.mjs && node --import tsx server/lib/cashbook-production-boundary.test.ts"
+    "test:cashbook-isolation": "node --test scripts/cashbook-development-schema.test.mjs && node server/lib/cashbook-engine.test.mjs && node --import tsx server/lib/cashbook-production-boundary.test.ts",
+    "test:login-security": "node --import tsx server/lib/login-limits.integration.test.ts && node --import tsx server/lib/password-boundary.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
@@ -123,6 +124,7 @@
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
     "date-fns": "^3.6.0",
+    "dompurify": "3.4.17",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "embla-carousel-react": "^8.6.0",
