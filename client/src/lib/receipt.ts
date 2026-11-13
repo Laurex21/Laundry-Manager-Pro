@@ -1,3 +1,4 @@
+import { safeReceiptDocument } from "./receipt-safety";
 import { receiptQuantity } from "./receipt-quantity";
 import { downloadReceiptDocument, type ReceiptFormat } from "./receipt-export";
 import { format } from "date-fns";
@@ -313,7 +314,7 @@ export function downloadReceiptHtml(html: string, filename: string): void {
     return;
   }
 
-  downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), filename);
+  downloadBlob(new Blob([safeReceiptDocument(html)], { type: "text/html;charset=utf-8" }), filename);
 }
 
 function thermalMoney(amount: number, symbol: string): string {

@@ -11,6 +11,7 @@ export function authErrorMessage(message: unknown, status: number, retryAfter: s
     'Owner accounts must use the owner login page': 'auth_use_owner',
     'Password must be at least 10 characters long': 'registration_password_rule',
     'Password must be at least 10 characters': 'registration_password_rule',
+    AUTH_PASSWORD_TOO_LONG: 'auth_password_too_long',
     'Password is too common': 'auth_password_common',
     'You must accept the current Terms, Privacy Policy, and Cookie Policy to create an account.': 'auth_legal_required',
   };

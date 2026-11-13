@@ -45,8 +45,23 @@ export function rateLimit(options: {
       }
       return next();
     } catch (error) {
-      console.error("Security rate limiter unavailable:", error);
+      console.error("Security rate limiter unavailable");
       return res.status(503).json({ message: "Security service temporarily unavailable" });
     }
   };
+}
+
+/** Independent cumulative budgets: rotating accounts or IPs cannot reset both.
+ * Fixed expiry never extends on rejected requests; no permanent account lock.
+ * Owner/staff share a namespace so switching login screens does not reset it.
+ */
+export function loginRateLimits(name: string, pairMax = 10): RequestHandler[] {
+  const key = (req: any) => typeof req.body?.email === "string"
+    ? req.body.email.trim().toLowerCase() : "invalid-email";
+  const windowMs = 15 * 60 * 1000;
+  return [
+    rateLimit({ name: `${name}:ip`, windowMs, max: 60 }),
+    rateLimit({ name: `${name}:account`, windowMs, max: 20, key, keyOnly: true }),
+    rateLimit({ name, windowMs, max: pairMax, key }),
+  ];
 }

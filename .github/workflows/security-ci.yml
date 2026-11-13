@@ -35,6 +35,7 @@ jobs:
       - run: npm run test:admin-user-access
       - run: npm run test:platform-admin-security
       - run: npm run test:platform-admin-saas
+      - run: npm run test:login-security
       - run: npm run test:security-hardening
       - name: Verify PostgreSQL TLS certificate and hostname checks locally
         run: |

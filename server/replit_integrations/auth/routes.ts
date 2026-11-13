@@ -14,7 +14,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { rateLimit } from "../../lib/rate-limit";
+import { rateLimit, loginRateLimits } from "../../lib/rate-limit";
 import {
   CURRENT_LEGAL_DOCUMENTS,
   clientIp,
@@ -128,7 +128,8 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function validatePassword(password: string): string | null {
+export function validatePassword(password: string): string | null {
+  if (Buffer.byteLength(password, "utf8") > 72) return "AUTH_PASSWORD_TOO_LONG";
   if (password.length < 10) {
     return "Password must be at least 10 characters";
   }
@@ -273,12 +274,7 @@ async function sendPasswordResetLink(user: { phone: string | null; email: string
   return false;
 }
 
-const authAttemptLimiter = rateLimit({
-  name: "auth-attempt",
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  key: (req) => String(req.body?.email || req.body?.identifier || "").trim().toLowerCase(),
-});
+const authAttemptLimiter = loginRateLimits("auth-attempt");
 
 const passwordResetLimiter = rateLimit({
   name: "password-reset",
@@ -390,7 +386,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/login", authAttemptLimiter, async (req, res) => {
+  app.post("/api/auth/login", ...authAttemptLimiter, async (req, res) => {
     try {
       const email = normalizeLoginEmail(req.body.email);
       const { password } = req.body;
@@ -439,7 +435,7 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/staff/login", authAttemptLimiter, async (req, res) => {
+  app.post("/api/staff/login", ...authAttemptLimiter, async (req, res) => {
     try {
       const email = normalizeLoginEmail(req.body.email);
       const { password } = req.body;
