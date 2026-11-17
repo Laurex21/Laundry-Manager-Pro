@@ -3,19 +3,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import type { DecisionOverview, DecisionAccount } from '@shared/platform-admin-decision';
+import type { DecisionOverview, DecisionAccount, RevenueScope } from '@shared/platform-admin-decision';
+import { NewRegistrations, RevenuePressings } from './platform-admin-follow-up';
 
 export default function PlatformAdminDecision({open}:{open:(account:DecisionAccount)=>void}) {
   const {i18n}=useTranslation(); const fr=i18n.language.startsWith('fr');
   const t=(a:string,b:string)=>fr?a:b;
   const [days,setDays]=useState(30);
+  const [revenueScope,setRevenueScope]=useState<RevenueScope>('commercial');
   const query=useQuery<DecisionOverview>({queryKey:['/api/platform-admin/decision-overview',days],retry:1,
     queryFn:async()=>{const r=await fetch(`/api/platform-admin/decision-overview?days=${days}`,{credentials:'include',cache:'no-store'});if(!r.ok)throw Error('ADMIN_DECISION_FAILED');return r.json();}});
   const d=query.data;
   const money=(n:number)=>new Intl.NumberFormat(fr?'fr-CM':'en-CM',{style:'currency',currency:'XAF',maximumFractionDigits:0}).format(n);
   const date=(v:string|null|undefined)=>v?new Intl.DateTimeFormat(fr?'fr-FR':'en-GB',{dateStyle:'medium',timeStyle:'short',timeZone:'Africa/Douala'}).format(new Date(v)):t('Non disponible','Unavailable');
   const ratio=(n:number,total:number)=>total?`${Math.round(n/total*100)} % (${n}/${total})`:'—';
-  const number=(label:string,value:ReactNode)=><div className="min-w-0 rounded-lg bg-slate-50 p-3"><dt className="text-xs text-slate-600">{label}</dt><dd className="mt-1 break-words text-xl font-bold">{value}</dd></div>;
+  const number=(label:string,value:ReactNode,scope?:RevenueScope)=><div className="min-w-0 rounded-lg bg-slate-50 p-3"><dt className="text-xs text-slate-600">{label}</dt><dd className="mt-1 break-words text-xl font-bold">{scope?<button type="button" className="text-left text-cyan-800 underline decoration-dotted underline-offset-4" aria-label={`${label} : ${value} · ${t('Voir les pressings','View pressings')}`} aria-pressed={revenueScope===scope} onClick={()=>setRevenueScope(scope)}>{value}</button>:value}</dd></div>;
   const list=(items:DecisionAccount[],empty:string)=><ul className="mt-3 space-y-1">{!items.length?<li className="text-sm text-slate-500">{empty}</li>:items.map(a=><li key={a.id}><button type="button" onClick={()=>open(a)} className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-700"><span className="font-medium text-cyan-800">{a.name} →</span>{a.endDate&&<span className="block text-xs text-slate-500">{t('Fin de période','Period ends')} : {date(a.endDate)}</span>}{a.createdAt&&<span className="block text-xs text-slate-500">{t('Inscrit le','Registered')} : {date(a.createdAt)}</span>}{a.lastOrderAt&&!a.endDate&&<span className="block text-xs text-slate-500">{t('Dernière commande','Last order')} : {date(a.lastOrderAt)}</span>}</button></li>)}</ul>;
   const block=(title:string,content:ReactNode)=><Card className="min-w-0 border-slate-200 shadow-sm"><CardHeader><CardTitle className="text-lg">{title}</CardTitle></CardHeader><CardContent className="space-y-3">{content}</CardContent></Card>;
   return <section aria-label={t('Pilotage de la plateforme','Platform decisions')} className="space-y-4">
@@ -38,8 +40,10 @@ export default function PlatformAdminDecision({open}:{open:(account:DecisionAcco
         <h3 className="text-sm font-semibold">{t('Prochaines fins d’essai · 8 premières','Next trial expiries · first 8')}</h3>{list(d.trials.due,t('Aucune fin d’essai sous 7 jours.','No trial ending within 7 days.'))}
         <p className="text-xs text-slate-500">{t('Les essais et contrats historiques restent distingués. Affichage de la date effective, sans conversion ni relance automatique.','Trials and historical contracts remain separate. Effective dates are displayed without conversion or automatic reminders.')}</p>
       </>)}
+      <NewRegistrations key={days} registrations={d.registrations} days={days} open={open}/>
       {block(t('3. Revenus des abonnements','3. Subscription revenue'),<>
-        <dl className="grid grid-cols-2 gap-2">{number(t('Encaissements commerciaux confirmés','Confirmed commercial receipts'),money(d.revenue.commercial))}{number(t('Période précédente comparable','Comparable previous period'),money(d.revenue.previousCommercial))}{number(t('Pilotes, affichés séparément','Pilots, shown separately'),money(d.revenue.pilots))}{number(t('Dont renouvellements commerciaux','Including commercial renewals'),money(d.revenue.renewals))}</dl>
+        <dl className="grid grid-cols-2 gap-2">{number(t('Encaissements commerciaux confirmés','Confirmed commercial receipts'),money(d.revenue.commercial),'commercial')}{number(t('Période précédente comparable','Comparable previous period'),money(d.revenue.previousCommercial),'previous')}{number(t('Pilotes, affichés séparément','Pilots, shown separately'),money(d.revenue.pilots),'pilots')}{number(t('Dont renouvellements commerciaux','Including commercial renewals'),money(d.revenue.renewals),'renewals')}</dl>
+        <RevenuePressings key={`${days}-${revenueScope}`} receipts={d.revenue.receipts} scope={revenueScope} setScope={setRevenueScope} open={open}/>
         <p className="text-sm">{t('Comptes payeurs sur la période','Paying accounts during period')} : {d.revenue.payingAccounts} · {t('Comptes payeurs commerciaux depuis le début','All-time commercial paying accounts')} : {d.revenue.cumulativePayers}</p>
         <p className="text-sm">{t('Accès offerts ou historiques sans paiement commercial confirmé','Gifted or historical access without confirmed commercial payment')} : {d.revenue.offeredOrHistorical}</p>
         <div aria-label={t('Évolution quotidienne des encaissements commerciaux','Daily commercial receipts')} className="flex h-20 items-end gap-px border-b">{d.revenue.daily.map(point=><div key={point.date} title={`${point.date} · ${money(point.amount)}`} aria-label={`${point.date} · ${money(point.amount)}`} className="flex-1 bg-cyan-600" style={{height:`${point.amount?Math.max(5,point.amount/Math.max(1,...d.revenue.daily.map(p=>p.amount))*100):1}%`}} />)}</div>

@@ -151,6 +151,12 @@ try {
     assert.equal(dashboard.growth.cohortPayers,0);
     assert.equal(dashboard.revenue.commercial,10999);
     assert.equal(dashboard.revenue.pilots,50);
+    assert.equal(dashboard.revenue.receipts.length,2,'Only confirmed live, non-excluded receipts are named');
+    assert.ok(dashboard.revenue.receipts.every(row=>row.name==='Fictitious pressing 1'&&row.organisationId===1));
+    assert.equal(dashboard.registrations.length,dashboard.growth.newAccounts);
+    assert.equal(dashboard.registrations[0].id,4);
+    assert.equal(dashboard.registrations[0].activity.orders,1);
+    assert.equal(dashboard.registrations[0].activity.firstOrderAt,'2026-10-26T23:30:00.000Z');
     assert.equal(dashboard.payments.paidWithoutActivation,1);
     assert.equal(dashboard.support.inactive,1);
     assert.equal(dashboard.support.neverOrdered,2);
@@ -187,6 +193,58 @@ try {
     assert.equal(issues.support.returning[0].lastOrderAt,'2026-09-01T00:00:00.000Z');
     assert.ok(!issues.support.returning[0].endDate,'Follow-up shows last activity instead of subscription expiry');
     assert.equal((await adminAudit({query},100)).find(e=>e.action==='payment_failed')?.outcome,'failure');
+    // Full registration list, cross-site counts, cancellation/future exclusion and local calendar days.
+    for(let id=10;id<=23;id++){
+      await database.insert(schema.users).values({id:`owner-${id}`,email:`new-${id}@example.invalid`,firstName:'Responsable',lastName:String(id),phone:'000',userType:'owner',organisationId:id});
+      await database.insert(schema.organisations).values({id,name:id<12?'Same business name':`New pressing ${id}`,ownerId:`owner-${id}`,createdAt:new Date('2026-10-22T10:00:00Z')});
+      await database.insert(schema.sites).values({id,organisationId:id,name:'New site'});
+    }
+    await database.insert(schema.sites).values({id:210,organisationId:10,name:'Second site'});
+    await database.insert(schema.orders).values([
+      {customerId:1,siteId:10,createdAt:new Date('2026-10-25T22:30:00Z')},
+      {customerId:1,siteId:210,createdAt:new Date('2026-10-25T23:30:00Z')},
+      {customerId:1,siteId:210,createdAt:new Date('2026-10-26T11:00:00Z')},
+      {customerId:1,siteId:10,status:'cancelled',createdAt:new Date('2026-10-24T00:00:00Z')},
+      {customerId:1,siteId:10,cancelledAt:new Date('2026-10-24'),createdAt:new Date('2026-10-23T00:00:00Z')},
+      {customerId:1,siteId:10,createdAt:new Date('2026-10-28T00:00:00Z')},
+      {customerId:1,siteId:11,status:'cancelled',createdAt:new Date('2026-10-23T00:00:00Z')},
+    ]);
+    const commercialInvoice=async(id:string,org:number,amount:number,status:string,created:string,paid:string|null,kind='cycle')=>{
+      await query(`INSERT INTO saas_invoices(id,organisation_id,quote,total_xaf,provider_environment,status,provider_status,created_at,paid_at)
+        VALUES($1,$2,$3::jsonb,$4,'live',$5,$6,$7,$8)`,[id,org,JSON.stringify({selection:{plan:'pro'},kind}),amount,status,status==='paid'?'COMPLETED':'FAILED',created,paid]);
+      if(status==='paid')await query("INSERT INTO saas_events(organisation_id,action,details) VALUES($1,'payment_applied',$2::jsonb)",[org,JSON.stringify({invoiceId:id})]);
+    };
+    await commercialInvoice('10000000-0000-4000-8000-000000000001',10,100,'failed','2026-10-25T00:00:00Z',null);
+    let followups=await adminDecisionOverview({query},7,clock);
+    assert.equal(followups.registrations.length,15,'All new organisations returned; no silent first-eight truncation');
+    const usage=followups.registrations.find(row=>row.id===10)!;
+    assert.equal(usage.activity.orders,3,'Cross-site counts exclude cancelled and future orders');
+    assert.equal(usage.activity.orders7,3);
+    assert.equal(usage.activity.activeDays7,2,'Local days, not UTC days');
+    assert.equal(usage.activity.firstOrderAt,'2026-10-25T22:30:00.000Z');
+    assert.equal(usage.activity.lastOrderAt,'2026-10-26T11:00:00.000Z');
+    assert.equal(usage.owner.email,'new-10@example.invalid');
+    assert.equal(usage.followUp.status,'payment_review');
+    assert.equal(followups.registrations.find(row=>row.id===11)!.followUp.reason,'no_orders');
+    assert.equal(followups.registrations.filter(row=>row.name==='Same business name').length,2,'Identity uses organisation id');
+    await commercialInvoice('10000000-0000-4000-8000-000000000002',10,1234,'paid','2026-10-26T01:00:00Z','2026-10-26T02:00:00Z','renewal');
+    await commercialInvoice('10000000-0000-4000-8000-000000000003',1,567,'paid','2026-10-14T01:00:00Z','2026-10-14T02:00:00Z');
+    const snapshot=await query('SELECT * FROM saas_accounts ORDER BY organisation_id');
+    await query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    followups=await adminDecisionOverview({query},7,clock);
+    await query('ROLLBACK');
+    assert.deepEqual(await query('SELECT * FROM saas_accounts ORDER BY organisation_id'),snapshot);
+    assert.notEqual(followups.registrations.find(row=>row.id===10)!.followUp.status,'payment_review','Later successful payment resolves a failed attempt');
+    assert.equal(followups.registrations.find(row=>row.id===10)!.subscription.lastPaymentAt,'2026-10-26T02:00:00.000Z');
+    for(const [total,filter] of [
+      [followups.revenue.commercial,(r:any)=>r.period==='current'&&!r.pilot],
+      [followups.revenue.previousCommercial,(r:any)=>r.period==='previous'&&!r.pilot],
+      [followups.revenue.pilots,(r:any)=>r.period==='current'&&r.pilot],
+      [followups.revenue.renewals,(r:any)=>r.period==='current'&&!r.pilot&&r.kind==='renewal'],
+    ] as const)assert.equal(followups.revenue.receipts.filter(filter).reduce((sum,r)=>sum+r.amount,0),total,'Named receipts reconcile exactly with each amount');
+    await query("UPDATE saas_invoices SET status='pending',provider_status=NULL WHERE id='10000000-0000-4000-8000-000000000001'");
+    assert.equal((await adminDecisionOverview({query},7,clock)).registrations.find(row=>row.id===10)!.followUp.status,'payment_review','A separate pending payment remains unresolved even after another payment succeeded');
+    console.log('PASS named receipts and registration activity: total reconciliation, complete list, names/contacts, cross-site activity, cancellations, local days, failed-then-paid, read-only snapshot');
     console.log('PASS six decision blocks: cohort, activity, pilots, exclusions, read-only, activation events, Douala boundaries, future dates');
     console.log('PASS isolated admin: effective plans, launch/legacy preservation, live-only receipts/pilots, excluded roles, readonly GET, preview/confirm, stale replay, acquired rights/days, rollback, current catalogue, unified audit, host isolation, auth gate');
 }
