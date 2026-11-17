@@ -90,7 +90,7 @@ export function RevenuePressings({ receipts, scope, setScope, open }: {
   </section>;
 }
 
-export function NewRegistrations({ registrations, days, open }: { registrations: DecisionRegistration[]; days: number; open: OpenAccount }) {
+export function NewRegistrations({ registrations, days, open, openContact }: { registrations: DecisionRegistration[]; days: number; open: OpenAccount; openContact?: OpenAccount }) {
   const { t, date } = useCopy();
   const [search, setSearch] = useState('');
   const [segment, setSegment] = useState('all');
@@ -103,6 +103,7 @@ export function NewRegistrations({ registrations, days, open }: { registrations:
   const followUp = (row: DecisionRegistration) => <>
     <span className={`inline-block rounded-full px-2 py-1 text-xs font-semibold ${row.followUp.status === 'payment_review' ? 'bg-red-50 text-red-800' : ['support', 'subscription', 'renewal'].includes(row.followUp.status) ? 'bg-amber-50 text-amber-900' : 'bg-cyan-50 text-cyan-900'}`}>{t(...statusCopy[row.followUp.status])}</span>
     <p className="mt-2 text-xs leading-relaxed text-slate-600">{t(...reasonCopy[row.followUp.reason])}</p>
+    {openContact && <Button variant="outline" size="sm" className="mt-3 whitespace-normal" onClick={() => openContact(row)}>{t('Suivi et message', 'Follow-up and message')}</Button>}
   </>;
   const identity = (row: DecisionRegistration) => <>
     <button className="break-words text-left font-semibold text-cyan-800 underline underline-offset-2" onClick={() => open(row)}>{row.name} →</button>

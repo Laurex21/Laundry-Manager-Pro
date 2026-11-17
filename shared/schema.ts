@@ -453,6 +453,37 @@ export const platformAdminAuditEvents = pgTable("platform_admin_audit_events", {
   index("idx_platform_admin_audit_action_created").on(table.action, table.createdAt),
 ]);
 
+// Platform-only relationship history. No tenant/customer data is rewritten by this workflow.
+export const platformContactCases = pgTable("platform_contact_cases", {
+  organisationId: integer("organisation_id").primaryKey().references(() => organisations.id),
+  version: integer("version").notNull().default(0),
+  status: text("status").notNull().default("open"),
+  nextAction: text("next_action").notNull().default(""),
+  nextActionDate: date("next_action_date"),
+  message: jsonb("message"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  check("platform_contact_version", sql`${table.version} >= 0`),
+  check("platform_contact_status", sql`${table.status} IN ('open','in_progress','paused','closed','do_not_contact')`),
+  check("platform_contact_action_length", sql`char_length(${table.nextAction}) <= 300`),
+  check("platform_contact_action_pair", sql`(${table.nextAction} = '') = (${table.nextActionDate} IS NULL)`),
+  check("platform_contact_closed", sql`${table.status} NOT IN ('closed','do_not_contact') OR ${table.nextActionDate} IS NULL`),
+  index("platform_contact_due").on(table.nextActionDate).where(sql`${table.status} IN ('open','in_progress')`),
+]);
+export const platformContactEvents = pgTable("platform_contact_events", {
+  id: uuid("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  actorUserId: varchar("actor_user_id").notNull(),
+  actorName: text("actor_name").notNull(),
+  action: text("action").notNull(),
+  data: jsonb("data").notNull(),
+  resultingVersion: integer("resulting_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  check("platform_contact_event_action", sql`${table.action} IN ('contact','plan','save_message','approve_message','cancel_message')`),
+  index("platform_contact_history").on(table.organisationId, table.createdAt.desc(), table.id),
+]);
+
 export const sites = pgTable("sites", {
   id: serial("id").primaryKey(),
   organisationId: integer("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),

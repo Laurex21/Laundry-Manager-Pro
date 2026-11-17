@@ -1,4 +1,5 @@
 import { adminUserDirectory, requestAdminPasswordReset, AdminUserError } from "./admin-password-reset";
+import { registerPlatformContactRoutes } from "./platform-contact-routes";
 import { adminDecisionOverview, decisionDays } from "./platform-admin-decision";
 import { readFile } from "node:fs/promises";
 import { adminSubscribers, adminSegment, adminBilling, adminAudit, adminGrant } from "./platform-admin-saas";
@@ -175,6 +176,7 @@ function safeLimit(value: unknown, fallback = 100, maximum = 200): number {
 }
 
 export function registerPlatformAdminRoutes(app: Express): void {
+  registerPlatformContactRoutes(app, requirePlatformAdmin);
   app.get("/api/platform-admin/users", requirePlatformAdmin, async (req:any,res) => {
     res.setHeader("Cache-Control","no-store");
     try {
