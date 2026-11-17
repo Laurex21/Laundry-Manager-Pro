@@ -19,7 +19,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=low
+      - run: node scripts/picomatch-security.mjs --apply
+      - run: npm run audit:security
       - run: npm run check
       - run: npm run test:cashbook-isolation
       - run: npm run test:training

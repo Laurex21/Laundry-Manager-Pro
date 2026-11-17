@@ -4,6 +4,11 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "postinstall": "node scripts/picomatch-security.mjs --apply",
+    "prebuild": "node scripts/picomatch-security.mjs --apply",
+    "prestart": "node scripts/picomatch-security.mjs",
+    "test:picomatch-security": "node --test scripts/picomatch-security.test.mjs",
+    "audit:security": "node scripts/security-audit.mjs",
     "test:platform-contacts": "node --import tsx server/lib/platform-contacts.integration.test.ts && node --import tsx client/src/lib/platform-contacts.test.tsx",
     "db:migrate:platform-contacts": "tsx scripts/migrate-platform-contacts.ts",
     "dev": "TRAINING_BUCKET_ID=replit-objstore-4f8b19e6-9284-45ab-b71e-5a5c8d64df8f NODE_ENV=development SAAS_BILLING_MODE=disabled SAAS_LIVE_ENABLED=false XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED=true tsx server/index.ts",
