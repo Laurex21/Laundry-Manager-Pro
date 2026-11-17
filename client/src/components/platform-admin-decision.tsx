@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import type { DecisionOverview, DecisionAccount, RevenueScope } from '@shared/platform-admin-decision';
 import { NewRegistrations, RevenuePressings } from './platform-admin-follow-up';
 
-export default function PlatformAdminDecision({open}:{open:(account:DecisionAccount)=>void}) {
+export default function PlatformAdminDecision({open,openContact}:{open:(account:DecisionAccount)=>void;openContact?:(account:DecisionAccount)=>void}) {
   const {i18n}=useTranslation(); const fr=i18n.language.startsWith('fr');
   const t=(a:string,b:string)=>fr?a:b;
   const [days,setDays]=useState(30);
@@ -40,7 +40,7 @@ export default function PlatformAdminDecision({open}:{open:(account:DecisionAcco
         <h3 className="text-sm font-semibold">{t('Prochaines fins d’essai · 8 premières','Next trial expiries · first 8')}</h3>{list(d.trials.due,t('Aucune fin d’essai sous 7 jours.','No trial ending within 7 days.'))}
         <p className="text-xs text-slate-500">{t('Les essais et contrats historiques restent distingués. Affichage de la date effective, sans conversion ni relance automatique.','Trials and historical contracts remain separate. Effective dates are displayed without conversion or automatic reminders.')}</p>
       </>)}
-      <NewRegistrations key={days} registrations={d.registrations} days={days} open={open}/>
+      <NewRegistrations key={days} registrations={d.registrations} days={days} open={open} openContact={openContact}/>
       {block(t('3. Revenus des abonnements','3. Subscription revenue'),<>
         <dl className="grid grid-cols-2 gap-2">{number(t('Encaissements commerciaux confirmés','Confirmed commercial receipts'),money(d.revenue.commercial),'commercial')}{number(t('Période précédente comparable','Comparable previous period'),money(d.revenue.previousCommercial),'previous')}{number(t('Pilotes, affichés séparément','Pilots, shown separately'),money(d.revenue.pilots),'pilots')}{number(t('Dont renouvellements commerciaux','Including commercial renewals'),money(d.revenue.renewals),'renewals')}</dl>
         <RevenuePressings key={`${days}-${revenueScope}`} receipts={d.revenue.receipts} scope={revenueScope} setScope={setRevenueScope} open={open}/>

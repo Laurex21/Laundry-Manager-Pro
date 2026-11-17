@@ -1,0 +1,11 @@
+# Picomatch : mitigation locale vérifiée
+
+L’avis [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) ne dispose pas de version corrigée au 17 novembre 2026. Les versions verrouillées du projet sont 2.3.2 et 4.0.4.
+
+Le correctif local ajoute un garde-fou dans `analyzeRepeatedExtglob`, avant l’option qui désactive les protections amont. Seule la répétition d’une branche littérale non vide reste autorisée. Les répétitions contenant des jokers, des groupes ou des alternatives utilisent le mécanisme amont qui traite le motif comme du texte littéral. Ainsi, `+(*a)` ne peut plus produire la répétition imbriquée responsable du blocage. Les motifs ordinaires de fichiers et les groupes non répétés restent disponibles. Les répétitions complexes changent volontairement de sémantique ; la compilation et les tests du projet doivent vérifier leur compatibilité.
+
+`scripts/picomatch-security.mjs` vérifie les versions, l’inventaire installé et l’empreinte SHA-256 du parseur avant d’appliquer le correctif à toutes les copies. Une version inconnue, une copie oubliée ou un fichier altéré provoque un échec. Le correctif est appliqué après installation et avant compilation ; son intégrité est aussi obligatoire au démarrage de production. La CI l’applique explicitement après son installation avec `--ignore-scripts`.
+
+`npm run audit:security` exécute l’audit complet et les tests d’attaque dans des processus à durée limitée. L’exception n’accepte que cet identifiant exact et ses dépendances transitives, avec toutes les copies corrigées. Une autre alerte, une réponse incomplète, un échec réseau ou une preuve manquante bloque. Les tests vérifient également qu’un parseur non corrigé bloque sur le cas d’attaque, qu’un correctif absent ou modifié est refusé et que l’application répétée du correctif est sans effet supplémentaire.
+
+La dérogation expire le **17 décembre 2026** : l’audit bloquera alors les nouvelles publications jusqu’à une revue. Cela n’interrompt pas les processus de production déjà démarrés. Dès qu’une version officielle corrigée existe, mettre à jour les dépendances, retirer le correctif et cette exception, puis rétablir l’audit npm direct après validation.

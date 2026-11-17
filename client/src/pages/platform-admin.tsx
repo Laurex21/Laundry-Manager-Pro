@@ -2,6 +2,7 @@ import PromoDirectory from "@/components/promo-directory";
 import AdminUserAccess from "@/components/admin-user-access";
 import SalesDirectory from "@/components/sales-directory";
 import PlatformAdminDecision from "@/components/platform-admin-decision";
+import { PlatformContactDirectory, PlatformContactPanel, PlatformContactWorkspace } from "@/components/platform-contacts";
 import AcquisitionReport from "@/components/acquisition-report";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { FormEvent, ReactNode, useEffect, useState } from "react";
@@ -131,6 +132,7 @@ type AdminStatus = {
 type AdminAuthStep = "credentials" | "enroll" | "verify";
 
 const ADMIN_FR: Record<string, string> = {
+  "Follow-up": "Accompagnement",
   "Ambassadors": "Ambassadeurs",
   "User access": "Accès utilisateurs",
   "preview": "Simulation", "requested": "Demandée", "sent": "Envoi accepté", "delivery_failed": "Échec d’envoi",
@@ -187,7 +189,7 @@ const ADMIN_FR: Record<string, string> = {
   "Sandbox checkout failed": "Échec du checkout Sandbox",
   "Organisation workspace": "Fiche organisation",
   "Controlled administration": "Administration encadrée",
-  "Only plan assignment is editable here. It is audited and does not record a payment. Other operational data remains read-only.": "Seule l’attribution de formule est modifiable ici. Elle est auditée et ne crée aucun paiement. Les autres données restent en lecture seule.",
+  "Plan assignment and relationship follow-up are audited. They do not record payments or change operational data.": "L’attribution de formule et le suivi des contacts sont audités. Ils n’enregistrent aucun paiement et ne modifient pas les données opérationnelles.",
   "Assign a plan manually": "Attribuer une formule manuellement",
   "Select a plan": "Choisir une formule",
   "End date": "Date de fin",
@@ -548,6 +550,7 @@ function AdminDashboard() {
   const [page, setPage] = useState(0);
   const [renewalPage, setRenewalPage] = useState(0);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Pick<Subscriber,"id"|"name"> | null>(null);
+  const [contactSubscriber, setContactSubscriber] = useState<Pick<Subscriber,"id"|"name"> | null>(null);
 
   const overview = useQuery<Overview>({
     queryKey: ["/api/platform-admin/overview"],
@@ -610,6 +613,7 @@ function AdminDashboard() {
           <TabsList className="h-auto w-full flex-wrap justify-start rounded-xl border border-slate-200 bg-white p-1 sm:w-fit">
             <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />{adminText('Overview')}</TabsTrigger>
             <TabsTrigger value="organisations" className="gap-2"><Building2 className="h-4 w-4" />{adminText('Organisations')}</TabsTrigger>
+            <TabsTrigger value="contacts">{adminText('Follow-up')}</TabsTrigger>
             <TabsTrigger value="renewals" className="gap-2"><CalendarClock className="h-4 w-4" />{adminText('Renewals')}</TabsTrigger>
             <TabsTrigger value="acquisition">Acquisition</TabsTrigger>
             <TabsTrigger value="user-access">{adminText("User access")}</TabsTrigger>
@@ -618,10 +622,11 @@ function AdminDashboard() {
           </TabsList>
 
           <TabsContent value="overview" className="mt-5 space-y-6">
-            <PlatformAdminDecision open={setSelectedSubscriber} />
+            <PlatformAdminDecision open={setSelectedSubscriber} openContact={setContactSubscriber} />
           </TabsContent>
 
           <TabsContent value="user-access" className="mt-5"><AdminUserAccess/></TabsContent>
+          <TabsContent value="contacts" className="mt-5"><PlatformContactDirectory open={setContactSubscriber}/></TabsContent>
           <TabsContent value="organisations" className="mt-5">
             <OrganisationDirectory loading={subscribers.isLoading} error={subscribers.error as Error | null} organisations={organisations} search={search} setSearch={setSearch} submitSearch={submitSearch} segment={segment} setSegment={changeSegment} select={setSelectedSubscriber} page={page} total={subscribers.data?.total ?? 0} pageSize={25} onPageChange={setPage} />
           </TabsContent>
@@ -650,6 +655,7 @@ function AdminDashboard() {
       </main>
 
       {selectedSubscriber && <OrganisationPanel subscriber={selectedSubscriber} close={() => setSelectedSubscriber(null)} />}
+      {contactSubscriber && <PlatformContactPanel account={contactSubscriber} close={() => setContactSubscriber(null)} />}
     </div>
   );
 }
@@ -719,6 +725,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Pick<Subscriber,
 
         <Tabs defaultValue="summary">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <TabsTrigger value="contacts">{adminText('Follow-up')}</TabsTrigger>
             <TabsTrigger value="summary">{adminText('Summary')}</TabsTrigger><TabsTrigger value="subscription">{adminText('Subscription')}</TabsTrigger><TabsTrigger value="sites">{adminText('Sites')}</TabsTrigger><TabsTrigger value="users">{adminText('Users')}</TabsTrigger><TabsTrigger value="payments">{adminText('Payments')}</TabsTrigger><TabsTrigger value="audit">{adminText('Audit')}</TabsTrigger>
           </TabsList>
 
@@ -731,8 +738,10 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Pick<Subscriber,
                 <dl className="grid grid-cols-2 gap-4 text-sm"><PanelDatum label={adminText('All orders')} value={detail.data.usage.orderCount}/><PanelDatum label={adminText('Last order')} value={formatDate(detail.data.usage.lastOrderAt)}/><PanelDatum label={adminText('Customers')} value={detail.data.usage.customerCount}/><PanelDatum label={adminText('New customers · 30 days')} value={detail.data.usage.customersLast30Days}/></dl>
               </PanelSection>
             </div>
-            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">{adminText('Controlled administration')}</p><p className="mt-1 text-sm text-cyan-800">{adminText('Only plan assignment is editable here. It is audited and does not record a payment. Other operational data remains read-only.')}</p></section>
+            <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4"><p className="text-sm font-semibold text-cyan-900">{adminText('Controlled administration')}</p><p className="mt-1 text-sm text-cyan-800">{adminText('Plan assignment and relationship follow-up are audited. They do not record payments or change operational data.')}</p></section>
           </TabsContent>
+
+          <TabsContent value="contacts" className="mt-5"><PlatformContactWorkspace organisationId={subscriber.id}/></TabsContent>
 
           <TabsContent value="subscription" className="mt-5">
             <PanelSection title={adminText('Current subscription')}><p className="mb-3 text-xs text-slate-500">{adminText('Source')}: {adminText(detail.data.source)}</p>

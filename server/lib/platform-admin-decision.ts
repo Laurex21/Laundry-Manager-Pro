@@ -11,7 +11,7 @@ export function decisionDays(value:unknown):number {
   if(!['number','string'].includes(typeof value)||!['7','30','90'].includes(String(value)))throw Error('INVALID_DECISION_PERIOD');
   return Number(value);
 }
-export async function adminDecisionOverview(db:SaasExecutor,days=30,now=new Date()):Promise<DecisionOverview> {
+export async function adminDecisionOverview(db:SaasExecutor,days=30,now=new Date(),includeAllRegistrations=false):Promise<DecisionOverview> {
   decisionDays(days);
   // Calendar-day windows in Douala; current day is partial, preceding days complete.
   const local=new Date(now.getTime()+3600000);
@@ -81,7 +81,7 @@ export async function adminDecisionOverview(db:SaasExecutor,days=30,now=new Date
       || !laterSuccess&&i.status==='failed'&&Date.parse(i.created_at)>=now.getTime()-14*DAY)paymentIssueIds.add(id);
   }
   const iso=(value:any):string|null=>value?new Date(value).toISOString():null;
-  const registrations:DecisionRegistration[]=newAccounts.map(a=>{
+  const registrations:DecisionRegistration[]=(includeAllRegistrations?eligible:newAccounts).map(a=>{
     const usage=activities.get(a.id),lastOrderAt=iso(usage?.last_valid_order_at),lastPaid=lastPaidByOrg.get(a.id);
     const row:Omit<DecisionRegistration,'followUp'>={
       id:a.id,name:a.name,createdAt:iso(a.createdAt)!,ageDays:Math.max(0,Math.floor((now.getTime()-Date.parse(a.createdAt))/DAY)),
