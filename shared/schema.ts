@@ -480,8 +480,26 @@ export const platformContactEvents = pgTable("platform_contact_events", {
   resultingVersion: integer("resulting_version").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
-  check("platform_contact_event_action", sql`${table.action} IN ('contact','plan','save_message','approve_message','cancel_message')`),
+  check("platform_contact_event_action", sql`${table.action} IN ('contact','plan','save_message','approve_message','cancel_message','delivery')`),
   index("platform_contact_history").on(table.organisationId, table.createdAt.desc(), table.id),
+]);
+
+export const platformContactDeliveries = pgTable("platform_contact_deliveries", {
+  id: uuid("id").primaryKey(),
+  organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  approvalId: uuid("approval_id").notNull().unique(),
+  actorUserId: varchar("actor_user_id").notNull(),
+  actorName: text("actor_name").notNull(),
+  recipient: text("recipient").notNull(),
+  message: jsonb("message").notNull(),
+  status: text("status").notNull(),
+  providerId: text("provider_id").unique(),
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  check("platform_contact_deliveries_status_check", sql`${table.status} IN ('dispatching','accepted','sent','delivered','read','failed','unknown')`),
+  index("platform_contact_deliveries_org").on(table.organisationId, table.createdAt.desc()),
 ]);
 
 export const sites = pgTable("sites", {

@@ -5,6 +5,7 @@ import type { DecisionRegistration } from '../../shared/platform-admin-decision'
 import type { SaasExecutor } from './saas-store';
 import { adminDecisionOverview, decisionDays } from './platform-admin-decision';
 import { suggestedContactMessage } from './platform-contact-messages';
+import { verifyWhatsAppTemplate } from './platform-whatsapp';
 
 export class PlatformContactError extends Error {
   constructor(readonly code: string, readonly status = 409) { super(code); }
@@ -58,7 +59,7 @@ export async function platformContactDirectory(db: SaasExecutor, options: { days
   const data = await snapshot(db, days, now);
   const visible = data.entries.filter(e => Date.parse(e.account.createdAt) >= Date.parse(data.start) || e.tracking.version > 0);
   const draft = (e: ContactEntry) => !!e.tracking.message && (e.tracking.message.status === 'draft' || e.messageStale);
-  const approved = (e: ContactEntry) => e.tracking.message?.status === 'approved' && !e.messageStale && !e.approvalBlocked;
+  const approved = (e: ContactEntry) => e.tracking.message?.status === 'approved' && !e.tracking.message.deliveryId && !e.messageStale && !e.approvalBlocked;
   const counts = { all: visible.length, due: visible.filter(e => e.due).length, drafts: visible.filter(draft).length, approved: visible.filter(approved).length };
   const rows = visible.filter(e => {
     const matches = [e.account.name, e.account.owner.name, e.account.owner.email, e.account.owner.phone].some(v => v?.toLocaleLowerCase().includes(search));
@@ -77,11 +78,17 @@ export async function platformContactDetail(db: SaasExecutor, organisationId: nu
   if (!current) throw new PlatformContactError('CONTACT_ORGANISATION_UNAVAILABLE', 404);
   const events = await db.query('SELECT id,actor_name,data,created_at FROM platform_contact_events WHERE organisation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 20 OFFSET $2', [organisationId, offset]);
   const total = Number((await db.query('SELECT count(*)::int AS total FROM platform_contact_events WHERE organisation_id=$1', [organisationId])).rows[0].total);
+  const deliveries = (await db.query('SELECT * FROM platform_contact_deliveries WHERE organisation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 20', [organisationId])).rows.map(r => ({
+    id: r.id, approvalId: r.approval_id, recipient: r.recipient, text: r.message.text, actorName: r.actor_name,
+    status: r.status === 'dispatching' && now.getTime() - new Date(r.created_at).getTime() > 60000 ? 'unknown' : r.status,
+    providerId: r.provider_id, errorCode: r.error_code, createdAt: iso(r.created_at)!, updatedAt: iso(r.updated_at)!,
+  }));
   return { ...current, suggestion: { fr: suggestedContactMessage(current.account, 'fr'), en: suggestedContactMessage(current.account, 'en') },
+    deliveries,
     history: { items: events.rows.map(r => ({ id: r.id, actorName: r.actor_name, createdAt: iso(r.created_at)!, data: r.data })), total, offset, limit: 20 } };
 }
 
-/** Caller owns one transaction. No email, WhatsApp API, billing or maintenance call is made here. */
+/** Caller owns one transaction. Template verification is read-only; no message, billing or maintenance is triggered here. */
 export async function writePlatformContact(db: SaasExecutor, organisationId: number, actor: { id: string; requestId?: string; ip: string; userAgent?: string }, input: unknown, now = new Date()) {
   const parsed = contactCommand.safeParse(input);
   if (!parsed.success || !Number.isSafeInteger(organisationId) || organisationId < 1) throw new PlatformContactError('CONTACT_INVALID_INPUT', 400);
@@ -107,8 +114,14 @@ export async function writePlatformContact(db: SaasExecutor, organisationId: num
     state.status = command.status; state.nextAction = command.nextAction; state.nextActionDate = command.nextActionDate;
   } else if (command.action === 'save_message') {
     if (command.contextFingerprint !== current.contextFingerprint) throw new PlatformContactError('CONTACT_CONTEXT_CHANGED');
+    if (command.whatsappTemplate) {
+      if (command.channel !== 'whatsapp' || !command.whatsappTemplate.language.startsWith(command.language)) throw new PlatformContactError('CONTACT_TEMPLATE_INVALID', 400);
+      try { await verifyWhatsAppTemplate(command.whatsappTemplate, command.text); }
+      catch (error) { throw new PlatformContactError((error as Error).message.startsWith('CONTACT_') ? (error as Error).message : 'CONTACT_PROVIDER_UNAVAILABLE', 400); }
+    }
     state.message = { text: command.text, channel: command.channel, language: command.language, reason: current.account.followUp.reason,
-      contextFingerprint: current.contextFingerprint, status: 'draft', approvedAt: null, approvedBy: null } satisfies ContactMessage;
+      contextFingerprint: current.contextFingerprint, status: 'draft', approvedAt: null, approvedBy: null,
+      ...(command.whatsappTemplate ? { whatsappTemplate: command.whatsappTemplate } : {}) } satisfies ContactMessage;
   } else if (command.action === 'approve_message') {
     if (current.approvalBlocked) throw new PlatformContactError('CONTACT_APPROVAL_BLOCKED');
     if (!state.message) throw new PlatformContactError('CONTACT_MESSAGE_REQUIRED', 400);
@@ -116,7 +129,7 @@ export async function writePlatformContact(db: SaasExecutor, organisationId: num
     if (state.message.status !== 'draft') throw new PlatformContactError('CONTACT_STATE_CHANGED');
     const recipient = state.message.channel === 'email' ? current.account.owner.email : current.account.owner.phone;
     if (!recipient?.trim()) throw new PlatformContactError('CONTACT_RECIPIENT_MISSING', 400);
-    state.message = { ...state.message, status: 'approved', approvedAt: now.toISOString(), approvedBy: who.name };
+    state.message = { ...state.message, status: 'approved', approvedAt: now.toISOString(), approvedBy: who.name, approvalId: command.requestId };
   } else {
     if (!state.message) throw new PlatformContactError('CONTACT_MESSAGE_REQUIRED', 400);
     state.message = null;

@@ -1,6 +1,6 @@
 /** Isolated PostgreSQL. No production database, delivery provider or background job. */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
@@ -8,6 +8,9 @@ import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import * as schema from '../../shared/schema';
 import { businessLaunchTrial } from '../../shared/saas-business-launch';
 import { platformContactDetail, platformContactDirectory, writePlatformContact } from './platform-contacts';
+import { reserveContactDelivery, finishContactDelivery, applyWhatsAppStatuses, sendContactDelivery } from './platform-contact-delivery';
+import { supportedTemplate, sendWhatsAppTemplate, validWhatsAppSignature, whatsappRecipient } from './platform-whatsapp';
+import { renderWhatsAppTemplate } from '../../shared/whatsapp-template';
 process.env.DATABASE_URL = 'postgresql://unused:unused@127.0.0.1:1/platform_contacts_isolated';
 process.env.NODE_ENV = 'test'; process.env.SAAS_BUSINESS_LAUNCH_ENABLED = 'true';
 process.env.SAAS_BILLING_MODE = 'disabled'; process.env.SAAS_LIVE_ENABLED = 'false'; process.env.SALES_EMAIL_ENABLED = 'false';
@@ -41,6 +44,8 @@ try {
   for (const sql of await generateMigration(generateDrizzleJson({}), generateDrizzleJson(schema))) await pg.exec(sql);
   const migration = await readFile(new URL('../../migrations/20261118_platform_contacts.sql', import.meta.url), 'utf8');
   await pg.exec(migration); await pg.exec(migration);
+  const deliveryMigration = await readFile(new URL('../../migrations/20261119_platform_contact_deliveries.sql', import.meta.url), 'utf8');
+  await pg.exec(deliveryMigration); await pg.exec(deliveryMigration);
   await pg.exec('CREATE TABLE IF NOT EXISTS security_rate_limits(bucket_key text PRIMARY KEY,count int NOT NULL,reset_at timestamptz NOT NULL)');
   await database.insert(schema.users).values({ id: 'admin', email: 'admin@example.invalid', firstName: 'Synthetic', lastName: 'Admin' });
   await database.insert(schema.platformAdmins).values({ userId: 'admin', mfaEnabledAt: now });
@@ -94,6 +99,100 @@ try {
   await assert.rejects(write(await command({ action: 'plan', status: 'closed', nextAction: '', nextActionDate: null, note: 'Synthetic close' }), 201, failing), /AUDIT_FAILURE/);
   assert.equal((await detail()).tracking.version, version); assert.deepEqual((await query('SELECT * FROM platform_contact_events ORDER BY id')).rows, events);
   assert.deepEqual(await businessSnapshot(), before, 'Contact workflow never changes business data');
+  // Synthetic provider only: a real API call is impossible in this test process.
+  Object.assign(process.env, { WHATSAPP_ACCESS_TOKEN: 'synthetic-token', WHATSAPP_PHONE_NUMBER_ID: '111', WHATSAPP_BUSINESS_ACCOUNT_ID: '222', META_APP_SECRET: 'synthetic-secret', WHATSAPP_WEBHOOK_VERIFY_TOKEN: 'test-only-verification-token-32-characters', PLATFORM_CONTACT_WHATSAPP_ENABLED: 'true' });
+  const rawTemplate = { id: '333', name: 'synthetic_support', language: 'fr', status: 'APPROVED', category: 'UTILITY', components: [{ type: 'BODY', text: 'Bonjour {{1}}, accompagnement de {{2}}.' }, { type: 'FOOTER', text: 'XpressPro' }] };
+  const template = { ...supportedTemplate(rawTemplate)!, parameters: ['Fictitious', 'Pressing test'] };
+  assert.ok(supportedTemplate(rawTemplate));
+  assert.equal(supportedTemplate({ ...rawTemplate, status: 'PENDING' }), null);
+  assert.equal(supportedTemplate({ ...rawTemplate, components: [...rawTemplate.components, { type: 'BUTTONS', buttons: [] }] }), null);
+  assert.equal(supportedTemplate({ ...rawTemplate, components: [{ type: 'BODY', text: 'Missing {{2}}' }] }), null);
+  assert.equal(whatsappRecipient('00237 600-000-000'), '+237600000000');
+  assert.throws(() => whatsappRecipient('600000000'), /CONTACT_RECIPIENT_INVALID/);
+  let providerCalls = 0, templateChanged = false;
+  const fakeFetch: typeof fetch = async (url, options) => {
+    assert.match(String(url), /^https:\/\/graph\.facebook\.com\/v27\.0\/(111\/messages|222\/message_templates\?)/);
+    if (options?.method === 'POST') {
+      providerCalls++;
+      const payload = JSON.parse(String(options.body));
+      assert.equal(payload.type, 'template'); assert.equal(payload.to, '237600000000');
+      assert.equal(payload.template.components[0].parameters[0].text, 'Fictitious');
+      assert.equal((await query('SELECT count(*)::int AS n FROM platform_contact_deliveries WHERE id=$1', [payload.biz_opaque_callback_data])).rows[0].n, 1, 'Durable reservation precedes network side effect');
+      return new Response(JSON.stringify({ messages: [{ id: 'wamid.synthetic' }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: [templateChanged ? { ...rawTemplate, status: 'PAUSED' } : rawTemplate] }), { status: 200 });
+  };
+  globalThis.fetch = fakeFetch;
+  const tx = async <T>(fn: () => Promise<T>) => { await query('BEGIN'); try { const value = await fn(); await query('COMMIT'); return value; } catch (error) { await query('ROLLBACK'); throw error; } };
+  const prepare = async () => {
+    await write(await command({ action: 'save_message', channel: 'whatsapp', language: 'fr', text: renderWhatsAppTemplate(template), whatsappTemplate: template, contextFingerprint: (await detail(202)).contextFingerprint }, 202), 202);
+    await write(await command({ action: 'approve_message' }, 202), 202);
+    const d = await detail(202);
+    return { requestId: randomUUID(), expectedVersion: d.tracking.version, approvalId: d.tracking.message!.approvalId!, consentConfirmed: true as const };
+  };
+  const send = await prepare();
+  const reserve = (input: unknown = send, org = 202, executor = { query }) => tx(() => reserveContactDelivery(executor, org, actor, input, now));
+  await assert.rejects(reserve({ ...send, consentConfirmed: false }), /CONTACT_INVALID_INPUT/);
+  await assert.rejects(reserve({ ...send, expectedVersion: 0 }), /CONTACT_INVALID_INPUT/);
+  await assert.rejects(reserve({ ...send, approvalId: randomUUID() }), /CONTACT_APPROVAL_REQUIRED/);
+  templateChanged = true; await assert.rejects(reserve(), /CONTACT_TEMPLATE_CHANGED/); templateChanged = false;
+  await assert.rejects(reserve(send, 202, failing), /AUDIT_FAILURE/);
+  assert.equal((await query('SELECT count(*)::int AS n FROM platform_contact_deliveries')).rows[0].n, 0);
+  const reserved = await reserve(); assert.equal(reserved.duplicate, false);
+  assert.equal((await reserve()).duplicate, true);
+  assert.equal((await reserve({ ...send, requestId: randomUUID() })).duplicate, true, 'Fresh retry UUID cannot resend the same approval');
+  await assert.rejects(reserve(send, 201), /CONTACT_REQUEST_CONFLICT/);
+  assert.equal(providerCalls, 0, 'Reservation never sends before commit');
+  const result = await sendWhatsAppTemplate(reserved.delivery.recipient, template, reserved.delivery.id);
+  assert.equal(result.status, 'accepted'); assert.equal(providerCalls, 1);
+  await tx(() => finishContactDelivery({ query }, reserved.delivery.id, result, now));
+  assert.equal((await detail(202)).deliveries[0].status, 'accepted');
+  assert.equal((await detail(202)).tracking.lastContactAt, null, 'Provider acceptance is not an actual conversation');
+  await sendContactDelivery(async () => ({ query, release() {} }), 202, actor, send);
+  assert.equal(providerCalls, 1, 'Route retry returns the reservation without network access');
+  const notification = (status: string, recipient = '237600000000', id = reserved.delivery.id) => ({ object: 'whatsapp_business_account', entry: [{ id: '222', changes: [{ field: 'messages', value: { metadata: { phone_number_id: '111' }, statuses: [{ id: 'wamid.synthetic', recipient_id: recipient, status, biz_opaque_callback_data: id }] } }] }] });
+  const raw = Buffer.from(JSON.stringify(notification('delivered')));
+  const signature = 'sha256=' + createHmac('sha256', process.env.META_APP_SECRET!).update(raw).digest('hex');
+  assert.equal(validWhatsAppSignature(raw, signature), true);
+  assert.equal(validWhatsAppSignature(Buffer.concat([raw, Buffer.from(' ')]), signature), false);
+  assert.equal(validWhatsAppSignature(raw, 'sha256=' + '0'.repeat(64)), false);
+  await tx(() => applyWhatsAppStatuses({ query }, notification('delivered', '237699999999'), now));
+  assert.equal((await detail(202)).deliveries[0].status, 'accepted', 'Wrong recipient cannot alter a delivery');
+  await tx(() => applyWhatsAppStatuses({ query }, notification('read'), now));
+  const historyAfterRead = (await detail(202)).history.total;
+  await tx(() => applyWhatsAppStatuses({ query }, notification('read'), now));
+  await tx(() => applyWhatsAppStatuses({ query }, notification('sent'), now));
+  await tx(() => applyWhatsAppStatuses({ query }, notification('failed'), now));
+  assert.equal((await detail(202)).deliveries[0].status, 'read', 'Out-of-order callbacks cannot regress delivered/read');
+  assert.equal((await detail(202)).history.total, historyAfterRead, 'Duplicate callbacks do not duplicate history');
+  const ambiguous = await prepare(); await reserve(ambiguous);
+  const unknown = await sendWhatsAppTemplate('+237600000000', template, ambiguous.requestId, async () => { throw Error('timeout'); });
+  assert.equal(unknown.status, 'unknown');
+  await tx(() => finishContactDelivery({ query }, ambiguous.requestId, unknown, now));
+  const afterAmbiguous = await prepare();
+  await assert.rejects(reserve(afterAmbiguous), /CONTACT_DELIVERY_UNRESOLVED/);
+  const recovered = notification('delivered', '237600000000', ambiguous.requestId);
+  recovered.entry[0].changes[0].value.statuses[0].id = 'wamid.recovered';
+  await tx(() => applyWhatsAppStatuses({ query }, recovered, now));
+  assert.equal((await detail(202)).deliveries.find(d => d.id === ambiguous.requestId)?.status, 'delivered', 'Callback recovers uncertain transport by opaque reservation ID');
+  await write(await command({ action: 'plan', status: 'do_not_contact', nextAction: '', nextActionDate: null, note: 'Synthetic explicit refusal' }, 202), 202);
+  await assert.rejects(reserve({ ...afterAmbiguous, expectedVersion: (await detail(202)).tracking.version }), /CONTACT_APPROVAL_BLOCKED/);
+  await write(await command({ action: 'plan', status: 'open', nextAction: '', nextActionDate: null, note: 'Synthetic test reset' }, 202), 202);
+  const beforePhoneChange = await prepare();
+  await query("UPDATE users SET phone='+237699999999' WHERE id='owner-202'");
+  await assert.rejects(reserve(beforePhoneChange), /CONTACT_CONTEXT_CHANGED/);
+  await query("UPDATE users SET phone='+237600000000' WHERE id='owner-202'");
+  const failureOnly = await reserve(beforePhoneChange);
+  const failureNotification = notification('failed', '237600000000', failureOnly.delivery.id);
+  const failureStatus: any = failureNotification.entry[0].changes[0].value.statuses[0];
+  failureStatus.id = 'wamid.failed'; delete failureStatus.recipient_id;
+  await tx(() => applyWhatsAppStatuses({ query }, failureNotification, now));
+  assert.equal((await detail(202)).deliveries.find(d => d.id === failureOnly.delivery.id)?.status, 'failed', 'Signed failure correlates even without recipient_id');
+  const rejected = await sendWhatsAppTemplate('+237600000000', template, randomUUID(), async () => new Response(JSON.stringify({ error: { code: 131030, message: 'private provider details' } }), { status: 400 }));
+  assert.deepEqual(rejected, { status: 'failed', providerId: null, errorCode: 'META_131030' });
+  assert.equal((await sendWhatsAppTemplate('+237600000000', template, randomUUID(), async () => new Response('{}', { status: 502 }))).status, 'unknown');
+  assert.deepEqual(await businessSnapshot(), before, 'Sending only affects platform relationship records');
+  globalThis.fetch = async () => { throw Error('NETWORK_FORBIDDEN'); };
   // A new order invalidates an approved message and changes the proposal.
   await database.insert(schema.customers).values({ id: 1, name: 'Synthetic customer', phone: '000', address: 'Synthetic' });
   await database.insert(schema.orders).values({ customerId: 1, siteId: 201, createdAt: new Date('2026-11-17T21:00:00Z') });
@@ -118,14 +217,16 @@ try {
   const page2 = await platformContactDetail({ query }, 201, 20, now);
   assert.ok(page2.history.total > 20); assert.ok(page2.history.items.length > 0, 'History remains accessible after page one');
   for (const session of [{}, { userId: 'owner-201' }, { userId: 'admin' }, { userId: 'admin', platformAdminVerifiedAt: Date.now() - 31 * 60000 }]) {
-    for (const path of ['GET /api/platform-admin/contacts', 'GET /api/platform-admin/contacts/:organisationId', 'POST /api/platform-admin/contacts/:organisationId'])
+    for (const path of ['GET /api/platform-admin/contacts', 'GET /api/platform-admin/contacts/whatsapp', 'GET /api/platform-admin/contacts/:organisationId', 'POST /api/platform-admin/contacts/:organisationId', 'POST /api/platform-admin/contacts/:organisationId/send'])
       assert.ok([401, 403].includes((await route(path, { session })).code));
   }
   assert.equal((await route('POST /api/platform-admin/contacts/:organisationId', { get: (key: string) => key === 'host' ? 'superadmin.example.invalid' : 'https://evil.example.invalid' })).code, 403);
   assert.equal((await route('POST /api/platform-admin/contacts/:organisationId', { get: () => undefined })).code, 403);
+  assert.equal((await route('POST /api/platform-admin/contacts/:organisationId/send', { get: () => undefined })).code, 403);
+  assert.equal((await route('POST /api/webhooks/platform-whatsapp', { rawBody: Buffer.from('{}') })).code, 403);
   const get = await route('GET /api/platform-admin/contacts'); assert.equal(get.code, 200); assert.equal(get.headers['Cache-Control'], 'no-store');
   const routeWrite = await route('POST /api/platform-admin/contacts/:organisationId', { body: { requestId: randomUUID(), expectedVersion: (await detail()).tracking.version, action: 'plan', status: 'open', nextAction: '', nextActionDate: null, note: 'Route transaction tested' } });
   assert.equal(routeWrite.code, 200, JSON.stringify(routeWrite.body));
   assert.equal(process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED, 'true');
-  console.log('PASS platform contacts: read-only projections, repeatable additive migration, contact history, Douala dates, continuing follow-up, proposals, approval without delivery, fresh context, consent suppression, idempotency, stale edits, audit rollback, MFA/origin gates and unchanged business data. No network or production access.');
+  console.log('PASS platform contacts: read-only projections, repeatable additive migration, contact history, Douala dates, continuing follow-up, proposals, approval without delivery, fresh context, consent suppression, durable WhatsApp attempts, immutable approved templates, duplicate/ambiguous sends, signed and out-of-order status callbacks, idempotency, stale edits, audit rollback, MFA/origin gates and unchanged business data. No network or production access.');
 } finally { await pg.close(); await pool.end(); }
