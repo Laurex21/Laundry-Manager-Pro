@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { WhatsAppCatalog, WhatsAppTemplate, DeliveryStatus } from '../../shared/platform-contact';
+import type { WhatsAppCatalog, WhatsAppTemplate, WhatsAppSender, DeliveryStatus } from '../../shared/platform-contact';
 import { whatsappTemplate } from '../../shared/platform-contact';
 import { renderWhatsAppTemplate, templateParameterCount } from '../../shared/whatsapp-template';
 
@@ -7,13 +7,15 @@ import { renderWhatsAppTemplate, templateParameterCount } from '../../shared/wha
 export function whatsappConfiguration() {
   const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim() ?? '';
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() ?? '';
+  const extraIds = process.env.WHATSAPP_ADDITIONAL_PHONE_NUMBER_IDS?.trim() ?? '';
+  const phoneIds = [...new Set([phoneId, ...(extraIds ? extraIds.split(',').map(id => id.trim()) : [])])];
   const accountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() ?? '';
   const secret = process.env.META_APP_SECRET?.trim() ?? '';
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim() ?? '';
   const version = process.env.WHATSAPP_GRAPH_VERSION?.trim() || 'v27.0';
-  const configured = !!token && /^\d{1,30}$/.test(phoneId) && /^\d{1,30}$/.test(accountId)
+  const configured = !!token && phoneIds.length <= 10 && phoneIds.every(id => /^\d{1,30}$/.test(id)) && /^\d{1,30}$/.test(accountId)
     && !!secret && verifyToken.length >= 32 && /^v\d+\.0$/.test(version);
-  return { token, phoneId, accountId, secret, verifyToken, version, configured,
+  return { token, phoneId, phoneIds, accountId, secret, verifyToken, version, configured,
     enabled: configured && process.env.PLATFORM_CONTACT_WHATSAPP_ENABLED === 'true' };
 }
 async function graphGet(path: string, request = fetch) {
@@ -38,7 +40,23 @@ export function supportedTemplate(raw: any): Omit<WhatsAppTemplate, 'parameters'
 }
 export async function whatsappCatalog(request = fetch): Promise<WhatsAppCatalog> {
   const config = whatsappConfiguration();
-  if (!config.configured) return { configured: false, enabled: false, templates: [] };
+  if (!config.configured) return { configured: false, enabled: false, senders: [], templates: [] };
+  const senders: WhatsAppSender[] = [];
+  let phoneAfter = '';
+  for (let page = 0; page < 10; page++) {
+    const params = new URLSearchParams({ fields: 'id,display_phone_number,verified_name,status', limit: '100', ...(phoneAfter ? { after: phoneAfter } : {}) });
+    const result = await graphGet(`${config.accountId}/phone_numbers?${params}`, request);
+    if (!Array.isArray(result.data)) throw Error('CONTACT_PROVIDER_UNAVAILABLE');
+    for (const raw of result.data) {
+      if (!config.phoneIds.includes(raw.id) || raw.status !== 'CONNECTED') continue;
+      if (typeof raw.display_phone_number !== 'string' || typeof raw.verified_name !== 'string') throw Error('CONTACT_PROVIDER_UNAVAILABLE');
+      const number = raw.display_phone_number.trim();
+      senders.push({ id: raw.id, accountId: config.accountId, phoneNumber: whatsappRecipient(number.startsWith('+') ? number : `+${number}`), name: raw.verified_name.slice(0, 512) });
+    }
+    if (!result.paging?.next || !result.paging?.cursors?.after) break;
+    phoneAfter = String(result.paging.cursors.after);
+    if (page === 9) throw Error('CONTACT_TEMPLATE_CATALOG_TOO_LARGE');
+  }
   const templates: WhatsAppCatalog['templates'] = [];
   let after = '';
   for (let page = 0; page < 10; page++) {
@@ -50,14 +68,19 @@ export async function whatsappCatalog(request = fetch): Promise<WhatsAppCatalog>
     after = String(result.paging.cursors.after);
     if (page === 9) throw Error('CONTACT_TEMPLATE_CATALOG_TOO_LARGE');
   }
-  return { configured: true, enabled: config.enabled, templates };
+  return { configured: true, enabled: config.enabled && senders.length > 0, senders, templates };
 }
-export async function verifyWhatsAppTemplate(template: WhatsAppTemplate, text: string, request = fetch) {
+export async function verifyWhatsAppTemplate(template: WhatsAppTemplate, text: string, senderId: string | undefined, request = fetch) {
   // The catalog establishes ownership by the configured business account, not just knowledge of a template ID.
-  const actual = (await whatsappCatalog(request)).templates.find(t => t.id === template.id);
+  if (!senderId) throw Error('CONTACT_SENDER_REQUIRED');
+  const catalog = await whatsappCatalog(request);
+  const sender = catalog.senders.find(s => s.id === senderId);
+  if (!sender) throw Error('CONTACT_SENDER_UNAVAILABLE');
+  const actual = catalog.templates.find(t => t.id === template.id);
   if (!actual || (['id','name','language','body','footer'] as const).some(k => actual[k] !== template[k]))
     throw Error('CONTACT_TEMPLATE_CHANGED');
   if (renderWhatsAppTemplate(template) !== text) throw Error('CONTACT_TEMPLATE_INVALID');
+  return sender;
 }
 export function whatsappRecipient(value: string | null | undefined): string {
   const compact = (value ?? '').replace(/[\s().-]/g, '').replace(/^00/, '+');
@@ -66,11 +89,13 @@ export function whatsappRecipient(value: string | null | undefined): string {
   return compact;
 }
 export type WhatsAppResult = { status: DeliveryStatus; providerId: string | null; errorCode: string | null };
-export async function sendWhatsAppTemplate(recipient: string, template: WhatsAppTemplate, deliveryId: string, request = fetch): Promise<WhatsAppResult> {
+export async function sendWhatsAppTemplate(recipient: string, template: WhatsAppTemplate, deliveryId: string, sender: WhatsAppSender, request = fetch): Promise<WhatsAppResult> {
   const config = whatsappConfiguration();
   if (!config.enabled) return { status: 'failed', providerId: null, errorCode: 'WHATSAPP_DISABLED' };
+  if (sender.accountId !== config.accountId || !config.phoneIds.includes(sender.id))
+    return { status: 'failed', providerId: null, errorCode: 'CONTACT_SENDER_UNAVAILABLE' };
   try {
-    const response = await request(`https://graph.facebook.com/${config.version}/${config.phoneId}/messages`, {
+    const response = await request(`https://graph.facebook.com/${config.version}/${sender.id}/messages`, {
       method: 'POST', headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(12000), redirect: 'error', body: JSON.stringify({
         messaging_product: 'whatsapp', recipient_type: 'individual', to: recipient.replace(/^\+/, ''), type: 'template',

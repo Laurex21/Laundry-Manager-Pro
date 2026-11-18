@@ -32,6 +32,9 @@ export function contactError(code: string, t: Copy) {
     CONTACT_TEMPLATE_REQUIRED: ['Choisis un modèle WhatsApp approuvé, puis enregistre et valide le message.', 'Select an approved WhatsApp template, then save and approve the message.'],
     CONTACT_TEMPLATE_CHANGED: ['Le modèle WhatsApp a changé ou n’est plus approuvé. Recharge les modèles et revois le message.', 'The WhatsApp template changed or is no longer approved. Reload templates and review the message.'],
     CONTACT_TEMPLATE_INVALID: ['Vérifie les champs personnalisés du modèle.', 'Check the template’s personalised fields.'],
+    CONTACT_SENDER_REQUIRED: ['Choisis un numéro expéditeur, puis enregistre et valide le message.', 'Choose a sender number, then save and approve the message.'],
+    CONTACT_SENDER_UNAVAILABLE: ['Ce numéro expéditeur n’est plus disponible. Actualise la connexion et choisis un numéro connecté.', 'This sender number is unavailable. Refresh the connection and choose a connected number.'],
+    CONTACT_SENDER_CHANGED: ['Le numéro expéditeur a changé chez WhatsApp. Enregistre et valide à nouveau le message.', 'The sender number changed in WhatsApp. Save and approve the message again.'],
     CONTACT_PROVIDER_UNAVAILABLE: ['La connexion à WhatsApp est indisponible. Réessaie plus tard.', 'The WhatsApp connection is unavailable. Try again later.'],
     CONTACT_RECIPIENT_INVALID: ['Le numéro doit contenir un indicatif international, par exemple +237…', 'The number must contain an international country code, for example +237…'],
     CONTACT_APPROVAL_REQUIRED: ['Enregistre puis valide ce message avant de l’envoyer.', 'Save and approve this message before sending.'],
@@ -143,8 +146,11 @@ export function ContactEditor({ detail: d, save, pending, historyPage, tab, onTa
   const [language, setLanguage] = useState<'fr' | 'en'>(d.tracking.message?.language ?? uiLanguage), [messageChannel, setMessageChannel] = useState<MessageChannel>(d.tracking.message?.channel ?? 'whatsapp');
   const [text, setText] = useState(d.tracking.message?.text ?? d.suggestion[uiLanguage]), [context, setContext] = useState(d.tracking.message?.contextFingerprint ?? d.contextFingerprint), [copyStatus, setCopyStatus] = useState('');
   const [template, setTemplate] = useState<WhatsAppTemplate | null>(d.tracking.message?.whatsappTemplate ?? null), [consent, setConsent] = useState(false);
+  const [senderId, setSenderId] = useState(d.tracking.message?.whatsappSender?.id ?? '');
   const message = d.tracking.message;
-  const edited = !message || text.trim() !== message.text || language !== message.language || messageChannel !== message.channel || context !== message.contextFingerprint || JSON.stringify(template) !== JSON.stringify(message.whatsappTemplate ?? null);
+  const selectedSender = catalog?.senders.find(s => s.id === senderId);
+  const approvedSenderAvailable = !!message?.whatsappSender && catalog?.senders.some(s => s.id === message.whatsappSender!.id && s.accountId === message.whatsappSender!.accountId && s.phoneNumber === message.whatsappSender!.phoneNumber && s.name === message.whatsappSender!.name);
+  const edited = !message || text.trim() !== message.text || language !== message.language || messageChannel !== message.channel || context !== message.contextFingerprint || JSON.stringify(template) !== JSON.stringify(message.whatsappTemplate ?? null) || !!template && (senderId !== message.whatsappSender?.id || !!selectedSender && !approvedSenderAvailable);
   const noContact = ['closed', 'do_not_contact'].includes(status);
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -187,6 +193,12 @@ export function ContactEditor({ detail: d, save, pending, historyPage, tab, onTa
           <p className="font-semibold">{catalog?.configured ? catalog.enabled ? t('WhatsApp connecté', 'WhatsApp connected') : t('WhatsApp connecté · envoi désactivé', 'WhatsApp connected · sending disabled') : catalogError ? t('Connexion WhatsApp indisponible', 'WhatsApp connection unavailable') : catalog ? t('WhatsApp · à connecter', 'WhatsApp · connect your account') : t('Vérification de WhatsApp…', 'Checking WhatsApp…')}</p>
           <p>{t('Pour une relance depuis le superadmin, choisis un modèle approuvé par WhatsApp. Personnalise ses champs puis vérifie le texte complet.', 'To send a follow-up from Super Admin, select a WhatsApp-approved template. Personalise its fields, then review the complete text.')}</p>
           {!catalog?.configured && <p>{t('Le numéro professionnel doit être associé à WhatsApp Business Platform. Les brouillons et la copie manuelle restent disponibles.', 'Connect the business number to WhatsApp Business Platform. Drafts and manual copying remain available.')}</p>}
+          {catalog?.configured && <label className="block">{t('Numéro expéditeur', 'Sender number')}<select className={inputClass} value={senderId} onChange={e => { setSenderId(e.target.value); setConsent(false); }}>
+            <option value="">{t('Choisir un numéro connecté', 'Choose a connected number')}</option>
+            {senderId && !selectedSender && <option value={senderId} disabled>{message?.whatsappSender?.phoneNumber || senderId} · {t('indisponible', 'unavailable')}</option>}
+            {catalog.senders.map(s => <option key={s.id} value={s.id}>{s.name} · {s.phoneNumber}</option>)}
+          </select></label>}
+          {catalog?.configured && !catalog.senders.length && <p>{t('Aucun numéro autorisé n’est connecté à WhatsApp.', 'No authorised number is connected to WhatsApp.')}</p>}
           {catalog?.configured && <label className="block">{t('Modèle WhatsApp', 'WhatsApp template')}<select className={inputClass} value={template?.id ?? ''} onChange={e => {
             const selected = catalog.templates.find(v => v.id === e.target.value);
             if (!selected) { setTemplate(null); return; }
@@ -202,17 +214,19 @@ export function ContactEditor({ detail: d, save, pending, historyPage, tab, onTa
         <Button variant="outline" disabled={pending} onClick={() => { setTemplate(null); setText(d.suggestion[language]); setContext(d.contextFingerprint); }}>{t('Utiliser la proposition actuelle', 'Use the current suggestion')}</Button>
         <label className="block text-sm">{t('Texte à valider', 'Text to approve')}<textarea readOnly={!!template} className={inputClass} rows={10} minLength={10} maxLength={3000} value={text} onChange={e => setText(e.target.value)} /></label>
         {context !== d.contextFingerprint && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={false} onChange={() => setContext(d.contextFingerprint)} />{t('J’ai revu ce texte selon la situation actuelle.', 'I reviewed this text against the current situation.')}</label>}
-        <div className="flex flex-wrap gap-2"><Button disabled={pending || text.trim().length < 10 || text.trim().length > 3000 || context !== d.contextFingerprint || !edited || !!template?.parameters.some(v => !v.trim())} onClick={() => save({ action: 'save_message', text, channel: messageChannel, language, contextFingerprint: context, ...(template ? { whatsappTemplate: template } : {}) })}>{t('Enregistrer le brouillon', 'Save draft')}</Button>
+        <div className="flex flex-wrap gap-2"><Button disabled={pending || text.trim().length < 10 || text.trim().length > 3000 || context !== d.contextFingerprint || !edited || !!template && (!selectedSender || template.parameters.some(v => !v.trim()))} onClick={() => save({ action: 'save_message', text, channel: messageChannel, language, contextFingerprint: context, ...(template ? { whatsappTemplate: template, whatsappSenderId: senderId } : {}) })}>{t('Enregistrer le brouillon', 'Save draft')}</Button>
           {message?.status === 'draft' && <Button variant="outline" disabled={pending || edited || d.messageStale || d.approvalBlocked} onClick={() => save({ action: 'approve_message' })}>{t('Valider le message', 'Approve message')}</Button>}
           {message?.status === 'approved' && <Button variant="outline" disabled={pending || edited || d.messageStale || d.approvalBlocked} onClick={copyApproved}>{t('Copier le message validé', 'Copy approved message')}</Button>}
           {message && <Button variant="ghost" disabled={pending} onClick={() => save({ action: 'cancel_message' })}>{t('Annuler ce message', 'Cancel this message')}</Button>}</div>
-        {message?.status === 'approved' && <p className="text-sm text-cyan-800">{t('Validé par', 'Approved by')} {message.approvedBy} · {date(message.approvedAt, true)} · {d.messageStale || d.approvalBlocked ? t('Validation antérieure · à revoir', 'Previous approval · review required') : message.deliveryId ? t('Envoi enregistré', 'Send recorded') : t('Prêt pour la prochaine étape', 'Ready for the next step')}</p>}
+        {message?.status === 'approved' && <p className="text-sm text-cyan-800">{t('Validé par', 'Approved by')} {message.approvedBy} · {date(message.approvedAt, true)} · {edited ? t('Modifications à enregistrer et valider', 'Save and approve the changes') : d.messageStale || d.approvalBlocked ? t('Validation antérieure · à revoir', 'Previous approval · review required') : message.deliveryId ? t('Envoi enregistré', 'Send recorded') : t('Prêt pour la prochaine étape', 'Ready for the next step')}</p>}
         {message?.status === 'approved' && message.channel === 'whatsapp' && !message.deliveryId && <div className="space-y-3 rounded-lg border border-cyan-300 p-4">
           <h4 className="font-semibold">{t('Confirmer l’envoi WhatsApp', 'Confirm WhatsApp sending')}</h4>
+          <p className="break-words text-sm">{t('Expéditeur validé', 'Approved sender')} : {message.whatsappSender ? `${message.whatsappSender.name} · ${message.whatsappSender.phoneNumber}` : '—'}</p>
           <p className="break-words text-sm">{t('Destinataire', 'Recipient')} : {d.account.owner.name} · {d.account.owner.phone || '—'}</p>
           {!message.whatsappTemplate && <p className="text-sm text-amber-900">{contactError('CONTACT_TEMPLATE_REQUIRED', t)}</p>}
+          {message.whatsappTemplate && !approvedSenderAvailable && <p className="text-sm text-amber-900">{contactError(message.whatsappSender ? 'CONTACT_SENDER_UNAVAILABLE' : 'CONTACT_SENDER_REQUIRED', t)}</p>}
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />{t('Ce responsable a accepté de recevoir nos messages sur WhatsApp.', 'This owner agreed to receive our WhatsApp messages.')}</label>
-          <Button disabled={pending || edited || d.messageStale || d.approvalBlocked || !consent || !catalog?.enabled || !message.whatsappTemplate || !message.approvalId || !send} onClick={send}>{t('Envoyer le WhatsApp validé', 'Send approved WhatsApp')}</Button>
+          <Button disabled={pending || edited || d.messageStale || d.approvalBlocked || !consent || !catalog?.enabled || !approvedSenderAvailable || !message.whatsappTemplate || !message.approvalId || !send} onClick={send}>{t('Envoyer le WhatsApp validé', 'Send approved WhatsApp')}</Button>
         </div>}
         {!!d.deliveries?.length && <DeliveryList deliveries={d.deliveries.slice(0, 1)} />}
         {copyStatus && <p role="status" className="text-sm">{copyStatus}</p>}
@@ -231,7 +245,7 @@ function HistoryEvent({ event }: { event: ContactHistoryEvent }) {
   return <article className="space-y-2 border-t pt-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><p className="font-semibold">{label(data.action, t)}</p><p className="text-xs text-slate-500">{date(event.createdAt, true)} · {event.actorName}</p></div>
     {data.action === 'contact' && <p>{label(data.channel, t)} · {label(data.outcome, t)} · {date(data.contactAt, true)}</p>}
     {(data.action === 'contact' || data.action === 'plan') && <><p className="whitespace-pre-wrap break-words">{data.note}</p><p className="text-xs text-slate-600">{label(data.status, t)} · {data.nextAction ? `${date(data.nextActionDate)} · ${data.nextAction}` : t('Aucune prochaine action', 'No next action')}</p></>}
-    {data.action === 'delivery' && <div className="space-y-1"><p>{deliveryLabel(data.status, t)} · {data.recipient}</p>{data.errorCode && <p className="text-xs">{t('Référence de l’erreur', 'Error reference')} : {data.errorCode}</p>}{data.text && <details><summary>{t('Voir le texte prévu pour l’envoi', 'View the text prepared for sending')}</summary><p className="whitespace-pre-wrap break-words">{data.text}</p></details>}</div>}
+    {data.action === 'delivery' && <div className="space-y-1"><p>{deliveryLabel(data.status, t)} · {data.recipient}</p>{data.sender && <p>{t('Expéditeur', 'Sender')} : {data.sender.name} · {data.sender.phoneNumber}</p>}{data.errorCode && <p className="text-xs">{t('Référence de l’erreur', 'Error reference')} : {data.errorCode}</p>}{data.text && <details><summary>{t('Voir le texte prévu pour l’envoi', 'View the text prepared for sending')}</summary><p className="whitespace-pre-wrap break-words">{data.text}</p></details>}</div>}
     {data.action === 'save_message' && <details><summary className="cursor-pointer text-cyan-800">{t('Voir le texte enregistré', 'View saved text')} · {label(data.channel, t)}</summary><p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3">{data.text}</p></details>}
   </article>;
 }
@@ -243,6 +257,7 @@ function DeliveryList({ deliveries }: { deliveries: ContactDetail['deliveries'] 
   const { t, date } = useCopy();
   return <div className="space-y-3">{deliveries.map(item => <article key={item.id} className="space-y-2 rounded-lg border bg-slate-50 p-3 text-sm">
     <p className="font-semibold">WhatsApp · {deliveryLabel(item.status, t)}</p>
+    {item.sender && <p className="break-words">{t('Expéditeur', 'Sender')} : {item.sender.name} · {item.sender.phoneNumber}</p>}
     <p className="break-words">{item.recipient} · {date(item.createdAt, true)} · {item.actorName}</p>
     <p className="text-xs text-slate-600">{t('Statut mis à jour', 'Status updated')} : {date(item.updatedAt, true)}</p>
     {item.status === 'unknown' && <p className="text-amber-900">{t('Le fournisseur n’a pas confirmé le résultat. Aucun nouvel essai automatique : vérifie cet envoi avant de relancer.', 'The provider has not confirmed the outcome. No automatic retry: check this send before following up.')}</p>}

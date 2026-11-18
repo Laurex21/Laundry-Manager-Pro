@@ -79,7 +79,7 @@ export async function platformContactDetail(db: SaasExecutor, organisationId: nu
   const events = await db.query('SELECT id,actor_name,data,created_at FROM platform_contact_events WHERE organisation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 20 OFFSET $2', [organisationId, offset]);
   const total = Number((await db.query('SELECT count(*)::int AS total FROM platform_contact_events WHERE organisation_id=$1', [organisationId])).rows[0].total);
   const deliveries = (await db.query('SELECT * FROM platform_contact_deliveries WHERE organisation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 20', [organisationId])).rows.map(r => ({
-    id: r.id, approvalId: r.approval_id, recipient: r.recipient, text: r.message.text, actorName: r.actor_name,
+    id: r.id, approvalId: r.approval_id, recipient: r.recipient, text: r.message.text, actorName: r.actor_name, sender: r.message.whatsappSender,
     status: r.status === 'dispatching' && now.getTime() - new Date(r.created_at).getTime() > 60000 ? 'unknown' : r.status,
     providerId: r.provider_id, errorCode: r.error_code, createdAt: iso(r.created_at)!, updatedAt: iso(r.updated_at)!,
   }));
@@ -114,14 +114,16 @@ export async function writePlatformContact(db: SaasExecutor, organisationId: num
     state.status = command.status; state.nextAction = command.nextAction; state.nextActionDate = command.nextActionDate;
   } else if (command.action === 'save_message') {
     if (command.contextFingerprint !== current.contextFingerprint) throw new PlatformContactError('CONTACT_CONTEXT_CHANGED');
+    let sender: ContactMessage['whatsappSender'];
+    if (command.whatsappSenderId && !command.whatsappTemplate) throw new PlatformContactError('CONTACT_TEMPLATE_REQUIRED', 400);
     if (command.whatsappTemplate) {
       if (command.channel !== 'whatsapp' || !command.whatsappTemplate.language.startsWith(command.language)) throw new PlatformContactError('CONTACT_TEMPLATE_INVALID', 400);
-      try { await verifyWhatsAppTemplate(command.whatsappTemplate, command.text); }
+      try { sender = await verifyWhatsAppTemplate(command.whatsappTemplate, command.text, command.whatsappSenderId); }
       catch (error) { throw new PlatformContactError((error as Error).message.startsWith('CONTACT_') ? (error as Error).message : 'CONTACT_PROVIDER_UNAVAILABLE', 400); }
     }
     state.message = { text: command.text, channel: command.channel, language: command.language, reason: current.account.followUp.reason,
       contextFingerprint: current.contextFingerprint, status: 'draft', approvedAt: null, approvedBy: null,
-      ...(command.whatsappTemplate ? { whatsappTemplate: command.whatsappTemplate } : {}) } satisfies ContactMessage;
+      ...(command.whatsappTemplate ? { whatsappTemplate: command.whatsappTemplate, whatsappSender: sender } : {}) } satisfies ContactMessage;
   } else if (command.action === 'approve_message') {
     if (current.approvalBlocked) throw new PlatformContactError('CONTACT_APPROVAL_BLOCKED');
     if (!state.message) throw new PlatformContactError('CONTACT_MESSAGE_REQUIRED', 400);
