@@ -9,7 +9,7 @@ import * as schema from '../../shared/schema';
 import { businessLaunchTrial } from '../../shared/saas-business-launch';
 import { platformContactDetail, platformContactDirectory, writePlatformContact } from './platform-contacts';
 import { reserveContactDelivery, finishContactDelivery, applyWhatsAppStatuses, sendContactDelivery } from './platform-contact-delivery';
-import { supportedTemplate, sendWhatsAppTemplate, validWhatsAppSignature, whatsappRecipient } from './platform-whatsapp';
+import { supportedTemplate, sendWhatsAppTemplate, validWhatsAppSignature, whatsappRecipient, whatsappCatalog, whatsappConfiguration } from './platform-whatsapp';
 import { renderWhatsAppTemplate } from '../../shared/whatsapp-template';
 process.env.DATABASE_URL = 'postgresql://unused:unused@127.0.0.1:1/platform_contacts_isolated';
 process.env.NODE_ENV = 'test'; process.env.SAAS_BUSINESS_LAUNCH_ENABLED = 'true';
@@ -100,7 +100,7 @@ try {
   assert.equal((await detail()).tracking.version, version); assert.deepEqual((await query('SELECT * FROM platform_contact_events ORDER BY id')).rows, events);
   assert.deepEqual(await businessSnapshot(), before, 'Contact workflow never changes business data');
   // Synthetic provider only: a real API call is impossible in this test process.
-  Object.assign(process.env, { WHATSAPP_ACCESS_TOKEN: 'synthetic-token', WHATSAPP_PHONE_NUMBER_ID: '111', WHATSAPP_BUSINESS_ACCOUNT_ID: '222', META_APP_SECRET: 'synthetic-secret', WHATSAPP_WEBHOOK_VERIFY_TOKEN: 'test-only-verification-token-32-characters', PLATFORM_CONTACT_WHATSAPP_ENABLED: 'true' });
+  Object.assign(process.env, { WHATSAPP_ACCESS_TOKEN: 'synthetic-token', WHATSAPP_PHONE_NUMBER_ID: '111', WHATSAPP_ADDITIONAL_PHONE_NUMBER_IDS: '444', WHATSAPP_BUSINESS_ACCOUNT_ID: '222', META_APP_SECRET: 'synthetic-secret', WHATSAPP_WEBHOOK_VERIFY_TOKEN: 'test-only-verification-token-32-characters', PLATFORM_CONTACT_WHATSAPP_ENABLED: 'true' });
   const rawTemplate = { id: '333', name: 'synthetic_support', language: 'fr', status: 'APPROVED', category: 'UTILITY', components: [{ type: 'BODY', text: 'Bonjour {{1}}, accompagnement de {{2}}.' }, { type: 'FOOTER', text: 'XpressPro' }] };
   const template = { ...supportedTemplate(rawTemplate)!, parameters: ['Fictitious', 'Pressing test'] };
   assert.ok(supportedTemplate(rawTemplate));
@@ -109,28 +109,47 @@ try {
   assert.equal(supportedTemplate({ ...rawTemplate, components: [{ type: 'BODY', text: 'Missing {{2}}' }] }), null);
   assert.equal(whatsappRecipient('00237 600-000-000'), '+237600000000');
   assert.throws(() => whatsappRecipient('600000000'), /CONTACT_RECIPIENT_INVALID/);
-  let providerCalls = 0, templateChanged = false;
+  const sender = { id: '111', accountId: '222', phoneNumber: '+237600000001', name: 'Synthetic sender' };
+  const secondSender = { id: '444', accountId: '222', phoneNumber: '+237600000002', name: 'Synthetic second sender' };
+  let providerCalls = 0, templateChanged = false, senderConnected = true, senderNumber = sender.phoneNumber;
+  const sentFrom: string[] = [];
   const fakeFetch: typeof fetch = async (url, options) => {
-    assert.match(String(url), /^https:\/\/graph\.facebook\.com\/v27\.0\/(111\/messages|222\/message_templates\?)/);
+    assert.match(String(url), /^https:\/\/graph\.facebook\.com\/v27\.0\/((111|444)\/messages|222\/(message_templates|phone_numbers)\?)/);
     if (options?.method === 'POST') {
-      providerCalls++;
+      providerCalls++; sentFrom.push(new URL(String(url)).pathname.split('/')[2]);
       const payload = JSON.parse(String(options.body));
       assert.equal(payload.type, 'template'); assert.equal(payload.to, '237600000000');
       assert.equal(payload.template.components[0].parameters[0].text, 'Fictitious');
       assert.equal((await query('SELECT count(*)::int AS n FROM platform_contact_deliveries WHERE id=$1', [payload.biz_opaque_callback_data])).rows[0].n, 1, 'Durable reservation precedes network side effect');
       return new Response(JSON.stringify({ messages: [{ id: 'wamid.synthetic' }] }), { status: 200 });
     }
+    if (String(url).includes('/phone_numbers?')) return new Response(JSON.stringify({ data: [
+      { id: '111', display_phone_number: senderNumber, verified_name: sender.name, status: senderConnected ? 'CONNECTED' : 'DISCONNECTED' },
+      { id: '444', display_phone_number: secondSender.phoneNumber, verified_name: secondSender.name, status: 'CONNECTED' },
+      { id: '555', display_phone_number: '+237600000003', verified_name: 'Not authorised', status: 'CONNECTED' },
+    ] }), { status: 200 });
     return new Response(JSON.stringify({ data: [templateChanged ? { ...rawTemplate, status: 'PAUSED' } : rawTemplate] }), { status: 200 });
   };
   globalThis.fetch = fakeFetch;
   const tx = async <T>(fn: () => Promise<T>) => { await query('BEGIN'); try { const value = await fn(); await query('COMMIT'); return value; } catch (error) { await query('ROLLBACK'); throw error; } };
-  const prepare = async () => {
-    await write(await command({ action: 'save_message', channel: 'whatsapp', language: 'fr', text: renderWhatsAppTemplate(template), whatsappTemplate: template, contextFingerprint: (await detail(202)).contextFingerprint }, 202), 202);
+  assert.deepEqual((await whatsappCatalog()).senders, [sender, secondSender], 'Other account numbers are never automatically enabled');
+  process.env.WHATSAPP_ADDITIONAL_PHONE_NUMBER_IDS = '444,invalid';
+  assert.equal(whatsappConfiguration().configured, false, 'Invalid allowlist fails closed');
+  process.env.WHATSAPP_ADDITIONAL_PHONE_NUMBER_IDS = '444';
+  const prepare = async (senderId = '111') => {
+    await write(await command({ action: 'save_message', channel: 'whatsapp', language: 'fr', text: renderWhatsAppTemplate(template), whatsappTemplate: template, whatsappSenderId: senderId, contextFingerprint: (await detail(202)).contextFingerprint }, 202), 202);
     await write(await command({ action: 'approve_message' }, 202), 202);
     const d = await detail(202);
     return { requestId: randomUUID(), expectedVersion: d.tracking.version, approvalId: d.tracking.message!.approvalId!, consentConfirmed: true as const };
   };
+  await assert.rejects(prepare('555'), /CONTACT_SENDER_UNAVAILABLE/);
   const send = await prepare();
+  senderConnected = false;
+  await assert.rejects(tx(() => reserveContactDelivery({ query }, 202, actor, send, now)), /CONTACT_SENDER_UNAVAILABLE/);
+  senderConnected = true;
+  senderNumber = '+237600000099';
+  await assert.rejects(tx(() => reserveContactDelivery({ query }, 202, actor, send, now)), /CONTACT_SENDER_CHANGED/);
+  senderNumber = sender.phoneNumber;
   const reserve = (input: unknown = send, org = 202, executor = { query }) => tx(() => reserveContactDelivery(executor, org, actor, input, now));
   await assert.rejects(reserve({ ...send, consentConfirmed: false }), /CONTACT_INVALID_INPUT/);
   await assert.rejects(reserve({ ...send, expectedVersion: 0 }), /CONTACT_INVALID_INPUT/);
@@ -143,7 +162,7 @@ try {
   assert.equal((await reserve({ ...send, requestId: randomUUID() })).duplicate, true, 'Fresh retry UUID cannot resend the same approval');
   await assert.rejects(reserve(send, 201), /CONTACT_REQUEST_CONFLICT/);
   assert.equal(providerCalls, 0, 'Reservation never sends before commit');
-  const result = await sendWhatsAppTemplate(reserved.delivery.recipient, template, reserved.delivery.id);
+  const result = await sendWhatsAppTemplate(reserved.delivery.recipient, template, reserved.delivery.id, reserved.delivery.message.whatsappSender!);
   assert.equal(result.status, 'accepted'); assert.equal(providerCalls, 1);
   await tx(() => finishContactDelivery({ query }, reserved.delivery.id, result, now));
   assert.equal((await detail(202)).deliveries[0].status, 'accepted');
@@ -158,6 +177,9 @@ try {
   assert.equal(validWhatsAppSignature(raw, 'sha256=' + '0'.repeat(64)), false);
   await tx(() => applyWhatsAppStatuses({ query }, notification('delivered', '237699999999'), now));
   assert.equal((await detail(202)).deliveries[0].status, 'accepted', 'Wrong recipient cannot alter a delivery');
+  const wrongSender = notification('read'); wrongSender.entry[0].changes[0].value.metadata.phone_number_id = '444';
+  await tx(() => applyWhatsAppStatuses({ query }, wrongSender, now));
+  assert.equal((await detail(202)).deliveries[0].status, 'accepted', 'A second authorised sender cannot update another sender’s delivery');
   await tx(() => applyWhatsAppStatuses({ query }, notification('read'), now));
   const historyAfterRead = (await detail(202)).history.total;
   await tx(() => applyWhatsAppStatuses({ query }, notification('read'), now));
@@ -166,7 +188,7 @@ try {
   assert.equal((await detail(202)).deliveries[0].status, 'read', 'Out-of-order callbacks cannot regress delivered/read');
   assert.equal((await detail(202)).history.total, historyAfterRead, 'Duplicate callbacks do not duplicate history');
   const ambiguous = await prepare(); await reserve(ambiguous);
-  const unknown = await sendWhatsAppTemplate('+237600000000', template, ambiguous.requestId, async () => { throw Error('timeout'); });
+  const unknown = await sendWhatsAppTemplate('+237600000000', template, ambiguous.requestId, sender, async () => { throw Error('timeout'); });
   assert.equal(unknown.status, 'unknown');
   await tx(() => finishContactDelivery({ query }, ambiguous.requestId, unknown, now));
   const afterAmbiguous = await prepare();
@@ -188,9 +210,32 @@ try {
   failureStatus.id = 'wamid.failed'; delete failureStatus.recipient_id;
   await tx(() => applyWhatsAppStatuses({ query }, failureNotification, now));
   assert.equal((await detail(202)).deliveries.find(d => d.id === failureOnly.delivery.id)?.status, 'failed', 'Signed failure correlates even without recipient_id');
-  const rejected = await sendWhatsAppTemplate('+237600000000', template, randomUUID(), async () => new Response(JSON.stringify({ error: { code: 131030, message: 'private provider details' } }), { status: 400 }));
+  const rejected = await sendWhatsAppTemplate('+237600000000', template, randomUUID(), sender, async () => new Response(JSON.stringify({ error: { code: 131030, message: 'private provider details' } }), { status: 400 }));
   assert.deepEqual(rejected, { status: 'failed', providerId: null, errorCode: 'META_131030' });
-  assert.equal((await sendWhatsAppTemplate('+237600000000', template, randomUUID(), async () => new Response('{}', { status: 502 }))).status, 'unknown');
+  assert.equal((await sendWhatsAppTemplate('+237600000000', template, randomUUID(), sender, async () => new Response('{}', { status: 502 }))).status, 'unknown');
+  const second = await prepare('444');
+  assert.equal((await detail(202)).tracking.message!.whatsappSender!.phoneNumber, secondSender.phoneNumber);
+  await assert.rejects(reserve({ ...second, whatsappSenderId: '111' }), /CONTACT_INVALID_INPUT/, 'Send request cannot override the approved sender');
+  const secondReserved = await reserve(second);
+  await sendWhatsAppTemplate(secondReserved.delivery.recipient, template, secondReserved.delivery.id, secondReserved.delivery.message.whatsappSender!);
+  assert.deepEqual(sentFrom, ['111', '444'], 'Each approved message uses its exact sender endpoint');
+  const secondNotification = notification('delivered', '237600000000', second.requestId);
+  secondNotification.entry[0].changes[0].value.statuses[0].id = 'wamid.second';
+  await tx(() => applyWhatsAppStatuses({ query }, secondNotification, now));
+  assert.equal((await detail(202)).deliveries.find(d => d.id === second.requestId)?.status, 'dispatching');
+  secondNotification.entry[0].changes[0].value.metadata.phone_number_id = '444';
+  await tx(() => applyWhatsAppStatuses({ query }, secondNotification, now));
+  const secondDetail = await detail(202);
+  assert.equal(secondDetail.deliveries.find(d => d.id === second.requestId)?.status, 'delivered');
+  assert.deepEqual(secondDetail.deliveries.find(d => d.id === second.requestId)?.sender, secondSender);
+  assert.ok(secondDetail.history.items.some(e => e.data.action === 'delivery' && e.data.sender?.id === '444'));
+  const invalidSenderResult = await sendWhatsAppTemplate('+237600000000', template, randomUUID(), { ...sender, accountId: '999' }, async () => { throw Error('MUST_NOT_SEND'); });
+  assert.equal(invalidSenderResult.status, 'failed');
+  assert.equal(invalidSenderResult.errorCode, 'CONTACT_SENDER_UNAVAILABLE');
+  const unapprovedSwitch = await prepare();
+  await write(await command({ action: 'save_message', channel: 'whatsapp', language: 'fr', text: renderWhatsAppTemplate(template), whatsappTemplate: template, whatsappSenderId: '444', contextFingerprint: (await detail(202)).contextFingerprint }, 202), 202);
+  assert.equal((await detail(202)).tracking.message!.status, 'draft', 'Changing sender always removes approval');
+  await assert.rejects(reserve({ ...unapprovedSwitch, expectedVersion: (await detail(202)).tracking.version }), /CONTACT_APPROVAL_REQUIRED/);
   assert.deepEqual(await businessSnapshot(), before, 'Sending only affects platform relationship records');
   globalThis.fetch = async () => { throw Error('NETWORK_FORBIDDEN'); };
   // A new order invalidates an approved message and changes the proposal.

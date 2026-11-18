@@ -14,15 +14,16 @@ export const whatsappTemplate = z.object({
   parameters: z.array(z.string().trim().min(1).max(300).regex(/^[^\r\n\t]+$/)).max(10),
 }).strict();
 export type WhatsAppTemplate = z.infer<typeof whatsappTemplate>;
-export type WhatsAppCatalog = { configured: boolean; enabled: boolean; templates: Omit<WhatsAppTemplate, 'parameters'>[] };
+export type WhatsAppSender = { id: string; accountId: string; phoneNumber: string; name: string };
+export type WhatsAppCatalog = { configured: boolean; enabled: boolean; senders: WhatsAppSender[]; templates: Omit<WhatsAppTemplate, 'parameters'>[] };
 export const deliveryStatuses = ['dispatching', 'accepted', 'sent', 'delivered', 'read', 'failed', 'unknown'] as const;
 export type DeliveryStatus = typeof deliveryStatuses[number];
 export type ContactDelivery = {
   id: string; approvalId: string; recipient: string; text: string; actorName: string;
   status: DeliveryStatus; providerId: string | null; errorCode: string | null;
-  createdAt: string; updatedAt: string;
+  createdAt: string; updatedAt: string; sender?: WhatsAppSender;
 };
-export type DeliveryHistory = { action: 'delivery'; deliveryId: string; status: DeliveryStatus; recipient: string; errorCode: string | null; text?: string };
+export type DeliveryHistory = { action: 'delivery'; deliveryId: string; status: DeliveryStatus; recipient: string; errorCode: string | null; text?: string; sender?: WhatsAppSender };
 export const sendContactCommand = z.object({ requestId: z.uuid(), expectedVersion: z.number().int().min(1), approvalId: z.uuid(), consentConfirmed: z.literal(true) }).strict();
 const base = { requestId: z.uuid(), expectedVersion: z.number().int().min(0) };
 const plan = {
@@ -32,14 +33,14 @@ const plan = {
 export const contactCommand = z.discriminatedUnion('action', [
   z.object({ ...base, ...plan, action: z.literal('contact'), channel: z.enum(contactChannels), outcome: z.enum(contactOutcomes), contactAt: z.iso.datetime() }).strict(),
   z.object({ ...base, ...plan, action: z.literal('plan') }).strict(),
-  z.object({ ...base, action: z.literal('save_message'), channel: z.enum(['whatsapp', 'email', 'sms']), language: z.enum(['fr', 'en']), text: z.string().trim().min(10).max(3000), contextFingerprint: z.string().regex(/^[a-f0-9]{64}$/), whatsappTemplate: whatsappTemplate.optional() }).strict(),
+  z.object({ ...base, action: z.literal('save_message'), channel: z.enum(['whatsapp', 'email', 'sms']), language: z.enum(['fr', 'en']), text: z.string().trim().min(10).max(3000), contextFingerprint: z.string().regex(/^[a-f0-9]{64}$/), whatsappTemplate: whatsappTemplate.optional(), whatsappSenderId: z.string().regex(/^\d{1,30}$/).optional() }).strict(),
   z.object({ ...base, action: z.enum(['approve_message', 'cancel_message']) }).strict(),
 ]);
 export type ContactCommand = z.infer<typeof contactCommand>;
 export type ContactMessage = {
   text: string; channel: MessageChannel; language: 'fr' | 'en'; reason: FollowUpReason;
   contextFingerprint: string; status: 'draft' | 'approved'; approvedAt: string | null; approvedBy: string | null;
-  approvalId?: string; deliveryId?: string; whatsappTemplate?: WhatsAppTemplate;
+  approvalId?: string; deliveryId?: string; whatsappTemplate?: WhatsAppTemplate; whatsappSender?: WhatsAppSender;
 };
 export type ContactCase = {
   version: number; reviewRevision: number; status: CaseStatus; nextAction: string; nextActionDate: string | null;

@@ -7,7 +7,7 @@ import { sendWhatsAppTemplate, verifyWhatsAppTemplate, whatsappConfiguration, wh
 type Actor = { id: string; ip: string; requestId?: string; userAgent?: string };
 type DeliveryRow = { id: string; organisation_id: number; approval_id: string; actor_name: string; recipient: string; message: ContactMessage; status: DeliveryStatus; provider_id: string | null; error_code: string | null };
 async function deliveryEvent(db: SaasExecutor, row: DeliveryRow, actorId: string, actorName: string, now: Date, text?: string) {
-  const data: DeliveryHistory = { action: 'delivery', deliveryId: row.id, status: row.status, recipient: row.recipient, errorCode: row.error_code, ...(text ? { text } : {}) };
+  const data: DeliveryHistory = { action: 'delivery', deliveryId: row.id, status: row.status, recipient: row.recipient, errorCode: row.error_code, sender: row.message.whatsappSender, ...(text ? { text } : {}) };
   await db.query(`INSERT INTO platform_contact_events(id,organisation_id,actor_user_id,actor_name,action,data,resulting_version,created_at)
     SELECT $1,$2,$3,$4,'delivery',$5::jsonb,version,$6 FROM platform_contact_cases WHERE organisation_id=$2`,
   [randomUUID(), row.organisation_id, actorId, actorName, JSON.stringify(data), now]);
@@ -33,6 +33,7 @@ export async function reserveContactDelivery(db: SaasExecutor, organisationId: n
   if (!message || message.status !== 'approved' || message.approvalId !== command.approvalId || message.deliveryId)
     throw new PlatformContactError('CONTACT_APPROVAL_REQUIRED', 400);
   if (message.channel !== 'whatsapp' || !message.whatsappTemplate) throw new PlatformContactError('CONTACT_TEMPLATE_REQUIRED', 400);
+  if (!message.whatsappSender) throw new PlatformContactError('CONTACT_SENDER_REQUIRED', 400);
   if (!whatsappConfiguration().enabled) throw new PlatformContactError('CONTACT_WHATSAPP_NOT_CONFIGURED', 400);
   // A transport interruption cannot be treated as a failure and resent under a fresh approval.
   if ((await db.query("SELECT id FROM platform_contact_deliveries WHERE organisation_id=$1 AND status IN ('dispatching','unknown') LIMIT 1", [organisationId])).rows.length)
@@ -40,7 +41,9 @@ export async function reserveContactDelivery(db: SaasExecutor, organisationId: n
   let recipient: string;
   try {
     recipient = whatsappRecipient(current.account.owner.phone);
-    await verifyWhatsAppTemplate(message.whatsappTemplate, message.text, request);
+    const sender = await verifyWhatsAppTemplate(message.whatsappTemplate, message.text, message.whatsappSender.id, request);
+    if (sender.accountId !== message.whatsappSender.accountId || sender.phoneNumber !== message.whatsappSender.phoneNumber || sender.name !== message.whatsappSender.name)
+      throw Error('CONTACT_SENDER_CHANGED');
   } catch (error) { throw new PlatformContactError((error as Error).message.startsWith('CONTACT_') ? (error as Error).message : 'CONTACT_PROVIDER_UNAVAILABLE', 400); }
   const who = (await db.query("SELECT COALESCE(NULLIF(trim(concat_ws(' ',first_name,last_name)),''),email,'Administrator') AS name FROM users WHERE id=$1", [actor.id])).rows[0];
   if (!who) throw new PlatformContactError('CONTACT_ACTOR_REQUIRED', 403);
@@ -82,7 +85,7 @@ export async function sendContactDelivery(connect: () => Promise<Connection>, or
     await db.query('COMMIT');
     if (reserved.duplicate) return { id: reserved.delivery.id, duplicate: true, status: reserved.delivery.status };
     const row = reserved.delivery;
-    const result = await sendWhatsAppTemplate(row.recipient, row.message.whatsappTemplate!, row.id, request);
+    const result = await sendWhatsAppTemplate(row.recipient, row.message.whatsappTemplate!, row.id, row.message.whatsappSender!, request);
     await db.query('BEGIN');
     const saved = await finishContactDelivery(db, row.id, result);
     await db.query('COMMIT');
@@ -99,13 +102,15 @@ export async function applyWhatsAppStatuses(db: SaasExecutor, body: any, now = n
     if (entry.id !== config.accountId || !Array.isArray(entry.changes)) continue;
     for (const change of entry.changes) {
       const value = change?.value;
-      if (change?.field !== 'messages' || value?.metadata?.phone_number_id !== config.phoneId || !Array.isArray(value.statuses)) continue;
+      if (change?.field !== 'messages' || !config.phoneIds.includes(value?.metadata?.phone_number_id) || !Array.isArray(value.statuses)) continue;
       for (const update of value.statuses) {
         if (!['sent','delivered','read','failed'].includes(update?.status) || typeof update.id !== 'string' || !update.id.startsWith('wamid.') || update.id.length > 500) continue;
         const parsedId = sendContactCommand.shape.requestId.safeParse(update.biz_opaque_callback_data);
         const correlation = parsedId.success ? parsedId.data : null;
-        const rows = (await db.query('SELECT id,recipient FROM platform_contact_deliveries WHERE provider_id=$1 OR id=$2::uuid', [update.id, correlation])).rows;
+        const rows = (await db.query('SELECT id,recipient,message FROM platform_contact_deliveries WHERE provider_id=$1 OR id=$2::uuid', [update.id, correlation])).rows;
         if (rows.length !== 1) continue;
+        const sender = rows[0].message.whatsappSender;
+        if (!sender || sender.id !== value.metadata.phone_number_id || sender.accountId !== entry.id) continue;
         // Failed notifications can omit recipient_id; authenticated message/correlation IDs still identify the reservation.
         if (update.recipient_id != null ? String(update.recipient_id) !== rows[0].recipient.replace(/^\+/, '') : update.status !== 'failed') continue;
         const code = update.errors?.[0]?.code;
