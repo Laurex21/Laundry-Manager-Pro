@@ -16,6 +16,7 @@ const sample: ContactDetail = {
     message: { text: 'Hello <script>bad()</script>, may we help you?', channel: 'email', language: 'en', reason: 'no_orders', status: 'draft', contextFingerprint: 'a'.repeat(64), approvedAt: null, approvedBy: null } },
   contextFingerprint: 'a'.repeat(64), messageStale: false, approvalBlocked: false, due: false,
   suggestion: { fr: 'Bonjour, comment pouvons-nous vous aider ?', en: 'Hello, how can we help?' },
+  deliveries: [],
   history: { items: [], total: 0, offset: 0, limit: 20 },
 };
 const markup = (detail: ContactDetail, tab = 'message') => renderToStaticMarkup(<ContactEditor detail={detail} tab={tab} save={() => {}} pending={false} historyPage={() => {}} />);
@@ -23,7 +24,7 @@ for (const language of ['fr', 'en']) {
   await i18n.changeLanguage(language);
   const html = markup(sample);
   assert.doesNotMatch(html, /<script>bad/); assert.match(html, /&lt;script&gt;/);
-  assert.ok(html.includes(language === 'fr' ? 'Valider pour envoi manuel' : 'Approve for manual sending'));
+  assert.ok(html.includes(language === 'fr' ? 'Valider le message' : 'Approve message'));
   assert.doesNotMatch(html, /href="(?:https:\/\/wa.me|mailto:)/, 'No implicit transmission');
   const approved = structuredClone(sample); approved.tracking.message!.status = 'approved'; approved.tracking.message!.approvedBy = 'Synthetic Admin';
   const approvedHtml = markup(approved); assert.ok(approvedHtml.includes(language === 'fr' ? 'Copier le message validé' : 'Copy approved message'));
@@ -31,8 +32,18 @@ for (const language of ['fr', 'en']) {
   const staleHtml = markup(stale);
   assert.match(staleHtml, /<button[^>]*disabled=""[^>]*>(?:Copier le message validé|Copy approved message)<\/button>/);
   const suppressed = markup({ ...sample, approvalBlocked: true, tracking: { ...sample.tracking, status: 'do_not_contact' } });
-  assert.match(suppressed, /<button[^>]*disabled=""[^>]*>(?:Valider pour envoi manuel|Approve for manual sending)<\/button>/);
+  assert.match(suppressed, /<button[^>]*disabled=""[^>]*>(?:Valider le message|Approve message)<\/button>/);
   const contact = markup(sample, 'contact'); assert.match(contact, /datetime-local/); assert.match(contact, /Douala/);
   assert.ok(contact.includes(language === 'fr' ? 'Ne plus contacter' : 'Do not contact'));
+  const whatsapp = structuredClone(approved);
+  whatsapp.tracking.message!.channel = 'whatsapp';
+  whatsapp.tracking.message!.approvalId = '9fe4bdf3-ec5f-411d-8b15-658a007ad8f7';
+  const unavailable = renderToStaticMarkup(<ContactEditor detail={whatsapp} tab="message" catalog={{ configured: false, enabled: false, templates: [] }} save={() => {}} pending={false} historyPage={() => {}} />);
+  assert.ok(unavailable.includes(language === 'fr' ? 'à connecter' : 'connect your account'));
+  assert.match(unavailable, /<button[^>]*disabled=""[^>]*>(?:Envoyer le WhatsApp validé|Send approved WhatsApp)<\/button>/);
+  whatsapp.deliveries = [{ id: 'synthetic', approvalId: 'synthetic', recipient: '+237600000000', text: 'Synthetic <script>bad()</script>', actorName: 'Synthetic Admin', status: 'unknown', providerId: null, errorCode: 'PROVIDER_RESULT_UNKNOWN', createdAt: '2026-11-18T12:00:00Z', updatedAt: '2026-11-18T12:00:00Z' }];
+  const uncertain = markup(whatsapp, 'history');
+  assert.ok(uncertain.includes(language === 'fr' ? 'Résultat incertain' : 'Unknown result'));
+  assert.doesNotMatch(uncertain, /<script>bad/);
 }
 console.log('PASS platform contact UI: FR/EN, manual approval distinction, escaped identities and messages, suppressed/stale actions disabled, contact outcomes and Douala scheduling.');
