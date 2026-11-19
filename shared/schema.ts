@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { CartLine, PublicService, StorefrontQuote, WeightReference } from "./storefront";
 
 export * from "./models/auth";
 import { users } from "./models/auth";
@@ -1305,3 +1306,44 @@ export const salesInvitations = pgTable("sales_invitations", {
 export const salesAccessEvents = pgTable("sales_access_events", {
  id:bigserial("id",{mode:"number"}).primaryKey(),accountId:uuid("account_id").notNull().references(()=>salesAccounts.id),adminId:varchar("admin_id").references(()=>users.id),action:text("action").notNull(),createdAt:timestamp("created_at",{withTimezone:true}).notNull().defaultNow(),
 },t=>[check("sales_access_action",sql`${t.action} IN ('invited','invitation_failed','accepted','suspended','reactivated','login','logout')`)]);
+
+// Storefront V1: additive, enabled only after the reviewed migration is applied.
+export const storefronts = pgTable("storefronts", {
+  id: serial("id").primaryKey(), organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  siteId: integer("site_id").notNull().unique().references(() => sites.id), slug: varchar("slug", { length: 70 }).notNull().unique(),
+  name: text("name").notNull(), description: text("description").notNull(), address: text("address").notNull(),
+  hours: text("hours").notNull(), whatsapp: varchar("whatsapp", { length: 20 }).notNull(), currency: varchar("currency", { length: 3 }).notNull(),
+  published: boolean("published").notNull().default(false), weightsAcknowledged: boolean("weights_acknowledged").notNull().default(false),
+  weights: jsonb("weights").$type<WeightReference[]>().notNull(), version: integer("version").notNull().default(1),
+  minimumAdjustmentServiceId: integer("minimum_adjustment_service_id").references(() => services.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [check("storefront_version_positive", sql`${t.version} > 0`)]);
+
+export const storefrontServices = pgTable("storefront_services", {
+  id: serial("id").primaryKey(), storefrontId: integer("storefront_id").notNull().references(() => storefronts.id),
+  serviceId: integer("service_id").notNull().references(() => services.id), mode: text("mode").$type<PublicService["mode"]>().notNull(),
+}, t => [uniqueIndex("storefront_service_unique").on(t.storefrontId, t.serviceId), check("storefront_service_mode", sql`${t.mode} IN ('piece','kg','quote')`)]);
+
+export const storefrontRequests = pgTable("storefront_requests", {
+  id: uuid("id").primaryKey(), reference: varchar("reference", { length: 32 }).notNull().unique(),
+  storefrontId: integer("storefront_id").notNull().references(() => storefronts.id),
+  siteId: integer("site_id").notNull().references(() => sites.id), organisationId: integer("organisation_id").notNull().references(() => organisations.id),
+  requestKey: uuid("request_key").notNull(), trackingHash: varchar("tracking_hash", { length: 64 }).notNull().unique(),
+  bodyFingerprint: varchar("body_fingerprint", { length: 64 }).notNull(),
+  customerName: text("customer_name").notNull(), phone: varchar("phone", { length: 20 }).notNull(), note: text("note").notNull(),
+  lines: jsonb("lines").$type<CartLine[]>().notNull(), serviceSnapshot: jsonb("service_snapshot").$type<PublicService[]>().notNull(),
+  weightSnapshot: jsonb("weight_snapshot").$type<WeightReference[]>().notNull(),
+  estimate: jsonb("estimate").$type<StorefrontQuote>().notNull(), finalQuote: jsonb("final_quote").$type<StorefrontQuote>(),
+  status: text("status").notNull().default("submitted"), version: integer("version").notNull().default(1),
+  acceptedVersion: integer("accepted_version"), receivedAt: timestamp("received_at", { withTimezone: true }),
+  convertedOrderId: integer("converted_order_id").unique().references(() => orders.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex("storefront_request_idempotency").on(t.storefrontId, t.requestKey), index("storefront_request_inbox").on(t.siteId, t.createdAt),
+  check("storefront_request_status", sql`${t.status} IN ('submitted','awaiting_dropoff','awaiting_customer_approval','ready_to_convert','converted','rejected','cancelled')`),
+  check("storefront_request_version", sql`${t.version} > 0`)]);
+
+export const storefrontEvents = pgTable("storefront_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(), requestId: uuid("request_id").notNull().references(() => storefrontRequests.id),
+  actorId: varchar("actor_id").references(() => users.id), action: text("action").notNull(), version: integer("version").notNull(),
+  note: text("note"), quote: jsonb("quote").$type<StorefrontQuote>(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [index("storefront_event_request").on(t.requestId, t.id)]);
