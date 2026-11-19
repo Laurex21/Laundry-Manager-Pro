@@ -16,4 +16,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.join(root, 'dist/i
   if (guard?.version !== 1 || guard.baseline !== 'b55a0a03481156af5cc29a0ce19647477e8e9645' || guard.commit !== manifest.commit) {
     throw new Error('Publication bloquée : reconstruire cette version avec le contrôle des correctifs reçus.');
   }
+  console.log(`Receipt release anchor active: ${manifest.commit}`);
 }
