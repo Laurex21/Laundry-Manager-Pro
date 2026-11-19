@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { marketingPage } from "../../shared/marketing";
+import { marketingPage, marketingHostAllowed } from "../../shared/marketing";
 
 const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -26,7 +26,7 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
       .replace("connect-src 'self'", "connect-src 'self' ws: wss:");
 
   const search = _req.path === "/auth" && _req.query.tab === "register" ? "?tab=register" : "";
-  if (process.env.VITE_TIKTOK_PIXEL_ENABLED === "true" && marketingPage(_req.path, search)) {
+  if (process.env.VITE_TIKTOK_PIXEL_ENABLED === "true" && marketingHostAllowed(_req.hostname) && marketingPage(_req.path, search)) {
     contentSecurityPolicy = contentSecurityPolicy
       .replace("script-src 'self'", "script-src 'self' https://analytics.tiktok.com")
       .replace("connect-src 'self'", "connect-src 'self' https://analytics.tiktok.com https://analytics-sg.tiktok.com https://analytics.us.tiktok.com");

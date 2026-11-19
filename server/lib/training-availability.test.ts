@@ -22,7 +22,7 @@ test('production activation preserves ordinary and admin authorization, and can 
  try{
   assert.equal((await fetch(base+'/api/training')).status,401);
   const data=await(await fetch(base+'/api/training',{headers:{authorization:'user'}})).json();
-  assert.equal(data.lessons.length,17);assert.ok(data.lessons.every((l:any)=>l.audience!=='admin'));
+  assert.equal(data.lessons.length,16);assert.ok(data.lessons.every((l:any)=>l.audience!=='admin'));
   for(const route of ['/api/training/admin','/api/training/super-admin/pc/video','/api/training/super-admin/mobile/video'])assert.equal((await fetch(base+route,{headers:{authorization:'user'}})).status,403);
   assert.equal(loads,0);
   for(const mode of ['pc','mobile']){

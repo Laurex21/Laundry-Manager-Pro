@@ -1,3 +1,4 @@
+import { AmbassadorAccess } from './lib/ambassador-access';
 import { respondCashbookDatabaseError } from './lib/cashbook-errors';
 import { registerPromoRoutes } from "./lib/saas-promo-routes";
 import { registerTrainingRoutes } from "./lib/training";
@@ -322,7 +323,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await setupAuth(app);
   registerAuthRoutes(app);
   registerCashbookRoutes(app, { db: pool, auth: isAuthenticated, siteIds: orgScopedSites, role: effectiveSiteRole });
-  registerTrainingRoutes(app, isAuthenticated, undefined, requirePlatformAdmin);
+  registerTrainingRoutes(app, isAuthenticated, undefined, requirePlatformAdmin, async req => !!(await new AmbassadorAccess().principal((req.session as any).userId)));
   registerCustomerFollowUpRoutes(app,isAuthenticated,new CustomerFollowUps(pool),effectivePlanSlug);
   registerSaasRoutes(app);
   registerPawapayNotificationReceivers(app);
