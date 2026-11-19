@@ -5,6 +5,8 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import * as schema from '../../shared/schema';
 import { saasSelection } from '../../shared/saas-plans';
+// Keep timestamp-without-time-zone fixtures identical to the UTC CI/runtime.
+process.env.TZ='UTC';
 process.env.DATABASE_URL='postgresql://unused:unused@127.0.0.1:1/isolated_test';
 process.env.SAAS_BILLING_MODE='sandbox';process.env.NODE_ENV='test';
 const pg=new PGlite();const testDb=drizzle(pg,{schema});
