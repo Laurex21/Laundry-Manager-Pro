@@ -16,6 +16,13 @@ Première installation : publier le code de protection, puis ajouter l'option et
 
 ## Chaque publication
 
+**Storefront :** une nouvelle validation explicite du propriétaire est requise
+avant toute migration de production. Contrôler les trois verrous PostgreSQL et
+le SQL réellement proposé par Replit selon
+[`storefront-approval.md`](storefront-approval.md). Une ancienne autorisation de
+publication, une fusion Git ou un test réussi ne vaut pas validation. Annuler
+la publication si elle propose une migration storefront non validée.
+
 1. Partir d'une révision revue et fusionnée de `origin/main`, avec l'historique Git complet (`git fetch --unshallow origin` si nécessaire). Préserver séparément le travail de développement non publié.
 2. Lancer `npm run test:receipt-release`, `npm run test:superadmin-release` et `npm run build`. La compilation vérifie l'ascendance de PR #90, les empreintes des fichiers des reçus, les limites de résolution et les délais réseau. Elle s'arrête avant de remplacer `dist` si un contrôle échoue.
 3. Publier cette révision précise. Ne jamais utiliser un ancien dossier de publication comme source sans le mettre à jour.
