@@ -88,7 +88,8 @@
     "test:saas-promos": "node --import tsx server/lib/saas-promos.integration.test.ts",
     "test:cashbook-isolation": "node --test scripts/cashbook-development-schema.test.mjs && node server/lib/cashbook-engine.test.mjs && node --import tsx server/lib/cashbook-production-boundary.test.ts",
     "test:login-security": "node --import tsx server/lib/login-limits.integration.test.ts && node --import tsx server/lib/password-boundary.integration.test.ts",
-    "db:migrate:platform-contact-deliveries": "tsx scripts/migrate-platform-contact-deliveries.ts"
+    "db:migrate:platform-contact-deliveries": "tsx scripts/migrate-platform-contact-deliveries.ts",
+    "test:admin-capacity": "node --import tsx server/lib/platform-admin-capacity.integration.test.ts && node --import tsx client/src/lib/admin-capacity.test.tsx"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

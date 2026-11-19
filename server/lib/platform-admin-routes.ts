@@ -1,4 +1,5 @@
 import { adminUserDirectory, requestAdminPasswordReset, AdminUserError } from "./admin-password-reset";
+import { adminCapacity, activateAdminCapacity } from './platform-admin-capacity';
 import { registerPlatformContactRoutes } from "./platform-contact-routes";
 import { adminDecisionOverview, decisionDays } from "./platform-admin-decision";
 import { readFile } from "node:fs/promises";
@@ -599,6 +600,28 @@ export function registerPlatformAdminRoutes(app: Express): void {
   };
   app.post("/api/platform-admin/organisations/:organisationId/plan-preview",requirePlatformAdmin,platformAdminPlanLimiter,grant(false));
   app.post("/api/platform-admin/organisations/:organisationId/plan",requirePlatformAdmin,platformAdminPlanLimiter,grant(true));
+
+  const capacity = (mode: 'read' | 'preview' | 'activate'): RequestHandler => async (req: any, res) => {
+    const org = Number(req.params.organisationId);
+    if (!Number.isSafeInteger(org) || org < 1) return res.status(400).json({ message: 'Invalid organisation identifier' });
+    const client = await pool.connect();
+    try {
+      await client.query(mode === 'activate' ? 'BEGIN' : 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const result = mode === 'read' ? await adminCapacity(client, org) : await activateAdminCapacity(
+        client, org, req.body, req.session.userId, req.requestId ?? null, new Date(), mode === 'activate',
+        { ipHash: crypto.createHash('sha256').update(requestIp(req)).digest('hex'), userAgent: String(req.get?.('user-agent') ?? '').slice(0, 500) });
+      await client.query('COMMIT');
+      res.json(result);
+    } catch (error: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      const known = String(error.message).startsWith('ADMIN_') || ['INVALID_PLAN', 'INVALID_OPTIONS', 'BUSINESS_REQUIRED', 'PAID_PLAN_REQUIRED'].includes(error.message);
+      if (!known) console.error('Platform capacity operation failed');
+      res.status(error.message === 'ADMIN_ORGANISATION_NOT_FOUND' ? 404 : known ? 409 : 500).json({ message: known ? error.message : 'ADMIN_CAPACITY_FAILED' });
+    } finally { client.release(); }
+  };
+  app.get('/api/platform-admin/organisations/:organisationId/capacity', requirePlatformAdmin, capacity('read'));
+  app.post('/api/platform-admin/organisations/:organisationId/capacity-preview', requirePlatformAdmin, platformAdminPlanLimiter, capacity('preview'));
+  app.post('/api/platform-admin/organisations/:organisationId/capacity', requirePlatformAdmin, platformAdminPlanLimiter, capacity('activate'));
 
   app.get("/api/platform-admin/audit-events", requirePlatformAdmin, async (req, res) => {
     try {

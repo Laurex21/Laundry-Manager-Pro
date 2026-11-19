@@ -1,4 +1,5 @@
 import PromoDirectory from "@/components/promo-directory";
+import AdminOrganisationCapacity from '@/components/admin-organisation-capacity';
 import AdminUserAccess from "@/components/admin-user-access";
 import SalesDirectory from "@/components/sales-directory";
 import PlatformAdminDecision from "@/components/platform-admin-decision";
@@ -308,6 +309,8 @@ function auditAction(value:string) {
     'platform_admin.mfa_verification':['Vérification à deux facteurs','Two-factor verification'],
     'platform_admin.organisation_view':['Consultation de la fiche','Organisation viewed'],
     'platform_admin.saas_grant':['Attribution manuelle de formule','Manual plan grant'],
+    'platform_admin.capacity_grant':['Attribution de places et activation d’accès','Capacity grant and access activation'],
+    admin_capacity_grant:['Places et accès activés manuellement','Capacity and access manually activated'],
     payment_applied:['Paiement appliqué à l’abonnement','Payment applied to subscription'],
     payment_failed:['Paiement échoué','Payment failed'],
     payment_requires_review:['Paiement à examiner','Payment requires review'],
@@ -744,6 +747,7 @@ function OrganisationPanel({ subscriber, close }: { subscriber: Pick<Subscriber,
           <TabsContent value="contacts" className="mt-5"><PlatformContactWorkspace organisationId={subscriber.id}/></TabsContent>
 
           <TabsContent value="subscription" className="mt-5">
+            <AdminOrganisationCapacity organisationId={subscriber.id} />
             <PanelSection title={adminText('Current subscription')}><p className="mb-3 text-xs text-slate-500">{adminText('Source')}: {adminText(detail.data.source)}</p>
               <div className="flex flex-wrap items-center justify-between gap-3"><Badge variant="outline" className={statusTone(detail.data.subscription?.status)}>{detail.data.subscription?.planName || adminText('No plan')}</Badge><span className="text-sm capitalize text-slate-500">{adminStatus(detail.data.subscription?.status)}</span></div>
               <dl className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><PanelDatum label={adminText('Plan price')} value={detail.data.subscription ? formatMoney(detail.data.subscription.planPrice) : "—"}/><PanelDatum label={adminText("Orders used")} value={detail.data.subscription?.ordersUsed ?? "—"}/><PanelDatum label={adminText('Started')} value={formatDate(detail.data.subscription?.startDate)}/><PanelDatum label={adminText("Renews / ends")} value={formatDate(detail.data.subscription?.endDate)}/></dl>
