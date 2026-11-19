@@ -1,0 +1,8 @@
+{
+  "description": "Reviewed capacity recap, cost and audited manual site/staff activation. Update only after validation; see docs/releases/replit.md.",
+  "files": {
+    "client/src/components/admin-organisation-capacity.tsx": "71448e305f95693c7b1f06eb1d43febb65723f515d241ead25aee19ac5405520",
+    "server/lib/platform-admin-capacity.ts": "62b006645f0423c4722c5df3aca3bf0e61aaeb2cd189ed3fec88560c03bdd06c",
+    "shared/admin-capacity.ts": "1156910fd5c2b85fa53f275d57cf3282ee44b434c13113cd4e745f2297af41ac"
+  }
+}

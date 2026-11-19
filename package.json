@@ -95,7 +95,9 @@
     "db:migrate:platform-contact-deliveries": "tsx scripts/migrate-platform-contact-deliveries.ts",
     "test:admin-capacity": "node --import tsx server/lib/platform-admin-capacity.integration.test.ts && node --import tsx client/src/lib/admin-capacity.test.tsx",
     "test:receipt-release": "node --test scripts/receipt-release.test.mjs",
-    "verify:receipt-release": "node scripts/verify-receipt-release.mjs"
+    "verify:receipt-release": "node scripts/verify-receipt-release.mjs",
+    "test:superadmin-release": "node --test scripts/superadmin-release.test.mjs",
+    "verify:superadmin-release": "node scripts/verify-superadmin-release.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

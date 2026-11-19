@@ -50,6 +50,9 @@ jobs:
       - run: npm run test:marketing
       - run: npm run test:acquisition
       - run: npm run test:order-references
+      - run: npm run test:superadmin-release
+      - run: npm run verify:superadmin-release
+      - run: npm run test:admin-capacity
       - run: npm run test:receipt-release
       - run: npm run verify:receipt-release
       - run: npm run test:receipt-export
