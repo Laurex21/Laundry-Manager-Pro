@@ -1,3 +1,4 @@
+import { requestReceipt } from "@/lib/receipt-request";
 import { OrderIdentity } from "@/components/order-identity";
 import { formatExactDecimal, addDecimals } from "@shared/exact-decimal";
 import { historicalSite } from "@/lib/access-feedback";
@@ -241,9 +242,12 @@ export default function OrderDetail() {
     if (isDownloadingReceipt) return;
     setIsDownloadingReceipt(true);
     try {
-      const subscriberReceipt = await fetch(`/api/orders/${orderId}/subscriber-receipt?format=a4`, { credentials: "include" });
-      if (subscriberReceipt.ok) {
-        const html = await subscriberReceipt.text();
+      const html = await requestReceipt(`/api/orders/${orderId}/subscriber-receipt?format=a4`, async response => {
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error("Receipt unavailable");
+        return response.text();
+      });
+      if (html !== null) {
         await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`, format, { orderId: order.id, kind: "subscriber" });
         return;
       }

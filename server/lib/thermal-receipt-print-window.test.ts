@@ -14,7 +14,7 @@ assert.doesNotMatch(thermalReceiptBuilder, /onclick="window\.print\(\)"/);
 assert.match(receipt, /getElementById\("receipt-print-button"\)/);
 assert.match(receipt, /printButton\.addEventListener\("click", \(\) => win\.print\(\)\)/);
 assert.match(payments, /const receiptWindow = action === "thermal" \? reserveReceiptPrintWindow\(\) : null/);
-assert.ok(payments.indexOf("reserveReceiptPrintWindow()") < payments.indexOf("await fetch(`/api/orders/${successPayment.orderId}`"));
+assert.ok(payments.indexOf("reserveReceiptPrintWindow()") < payments.indexOf("await requestReceipt(`/api/orders/${successPayment.orderId}`"));
 assert.ok(orderDetail.indexOf("const receiptWindow = reserveReceiptPrintWindow()") < orderDetail.indexOf("await fetch(`/api/orders/${orderId}/subscriber-receipt?format=thermal80`"));
 assert.doesNotMatch(orderDetail, /receiptWindow\.print\(\)/);
 assert.match(orderDetail, /renderReceiptInPrintWindow\(receiptWindow, await subscriberReceipt\.text\(\)\)/);

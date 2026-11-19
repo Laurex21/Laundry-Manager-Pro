@@ -10,10 +10,14 @@ for (const [width, height] of [[680, 900], [680, 1800], [794, 2400], [680, 4500]
   assert.ok(Math.max(width, height) * result.scale <= 16384);
 }
 assert.equal(receiptExportSize(680, 900).scale, 4);
+assert.equal(receiptExportSize(680, 1400, true).scale, 2);
+assert.equal(receiptExportSize(680, 1400, true).height, 1400);
+assert.ok(680 * 1400 * receiptExportSize(680, 1400, true).scale ** 2 < 4_000_000);
 for (const dimensions of [[0, 100], [-1, 100], [NaN, 50], [680, Infinity]]) {
   assert.throws(() => receiptExportSize(...dimensions as [number, number]), /Invalid receipt dimensions/);
 }
 assert.throws(() => receiptExportSize(680, 10000), /RECEIPT_TOO_LARGE/);
+assert.throws(() => receiptExportSize(680, 10000, true), /RECEIPT_TOO_LARGE/);
 console.log('Receipt export resolution and overflow checks passed');
 
 // Preserve six-decimal weights while removing storage-only trailing zeros.
