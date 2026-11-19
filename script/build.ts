@@ -4,6 +4,8 @@ import { execFileSync } from "child_process";
 import { rm, readFile, writeFile } from "fs/promises";
 // @ts-expect-error Dependency-free guard is also used by Node before installation.
 import { verifyReceiptRelease } from "../scripts/verify-receipt-release.mjs";
+// @ts-expect-error Release guard is shared with its Node test runner.
+import { verifySuperadminRelease } from "../scripts/verify-superadmin-release.mjs";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -37,6 +39,9 @@ const allowlist = [
 
 async function buildAll() {
   const receiptReleaseGuard = verifyReceiptRelease();
+  const superadminReleaseGuard = verifySuperadminRelease();
+  execFileSync(process.execPath, ["--import", "tsx", "server/lib/platform-admin-capacity.integration.test.ts"], { stdio: "inherit" });
+  execFileSync(process.execPath, ["--import", "tsx", "client/src/lib/admin-capacity.test.tsx"], { stdio: "inherit" });
   execFileSync(process.execPath, ["--import", "tsx", "server/lib/receipt-export.test.ts"], { stdio: "inherit" });
   execFileSync(process.execPath, ["--import", "tsx", "--test", "client/src/lib/receipt-request.test.ts"], { stdio: "inherit" });
   const buildStartedAt = new Date().toISOString();
@@ -75,6 +80,7 @@ async function buildAll() {
       {
         commit,
         receiptReleaseGuard,
+        superadminReleaseGuard,
         buildStartedAt,
         buildCompletedAt: new Date().toISOString(),
       },
