@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { db } from "../db";
-import { customers, orders, services, sites, storefronts as shops, storefrontServices as offerings, storefrontRequests as requests, storefrontEvents as events } from "../../shared/schema";
+import { customers, orders, organisations, services, sites, storefronts as shops, storefrontServices as offerings, storefrontRequests as requests, storefrontEvents as events } from "../../shared/schema";
 import { GARMENT_LABELS, SIZE_LABELS, requestInputSchema, reviewInputSchema, shopInputSchema, type PublicService, type ShopInput } from "../../shared/storefront";
 import { addDecimals } from "../../shared/exact-decimal";
 import { calculateStorefrontQuote, digest, StorefrontError } from "./storefront-pricing";
@@ -12,6 +12,10 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type StorefrontActor = { siteId: number; organisationId: number; userId: string };
 export class StorefrontService {
   constructor(private database: Database, private refreshAnalytics?: (id: number, tx: Tx) => Promise<void>) {}
+  async organisationCurrency(organisationId: number, executor: Database | Tx = this.database) {
+    const [shop] = await executor.select({ currency: shops.currency }).from(shops).where(eq(shops.organisationId, organisationId)).orderBy(shops.id).limit(1);
+    return shop?.currency ?? null;
+  }
   private async site(actor: StorefrontActor, executor: Database | Tx = this.database) {
     const [site] = await executor.select().from(sites).where(and(eq(sites.id, actor.siteId), eq(sites.organisationId, actor.organisationId), eq(sites.isActive, true)));
     if (!site) throw new StorefrontError(403, "Agence indisponible");
@@ -22,7 +26,7 @@ export class StorefrontService {
     const [shop] = await this.database.select().from(shops).where(eq(shops.siteId, site.id));
     const available = await this.database.select().from(services).where(and(eq(services.siteId, site.id), eq(services.active, true)));
     const selected = shop ? await this.database.select({ serviceId: offerings.serviceId, mode: offerings.mode }).from(offerings).where(eq(offerings.storefrontId, shop.id)) : [];
-    return { site, shop: shop ? { ...shop, services: selected } : null, availableServices: available };
+    return { site, currency: await this.organisationCurrency(actor.organisationId), shop: shop ? { ...shop, services: selected } : null, availableServices: available };
   }
   async save(actor: StorefrontActor, raw: unknown) {
     const input = shopInputSchema.parse(raw);
@@ -30,6 +34,11 @@ export class StorefrontService {
     return this.database.transaction(async tx => {
       // Lock the agency too, including first publication (no storefront row yet).
       await this.site(actor, tx);
+      // One accounting currency per organisation, including its consolidated view.
+      // Serialise first shops on different sites so two currencies cannot win a race.
+      await tx.select({ id: organisations.id }).from(organisations).where(eq(organisations.id, actor.organisationId)).for("update");
+      const currency = await this.organisationCurrency(actor.organisationId, tx);
+      if (currency && currency !== input.currency) throw new StorefrontError(409, `Les boutiques et la caisse de cette organisation utilisent ${currency}.`);
       await tx.select().from(sites).where(eq(sites.id, actor.siteId)).for("update");
       const [previous] = await tx.select().from(shops).where(eq(shops.siteId, actor.siteId)).for("update");
       if ((previous?.version ?? 0) !== input.expectedVersion) throw new StorefrontError(409, "La boutique a changé. Rechargez avant d’enregistrer.");

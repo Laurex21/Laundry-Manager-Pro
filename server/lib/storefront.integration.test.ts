@@ -86,6 +86,13 @@ try {
   await rejects(() => service.review(actor, unknown.id, { expectedVersion: 2, received: true, basis: "conventional", note: "Forfait" }), 400);
   const config = (await service.admin(actor)).shop!;
   await rejects(() => service.save(actor, { ...config, expectedVersion: 1, services: [{ serviceId: 4, mode: "kg" }] }), 400);
+  await database.insert(schema.sites).values({ id: 3, organisationId: 1, name: "Seconde agence fictive" });
+  const secondActor = { ...actor, siteId: 3 };
+  const secondShop = { ...config, siteId: 3, slug: "second-test", expectedVersion: 0, published: false, services: [], currency: "EUR" };
+  await rejects(() => service.save(secondActor, secondShop), 409);
+  await service.save(secondActor, { ...secondShop, currency: "XAF" });
+  check(await service.organisationCurrency(1) === "XAF", "same organisation uses one immutable accounting currency");
+  check(await service.organisationCurrency(2) === null, "another organisation keeps independent currency preferences");
   await service.save(actor, { ...config, expectedVersion: config.version, published: false });
   await rejects(() => service.publicShop(slug), 404);
   check((await service.tracking(body.trackingSecret)).status === "converted", "closing storefront preserves existing tracking");

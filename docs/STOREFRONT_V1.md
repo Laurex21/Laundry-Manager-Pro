@@ -78,7 +78,7 @@ Le lanceur `npm run dev:storefront:replit` démarre l’application complète av
 - Interface pilote en français ; internationalisation détaillée à compléter avant ouverture à d’autres langues.
 - Les quantités/types sont contrôlés à réception mais pas modifiables sur une demande. En cas d’écart, établir une nouvelle demande corrigée avant facturation.
 - Les 100 dernières demandes sont visibles ; pagination, recherche, relances et clôture des demandes abandonnées restent à ajouter pour un déploiement large.
-- Les devis conservent leur devise. Xpress Pro utilise actuellement une préférence d’affichage pour ses commandes et reçus existants : ce pilote doit fonctionner avec **une devise cohérente pour l’agence et tous ses utilisateurs**, en XAF dans la démonstration. Le rapprochement serveur des devis avec la devise des encaissements et des reçus est un point à verrouiller avant un usage multidevise. Aucun change n’est calculé.
+- La première boutique fixe une devise commune à l’organisation : ses autres boutiques doivent utiliser la même devise, imposée également à la caisse et aux reçus par la session authentifiée. Choisir la devise réelle des tarifs existants ; aucun change n’est calculé. Les organisations sans boutique conservent leur préférence actuelle.
 - Le lien de suivi est un accès personnel par possession. Récupération de lien, révocation et politique de conservation/anonymisation doivent être définies avant ouverture large.
 - Les valeurs enfant/adolescent sont largement extrapolées. Elles doivent être calibrées avec les vêtements secs du pressing. La taille, le tissu et la coupe comptent davantage qu’une tranche d’âge rigide.
 

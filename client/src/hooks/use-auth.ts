@@ -24,6 +24,7 @@ export type AuthUser = User & {
   allSites?: any[];
   legalAcceptance?: LegalAcceptanceState;
   isPlatformAdmin?: boolean;
+  storefrontCurrency?: string | null;
 };
 
 async function fetchUser(): Promise<User | null> {
