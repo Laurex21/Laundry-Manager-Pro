@@ -84,7 +84,7 @@
     "test:platform-admin-follow-up": "node --import tsx server/lib/platform-admin-follow-up.test.ts && node --import tsx client/src/lib/platform-admin-follow-up.test.tsx && node --import tsx server/lib/platform-admin-saas.integration.test.ts",
     "test:payment-journey": "node --import tsx client/src/lib/saas-payment-journey.test.tsx",
     "test:acquisition": "tsx server/lib/acquisition.integration.test.ts && tsx client/src/lib/acquisition.test.ts && node --import tsx server/lib/sales-referrals.integration.test.ts && node --import tsx server/lib/sales-portal.integration.test.ts",
-    "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-storage-dependencies.test.ts server/lib/training-availability.test.ts client/src/lib/training-catalogue.test.ts",
+    "test:training": "node --import tsx --test server/lib/training.test.ts server/lib/training-security.test.ts server/lib/training-storage-dependencies.test.ts server/lib/training-availability.test.ts client/src/lib/training-catalogue.test.ts",
     "test:saas-promos": "node --import tsx server/lib/saas-promos.integration.test.ts",
     "test:cashbook-isolation": "node --test scripts/cashbook-development-schema.test.mjs && node server/lib/cashbook-engine.test.mjs && node --import tsx server/lib/cashbook-production-boundary.test.ts",
     "test:login-security": "node --import tsx server/lib/login-limits.integration.test.ts && node --import tsx server/lib/password-boundary.integration.test.ts",

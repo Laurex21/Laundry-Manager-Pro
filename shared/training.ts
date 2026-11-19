@@ -493,7 +493,7 @@ export const TRAINING_LESSONS = [
       }
     },
     "number": 17,
-    "audience": "user"
+    "audience": "ambassador"
   },
   {
     "id": "super-admin",

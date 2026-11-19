@@ -58,16 +58,16 @@ test('complete catalogue and private Super Admin videos enforce server access',a
  const base=`http://127.0.0.1:${(server.address() as any).port}`;
  try{
   const catalogue=await(await fetch(base+'/api/training',{headers:{authorization:'user'}})).json();
-  assert.equal(catalogue.lessons.length,17);assert.ok(!catalogue.lessons.some((x:any)=>x.id==='super-admin'));
+  assert.equal(catalogue.lessons.length,16);assert.ok(!catalogue.lessons.some((x:any)=>x.id==='super-admin'));
   assert.equal((await fetch(base+'/api/training/admin',{headers:{authorization:'user'}})).status,403);
   for(const mode of ['pc','mobile'])assert.equal((await fetch(base+`/api/training/super-admin/${mode}/video`,{headers:{authorization:'user'}})).status,403);
   assert.equal(loads,0,'denied requests must not load private media');
-  const all=await(await fetch(base+'/api/training/admin',{headers:{authorization:'verified-admin'}})).json();assert.equal(all.lessons.length,18);
+  const all=await(await fetch(base+'/api/training/admin',{headers:{authorization:'verified-admin'}})).json();assert.equal(all.lessons.length,17);
   for(const lesson of all.lessons)for(const mode of ['pc','mobile']){
    const headers={authorization:lesson.audience==='admin'?'verified-admin':'user'};
    assert.equal((await fetch(base+lesson.variants[mode].url,{headers})).status,200);
   }
-  assert.equal(loads,36,'each lesson and format must use a distinct cache');
+  assert.equal(loads,34,'each lesson and format must use a distinct cache');
   process.env.NODE_ENV='production';
   assert.equal((await fetch(base+'/api/training/admin',{headers:{authorization:'verified-admin'}})).status,404);
   assert.equal((await fetch(base+'/api/training/super-admin/pc/video',{headers:{authorization:'verified-admin'}})).status,404);
