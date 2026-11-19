@@ -102,5 +102,24 @@ try{
  // The compatibility flag does not activate the new schema or provider in production.
  process.env.NODE_ENV='production';assert.equal(saasEnabled(),false);process.env.NODE_ENV='test';
  assert.equal(saasSelection('business',1,0).extraSites,1);
+ // A new synthetic account gets Business even while all payments are disabled.
+ process.env.SAAS_BILLING_MODE='disabled';process.env.SAAS_BUSINESS_LAUNCH_ENABLED='true';
+ process.env.SALES_EMAIL_ENABLED='false';process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED='true';process.env.SAAS_DEFERRED_ORGANISATION_IDS='3,100,112,193';
+ const runtime=await import('./saas-runtime');
+ const createdAt=new Date();
+ await testDb.insert(schema.users).values({id:'new-business-owner',email:'business-trial@example.invalid',organisationId:9001});
+ await testDb.insert(schema.organisations).values({id:9001,name:'Fictitious Business trial',ownerId:'new-business-owner',createdAt});
+ await testDb.insert(schema.sites).values({id:9001,organisationId:9001,name:'Fictitious trial site'});
+ const trial=await runtime.saasForOrganisation(9001,'new-business-owner');
+ assert.equal(trial?.plan,'business');assert.equal(trial?.phase,'trialing');
+ assert.equal(Date.parse(trial!.trialEndsAt!)-createdAt.getTime(),30*86400000);
+ assert.equal(runtime.saasEnabled(),false);assert.equal(runtime.saasOrganisationEnabled(9001),false);
+ assert.equal(runtime.saasOrganisationAccessEnabled(9001),true);
+ for(const id of [3,100,112,193])assert.equal(runtime.saasOrganisationAccessEnabled(id),false);
+ assert.deepEqual(await runtime.saasForOrganisation(9001,'new-business-owner'),trial,'Repeated login must not extend the trial');
+ let blocked=200;const response:any={status:(c:number)=>{blocked=c;return response;},json:()=>response};
+ await handlers.get('POST /api/saas/quote')!({userId:'new-business-owner',organisationId:9001,body:{plan:'pro'}},response);
+ assert.equal(blocked,404,'Payment route stays disabled during Business trial');
+ console.log('PASS disabled billing: new Business trial exactly 30 days, stable expiry, paid routes disabled, four exclusions retained');
  console.log('PASS SaaS access: archived sites, direct mutation scopes, open staff sessions, premium APIs, standard receipts, atomic site quota and production opt-out');
 }finally{await pg.close();await pool.end();delete process.env.SAAS_BILLING_MODE;}

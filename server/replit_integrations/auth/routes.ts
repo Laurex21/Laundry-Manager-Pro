@@ -3,7 +3,7 @@ import { adminResetTokenMatchesEmail, adminResetTargetExcluded, adminResetLocked
 import { createSalesRegistrationUser, completeSalesRegistration, SalesReferralError } from "../../lib/sales-referrals";
 import { normalizeLoginEmail } from "@shared/login-email";
 import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
-import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
+import { saasOrganisationAccessEnabled, saasAccessEnabled, saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
 import type { Express } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
@@ -41,7 +41,7 @@ async function buildUserResponse(userId: string) {
   const isOrgOwner = user.userType !== "staff" && (!orgOwnerId || orgOwnerId === userId);
   const subscriptionOwnerId = isOrgOwner ? userId : orgOwnerId;
   const sub = subscriptionOwnerId ? await storage.getUserSubscription(subscriptionOwnerId) : null;
-  const saas = saasEnabled() && user.organisationId ? await saasForOrganisation(user.organisationId,user.id) : null;
+  const saas = saasAccessEnabled() && user.organisationId ? await saasForOrganisation(user.organisationId,user.id) : null;
   const planSlug = saas?.plan ?? sub?.plan?.slug ?? "starter";
 
   // Determine effective role: check if user is the org owner or a site member
@@ -349,9 +349,9 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
-      if (saasEnabled()) {
+      if (saasAccessEnabled()) {
         const created = await authStorage.getUser(user.id);
-        if (created?.organisationId && saasOrganisationEnabled(created.organisationId)) await saasStore.ensure(created.organisationId);
+        if (created?.organisationId && saasOrganisationAccessEnabled(created.organisationId)) await saasStore.ensure(created.organisationId);
       }
 
       const userAfterOrg = await authStorage.getUser(user.id);
@@ -415,9 +415,9 @@ export function registerAuthRoutes(app: Express): void {
       (req.session as any).userId = user.id;
 
       await ensureUserOrganisation(user.id);
-      if (saasEnabled()) {
+      if (saasAccessEnabled()) {
         const created = await authStorage.getUser(user.id);
-        if (created?.organisationId && saasOrganisationEnabled(created.organisationId)) await saasStore.ensure(created.organisationId);
+        if (created?.organisationId && saasOrganisationAccessEnabled(created.organisationId)) await saasStore.ensure(created.organisationId);
       }
 
       const response = await buildUserResponse(user.id);

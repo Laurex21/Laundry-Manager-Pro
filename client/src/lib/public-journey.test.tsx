@@ -27,6 +27,7 @@ for (const search of ["", "plan=enterprise", "plan=__proto__", "plan=pro&extraSi
 assert.equal(planIntentUrl("/auth", null, "login"), "/auth");
 
 assert.equal(saasSignupOffer({SAAS_BILLING_MODE:"disabled"}), null);
+assert.deepEqual(saasSignupOffer({SAAS_BILLING_MODE:"disabled",SAAS_BUSINESS_LAUNCH_ENABLED:"true"}), {plan:"business",days:30});
 assert.deepEqual(saasSignupOffer({NODE_ENV:"test",SAAS_BILLING_MODE:"sandbox",SAAS_BUSINESS_LAUNCH_ENABLED:"true"}), {plan:"business",days:30});
 assert.deepEqual(saasSignupOffer({NODE_ENV:"test",SAAS_BILLING_MODE:"sandbox"}), {plan:"pro",days:30});
 const live = {NODE_ENV:"production",SAAS_BILLING_MODE:"live",SAAS_LIVE_ENABLED:"true",SAAS_DATABASE_ENVIRONMENT:"production",PAWAPAY_PRODUCTION_API_TOKEN:"synthetic-never-used",SAAS_PRODUCTION_ORIGIN:"https://example.com",SAAS_BUSINESS_LAUNCH_ENABLED:"true"};
@@ -43,7 +44,7 @@ function render(config: unknown, children: React.ReactNode) {
 for (const language of ["fr", "en"]) {
   await i18n.changeLanguage(language);
   const html = render({enabled:false,signupOffer:{plan:"business",days:30}}, <SaasPublicPlans/>);
-  assert.match(html, /30 (jours de Business|days of free Business)/, "Welcome offer is independent of the visitor's payment flag");
+  assert.match(html, /Business (gratuitement pendant 30 jours|free for 30 days)/, "Welcome offer is independent of the visitor's payment flag");
   for (const plan of ["starter","pro","business"]) assert.ok(html.includes(`plan=${plan}`));
   const starter = render({enabled:false,signupOffer:null}, <SaasTrialInfo/>);
   assert.match(starter, /démarre sur Starter gratuit|starts on free Starter/);

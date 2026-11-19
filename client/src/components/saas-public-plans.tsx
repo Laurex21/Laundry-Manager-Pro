@@ -11,7 +11,7 @@ export function SaasTrialInfo(){
   const offer=config.data?.signupOffer;
   const message=config.isLoading?(fr?'Chargement de l’offre de bienvenue…':'Loading the welcome offer…')
     :config.isError||offer===undefined?(fr?'Créez votre compte gratuitement. Les conditions de bienvenue sont momentanément indisponibles ; votre formule sera indiquée dans votre compte.':'Create your account for free. Welcome terms are temporarily unavailable; your starting plan will be shown in your account.')
-    :offer?(fr?`${offer.days} jours de ${SAAS_PLANS[offer.plan].name} offerts aux nouveaux comptes. Puis Starter gratuit si aucun abonnement payant n’est confirmé.`:`New accounts receive ${offer.days} days of free ${SAAS_PLANS[offer.plan].name}. Then free Starter unless a paid subscription is confirmed.`)
+    :offer?(fr?`Profitez de ${SAAS_PLANS[offer.plan].name} gratuitement pendant ${offer.days} jours. À la fin de l’essai, choisissez votre abonnement ou continuez sur Starter gratuit. Vos données sont conservées.`:`Enjoy ${SAAS_PLANS[offer.plan].name} free for ${offer.days} days. After your trial, choose a subscription or continue on free Starter. Your data is retained.`)
     :(fr?'Votre compte démarre sur Starter gratuit. Vous pourrez choisir Pro, Business ou Personnalisé lorsque le paiement sera disponible pour votre compte.':'Your account starts on free Starter. You can choose Pro, Business or Custom when payment is available for your account.');
   return <p data-testid="signup-offer" className="my-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">{message} {fr?'Sans carte bancaire à l’inscription. Aucun prélèvement automatique.':'No payment card at signup. No automatic debit.'}</p>;
 }

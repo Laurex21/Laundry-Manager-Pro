@@ -1,6 +1,6 @@
 import {starterReceiptSettings} from "../../shared/starter-receipt";
 import { hasSaasFeature, type SaasFeature, type SaasState } from "../../shared/saas-plans";
-import { saasEnabled, saasStore, saasForOrganisation } from "./saas-runtime";
+import { saasAccessEnabled, saasEnabled, saasStore, saasForOrganisation } from "./saas-runtime";
 import { SaasError } from "./saas-store";
 
 export const SAAS_CUSTOM_FIELDS = ["logoBase64", "receiptHeaderColor", "receiptFooterNote", "receiptQrCodeBase64", "receiptQrCodeTarget", "receiptQrCodeLabel", "showLogo", "showPickupDate", "showGarmentList", "showPaymentHistory", "showTerms", "termsOfService"];
@@ -9,7 +9,7 @@ export function standardSaasSettings<T extends Record<string, any>>(settings: T,
   return starterReceiptSettings(settings);
 }
 export async function applySaasAccess(req: any, res: any): Promise<boolean> {
-  if (!saasEnabled() || !req.organisationId) return true;
+  if (!saasAccessEnabled() || !req.organisationId) return true;
   const state = await saasForOrganisation(req.organisationId,req.userId);
   if (!state) return true; // Unreviewed legacy accounts keep their existing access.
   req.saas = state;

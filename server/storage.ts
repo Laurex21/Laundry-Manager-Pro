@@ -2,7 +2,7 @@ import { canDeliverGarments } from "@shared/garment-delivery";
 import { currentCustomerRisk } from "./lib/customer-risk";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { requireExistingColumns } from "./lib/existing-schema-check";
-import { saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
+import { saasAccessEnabled, saasEnabled, saasOrganisationAccessEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
 import { standardSaasSettings } from "./lib/saas-access";
 import { db } from "./db";
 import { insertOrderRecords, type OrderCreationRecords } from "./lib/order-creation";
@@ -1670,7 +1670,7 @@ export class DatabaseStorage implements IStorage {
     await ensureBusinessSettingsSchema();
     const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
     const effective = async (value: BusinessSettings) => {
-      if (!saasEnabled()) return value;
+      if (!saasAccessEnabled()) return value;
       const org = await this.getOrganisationByOwner(userId);
       const state = org ? await saasForOrganisation(org.id) : null;
       return state ? standardSaasSettings(value, state.plan) : value;
@@ -1737,7 +1737,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSite(organisationId: number, data: { name: string; address?: string; city?: string; phone?: string }): Promise<Site> {
-    if (saasOrganisationEnabled(organisationId)) await saasStore.ensure(organisationId);
+    if (saasOrganisationAccessEnabled(organisationId)) await saasStore.ensure(organisationId);
     return await db.transaction(async (tx) => {
       const create = async () => {
       const [site] = await tx.insert(sites).values({
@@ -1753,7 +1753,7 @@ export class DatabaseStorage implements IStorage {
       }
       return site;
       };
-      if (!saasOrganisationEnabled(organisationId)) return create();
+      if (!saasOrganisationAccessEnabled(organisationId)) return create();
       let created: Site | undefined;
       await saasStore.allocateSite(drizzleSaasExecutor(tx), organisationId, async () => { created = await create(); return created.id; });
       return created!;
@@ -1869,7 +1869,7 @@ export class DatabaseStorage implements IStorage {
       return null;
     }
 
-    if (saasOrganisationEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
+    if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
       const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
       if (!site || site.organisationId !== inv.organisationId) return null;
@@ -1886,7 +1886,7 @@ export class DatabaseStorage implements IStorage {
         currentSiteId: inv.siteId,
       }).returning();
 
-      if (saasOrganisationEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, staffUser.id, inv.siteId);
+      if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, staffUser.id, inv.siteId);
       await tx.insert(siteMembers).values({ siteId: inv.siteId, userId: staffUser.id, role: inv.role });
       await tx.update(siteInvitations).set({ status: "accepted" }).where(eq(siteInvitations.id, inv.id));
       return staffUser;
@@ -1910,9 +1910,9 @@ export class DatabaseStorage implements IStorage {
     if (!userIdentifiers.includes(invitedIdentifier)) {
       throw new Error("INVITATION_IDENTIFIER_MISMATCH");
     }
-    if (saasOrganisationEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
+    if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
-      if (saasOrganisationEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, userId, inv.siteId);
+      if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, userId, inv.siteId);
       const [site] = await tx.select().from(sites).where(and(
         eq(sites.id, inv.siteId),
         eq(sites.organisationId, inv.organisationId),
