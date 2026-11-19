@@ -1,6 +1,5 @@
 import { Link } from "wouter";
 import { SALES_CODE } from "@shared/sales-referrals";
-import { SalesReferralNotice } from "@/components/sales-referral-notice";
 import { readPlanIntent, planIntentUrl } from "@/lib/saas-plan-intent";
 import { SaasPlanIntent } from "@/components/saas-plan-intent";
 import { authErrorMessage } from "@/lib/auth-errors";
@@ -36,8 +35,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
   const search = useSearch();
   const rawSalesCode = new URLSearchParams(search).get("sales") || "";
   const salesCode = SALES_CODE.test(rawSalesCode) ? rawSalesCode : "";
-  const [ignoredSalesCode, setIgnoredSalesCode] = useState("");
-  const salesReferralCode = salesCode && ignoredSalesCode !== salesCode ? salesCode : undefined;
+  const salesReferralCode = salesCode || undefined;
   const selectedPlan = readPlanIntent(search);
   const destination = selectedPlan ? planIntentUrl("/subscriptions", selectedPlan) : "/";
   const [, setLocation] = useLocation();
@@ -101,7 +99,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setFormError({message: data.message === "SALES_REFERRAL_UNAVAILABLE" ? (i18n.language.startsWith("fr") ? "Lien commercial indisponible. Choisissez « Continuer sans recommandation », puis réessayez." : "Referral unavailable. Choose ‘Continue without a referral’ and try again.") : data.message, status: res.status, retryAfter: res.headers.get("Retry-After")});
+        setFormError({message: data.message === "SALES_REFERRAL_UNAVAILABLE" ? (i18n.language.startsWith("fr") ? "Ce lien d’inscription est indisponible. Demandez un nouveau lien à la personne qui vous l’a envoyé." : "This signup link is unavailable. Ask the person who shared it for a new link.") : data.message, status: res.status, retryAfter: res.headers.get("Retry-After")});
         return;
       }
 
@@ -160,7 +158,6 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
       <form id="auth-form-panel" role="tabpanel" aria-labelledby={tab === "login" ? "auth-login-tab" : "auth-register-tab"} onSubmit={handleSubmit} className="space-y-4">
         {formError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{authErrorMessage(formError.message, formError.status, formError.retryAfter, t)}</p>}
-        {tab === "register" && salesReferralCode && <SalesReferralNotice code={salesReferralCode} remove={() => setIgnoredSalesCode(salesCode)} />}
         {tab === "register" && (
           <>
             <div className="grid grid-cols-2 gap-3">

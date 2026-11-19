@@ -6,7 +6,7 @@ import { automaticMaintenanceSuspended } from "./automatic-maintenance";
 import type { Express } from "express";
 import { z } from "zod";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { saasEnabled, saasOrganisationEnabled, saasRequestEnabled, collectionPilotRequestEnabled, saasStore, startSaasJobs, saasUserDeferred } from "./saas-runtime";
+import { saasOrganisationAccessEnabled, saasEnabled, saasOrganisationEnabled, saasRequestEnabled, collectionPilotRequestEnabled, saasStore, startSaasJobs, saasUserDeferred } from "./saas-runtime";
 import { livePilotConfigured, pilotSelectionAllowed, collectionPilotConfigured, collectionPilotAllowed, isCollectionPilotInvoice, COLLECTION_PILOT_XAF } from "./saas-pilot";
 import { saasFailure } from "./saas-access";
 import { configuredSaasProvider, saasCallbackAuthority } from "./saas-pawapay";
@@ -65,8 +65,8 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
     if(!origin)throw new SaasError("LIVE_HTTPS_ORIGIN_REQUIRED",503);
     res.json(await provider().start(org,invoice.id,new URL("/subscriptions",origin).toString()));
   });
-  async function owner(req: any, res: any) {
-    if (await saasUserDeferred(req.userId) || !saasOrganisationEnabled(req.organisationId)) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
+  async function owner(req: any, res: any, accessOnly = false) {
+    if (await saasUserDeferred(req.userId) || !(accessOnly ? saasOrganisationAccessEnabled(req.organisationId) : saasOrganisationEnabled(req.organisationId))) { res.status(404).json({ code: "SAAS_DISABLED" }); return null; }
     if (!req.organisationId) { res.status(403).json({ code: "ORGANISATION_REQUIRED" }); return null; }
     const row = (await saasStore.db.query("SELECT owner_id FROM organisations WHERE id=$1", [req.organisationId])).rows[0];
     if (row?.owner_id !== req.userId) { res.status(403).json({ code: "OWNER_REQUIRED" }); return null; }
@@ -74,7 +74,7 @@ export function registerSaasRoutes(app: Express, { backgroundJobs = true }: { ba
   }
   function route(method: "get" | "post", path: string, fn: (org: number, req: any, res: any) => Promise<void>) {
     app[method](path, isAuthenticated, limited, async (req: any, res: any) => {
-      try { const org = await owner(req, res); if (org) {
+      try { const org = await owner(req, res, method === "get" && path === "/api/saas/current"); if (org) {
         if(proPilotConfigured() && path !== "/api/saas/notices") throw new SaasError("PRO_PILOT_USE_DEDICATED_FLOW",403);
         await fn(org, req, res);
       } }

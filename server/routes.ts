@@ -16,7 +16,7 @@ import { getPilotageOverview } from "./lib/pilotage-overview";
 import { registerCashbookRoutes } from "./lib/cashbook-routes";
 import { registerSaasRoutes } from "./lib/saas-routes";
 import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
-import { saasEnabled, saasRequestEnabled, saasStore, saasForOrganisation, saasUserDeferred } from "./lib/saas-runtime";
+import { saasAccessEnabled, saasEnabled, saasRequestEnabled, saasStore, saasForOrganisation, saasUserDeferred } from "./lib/saas-runtime";
 import { SAAS_CUSTOM_FIELDS, standardSaasSettings } from "./lib/saas-access";
 import { SAAS_PLANS } from "@shared/saas-plans";
 import type { Express } from "express";
@@ -310,7 +310,7 @@ async function effectivePlanSlug(req: any): Promise<string> {
     const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId)).limit(1);
     subscriptionOwnerId = org?.ownerId || userId;
   }
-  if (saasEnabled()) {
+  if (saasAccessEnabled()) {
     const orgId = Number((req as any).organisationId);
     const state = orgId ? await saasForOrganisation(orgId,userId) : null;
     if (state) return state.plan;

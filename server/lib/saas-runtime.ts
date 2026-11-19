@@ -1,3 +1,4 @@
+import { businessTrialEnabled } from "./saas-public-offer";
 import { saasOrganisationDeferred, saasIdentityDeferred } from "./saas-deferred";
 import { proPilotConfigured } from "./saas-pro-pilot";
 import { automaticMaintenanceSuspended } from "./automatic-maintenance";
@@ -11,6 +12,11 @@ import { saasEnvironment } from "./saas-environment";
 // Live requires explicit approval, production-only credentials and a permanent origin.
 export function saasEnabled() {
   return saasEnvironment() !== null;
+}
+// Subscription rights and welcome trials do not require payment activation.
+export function saasAccessEnabled() { return businessTrialEnabled() || saasEnabled(); }
+export function saasOrganisationAccessEnabled(org: unknown) {
+  return saasAccessEnabled() && !saasOrganisationDeferred(org) && !collectionPilotConfigured() && pilotOrganisationAllowed(org);
 }
 export function saasOrganisationEnabled(org: unknown) {
   return saasEnabled() && !saasOrganisationDeferred(org) && !collectionPilotConfigured() && pilotOrganisationAllowed(org);
@@ -42,7 +48,7 @@ const database: SaasDatabase = {
 };
 export const saasStore = new SaasStore(database, undefined, process.env.SAAS_BILLING_MODE === "live" ? "live" : "sandbox");
 export async function saasForOrganisation(org: number, userId?: string) {
-  if (!saasOrganisationEnabled(org) || await saasIdentityDeferred(database,userId)) return null;
+  if (!saasOrganisationAccessEnabled(org) || await saasIdentityDeferred(database,userId)) return null;
   if(proPilotConfigured() && !(await saasStore.db.query("SELECT organisation_id FROM saas_accounts WHERE organisation_id=$1",[org])).rows.length) return null;
   try { return await saasStore.current(org); } catch (error) {
     if (error instanceof SaasError && error.code === "LEGACY_SUBSCRIPTION_REQUIRES_REVIEW") return null;
