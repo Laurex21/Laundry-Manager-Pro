@@ -2,6 +2,7 @@ import { safeReceiptDocument } from "./receipt-safety";
 import { receiptQuantity } from "./receipt-quantity";
 import { recordOnboardingAction } from "./onboarding-events";
 import { archiveReceiptHtml, type ReceiptArchiveContext } from "./receipt-archive";
+import { waitForReceiptOperation, withReceiptTimeout } from "./receipt-request";
 export type ReceiptFormat = "html" | "pdf" | "png";
 
 // Apply display-only corrections after reading the frozen archive too. Never
@@ -22,12 +23,13 @@ export function normalizeReceiptPresentation(html: string): string {
 
 // Keep the same desktop layout on phones; only the output resolution changes.
 export const RECEIPT_VIEWPORT_WIDTH = 820;
-export function receiptExportSize(width: number, height: number) {
+export function receiptExportSize(width: number, height: number, mobile = false) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     throw new Error("Invalid receipt dimensions");
   }
   // Avoid blank canvases on mobile. Never silently export an unreadable receipt.
-  const scale = Math.min(4, 16384 / Math.max(width, height), Math.sqrt(16_000_000 / (width * height)));
+  // 2x retains readable text on phones while quartering the usual 4x bitmap.
+  const scale = Math.min(mobile ? 2 : 4, 16384 / Math.max(width, height), Math.sqrt(16_000_000 / (width * height)));
   if (scale < 2) throw new Error("RECEIPT_TOO_LARGE");
   return { width: Math.ceil(width), height: Math.ceil(height), scale };
 }
@@ -46,7 +48,12 @@ export function saveReceiptBlob(blob: Blob, filename: string) {
 
 /** One rendering shared by PDF and PNG: no print CSS, pagination or JPEG compression. */
 export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasElement> {
-  const { default: html2canvas } = await import("html2canvas");
+  return withReceiptTimeout(signal => renderReceiptCanvasWithinDeadline(html, signal), 30_000);
+}
+
+async function renderReceiptCanvasWithinDeadline(html: string, signal: AbortSignal): Promise<HTMLCanvasElement> {
+  const wait = <T,>(operation: Promise<T>) => waitForReceiptOperation(operation, signal);
+  const { default: html2canvas } = await wait(import("html2canvas"));
   const parsed = new DOMParser().parseFromString(safeReceiptDocument(html), "text/html");
   parsed.querySelectorAll("script, iframe, object, embed, base, meta[http-equiv], .no-print").forEach(node => node.remove());
   parsed.querySelectorAll("*").forEach(node => {
@@ -65,19 +72,23 @@ export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasEleme
   });
   frame.srcdoc = parsed.documentElement.outerHTML;
   document.body.appendChild(frame);
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("Receipt loading timed out")), 20_000); });
   try {
-    await Promise.race([loaded, deadline]);
+    await wait(loaded);
     const doc = frame.contentDocument!;
-    await Promise.race([doc.fonts.ready, deadline]);
-    await Promise.race([Promise.all(Array.from(doc.images).map(async image => {
-      if (!image.complete) await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error("Receipt image could not be loaded"));
-      });
-      if (!image.naturalWidth) throw new Error("Receipt image could not be loaded");
-    })), deadline]);
+    await wait(doc.fonts.ready);
+    await wait(Promise.all(Array.from(doc.images).map(async image => {
+      if (!image.complete) await wait(new Promise<void>(resolve => {
+        image.onload = image.onerror = () => resolve();
+      }));
+      if (!image.naturalWidth) {
+        // A removed/invalid logo must not prevent access to the receipt. Make
+        // the missing image explicit in the export; never change its archive.
+        const placeholder = doc.createElement("span");
+        placeholder.textContent = `[${image.alt || "Image"} — unavailable / indisponible]`;
+        placeholder.style.cssText = "font:12px Arial;color:#64748b";
+        image.replaceWith(placeholder);
+      }
+    })));
     const receipt = doc.querySelector<HTMLElement>(".receipt, main");
     if (!receipt) throw new Error("Receipt content is missing");
     // Export the receipt itself at the document origin, without page chrome.
@@ -86,17 +97,24 @@ export async function renderReceiptCanvas(html: string): Promise<HTMLCanvasEleme
     doc.body.style.margin = "0";
     receipt.style.margin = "0";
     const rect = receipt.getBoundingClientRect();
-    const size = receiptExportSize(Math.max(rect.width, receipt.scrollWidth), Math.max(rect.height, receipt.scrollHeight));
-    return await html2canvas(receipt, {
+    const mobile = window.matchMedia("(max-width: 600px), (pointer: coarse)").matches;
+    const size = receiptExportSize(Math.max(rect.width, receipt.scrollWidth), Math.max(rect.height, receipt.scrollHeight), mobile);
+    return await wait(html2canvas(receipt, {
       ...size, backgroundColor: "#ffffff", logging: false, useCORS: true,
       // Let the browser lay out and paint text, borders, flex and grid together.
       // The manual canvas text renderer shifts baselines relative to the HTML.
       foreignObjectRendering: true,
       windowWidth: RECEIPT_VIEWPORT_WIDTH, windowHeight: Math.max(1000, size.height),
       scrollX: 0, scrollY: 0,
-    });
+    }).then(canvas => {
+      if (signal.aborted) {
+        canvas.width = canvas.height = 0;
+        throw signal.reason;
+      }
+      return canvas;
+    }));
   } finally {
-    clearTimeout(timeout);
+    frame.onload = frame.onerror = null;
     frame.remove();
   }
 }
@@ -112,10 +130,10 @@ export async function downloadReceiptDocument(html: string, filename: string, fo
   const canvas = await renderReceiptCanvas(html);
   try {
     if (format === "png") {
-      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("PNG export failed")), "image/png"));
+      const blob = await withReceiptTimeout(() => new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("PNG export failed")), "image/png")));
       saveReceiptBlob(blob, `${basename}.png`);
     } else {
-      const { jsPDF } = await import("jspdf");
+      const { jsPDF } = await withReceiptTimeout(() => import("jspdf"));
       // The page follows the HTML proportions, including long receipts, with no clipping.
       const width = 510; // 680 CSS pixels at 96 dpi, in PDF points.
       const height = width * canvas.height / canvas.width;

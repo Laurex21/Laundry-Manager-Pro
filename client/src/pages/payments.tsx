@@ -1,3 +1,4 @@
+import { requestReceipt } from "@/lib/receipt-request";
 import { ReceiptDownloadMenu } from "@/components/receipt-download-menu";
 import type { ReceiptFormat } from "@/lib/receipt-export";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
@@ -265,10 +266,14 @@ export default function Payments() {
     try {
       let orderDetails: any = null;
       try {
-        const res = await fetch(`/api/orders/${successPayment.orderId}`, { credentials: "include" });
-        if (res.ok) orderDetails = await res.json();
-      } catch {
-        // proceed with available data
+        orderDetails = await requestReceipt(`/api/orders/${successPayment.orderId}`, async response => {
+          if (!response.ok) throw new Error("Receipt order unavailable");
+          return response.json();
+        });
+      } catch (error) {
+        // Downloaded receipts must retain the full order details and amounts.
+        if (action !== "thermal") throw error;
+        // Preserve the existing thermal-print fallback.
       }
 
       const items = orderDetails?.items || [];

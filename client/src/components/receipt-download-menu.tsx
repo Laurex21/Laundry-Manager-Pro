@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import type { ReceiptFormat } from "@/lib/receipt-export";
+import { RECEIPT_TIMEOUT } from "@/lib/receipt-request";
 
 type Props = Omit<ComponentProps<typeof Button>, "onClick"> & { onDownload: (format: ReceiptFormat) => Promise<void> };
 export function ReceiptDownloadMenu({ onDownload, children, disabled, ...props }: Props) {
@@ -18,7 +19,10 @@ export function ReceiptDownloadMenu({ onDownload, children, disabled, ...props }
     try { await onDownload(format); }
     catch (error) {
       const tooLarge = error instanceof Error && error.message === "RECEIPT_TOO_LARGE";
-      toast({ title: fr ? "Téléchargement impossible" : "Download failed", description: tooLarge
+      const timedOut = error instanceof Error && error.message === RECEIPT_TIMEOUT;
+      toast({ title: fr ? "Téléchargement impossible" : "Download failed", description: timedOut
+        ? (fr ? "La préparation du reçu prend trop de temps. Vérifiez votre connexion, puis réessayez. Pour un export plus léger, choisissez le HTML." : "Preparing the receipt is taking too long. Check your connection and try again. Choose HTML for a lighter export.")
+        : tooLarge
         ? (fr ? "Ce reçu est trop long pour un export HD sur cet appareil. Téléchargez le HTML." : "This receipt is too long for HD export on this device. Download the HTML.")
         : (fr ? "Le reçu n’a pas pu être généré. Réessayez ou choisissez le HTML." : "The receipt could not be generated. Try again or choose HTML."), variant: "destructive" });
     } finally { setBusy(false); }
