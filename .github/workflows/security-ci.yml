@@ -24,6 +24,7 @@ jobs:
       - run: node scripts/picomatch-security.mjs --apply
       - run: npm run audit:security
       - run: npm run check
+      - run: npm run test:storefront-approval
       - run: npm run test:cashbook-isolation
       - run: npm run test:training
       - run: npm run test:payment-journey

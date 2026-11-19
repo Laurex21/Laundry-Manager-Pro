@@ -97,7 +97,8 @@
     "test:receipt-release": "node --test scripts/receipt-release.test.mjs",
     "verify:receipt-release": "node scripts/verify-receipt-release.mjs",
     "test:superadmin-release": "node --test scripts/superadmin-release.test.mjs",
-    "verify:superadmin-release": "node scripts/verify-superadmin-release.mjs"
+    "verify:superadmin-release": "node scripts/verify-superadmin-release.mjs",
+    "test:storefront-approval": "node --test scripts/storefront-approval-guard.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
