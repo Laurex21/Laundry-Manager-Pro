@@ -86,8 +86,9 @@ try{
   const preview=previewDualRoleSeparation(evidence);assert.equal(preview.status,'ready_for_isolated_separation');
   assert.equal(previewDualRoleSeparation({...evidence,memberships:[evidence.memberships[0],{...evidence.memberships[1],role:'owner'}]}).status,'review_required');
   const staffBefore=await saasStore.staffCandidates(saasStore.db,c.foreign);
-  // Disabled billing tests the existing tenant boundary without creating SaaS states.
-  process.env.SAAS_BILLING_MODE='disabled';
+  // This section isolates the pre-SaaS tenant boundary. Billing alone no longer
+  // disables Business trials; turn off the trial flag explicitly for these fixtures.
+  process.env.SAAS_BILLING_MODE='disabled';process.env.SAAS_BUSINESS_LAUNCH_ENABLED='false';
   const before=await tenant(`dual-${c.org}`,c.foreign);assert.deepEqual(before.siteScope,[c.foreign]);
   const membersBefore=(await query('SELECT * FROM site_members WHERE user_id=$1 ORDER BY id',[`dual-${c.org}`])).rows;
   async function separate(fail=false){await pg.transaction(async tx=>{
