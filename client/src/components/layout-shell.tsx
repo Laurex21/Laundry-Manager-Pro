@@ -45,6 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
       { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
+      { icon: ShoppingBag, labelKey: "Boutique WhatsApp", href: "/boutique", page: "storefront" },
       { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
       { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
       { icon: CreditCard, labelKey: "payments", href: "/payments", page: "payments" },

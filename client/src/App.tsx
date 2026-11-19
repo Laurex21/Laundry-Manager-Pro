@@ -35,6 +35,9 @@ const Orders            = lazy(() => import("@/pages/orders"));
 const OrderDetail       = lazy(() => import("@/pages/order-detail"));
 const Pilotage          = lazy(() => import("@/pages/pilotage"));
 const Services          = lazy(() => import("@/pages/services"));
+const StorefrontPublic = lazy(() => import("@/pages/storefront-public"));
+const StorefrontTracking = lazy(() => import("@/pages/storefront-tracking"));
+const StorefrontAdmin = lazy(() => import("@/pages/storefront-admin"));
 const Cashbook = lazy(() => import("@/pages/cashbook"));
 const Expenses          = lazy(() => import("@/pages/expenses"));
 const Inventory         = lazy(() => import("@/pages/inventory"));
@@ -176,6 +179,9 @@ function Router() {
   return (
     <Suspense fallback={<PageSkeleton />}>
       <Switch>
+        <Route path="/b/:slug" component={StorefrontPublic} />
+        <Route path="/suivi-boutique" component={StorefrontTracking} />
+        <Route path="/boutique"><ProtectedRoute component={StorefrontAdmin} page="storefront" /></Route>
         <Route path="/rencontre" component={FippPage} />
         <Route path="/xpresspro"><XpressBranchPage branch="pro" /></Route>
         <Route path="/xpress-consulting"><XpressBranchPage branch="consulting" /></Route>

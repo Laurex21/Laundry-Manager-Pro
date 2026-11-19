@@ -116,6 +116,7 @@ export function useAuth() {
   const canAccess = (page: string): boolean => {
     const state = (user as AuthUser)?.saas;
     if ((user as AuthUser)?.saasSuspended) return false;
+    if (page === "storefront") return userRole === "owner" || userRole === "manager";
     if (state && state.plan === "starter" && ["reports","analytics","team","machines","employees"].includes(page)) return false;
     const ownerPages = ["settings", "subscriptions", "pilotage", "reports", "dailyReports", "analytics", "team", "dashboard", "orders", "qualityOperations", "customers", "payments", "services", "expenses", "inventory", "machines", "employees"];
     const managerPages = ["orders", "pilotage", "reports", "qualityOperations", "dailyReports", "customers", "payments", "services", "expenses", "inventory", "machines", "employees", "analytics", "dashboard"];

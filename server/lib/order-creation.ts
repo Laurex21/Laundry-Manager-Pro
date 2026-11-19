@@ -11,6 +11,8 @@ import { compareDecimals } from "@shared/exact-decimal";
 type OrderTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type OrderCreationRecords = {
+  // Internal-only, server-validated storefront quote prices. Never copy HTTP input here.
+  validatedPrices?: Record<number, string>;
   initialPayment?: Omit<InsertPayment, "orderId">;
   actorUserId?: string | null;
   employeeId?: number | null;
@@ -43,7 +45,7 @@ export async function insertOrderRecords(
     const [service] = await tx.select().from(services).where(eq(services.id, item.serviceId));
     if (!service) throw new Error(`Service ${item.serviceId} not found`);
     await tx.insert(orderItems).values({
-      orderId: order.id, serviceId: item.serviceId, quantity: String(item.quantity), priceAtOrder: service.price,
+      orderId: order.id, serviceId: item.serviceId, quantity: String(item.quantity), priceAtOrder: records.validatedPrices?.[item.serviceId] ?? service.price,
     });
   }
   for (const garment of garments) {
