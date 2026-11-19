@@ -12,7 +12,7 @@
 - Conversion transactionnelle et idempotente vers les tables de commandes, articles, vêtements et historique déjà utilisées par Xpress Pro. Les prix acceptés restent figés si le catalogue évolue. Paiement dans le parcours existant.
 - Suivi personnel du devis et de l’état réel de la commande sur `/suivi-boutique#secret`.
 
-Le code est intégré au routeur et au menu de l’application. Il n’a pas été déployé sur un environnement partagé. La démonstration locale ci-dessous utilise les mêmes composants, le même moteur et les mêmes routes métier, avec une base PostgreSQL PGlite fictive en mémoire.
+Le code est intégré au routeur et au menu de l’application. Le 19 novembre 2026, il a été connecté à la base de développement Replit et vérifié jusqu’aux paiements fictifs et aux PDF : voir [le compte rendu de validation](STOREFRONT_DEV_VALIDATION_20261119.md). La démonstration locale ci-dessous reste disponible avec une base PostgreSQL PGlite fictive en mémoire.
 
 ## Lancer la démonstration locale
 
@@ -60,7 +60,7 @@ Un minimum au kilo crée, si nécessaire, une ligne explicite « Complément min
 2. Après avoir vérifié la cible `DATABASE_URL`, exécuter explicitement :
 
    ```sh
-   XPRESSPRO_SCHEMA_CHANGE_TARGET=development npm run db:migrate:storefront
+   NODE_ENV=development XPRESSPRO_SCHEMA_CHANGE_TARGET=development npm run db:migrate:storefront
    ```
 
    Le lanceur refuse `NODE_ENV=production`, ne recrée pas les quatre tables déjà présentes et bloque un schéma partiel. S’il trouve les tables, il ne certifie pas leur conformité : comparer les colonnes avant activation.
@@ -68,7 +68,9 @@ Un minimum au kilo crée, si nécessaire, une ligne explicite « Complément min
 4. Renseigner adresse, numéro réel et horaires ; sélectionner des services de cette agence ; vérifier les poids puis ouvrir la boutique. L’identifiant du lien et la devise deviennent fixes à la première sauvegarde.
 5. Exécuter l’essai complet avec authentification réelle, paiement de test et reçu, puis comparer le devis accepté, les lignes et le montant encaissé.
 
-Le drapeau est désactivé par défaut ; les nouvelles routes ne touchent pas les tables tant qu’il est désactivé. La navigation affiche alors un message d’indisponibilité. Fermer une boutique avec sa case d’ouverture arrête les nouvelles demandes tout en conservant les suivis existants. Aucun script de migration n’a été lancé sur une base externe pendant ce développement.
+Le drapeau est désactivé par défaut ; les nouvelles routes ne touchent pas les tables tant qu’il est désactivé. La navigation affiche alors un message d’indisponibilité. Fermer une boutique avec sa case d’ouverture arrête les nouvelles demandes tout en conservant les suivis existants. La migration a été appliquée uniquement à `helium/heliumdb` dans Replit développement, sans publication ni migration de production.
+
+Le lanceur `npm run dev:storefront:replit` démarre l’application complète avec son authentification habituelle. Il exige un domaine Replit de développement et la base locale `helium/heliumdb`, et refuse les déploiements, la production et les bases externes. Il suspend les maintenances automatiques et la collecte SaaS réelle pour cet essai. Il ne remplace pas le lanceur fictif `dev:storefront`.
 
 ## Limites du premier pilote
 
@@ -94,13 +96,13 @@ node --import tsx script/build.ts
 node --import tsx scripts/verify-production-build.ts
 ```
 
-Les tests métier appliquent la **migration SQL livrée** sur une base PGlite vierge contenant le schéma antérieur. Ils couvrent calcul exact, gabarits mélangés, devis incomplet, pesée, forfait, minimum, changement de tarif, versions, doublons, rollback et isolation entre organisations. Les tests de routes vérifient authentification, rôle, activation, limiteur, origine et validation.
+Les tests métier appliquent la **migration SQL livrée** sur une base PGlite vierge contenant le schéma antérieur. Ils couvrent calcul exact, gabarits mélangés, devis incomplet, pesée, forfait, minimum, changement de tarif, versions, doublons, rollback et isolation entre organisations. Les tests de routes vérifient authentification, rôle, activation, limiteur, origine et validation. Le test `storefront-payment.integration.test.ts` utilise aussi le module d’encaissement existant : acompte, répétition idempotente, solde, suivi réglé et contenu des deux types de reçus.
 
 Le scénario `scripts/storefront.browser.test.mjs` utilise Playwright avec Chrome, contre le lanceur local déjà ouvert. Définir `PLAYWRIGHT_MODULE` si Playwright est fourni hors du projet, et éventuellement `STOREFRONT_SCREENSHOTS` pour conserver les six captures. Il traverse les écrans sur un mobile de 390 px et un bureau de 1440 px, vérifie la commande créée, l’absence de débordement mobile et d’erreurs JavaScript.
 
 La validation du build constate également l’avertissement préexistant sur les gros paquets JavaScript. Les tests d’intégrité des commandes existantes vérifient la création atomique, les avances, les compteurs et l’authentification entre organisations.
 
-## Résultats obtenus le 19 novembre 2026
+## Résultats du premier essai local, le 19 novembre 2026
 
 | Vérification | Résultat |
 | --- | --- |
@@ -115,4 +117,4 @@ La validation du build constate également l’avertissement préexistant sur le
 | Lanceur fictif dans les fichiers de production | Aucun marqueur du lanceur trouvé |
 | Base externe, paiement réel et publication | Non exécutés |
 
-La commande du test navigateur passe de l’estimation de 1 300 FCFA à un devis pesé de 1 450 FCFA, accepté par le client, puis enregistré comme commande non réglée. Les tests de calcul vérifient également les lignes du supplément minimum. La génération du reçu et l’encaissement dans une instance Xpress Pro connectée restent à valider au prochain essai sur une base de développement.
+La commande du premier test navigateur passe de l’estimation de 1 300 FCFA à un devis pesé de 1 450 FCFA, accepté par le client, puis enregistré comme commande non réglée. Les tests de calcul vérifient également les lignes du supplément minimum. L’essai connecté suivant a confirmé l’encaissement de 500 puis 950 FCFA, le suivi réglé et les trois PDF téléchargés, détaillés dans le compte rendu de développement.
