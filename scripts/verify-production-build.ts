@@ -12,6 +12,8 @@ const requiredMarkers = [
   "payments-page-redesign",
   "analytics-page-redesign",
   "settings-page-redesign",
+  "admin-capacity",
+  "capacity-preview",
 ];
 
 async function verifyProductionBuild() {
@@ -19,6 +21,7 @@ async function verifyProductionBuild() {
     await readFile("dist/public/build-manifest.json", "utf8"),
   ) as {
     commit?: string;
+    superadminReleaseGuard?: { version: number; baseline: string; commit: string };
     receiptReleaseGuard?: { version: number; baseline: string; commit: string };
     buildStartedAt?: string;
     buildCompletedAt?: string;
@@ -32,6 +35,16 @@ async function verifyProductionBuild() {
       manifest.receiptReleaseGuard.baseline !== "b55a0a03481156af5cc29a0ce19647477e8e9645" ||
       manifest.receiptReleaseGuard.commit !== manifest.commit) {
     throw new Error("Production build verification failed: receipt release guard is missing.");
+  }
+
+  if (manifest.superadminReleaseGuard?.version !== 1 ||
+      manifest.superadminReleaseGuard.baseline !== "2783e45118028dce5dc895332920ce1a1ea4df8d" ||
+      manifest.superadminReleaseGuard.commit !== manifest.commit) {
+    throw new Error("Production build verification failed: superadmin release guard is missing.");
+  }
+  const serverBundle = await readFile("dist/index.cjs", "utf8");
+  for (const marker of ["/api/platform-admin/organisations/:organisationId/capacity", "/api/platform-admin/organisations/:organisationId/capacity-preview", "platform_admin.capacity_grant"]) {
+    if (!serverBundle.includes(marker)) throw new Error(`Production build verification failed: superadmin endpoint/audit marker ${marker} is missing.`);
   }
 
   const buildStartedAt = Date.parse(manifest.buildStartedAt || "");
@@ -73,7 +86,7 @@ async function verifyProductionBuild() {
   }
 
   console.log(
-    `Verified fresh production build for commit ${manifest.commit}: ${javascriptAssets.length} frontend bundles and ${requiredMarkers.length} redesign markers.`,
+    `Verified fresh production build for commit ${manifest.commit}: ${javascriptAssets.length} frontend bundles and ${requiredMarkers.length} required UI markers.`,
   );
 }
 
