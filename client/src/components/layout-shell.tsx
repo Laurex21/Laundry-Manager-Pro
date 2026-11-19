@@ -45,6 +45,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, labelKey: "dashboard", href: "/", page: "dashboard" },
       { icon: ShoppingBag, labelKey: "orders", href: "/orders", page: "orders" },
+      { icon: ShoppingBag, labelKey: "Boutique WhatsApp", href: "/boutique", page: "storefront" },
       { icon: Users, labelKey: "customers", href: "/customers", page: "customers" },
       { icon: ListChecks, labelKey: "subscription_plans", href: "/membership-plans", page: "customers" },
       { icon: CreditCard, labelKey: "payments", href: "/payments", page: "payments" },
@@ -158,7 +159,7 @@ function BackButton({ location }: { location: string }) {
 
 function RegionalSettings() {
   const { t, i18n } = useTranslation();
-  const { currency, setCurrency } = useCurrency();
+  const { currency, setCurrency, locked } = useCurrency();
   const [currencySearch, setCurrencySearch] = useState("");
   const currentLang = LANGUAGES.find((l) => l.code === i18n.language) || LANGUAGES[0];
   const currentCurrency = CURRENCIES.find((c) => c.code === currency) || CURRENCIES[0];
@@ -216,6 +217,8 @@ function RegionalSettings() {
             size="sm"
             className="gap-1.5 text-muted-foreground hover:text-foreground px-2.5 h-8"
             data-testid="button-currency-toggle"
+            disabled={locked}
+            title={locked ? "Devise commune aux boutiques, à la caisse et aux reçus" : undefined}
           >
             <Banknote className="w-3.5 h-3.5" strokeWidth={1.5} />
             <span className="text-xs font-medium hidden sm:inline">{currentCurrency.symbol}</span>

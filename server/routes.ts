@@ -1,4 +1,7 @@
 import { AmbassadorAccess } from './lib/ambassador-access';
+import { registerStorefrontRoutes } from "./lib/storefront-routes";
+import { StorefrontService } from "./lib/storefront-service";
+import { StorefrontError } from "./lib/storefront-pricing";
 import { respondCashbookDatabaseError } from './lib/cashbook-errors';
 import { registerPromoRoutes } from "./lib/saas-promo-routes";
 import { registerTrainingRoutes } from "./lib/training";
@@ -322,6 +325,18 @@ async function effectivePlanSlug(req: any): Promise<string> {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerStorefrontRoutes(app, {
+    service: new StorefrontService(db, refreshCustomerAnalyticsFromHistory), auth: isAuthenticated,
+    enabled: () => process.env.XPRESSPRO_STOREFRONT_ENABLED === "true",
+    limit: rateLimit({ name: "storefront", windowMs: 60_000, max: 90 }),
+    actor: async req => {
+      const siteId = resolveWriteSiteId(req);
+      if (!siteId) throw new StorefrontError(400, "Sélectionnez une agence pour ouvrir sa boutique.");
+      const role = await effectiveSiteRole(req, siteId);
+      if (role !== "owner" && role !== "manager") throw new StorefrontError(403, "Accès réservé au propriétaire ou au responsable de cette agence.");
+      return { siteId, organisationId: Number((req as any).organisationId), userId: (req.session as any).userId };
+    },
+  });
   registerCashbookRoutes(app, { db: pool, auth: isAuthenticated, siteIds: orgScopedSites, role: effectiveSiteRole });
   registerTrainingRoutes(app, isAuthenticated, undefined, requirePlatformAdmin, async req => !!(await new AmbassadorAccess().principal((req.session as any).userId)));
   registerCustomerFollowUpRoutes(app,isAuthenticated,new CustomerFollowUps(pool),effectivePlanSlug);

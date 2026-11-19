@@ -4,6 +4,10 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "dev:storefront": "node --import tsx scripts/dev-storefront.ts",
+    "dev:storefront:replit": "node --import tsx scripts/start-storefront-development.ts",
+    "db:migrate:storefront": "node --import tsx scripts/migrate-storefront.ts",
+    "test:storefront": "node --import tsx server/lib/storefront.integration.test.ts && node --import tsx server/lib/storefront-routes.test.ts && node --import tsx server/lib/storefront-payment.integration.test.ts && node --import tsx client/src/lib/storefront-currency.test.tsx",
     "postinstall": "node scripts/picomatch-security.mjs --apply",
     "prebuild": "node scripts/picomatch-security.mjs --apply",
     "prestart": "node scripts/picomatch-security.mjs",

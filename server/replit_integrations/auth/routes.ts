@@ -22,6 +22,7 @@ import {
   recordCurrentLegalAcceptance,
 } from "../../lib/legal";
 import { isActivePlatformAdmin } from "../../lib/platform-admin-routes";
+import { StorefrontService } from "../../lib/storefront-service";
 
 async function getOrganisationOwnerId(organisationId: number | null): Promise<string | null> {
   if (!organisationId) return null;
@@ -87,8 +88,10 @@ async function buildUserResponse(userId: string) {
   }
   const legalAcceptance = await getCurrentLegalAcceptanceStatus(userId);
   const isPlatformAdmin = await isActivePlatformAdmin(userId);
+  const storefrontCurrency = process.env.XPRESSPRO_STOREFRONT_ENABLED === "true" && user.organisationId
+    ? await new StorefrontService(db).organisationCurrency(user.organisationId) : null;
 
-  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, saas, saasSuspended: !!saas && !isOrgOwner && !saas.activeStaffIds.includes(user.id), passwordHash: undefined, currentSite, allSites, legalAcceptance, isPlatformAdmin };
+  return { ...user, userType: isOrgOwner ? "owner" : "staff", role: effectiveRole, planSlug, saas, saasSuspended: !!saas && !isOrgOwner && !saas.activeStaffIds.includes(user.id), passwordHash: undefined, currentSite, allSites, legalAcceptance, isPlatformAdmin, storefrontCurrency };
 }
 
 async function ensureUserOrganisation(userId: string) {
