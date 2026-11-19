@@ -91,6 +91,10 @@ async function renderReceiptCanvasWithinDeadline(html: string, signal: AbortSign
     })));
     const receipt = doc.querySelector<HTMLElement>(".receipt, main");
     if (!receipt) throw new Error("Receipt content is missing");
+    // Sanitization removes print buttons but can retain their text. Archived
+    // receipts may also contain toolbars or wrappers before the receipt. Keep
+    // only the receipt in the render document so none of them offset its bounds.
+    doc.body.replaceChildren(receipt);
     // Export the receipt itself at the document origin, without page chrome.
     // Non-zero offsets are scaled twice by html2canvas's foreign-object path.
     doc.body.style.padding = "0";
