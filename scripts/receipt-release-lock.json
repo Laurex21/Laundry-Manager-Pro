@@ -1,0 +1,9 @@
+{
+  "description": "Reviewed receipt download and header implementation. Update only after mobile/desktop PDF validation; see docs/releases/replit.md.",
+  "files": {
+    "client/src/lib/receipt-export.ts": "590c5d1b9fb0176ce9bee58cc7421137a4f1ab498209884b3b9f854e7b9c31ee",
+    "client/src/lib/receipt-request.ts": "2167e8dd38630f64031126f3d68ea106dd40aa7d0c8ed1e0f51db8dbeace76fa",
+    "client/src/lib/receipt-archive.ts": "b5f088e8c6e18933158c11c2c0a63e9b0a01e099d6f5dc3702337fdf2679fde1",
+    "client/src/components/receipt-download-menu.tsx": "3e3fbdd659a7760f1a8cec8624834e0ebb35f3cf18f175d2cc9ef28344d4b1c0"
+  }
+}

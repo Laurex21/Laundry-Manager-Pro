@@ -19,12 +19,19 @@ async function verifyProductionBuild() {
     await readFile("dist/public/build-manifest.json", "utf8"),
   ) as {
     commit?: string;
+    receiptReleaseGuard?: { version: number; baseline: string; commit: string };
     buildStartedAt?: string;
     buildCompletedAt?: string;
   };
 
   if (!manifest.commit || !/^[0-9a-f]{40}$/i.test(manifest.commit)) {
     throw new Error("Production build verification failed: missing valid Git commit.");
+  }
+
+  if (manifest.receiptReleaseGuard?.version !== 1 ||
+      manifest.receiptReleaseGuard.baseline !== "b55a0a03481156af5cc29a0ce19647477e8e9645" ||
+      manifest.receiptReleaseGuard.commit !== manifest.commit) {
+    throw new Error("Production build verification failed: receipt release guard is missing.");
   }
 
   const buildStartedAt = Date.parse(manifest.buildStartedAt || "");

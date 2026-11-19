@@ -2,6 +2,8 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { execFileSync } from "child_process";
 import { rm, readFile, writeFile } from "fs/promises";
+// @ts-expect-error Dependency-free guard is also used by Node before installation.
+import { verifyReceiptRelease } from "../scripts/verify-receipt-release.mjs";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -34,6 +36,9 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  const receiptReleaseGuard = verifyReceiptRelease();
+  execFileSync(process.execPath, ["--import", "tsx", "server/lib/receipt-export.test.ts"], { stdio: "inherit" });
+  execFileSync(process.execPath, ["--import", "tsx", "--test", "client/src/lib/receipt-request.test.ts"], { stdio: "inherit" });
   const buildStartedAt = new Date().toISOString();
   await rm("dist", { recursive: true, force: true });
 
@@ -62,15 +67,14 @@ async function buildAll() {
     logLevel: "info",
   });
 
-  const commit =
-    process.env.REPLIT_GIT_COMMIT ||
-    execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const commit = receiptReleaseGuard.commit;
 
   await writeFile(
     "dist/public/build-manifest.json",
     JSON.stringify(
       {
         commit,
+        receiptReleaseGuard,
         buildStartedAt,
         buildCompletedAt: new Date().toISOString(),
       },
