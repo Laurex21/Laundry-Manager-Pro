@@ -98,7 +98,11 @@
     "verify:receipt-release": "node scripts/verify-receipt-release.mjs",
     "test:superadmin-release": "node --test scripts/superadmin-release.test.mjs",
     "verify:superadmin-release": "node scripts/verify-superadmin-release.mjs",
-    "test:storefront-approval": "node --test scripts/storefront-approval-guard.test.mjs"
+    "test:storefront-approval": "node --test scripts/storefront-approval-guard.test.mjs",
+    "test:storefront:experience": "node --import tsx server/lib/storefront-experience.integration.test.ts && node --import tsx server/lib/storefront-flows.integration.test.ts",
+    "test:storefront:browser": "node scripts/storefront.browser.test.mjs && node scripts/storefront-experience.browser.test.mjs",
+    "db:migrate:storefront-branding:dev": "node --import tsx scripts/migrate-storefront-branding-development.ts",
+    "demo:storefront-flow": "node --import tsx scripts/demo-storefront-flow.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

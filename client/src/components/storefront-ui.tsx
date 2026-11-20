@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { StorefrontQuote } from "@shared/storefront";
 import "./storefront.css";
 
@@ -12,7 +12,8 @@ export const money = (value: string | null, currency: string) => value == null ?
 export const whatsappHref = (phone: string, message: string) => `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
 export function useStorefrontAction() {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const run = async (fn: () => Promise<void>) => { if (busy) return; setBusy(true); setError(""); try { await fn(); } catch (e: any) { setError(e.message); } finally { setBusy(false); } };
+  const locked = useRef(false);
+  const run = async (fn: () => Promise<void>) => { if (locked.current) return; locked.current = true; setBusy(true); setError(""); try { await fn(); } catch (e: any) { setError(e.message); } finally { locked.current = false; setBusy(false); } };
   return { busy, error, run, setError };
 }
 export function Message({ children, error = false }: { children: ReactNode; error?: boolean }) { return <p className={`sf-notice ${error ? "sf-error" : ""}`} role={error ? "alert" : "status"}>{children}</p>; }

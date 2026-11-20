@@ -6,6 +6,7 @@ import { GARMENT_LABELS, SIZE_LABELS, requestInputSchema, reviewInputSchema, sho
 import { addDecimals } from "../../shared/exact-decimal";
 import { calculateStorefrontQuote, digest, StorefrontError } from "./storefront-pricing";
 import { insertOrderRecords } from "./order-creation";
+import { sanitizeBranding } from "./storefront-branding";
 
 type Database = typeof db;
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -31,6 +32,9 @@ export class StorefrontService {
   async save(actor: StorefrontActor, raw: unknown) {
     const input = shopInputSchema.parse(raw);
     if (input.siteId !== actor.siteId) throw new StorefrontError(409, "L’agence sélectionnée a changé. Rechargez la configuration.");
+    await this.site(actor);
+    const [existing] = input.branding ? await this.database.select({ branding: shops.branding }).from(shops).where(eq(shops.siteId, actor.siteId)) : [];
+    const branding = input.branding ? await sanitizeBranding(input.branding, input.services.map(s => s.serviceId), existing?.branding) : undefined;
     return this.database.transaction(async tx => {
       // Lock the agency too, including first publication (no storefront row yet).
       await this.site(actor, tx);
@@ -49,7 +53,8 @@ export class StorefrontService {
         const service = available.find(s => s.id === item.serviceId);
         if (!service || (item.mode === "kg" ? service.unit !== "kg" : service.unit !== "piece")) throw new StorefrontError(400, "Choisissez un service actif de cette agence avec l’unité correspondante.");
       }
-      const { expectedVersion, services: selected, ...values } = input;
+      const { expectedVersion, services: selected, branding: _rawBranding, ...rest } = input;
+      const values = { ...rest, ...(branding ? { branding } : {}) };
       const [shop] = previous
         ? await tx.update(shops).set({ ...values, version: previous.version + 1, updatedAt: new Date() }).where(eq(shops.id, previous.id)).returning()
         : await tx.insert(shops).values({ ...values, organisationId: actor.organisationId, siteId: actor.siteId }).returning();
@@ -72,7 +77,7 @@ export class StorefrontService {
   }
   async publicShop(slug: string) {
     const { shop, catalogue } = await this.catalogue(slug);
-    return { slug, name: shop.name, description: shop.description, address: shop.address, hours: shop.hours, whatsapp: shop.whatsapp, currency: shop.currency, weights: shop.weights, services: catalogue, version: shop.version };
+    return { slug, name: shop.name, description: shop.description, address: shop.address, hours: shop.hours, whatsapp: shop.whatsapp, currency: shop.currency, branding: { ...shop.branding, serviceImages: Object.fromEntries(Object.entries(shop.branding.serviceImages).filter(([id]) => catalogue.some(s => s.id === Number(id)))) }, weights: shop.weights, services: catalogue, version: shop.version };
   }
   async quote(slug: string, input: unknown) {
     const { shop, catalogue } = await this.catalogue(slug);

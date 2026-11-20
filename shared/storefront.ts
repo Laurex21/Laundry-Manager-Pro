@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { brandingSchema } from "./storefront-branding";
 
 export const SIZE_LABELS = { child: "Enfant", teen: "Adolescent", adult: "Adulte" } as const;
 export const GARMENT_LABELS = { tshirt: "T-shirt", shirt: "Chemise", dress: "Robe simple", jeans: "Jean", trousers: "Pantalon en tissu", shorts: "Short", sweater: "Sweat / pull", pyjamas: "Pyjama complet", evening_dress: "Robe de soirée" } as const;
@@ -31,11 +32,12 @@ export const shopInputSchema = z.object({
   whatsapp: z.string().regex(/^\+[1-9]\d{7,14}$/, "Utilisez le format international, par exemple +237…"),
   currency: z.enum(["XAF", "XOF", "EUR", "USD", "CDF", "NGN", "GHS", "KES", "MAD", "DZD", "TND", "AOA", "MZN", "ZAR", "RWF", "UGX", "TZS", "GNF", "MGA"]),
   published: z.boolean(), weightsAcknowledged: z.boolean(),
+  branding: brandingSchema.optional(),
   weights: z.array(z.object({ garment, child: grams, teen: grams, adult: grams })).length(PILOT_WEIGHTS.length)
     .refine(rows => new Set(rows.map(row => row.garment)).size === PILOT_WEIGHTS.length, "Chaque type doit avoir une référence unique"),
   services: z.array(z.object({ serviceId: z.number().int().positive(), mode: z.enum(["piece", "kg", "quote"]) })).max(100)
     .refine(rows => new Set(rows.map(row => row.serviceId)).size === rows.length, "Service dupliqué"),
-}).refine(v => !v.published || (v.weightsAcknowledged && v.services.length > 0), "Validez le barème et sélectionnez au moins un service avant publication");
+}).refine(v => !v.published || (v.services.length > 0 && (!v.services.some(s => s.mode === "kg") || v.weightsAcknowledged)), "Sélectionnez un service et validez le barème si vous facturez au kilo avant publication");
 export const requestInputSchema = quoteInputSchema.extend({
   requestKey: z.string().uuid(), trackingSecret: z.string().regex(/^[a-f0-9]{64}$/),
   quoteFingerprint: z.string().regex(/^[a-f0-9]{64}$/),

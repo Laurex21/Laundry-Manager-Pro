@@ -44,12 +44,14 @@ const settingsJsonParser = express.json({
     req.rawBody = buf;
   },
 });
+const storefrontJsonParser = express.json({ limit: "750kb", verify: (req, _res, buf) => { req.rawBody = buf; } });
 
 app.use((req, res, next) => {
   const isReturnEvidenceUpload = req.method === "POST" && /^\/api\/orders\/\d+\/garment-returns$/.test(req.path);
   const isBusinessLogoUpdate = req.method === "PUT" && req.path === "/api/settings";
   const isReceiptArchive = req.method === "POST" && req.path === "/api/receipt-snapshots";
-  const parser = isReceiptArchive
+  const isStorefrontUpdate = req.method === "PUT" && req.path === "/api/storefront/admin/current";
+  const parser = isStorefrontUpdate ? storefrontJsonParser : isReceiptArchive
     ? receiptJsonParser
     : isReturnEvidenceUpload
     ? evidenceJsonParser

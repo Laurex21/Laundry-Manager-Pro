@@ -7,9 +7,9 @@ import { registerStorefrontRoutes } from "../server/lib/storefront-routes";
 import viteConfig from "../vite.config";
 
 if (process.env.NODE_ENV === "production") throw new Error("The storefront sandbox cannot run in production");
-const fixture = await storefrontFixture();
+const fixture = await storefrontFixture({ createShop: !process.argv.includes("--new-shop") });
 const app = express();
-app.use(express.json({ limit: "64kb" }));
+app.use(express.json({ limit: "750kb" }));
 registerStorefrontRoutes(app, { service: fixture.service, auth: (_req, _res, next) => next(), limit: (_req, _res, next) => next(), enabled: () => true, actor: async () => fixture.actor });
 app.get("/api/storefront-preview/orders/:id", async (req, res) => {
   const [order] = await fixture.database.select().from(fixture.schema.orders).where(eq(fixture.schema.orders.id, Number(req.params.id)));
@@ -17,7 +17,7 @@ app.get("/api/storefront-preview/orders/:id", async (req, res) => {
   const items = await fixture.database.select({ quantity: fixture.schema.orderItems.quantity, priceAtOrder: fixture.schema.orderItems.priceAtOrder, name: fixture.schema.services.name, unit: fixture.schema.services.unit }).from(fixture.schema.orderItems).innerJoin(fixture.schema.services, eq(fixture.schema.services.id, fixture.schema.orderItems.serviceId)).where(eq(fixture.schema.orderItems.orderId, order.id));
   res.json({ ...order, items });
 });
-const vite = await createServer({ ...viteConfig, configFile: false, cacheDir: ".storefront-vite", server: { host: "127.0.0.1", middlewareMode: true, hmr: { host: "127.0.0.1", port: 5124 } }, appType: "custom" });
+const vite = await createServer({ ...viteConfig, configFile: false, cacheDir: ".storefront-vite", server: { host: "127.0.0.1", middlewareMode: true, hmr: { host: "127.0.0.1", port: Number(process.env.STOREFRONT_PREVIEW_PORT || 5123) + 1 } }, appType: "custom" });
 app.use(vite.middlewares);
 app.use(async (req, res, next) => {
   if (req.path.startsWith("/api/")) { res.status(404).json({ message: "Cette fonction appartient à l’application complète, hors de la démonstration locale." }); return; }
