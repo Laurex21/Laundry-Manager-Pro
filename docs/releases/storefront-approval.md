@@ -78,3 +78,23 @@ unrelated schema changes, replication mode and reinstallation.
 Production verification must use a transaction that always rolls back or an
 exception-catching DO block. Never commit sample storefront tables or customer
 records merely to test the guard.
+
+## Approved branding exception (21 November 2026)
+
+See the narrowly scoped owner-approved exception in `AGENTS.md`. The exact SQL
+reviewed in Replit is:
+
+```sql
+ALTER TABLE "storefronts" ADD COLUMN "branding" jsonb DEFAULT '{"logo":"","cover":"","accent":"#125d4e","welcome":"Du linge frais. Du temps pour vous.","template":"classic","serviceImages":{}}'::jsonb NOT NULL;
+```
+
+SHA-256 of that UTF-8 statement plus one trailing newline:
+`4224bd1dd3fd8b60c7d9870d29412c373dd30d671b3ccf57e2ab5453faefcb5e`.
+V2 source: `959e80e1f34194a10327c6b61d6b41bdd9d08149`, merged as
+`bd4a7ab4e9130de2cdb1ec08f765cb91bef82045` (PR 95).
+
+The exception allows temporary trigger suspension only inside the reviewed manual
+transaction, with inventory refresh and ENABLE ALWAYS restoration before commit.
+It does not authorize disabling guards across a Replit publication. Automatic
+approval review still applies. If the SQL or target differs, stop. Preserve the
+column and its data on application rollback; never drop it as a rollback shortcut.
