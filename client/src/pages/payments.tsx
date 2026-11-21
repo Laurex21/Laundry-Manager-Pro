@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-methods";
 import { generatePaymentReceipt, generateThermalPaymentReceipt, reserveReceiptPrintWindow } from "@/lib/receipt";
-import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { receiptSettingsForOrder } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { paymentDateWithRegistrationTime } from "@/lib/payment-date";
 import { useAuth } from "@/hooks/use-auth";
@@ -78,6 +78,7 @@ function PaymentLedger() {
 
 export default function Payments() {
   const { data: allOrders, isLoading: ordersLoading } = useOrders();
+  const { currentSite, allSites } = useAuth();
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
@@ -283,11 +284,8 @@ export default function Payments() {
       const entryDate = orderDetails?.entryDate || successPayment.date;
       const displayOrderId = orderDisplayId(orderDetails) || successPayment.orderId;
 
-      const mergedSettings = {
-        ...DEFAULT_SETTINGS,
-        ...(settings || {}),
-        receiptLanguage: settings?.receiptLanguage || i18n.language,
-      };
+      const siteId = orderDetails?.siteId ?? allOrders?.find(order => order.id === successPayment.orderId)?.siteId;
+      const mergedSettings = receiptSettingsForOrder(settings, i18n.language, siteId, currentSite, allSites);
       const allPayments = orderDetails?.payments || [];
       const currentPayment = successPayment.paymentId
         ? allPayments.find((p: any) => p.id === successPayment.paymentId)
