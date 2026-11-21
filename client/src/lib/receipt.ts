@@ -59,6 +59,10 @@ function paymentReference(reference: string | null | undefined, lang: string): s
   return reference ? ` (${label("Ref:", "Réf :", lang)} ${reference})` : "";
 }
 
+function receiptPaymentMethod(method: string | null | undefined, lang: string): string {
+  return method?.trim().toLowerCase() === "cash" ? label("Cash", "Espèces", lang) : method ?? "";
+}
+
 function serviceUnitLabel(unit: string | null | undefined, lang: string): string {
   return unit === "kg" ? "kg" : label("Pieces", "Pièces", lang);
 }
@@ -194,7 +198,7 @@ function buildPaymentHistoryLines(payments: any[], orderTotal: number, symbol: s
     const ref = paymentReference(payment.reference, lang);
     const paidLabel = label("Paid", "Payé", lang);
     const remainingLabel = label("Remaining balance", "Solde restant", lang);
-    return `${formatReceiptDateTime(payment.date || fallbackDate, lang)} - ${payment.method}${ref} - ${paidLabel}: ${symbol}${amount.toFixed(2)} - ${remainingLabel}: ${remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}`;
+    return `${formatReceiptDateTime(payment.date || fallbackDate, lang)} - ${receiptPaymentMethod(payment.method, lang)}${ref} - ${paidLabel}: ${symbol}${amount.toFixed(2)} - ${remainingLabel}: ${remaining > 0 ? `${symbol}${remaining.toFixed(2)}` : label("FULLY PAID", "ENTIÈREMENT PAYÉ", lang)}`;
   });
 }
 
@@ -207,7 +211,7 @@ function buildPaymentHistoryHtml(payments: any[], orderTotal: number, symbol: st
     const ref = paymentReference(payment.reference, lang);
     return `<div style="padding:8px 0;border-bottom:1px solid rgba(14,165,233,0.18);font-size:12px;color:#475569;">
       <div style="display:flex;justify-content:space-between;gap:12px;">
-        <span>${formatReceiptDateTime(payment.date || fallbackDate, lang)} &bull; ${escapeHtml(payment.method)}${escapeHtml(ref)}</span>
+        <span>${formatReceiptDateTime(payment.date || fallbackDate, lang)} &bull; ${escapeHtml(receiptPaymentMethod(payment.method, lang))}${escapeHtml(ref)}</span>
         <span style="color:#16a34a;font-weight:600;white-space:nowrap;">${symbol}${amount.toFixed(2)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;gap:12px;margin-top:3px;font-size:11px;font-weight:700;color:${remaining > 0 ? "#dc2626" : "#16a34a"};">
@@ -716,7 +720,7 @@ export function generateDepositReceipt(order: any, symbol: string, settings: Rec
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.starterServiceProvider ? escapeHtml(label("Service provided by ", "Service assuré par ", lang) + settings.starterServiceProvider) : settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
+      <p>${settings.starterServiceProvider ? escapeHtml(label("Service provided by ", "Service assuré par ", lang) + settings.starterServiceProvider) : escapeHtml(settings.businessName)} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
       ${buildReceiptQrHtml(settings)}
     </div>
   </div>
@@ -830,7 +834,7 @@ export function generateThermalPaymentReceipt(
     receiptQrCodeBase64: settings.receiptQrCodeBase64,
     receiptQrCodeLabel: settings.receiptQrCodeLabel,
     paymentLine: thermalMoney(currentPaymentAmount, symbol),
-    methodLine: payment.method,
+    methodLine: receiptPaymentMethod(payment.method, lang),
     creditApplied: Number(payment.creditApplied || 0),
     creditAdded: Number(payment.creditAdded || 0),
     creditBalance: Number(payment.creditBalance || 0),
@@ -974,7 +978,7 @@ export function generatePaymentReceipt(
       <div class="payment-box">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div style="font-size:12px;color:#64748b;margin-bottom:4px;">${label("Method", "Méthode", lang)}: ${escapeHtml(payment.method)}</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:4px;">${label("Method", "Méthode", lang)}: ${escapeHtml(receiptPaymentMethod(payment.method, lang))}</div>
             <div class="payment-amount">${symbol}${Number(payment.amount).toFixed(2)}</div>
           </div>
           <span style="display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;background:${statusBg};color:${statusColor};">${statusLabel}</span>
@@ -1029,7 +1033,7 @@ export function generatePaymentReceipt(
 
     <div class="footer">
       <p class="thanks">${footerNote}</p>
-      <p>${settings.starterServiceProvider ? escapeHtml(label("Service provided by ", "Service assuré par ", lang) + settings.starterServiceProvider) : settings.businessName} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
+      <p>${settings.starterServiceProvider ? escapeHtml(label("Service provided by ", "Service assuré par ", lang) + settings.starterServiceProvider) : escapeHtml(settings.businessName)} &bull; ${generatedLabel} ${formatReceiptDateTime(new Date(), lang)}</p>
       ${buildReceiptQrHtml(settings)}
     </div>
   </div>

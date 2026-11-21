@@ -53,6 +53,29 @@ export const DEFAULT_SETTINGS: ReceiptSettings = {
   receiptFooterNote: "Thank you for your trust · Merci de votre confiance · Obrigado pela confiança",
 };
 
+type ReceiptSite = { id: number; name: string };
+
+export function receiptSettingsForOrder(
+  settings: Partial<ReceiptSettings> | undefined,
+  language: string,
+  siteId: number | null | undefined,
+  currentSite: ReceiptSite | null,
+  allSites: readonly ReceiptSite[],
+): ReceiptSettings {
+  const site = currentSite?.id === siteId ? currentSite : allSites.find(site => site.id === siteId);
+  const siteName = site?.name.trim();
+  const result = {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    receiptLanguage: settings?.receiptLanguage || language,
+  };
+  if (siteName) {
+    if (settings?.starterServiceProvider !== undefined) result.starterServiceProvider = siteName;
+    else result.businessName = siteName;
+  }
+  return result;
+}
+
 export const DEFAULT_TERMS_EN = `Liability: Our liability for any lost or damaged garment shall not exceed 3x the cleaning cost of that item.
 Pocket Policy: Customers are responsible for emptying all pockets. We are not liable for items left in pockets.
 Unclaimed Items: Items not collected within 30 days may incur storage fees. Items left 90+ days will be donated.
@@ -120,6 +143,7 @@ const RECEIPT_PT_LABELS: Record<string, string> = {
   "Terms & Conditions": "Termos e Condições",
   "This Payment": "Este Pagamento",
   "Method": "Método",
+  "Cash": "Numerário",
   "Order Total": "Total do Pedido",
 };
 

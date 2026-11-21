@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { generateDepositReceipt } from "@/lib/receipt";
 import { useQuery, useQuery as useSettingsQuery } from "@tanstack/react-query";
-import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { receiptSettingsForOrder } from "@/lib/receipt-settings";
 import { orderDisplayId, orderDisplayLabel } from "@/lib/order-display";
 import {
   Plus,
@@ -395,11 +395,8 @@ export default function Orders() {
     if (notifyingCustomer) return;
     setNotifyingCustomer(true);
     try {
-      await generateDepositReceipt(createdOrder, symbol, {
-        ...DEFAULT_SETTINGS,
-        ...(settings || {}),
-        receiptLanguage: settings?.receiptLanguage || i18n.language,
-      }, "download");
+      const receiptSettings = receiptSettingsForOrder(settings, i18n.language, createdOrder.siteId, currentSite, allSites);
+      await generateDepositReceipt(createdOrder, symbol, receiptSettings, "download");
       openWhatsApp({
         phone: createdOrderWhatsAppPhone,
         text: buildOrderConfirmationWhatsAppMessage({
@@ -884,7 +881,7 @@ function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boo
 
 function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: any) => void; correctionOrder?: any }) {
   const { t, i18n } = useTranslation();
-  const { isOwner } = useAuth();
+  const { isOwner, currentSite, allSites } = useAuth();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { toast } = useToast();
@@ -1271,11 +1268,8 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
               const html = await subscriberReceipt.text();
               await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(orderDetails)}.html`, "html", { orderId: newOrder.id, kind: "subscriber" });
             } else {
-              await generateDepositReceipt(orderDetails, symbol, {
-                ...DEFAULT_SETTINGS,
-                ...(settings || {}),
-                receiptLanguage: settings?.receiptLanguage || i18n.language,
-              }, "download");
+              const receiptSettings = receiptSettingsForOrder(settings, i18n.language, orderDetails.siteId, currentSite, allSites);
+              await generateDepositReceipt(orderDetails, symbol, receiptSettings, "download");
             }
           }
         } catch {

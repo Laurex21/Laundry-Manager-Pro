@@ -29,20 +29,37 @@ assert.equal(receiptQuantity('2.125000','en'), '2.125');
 assert.equal(receiptQuantity('0.000001','fr'), '0,000001');
 assert.equal(receiptQuantity('0.000000','fr'), '0');
 const { generateDepositReceipt, generatePaymentReceipt } = await import('../../client/src/lib/receipt');
-const { DEFAULT_SETTINGS } = await import('../../client/src/lib/receipt-settings');
+const { DEFAULT_SETTINGS, receiptSettingsForOrder } = await import('../../client/src/lib/receipt-settings');
+const xpressSite = { id: 14, name: 'Xpress 0' };
+const otherSite = { id: 15, name: 'Autre agence' };
+const companySettings = { businessName: 'Xpress Clean' };
+assert.equal(receiptSettingsForOrder(companySettings, 'fr', 14, xpressSite, []).businessName, 'Xpress 0');
+assert.equal(receiptSettingsForOrder(companySettings, 'fr', 14, otherSite, [xpressSite]).businessName, 'Xpress 0');
+assert.equal(receiptSettingsForOrder(companySettings, 'fr', 14, otherSite, []).businessName, 'Xpress Clean');
+const starter = receiptSettingsForOrder({ businessName: 'XpressPro', starterServiceProvider: '' }, 'fr', 14, xpressSite, []);
+assert.equal(starter.businessName, 'XpressPro');
+assert.equal(starter.starterServiceProvider, 'Xpress 0');
 let receiptHtml = '';
 (globalThis as any).__captureReceiptHtml = (html: string) => { receiptHtml = html; };
 const items = [{quantity:'2.125000',priceAtOrder:'1000',service:{name:'Lavage',unit:'kg'}}];
 try {
   for(const receiptLanguage of ['fr','en']) {
-    const settings = {...DEFAULT_SETTINGS,receiptLanguage};
-    await generateDepositReceipt({id:1,items,garmentItems:[{quantity:'1.000000',itemName:'Chemise'}],payments:[],customer:{}},'FCFA',settings,'html');
+    const settings = receiptSettingsForOrder({ ...DEFAULT_SETTINGS, ...companySettings, receiptLanguage }, 'fr', 14, xpressSite, []);
+    const payment = { amount: '100', method: 'Cash', date: '2026-10-26', newStatus: 'partial' };
+    const payments = [payment, { ...payment, method: 'Chipper Cash' }];
+    await generateDepositReceipt({id:1,items,garmentItems:[{quantity:'1.000000',itemName:'Chemise'}],payments,customer:{}},'FCFA',settings,'html');
     assert.ok(receiptHtml.includes(receiptLanguage==='fr'?'2,125 kg':'2.125 kg'));
     assert.ok(receiptHtml.includes('1 x Chemise'));
     assert.ok(!receiptHtml.includes('1.000000'));
-    await generatePaymentReceipt('DP-26-TEST',{},items,[],{amount:'100',method:'cash',date:'2026-10-26',newStatus:'partial'},[],'2026-10-26','2026-10-29',0,'FCFA',settings,0,'html');
+    assert.ok(receiptHtml.includes(`&bull; ${receiptLanguage === 'fr' ? 'Espèces' : 'Cash'}<`));
+    await generatePaymentReceipt('DP-26-TEST',{},items,[],{ ...payment, method: 'cash' },payments,'2026-10-26','2026-10-29',0,'FCFA',settings,0,'html');
     assert.ok(receiptHtml.includes(receiptLanguage==='fr'?'2,125 kg':'2.125 kg'));
     assert.ok(!receiptHtml.includes('2.125000'));
+    assert.match(receiptHtml, /<h1[^>]*>Xpress 0<\/h1>/);
+    assert.ok(!receiptHtml.includes('Xpress Clean'));
+    assert.ok(receiptHtml.includes(receiptLanguage === 'fr' ? 'Méthode: Espèces' : 'Method: Cash'));
+    assert.ok(receiptHtml.includes(`&bull; ${receiptLanguage === 'fr' ? 'Espèces' : 'Cash'}<`));
+    assert.ok(receiptHtml.includes('Chipper Cash'));
   }
 } finally {delete (globalThis as any).__captureReceiptHtml;}
 console.log('Receipt quantities: integer and fractional precision preserved in FR/EN deposit and payment HTML.');

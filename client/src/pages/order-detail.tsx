@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { queryClient } from "@/lib/queryClient";
 import { generateDepositReceipt, generateThermalDepositReceipt, renderReceiptInPrintWindow, reserveReceiptPrintWindow } from "@/lib/receipt";
-import { DEFAULT_SETTINGS } from "@/lib/receipt-settings";
+import { receiptSettingsForOrder } from "@/lib/receipt-settings";
 import { orderDisplayId, orderDisplayLabel } from "@/lib/order-display";
 import { formatBusinessDateTime } from "@/lib/date-time";
 import { PRODUCTION_STAGES, isMachineStage, normalizeProductionStatus } from "@shared/production-workflow";
@@ -106,7 +106,7 @@ export default function OrderDetail() {
   const symbol = getSymbol();
   const { toast } = useToast();
   const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
-  const { isOwner, userRole, user, hasFeature } = useAuth();
+  const { isOwner, userRole, user, hasFeature, currentSite, allSites } = useAuth();
   const { data: machines } = useQuery<any[]>({ queryKey: ["/api/machines"], enabled: !!user && hasFeature("machines") && !historicalSite(user, order?.siteId) });
   const isManager = userRole === "manager" || isOwner;
 
@@ -143,6 +143,7 @@ export default function OrderDetail() {
   }
 
   const readOnly = historicalSite(user, order.siteId);
+  const receiptSettings = receiptSettingsForOrder(settings, i18n.language, order.siteId, currentSite, allSites);
   const currentStageIndex = getStageIndex(order.status);
   const nextPipelineStage = PIPELINE_STAGES[currentStageIndex + 1];
   const activeMachines = machines?.filter((machine: any) => machine.status !== "inactive") ?? [];
@@ -251,12 +252,7 @@ export default function OrderDetail() {
         await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(order)}.html`, format, { orderId: order.id, kind: "subscriber" });
         return;
       }
-      const mergedSettings = {
-        ...DEFAULT_SETTINGS,
-        ...(settings || {}),
-        receiptLanguage: settings?.receiptLanguage || i18n.language,
-      };
-      await generateDepositReceipt(order, symbol, mergedSettings, format);
+      await generateDepositReceipt(order, symbol, receiptSettings, format);
     } catch (err) {
       console.error("Receipt download error:", err);
       throw err;
@@ -277,12 +273,7 @@ export default function OrderDetail() {
         renderReceiptInPrintWindow(receiptWindow, await subscriberReceipt.text());
         return;
       }
-      const mergedSettings = {
-        ...DEFAULT_SETTINGS,
-        ...(settings || {}),
-        receiptLanguage: settings?.receiptLanguage || i18n.language,
-      };
-      generateThermalDepositReceipt(order, symbol, mergedSettings, receiptWindow);
+      generateThermalDepositReceipt(order, symbol, receiptSettings, receiptWindow);
     } catch {
       receiptWindow.close();
       toast({ title: t("error"), description: "Could not prepare the thermal receipt.", variant: "destructive" });
@@ -356,12 +347,7 @@ export default function OrderDetail() {
       return;
     }
 
-    const mergedSettings = {
-      ...DEFAULT_SETTINGS,
-      ...(settings || {}),
-      receiptLanguage: settings?.receiptLanguage || i18n.language,
-    };
-    await generateDepositReceipt(order, symbol, mergedSettings, "download");
+    await generateDepositReceipt(order, symbol, receiptSettings, "download");
 
     openWhatsApp({ phone: readyWhatsAppPhone, text: buildCustomerWhatsAppMessage() });
   }
