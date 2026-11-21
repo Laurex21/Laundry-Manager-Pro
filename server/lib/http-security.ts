@@ -1,6 +1,8 @@
 import type { RequestHandler } from "express";
 import { marketingPage, marketingHostAllowed } from "../../shared/marketing";
 
+import { FLOW_SIGNUP_PAGE, flowSignupConfig } from "./storefront-flow-signup";
+
 const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -32,6 +34,13 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
       .replace("connect-src 'self'", "connect-src 'self' https://analytics.tiktok.com https://analytics-sg.tiktok.com https://analytics.us.tiktok.com");
   }
 
+  if (_req.path === FLOW_SIGNUP_PAGE && flowSignupConfig()) {
+    contentSecurityPolicy = contentSecurityPolicy
+      .replace("script-src 'self'", "script-src 'self' https://connect.facebook.net")
+      .replace("connect-src 'self'", "connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net")
+      .replace("frame-src ", "frame-src https://www.facebook.com https://staticxx.facebook.com ");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  }
   res.setHeader("Content-Security-Policy", contentSecurityPolicy);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");

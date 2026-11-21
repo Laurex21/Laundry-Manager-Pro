@@ -32,6 +32,43 @@ try {
   assert.equal(await staff.getByLabel("Message d’accueil").inputValue(), "Votre pressing, votre style.");
   assert.equal(await staff.getByRole("button", { name: "Retirer logo", exact: true }).count(), 1);
   await staff.screenshot({ path: `${output}/08-personnalisation-desktop.png`, fullPage: true });
+  await staff.getByRole("button", { name: /Ouvrir et partager/ }).click();
+  await staff.getByRole("button", { name: "Copier le lien à partager" }).waitFor();
+  await staff.getByRole("link", { name: "Connecter mon WhatsApp" }).click();
+  await staff.getByText("La connexion Meta n’est pas encore disponible ici.", { exact: true }).waitFor();
+  await staff.route("https://connect.facebook.net/fr_FR/sdk.js", async route => {
+    await route.fulfill({ contentType: "application/javascript", body: `
+      window.FB = {
+        init: () => {},
+        login: callback => {
+          const dispatch = (origin, phone_number_id) => window.dispatchEvent(new MessageEvent("message", {
+            origin,
+            data: JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: "FINISH", data: { waba_id: "102", phone_number_id } })
+          }));
+          dispatch("https://notfacebook.com", "999");
+          callback({ authResponse: { code: "fixture-code" } });
+          dispatch("https://www.facebook.com", "103");
+        }
+      };
+    ` });
+  });
+  const signup = `${origin}/api/storefront/admin/flow-signup`;
+  await staff.route(signup, route => route.fulfill({ json: { state: "ready", phone: "+237600000000" } }));
+  await staff.route(`${signup}/start`, route => route.fulfill({ json: {
+    appId: "100", configurationId: "101", version: "v27.0", phone: "+237600000000", attempt: "fixture-attempt",
+  } }));
+  let sentSignup;
+  await staff.route(`${signup}/finish`, route => {
+    sentSignup = route.request().postDataJSON();
+    return route.fulfill({ json: { status: "pending", phone: "+237600000000" } });
+  });
+  await staff.reload();
+  await staff.getByRole("button", { name: "Préparer la connexion" }).click();
+  await staff.getByRole("button", { name: "Ouvrir la connexion Meta" }).click();
+  await staff.getByText("Numéro +237600000000 vérifié. L’activation du formulaire est en attente.", { exact: true }).waitFor();
+  assert.deepEqual(sentSignup, { authorization: "fixture-code", wabaId: "102", phoneNumberId: "103", attempt: "fixture-attempt" });
+  await staff.getByRole("link", { name: "Retour à ma boutique" }).click();
+  await staff.getByRole("button", { name: "Configurer ma boutique" }).click();
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
   mobile.on("pageerror", e => errors.push(e.message));
   await mobile.goto(`${origin}/b/pressing-horizon`);
@@ -72,5 +109,5 @@ try {
   await staff.screenshot({ path: `${output}/10-configuration-mobile.png`, fullPage: true });
   assert.equal(await staff.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "admin fits phone");
   assert.deepEqual(errors, []);
-  console.log("PASS browser V2: logo/cover/service upload, reload persistence, public branding, delayed quote race, consent reset, piece billing, 320/390px customer and 390px admin.");
+  console.log("PASS browser V2: logo/cover/service upload, reload persistence, public branding, delayed quote race, consent reset, piece billing, optional WhatsApp signup and original public link, 320/390px customer and 390px admin.");
 } finally { await browser.close(); }

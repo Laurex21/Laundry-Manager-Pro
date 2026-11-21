@@ -107,8 +107,13 @@ app.use((req, res, next) => {
     subscriptionNotificationTimer.unref();
   }
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
+    if (req.path.startsWith("/api/storefront/admin/flow-signup/")) {
+      // A JSON parser error can contain the raw Meta code in err.body.
+      if (res.headersSent) return next();
+      return res.status(status).json({ message: "La demande de connexion n’a pas pu être traitée." });
+    }
     const message = status >= 500 ? "Internal Server Error" : (err.message || "Request failed");
 
     console.error("Internal Server Error:", err);

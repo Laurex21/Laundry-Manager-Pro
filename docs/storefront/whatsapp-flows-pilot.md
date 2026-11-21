@@ -61,3 +61,18 @@ La réservation PostgreSQL unique est validée avant l'appel Meta. Un résultat 
 `npm run test:storefront:flows-pilot` ouvre seulement un serveur local et une base PGlite. Meta est simulé. Il teste les signatures, le challenge, la sélection du WABA, les numéros, les destinataires, l'ancienneté, les doublons concurrents, l'envoi incertain, le panier chiffré de trois gabarits, la confirmation répétée et l'isolation des agences. `npm run test:storefront:experience` couvre le moteur, les poids inconnus, changements de prix, révocation, changement de Flow, expiration et fermeture.
 
 Références : [exemple officiel d'endpoint Meta](https://github.com/WhatsApp/WhatsApp-Flows-Tools/tree/main/examples/endpoint/nodejs/basic), [changelog Flows](https://developers.facebook.com/documentation/business-messaging/whatsapp/flows/changelog/).
+
+## Connexion des pressings depuis Xpress Pro
+
+La boutique par lien reste le parcours de base. Un administrateur de boutique peut ouvrir **Ouvrir et partager → Connecter mon WhatsApp** après avoir enregistré son numéro. Cette page dédiée charge le SDK Meta après l'action du pressing. Les autorisations du navigateur pour le SDK sont limitées à cette page.
+
+L'inscription intégrée v4 prépare une connexion par agence. Xpress Pro vérifie le numéro dans le compte autorisé par Meta, rattache la tentative à l'agence et à la session, chiffre le jeton, puis enregistre un état **activation en attente**. Un numéro n'est associé qu'à une agence. La présence d'une ligne dans ce registre ne déclenche aucun envoi. L'activation du Flow de chaque pressing, la vérification de son état de santé et le choix de la facturation restent à raccorder avant ouverture générale.
+
+Pour essayer l'inscription avec une application Meta prête aux essais, utiliser un domaine HTTPS déclaré dans Facebook Login for Business, prévoir un compte Meta de test autorisé et installer le SQL de revue `integrations/whatsapp-flows/signup-schema.REVIEW.sql` dans l'environnement de test. Ce SQL ajoute un registre indépendant du pilote existant et n'est pas exécuté au déploiement. Configurer côté serveur :
+
+- `XPRESSPRO_FLOW_SIGNUP_ENABLED=true` et `XPRESSPRO_STOREFRONT_ENABLED=true`
+- `XPRESSPRO_FLOW_SIGNUP_APP_ID` et `XPRESSPRO_FLOW_SIGNUP_CONFIG_ID` avec les identifiants de l'application et de la configuration Embedded Signup v4
+- `XPRESSPRO_FLOWS_GRAPH_VERSION` et `XPRESSPRO_FLOWS_APP_SECRET` pour cette application
+- `XPRESSPRO_FLOW_SIGNUP_ENCRYPTION_KEY` avec une clé distincte de 32 octets, encodée en 64 chiffres hexadécimaux minuscules
+
+L'application Meta doit être autorisée pour l'inscription des entreprises. La configuration doit être testée avec le numéro réellement contrôlé par le pressing. Voir [l'implémentation officielle](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/implementation/). Le code fourni prépare le raccordement et conserve la connexion vérifiée en attente. Le webhook et le Flow du pilote continuent d'utiliser leur configuration dédiée.
