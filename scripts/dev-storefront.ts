@@ -11,6 +11,7 @@ const fixture = await storefrontFixture({ createShop: !process.argv.includes("--
 const app = express();
 app.use(express.json({ limit: "750kb" }));
 registerStorefrontRoutes(app, { service: fixture.service, auth: (_req, _res, next) => next(), limit: (_req, _res, next) => next(), enabled: () => true, actor: async () => fixture.actor });
+app.get("/api/storefront/admin/flow-signup", (_req, res) => res.json({ state: "unavailable" }));
 app.get("/api/storefront-preview/orders/:id", async (req, res) => {
   const [order] = await fixture.database.select().from(fixture.schema.orders).where(eq(fixture.schema.orders.id, Number(req.params.id)));
   if (!order) { res.status(404).json({ message: "Commande de démonstration introuvable" }); return; }

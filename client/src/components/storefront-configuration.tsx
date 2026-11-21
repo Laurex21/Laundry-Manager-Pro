@@ -84,6 +84,11 @@ export function Configuration({ data, onSaved }: { data: Admin; onSaved: () => P
           {saved && <Message>Configuration enregistrée.</Message>}
           {data.shop?.published && <div className="sf-stack"><a className="sf-link-box" href={link} target="_blank" rel="noopener noreferrer">Voir ma boutique</a><small>{link}</small><div className="sf-row">{qr && <img className="sf-qr" src={qr} alt="QR code de la boutique" />}<button type="button" className="sf-secondary" onClick={() => action.run(async () => { await navigator.clipboard.writeText(link); setCopied(true); })}>{copied ? "Lien copié" : "Copier le lien à partager"}</button></div><small>Collez ce lien dans une conversation, votre statut ou votre profil WhatsApp Business.</small></div>}
         </section>}
+        {step === 2 && data.shop && <section className="sf-card sf-stack" aria-label="Commande dans WhatsApp">
+          <h3>Commande dans WhatsApp · option</h3>
+          <p className="sf-muted">Proposez un formulaire de commande directement dans une conversation WhatsApp.</p>
+          <a className="sf-button" href="/boutique/connexion-whatsapp">Connecter mon WhatsApp</a>
+        </section>}
         {action.error && <Message error>{action.error}</Message>}
         <div className="sf-wizard-actions">{step > 0 && <button type="button" className="sf-secondary" onClick={() => navigate(step - 1)}>Retour</button>}{step < 2 && <button type="submit">Continuer</button>}</div>
       </fieldset>

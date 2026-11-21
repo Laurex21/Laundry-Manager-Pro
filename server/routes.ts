@@ -1,6 +1,8 @@
 import { AmbassadorAccess } from './lib/ambassador-access';
 import { registerStorefrontRoutes } from "./lib/storefront-routes";
+import { StorefrontFlowSignup, postgresSignupStore } from "./lib/storefront-flow-signup";
 import { StorefrontService } from "./lib/storefront-service";
+import { readFlowPilotConfiguration, registerStorefrontFlowPilotRoutes, postgresFlowPilotLedger, StorefrontFlowPilot } from "./lib/storefront-flow-pilot";
 import { StorefrontError } from "./lib/storefront-pricing";
 import { respondCashbookDatabaseError } from './lib/cashbook-errors';
 import { registerPromoRoutes } from "./lib/saas-promo-routes";
@@ -325,8 +327,23 @@ async function effectivePlanSlug(req: any): Promise<string> {
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  let flowPilot: StorefrontFlowPilot | undefined;
+  registerStorefrontFlowPilotRoutes(app, {
+    limit: rateLimit({ name: "storefront-flows", windowMs: 60_000, max: 120 }),
+    pilot: () => {
+      if (process.env.XPRESSPRO_STOREFRONT_ENABLED !== "true" || process.env.XPRESSPRO_WHATSAPP_FLOWS_ENABLED !== "true") return null;
+      if (!flowPilot) {
+        const config = readFlowPilotConfiguration(process.env);
+        if (!config) return null;
+        flowPilot = new StorefrontFlowPilot(config, new StorefrontService(db), postgresFlowPilotLedger(pool));
+      }
+      return flowPilot;
+    },
+  });
+  const storefrontService = new StorefrontService(db, refreshCustomerAnalyticsFromHistory);
   registerStorefrontRoutes(app, {
-    service: new StorefrontService(db, refreshCustomerAnalyticsFromHistory), auth: isAuthenticated,
+    service: storefrontService, auth: isAuthenticated,
+    signup: new StorefrontFlowSignup(storefrontService, postgresSignupStore(pool)),
     enabled: () => process.env.XPRESSPRO_STOREFRONT_ENABLED === "true",
     limit: rateLimit({ name: "storefront", windowMs: 60_000, max: 90 }),
     actor: async req => {

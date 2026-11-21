@@ -26,6 +26,7 @@ jobs:
       - run: npm run check
       - run: npm run test:storefront
       - run: npm run test:storefront:experience
+      - run: npm run test:storefront:flows-pilot
       - run: npm run test:storefront-approval
       - run: npm run test:cashbook-isolation
       - run: npm run test:training

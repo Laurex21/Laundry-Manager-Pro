@@ -1,17 +1,18 @@
 # Préparation WhatsApp Flows — Xpress Pro
 
-État : prototype technique testable, sans connexion à Meta. Aucun message envoyé et aucun endpoint Flows monté en production.
+État : raccordement pilote implémenté et testé localement, désactivé par défaut. Aucun essai réel WhatsApp n'est encore validé. Voir `whatsapp-flows-pilot.md` pour l'activation contrôlée, les prérequis Meta et les limites.
 
 ## Éléments préparés
 
 - `integrations/whatsapp-flows/storefront-order.draft.json` : écrans vêtements → panier → confirmation, ajout de plusieurs lignes et estimation explicite. Flow JSON 7.3, Data API 4.0, message en mode draft.
 - `server/lib/storefront-flows.ts` : adaptateur qui utilise `publicShop`, `quote` et `submit` du moteur existant. Les demandes apparaissent dans la même boîte de réception et suivent ensuite le parcours habituel de validation au dépôt.
-- `server/lib/storefront-flow-transport.ts` : traitement chiffré indépendant, signature HMAC obligatoire sur les octets bruts, RSA-OAEP/SHA-256 et AES-128-GCM, inversion de l'IV de réponse. Aucun journal de données déchiffrées.
+- `server/lib/storefront-flow-transport.ts` : traitement chiffré, signature HMAC obligatoire sur les octets bruts, RSA-OAEP/SHA-256 et AES-128-GCM, inversion de l'IV de réponse. Aucun journal de données déchiffrées.
+- `server/lib/storefront-flow-pilot.ts` : routes HTTP fermées par défaut, configuration d'une agence, vérification Meta, webhook et registre persistant contre les doublons. Aucun secret ni raccordement réel inclus.
 - `scripts/demo-storefront-flow.ts` : démonstration sans réseau ni base réelle. Trois t-shirts enfant, deux chemises adulte et un jean adolescent donnent 1 300 FCFA, puis une demande fictive.
 
 ## Sessions et limites
 
-Une connexion doit être résolue côté serveur via `resolveBinding`, depuis un registre Meta vérifié. Le prototype ne fournit volontairement pas de registre de production ou de route permettant de déclarer librement un rattachement. `launch` reçoit le destinataire vérifié d'une conversation autorisée et prépare un message ; il ne l'envoie pas.
+Une connexion est résolue côté serveur via `resolveBinding`. Le pilote utilise une configuration propriétaire et vérifie auprès de Meta l'appartenance du numéro et du Flow au WABA, leur état et l'endpoint. Aucune route ne permet à un client de déclarer librement un rattachement. `launch` prépare un message ; le pilote peut l'envoyer uniquement en réponse à une commande entrante signée d'un testeur autorisé.
 
 Les jetons de lancement et de panier sont chiffrés/authentifiés avec une clé serveur dédiée de 32 octets. Ils expirent après 30 minutes, restent liés à une agence et à un destinataire, et sont vérifiés à chaque échange. Le panier n'a pas besoin d'un cache mémoire pour être repris entre instances. La clé doit être gérée dans un coffre de secrets avec une procédure de rotation ; sa perte invalide les sessions ouvertes.
 
@@ -22,9 +23,9 @@ Le prototype couvre la préparation et l'enregistrement de la demande. Il ne tra
 ## Raccordement restant avant pilote WhatsApp
 
 1. Confirmer l'application Meta, les permissions, l'éligibilité des WABA/numéros et le mode de connexion des pressings. Un numéro saisi dans la boutique ne prouve pas sa propriété.
-2. Construire le registre vérifié organisation/agence → WABA → phone_number_id → flow_id, avec secrets côté serveur et révocation. Ne jamais utiliser un identifiant d'agence fourni librement par un client.
+2. Provisionner la configuration vérifiée organisation/agence → WABA → phone_number_id → flow_id du pilote, avec secrets côté serveur et révocation. L'inscription autonome multi-pressings reste à construire. Ne jamais utiliser un identifiant d'agence fourni librement par un client.
 3. Installer les clés publiques pour les numéros concernés et un endpoint HTTPS à chemin dédié. Brancher le transport uniquement derrière un dispositif d'activation explicite, des limites de fréquence/taille et la vérification de signature sur le corps brut.
-4. Brancher le webhook Meta vérifié et dédupliqué pour lancer le Flow à la demande du client, selon les fenêtres et modèles de messagerie applicables. Un envoi ou l'approbation d'un modèle ne sont pas réalisés par ce prototype.
+4. Après revue du SQL du registre et installation, brancher le webhook Meta aux routes du pilote pour lancer le Flow à la demande du client. Valider la coexistence du fournisseur déjà connecté. Le pilote n'envoie aucun modèle proactif.
 5. Importer le JSON en brouillon dans WhatsApp Manager, vérifier la compatibilité Data API, le routage retour, les champs et la remise à zéro du consentement après un nouveau devis. Corriger tout rejet avant publication.
 6. Tester réellement sur Android/iOS : panier mixte, plusieurs ajouts, retour/modification, erreur de saisie, délai réseau, fermeture de boutique, tarif modifié, double confirmation et arrivée dans la bonne agence.
 7. Préparer le suivi et l'acceptation du devis définitif dans WhatsApp. Le devis initial au kilo reste une estimation ; un accord initial ne vaut pas acceptation de n'importe quel montant final.

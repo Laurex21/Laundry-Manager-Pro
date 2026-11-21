@@ -1,4 +1,4 @@
-// Unmounted transport, exercised locally. Never accepts unsigned Meta payloads.
+// Encrypted pilot transport. Never accepts unsigned Meta payloads.
 import { constants, createCipheriv, createDecipheriv, createHmac, privateDecrypt, timingSafeEqual, type KeyLike } from "node:crypto";
 import { z, ZodError } from "zod";
 import { StorefrontError } from "./storefront-pricing";

@@ -1,11 +1,13 @@
 import type { Express, Request, RequestHandler } from "express";
 import { z, ZodError } from "zod";
 import { StorefrontService, type StorefrontActor } from "./storefront-service";
+import type { StorefrontFlowSignup } from "./storefront-flow-signup";
 import { StorefrontError } from "./storefront-pricing";
 
 export function registerStorefrontRoutes(app: Express, deps: {
   service: StorefrontService; auth: RequestHandler; limit: RequestHandler; enabled: () => boolean;
   actor: (req: Request) => Promise<StorefrontActor>;
+  signup?: StorefrontFlowSignup;
 }) {
   const gate: RequestHandler = (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -43,6 +45,13 @@ export function registerStorefrontRoutes(app: Express, deps: {
   const base = "/api/storefront/admin";
   app.get(`${base}/current`, deps.auth, gate, route(async req => deps.service.admin(await deps.actor(req))));
   app.put(`${base}/current`, deps.auth, gate, route(async req => deps.service.save(await deps.actor(req), req.body)));
+  const signup = deps.signup;
+  if (signup) {
+    const connect = `${base}/flow-signup`;
+    app.get(connect, deps.auth, gate, deps.limit, route(async req => signup.status(await deps.actor(req))));
+    app.post(`${connect}/start`, deps.auth, gate, deps.limit, route(async req => signup.start(await deps.actor(req), req.sessionID)));
+    app.post(`${connect}/finish`, deps.auth, gate, deps.limit, route(async req => signup.finish(await deps.actor(req), req.sessionID, req.body)));
+  }
   app.get(`${base}/requests`, deps.auth, gate, route(async req => deps.service.inbox(await deps.actor(req))));
   app.get(`${base}/requests/:id`, deps.auth, gate, route(async req => deps.service.detail(await deps.actor(req), id(req))));
   app.post(`${base}/requests/:id/disposition`, deps.auth, gate, route(async req => {

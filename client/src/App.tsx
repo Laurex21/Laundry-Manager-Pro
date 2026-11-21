@@ -37,6 +37,7 @@ const Pilotage          = lazy(() => import("@/pages/pilotage"));
 const Services          = lazy(() => import("@/pages/services"));
 const StorefrontPublic = lazy(() => import("@/pages/storefront-public"));
 const StorefrontTracking = lazy(() => import("@/pages/storefront-tracking"));
+const StorefrontFlowSignup = lazy(() => import("@/pages/storefront-flow-signup"));
 const StorefrontAdmin = lazy(() => import("@/pages/storefront-admin"));
 const Cashbook = lazy(() => import("@/pages/cashbook"));
 const Expenses          = lazy(() => import("@/pages/expenses"));
@@ -181,6 +182,7 @@ function Router() {
       <Switch>
         <Route path="/b/:slug" component={StorefrontPublic} />
         <Route path="/suivi-boutique" component={StorefrontTracking} />
+        <Route path="/boutique/connexion-whatsapp"><ProtectedRoute component={StorefrontFlowSignup} page="storefront" /></Route>
         <Route path="/boutique"><ProtectedRoute component={StorefrontAdmin} page="storefront" /></Route>
         <Route path="/rencontre" component={FippPage} />
         <Route path="/xpresspro"><XpressBranchPage branch="pro" /></Route>

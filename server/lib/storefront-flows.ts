@@ -1,4 +1,4 @@
-// Preparation adapter: intentionally not mounted in the production route graph.
+// Shared adapter; mounted only behind the explicit, recipient-restricted Flows pilot.
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { cartLineSchema, quoteInputSchema, requestInputSchema, GARMENT_LABELS, SIZE_LABELS, type CartLine, type StorefrontQuote } from "../../shared/storefront";
@@ -8,7 +8,7 @@ import { StorefrontError } from "./storefront-pricing";
 export type FlowBinding = { id: string; actor: StorefrontActor; phoneNumberId: string; flowId: string; enabled: boolean };
 const launchSchema = z.object({
   kind: z.literal("launch"), id: z.string().uuid(), connectionId: z.string(), siteId: z.number().int(), organisationId: z.number().int(),
-  phoneNumberId: z.string(), slug: z.string(), recipient: requestInputSchema.shape.phone, trackingSecret: requestInputSchema.shape.trackingSecret,
+  phoneNumberId: z.string(), flowId: z.string(), slug: z.string(), recipient: requestInputSchema.shape.phone, trackingSecret: requestInputSchema.shape.trackingSecret,
   expires: z.number().int(),
 });
 type Launch = z.infer<typeof launchSchema>;
@@ -50,7 +50,7 @@ export class StorefrontFlowAdapter {
     const binding = await this.binding(connectionId), config = await this.service.admin(binding.actor);
     if (!config.shop?.published) throw new StorefrontError(404, "Cette boutique n’est pas disponible");
     const launch: Launch = launchSchema.parse({ kind: "launch", id: randomUUID(), connectionId,
-      siteId: binding.actor.siteId, organisationId: binding.actor.organisationId, phoneNumberId: binding.phoneNumberId,
+      siteId: binding.actor.siteId, organisationId: binding.actor.organisationId, phoneNumberId: binding.phoneNumberId, flowId: binding.flowId,
       slug: config.shop.slug, recipient: verifiedRecipient, trackingSecret: randomBytes(32).toString("hex"), expires: this.now() + 30 * 60_000 });
     const token = this.seal(launch);
     return { flow_token: token, message: { messaging_product: "whatsapp", to: verifiedRecipient.replace(/^\+/, ""), type: "interactive",
@@ -84,7 +84,7 @@ export class StorefrontFlowAdapter {
     const parsed = launchSchema.safeParse(this.open(input.flow_token));
     if (!parsed.success || parsed.data.expires <= this.now()) throw new StorefrontError(427, "Session expirée. Relancez la commande.");
     const launch = parsed.data, binding = await this.binding(launch.connectionId);
-    if (binding.actor.siteId !== launch.siteId || binding.actor.organisationId !== launch.organisationId || binding.phoneNumberId !== launch.phoneNumberId) throw new StorefrontError(427, "La connexion de cette boutique a changé.");
+    if (binding.actor.siteId !== launch.siteId || binding.actor.organisationId !== launch.organisationId || binding.phoneNumberId !== launch.phoneNumberId || binding.flowId !== launch.flowId) throw new StorefrontError(427, "La connexion de cette boutique a changé.");
     const config = await this.service.admin(binding.actor);
     if (!config.shop?.published || config.shop.slug !== launch.slug) throw new StorefrontError(427, "La boutique est fermée.");
     if (input.data.error) return { data: { acknowledged: true } };
