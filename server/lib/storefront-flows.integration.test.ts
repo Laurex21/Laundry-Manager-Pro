@@ -76,6 +76,9 @@ try {
   const expiredResponse = await transport(expired);
   assert.equal(expiredResponse.status, 427); assert.match(expired.decrypt(expiredResponse.body).error_msg, /expirée/);
   now -= 31 * 60_000;
+  connection = { ...connection!, flowId: "different-flow" };
+  await assert.rejects(() => run("INIT"), (e: any) => e.status === 427);
+  connection.flowId = "synthetic-flow-id";
   connection = { ...connection!, actor: { siteId: 2, organisationId: 2, userId: "other-demo" } };
   await assert.rejects(() => run("INIT"), (e: any) => e.status === 427);
   connection = { ...connection, actor: f.actor, enabled: false };
