@@ -1,46 +1,96 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GARMENT_LABELS, SIZE_LABELS, type CartLine, type StorefrontQuote } from "@shared/storefront";
+import { Check, ChevronLeft, Minus, Plus, Shirt, ShoppingBag } from "lucide-react";
+import { GARMENT_LABELS, SIZE_LABELS, type CartLine, type Garment, type SizeGroup, type StorefrontQuote } from "@shared/storefront";
 import type { StorefrontService } from "../../../server/lib/storefront-service";
+import { ShopHeader, brandStyle } from "@/components/storefront-branding";
 import { Message, QuoteSummary, money, storefrontApi, useStorefrontAction, whatsappHref } from "@/components/storefront-ui";
+import { loadCart, updateCart } from "@/lib/storefront-cart";
 
 type Shop = Awaited<ReturnType<StorefrontService["publicShop"]>>;
 const newSecret = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, "0")).join("");
+
 export default function StorefrontPublic() {
-  const slug = decodeURIComponent(location.pathname.split("/")[2] ?? "");
-  const base = `/api/public/shops/${encodeURIComponent(slug)}`;
+  const slug = decodeURIComponent(location.pathname.split("/")[2] ?? ""), base = `/api/public/shops/${encodeURIComponent(slug)}`;
+  const cartKey = `storefront-cart:${slug}`;
   const shop = useQuery<Shop>({ queryKey: [base], queryFn: () => storefrontApi(base), staleTime: 30_000, retry: false });
-  const [lines, setLines] = useState<CartLine[]>([]), [quote, setQuote] = useState<StorefrontQuote | null>(null);
-  const [line, setLine] = useState<CartLine>({ serviceId: 0, garment: "tshirt", size: "adult", count: 1 });
+  const [lines, setLines] = useState<CartLine[]>(() => loadCart(cartKey));
+  const [serviceId, setServiceId] = useState(0), [size, setSize] = useState<SizeGroup>("adult");
+  const [step, setStep] = useState<"choose" | "confirm">("choose");
   const [contact, setContact] = useState({ customerName: "", phone: "", note: "" });
-  const [consent, setConsent] = useState(false), [receipt, setReceipt] = useState<{ reference: string; secret: string } | null>(null);
-  const action = useStorefrontAction();
-  useEffect(() => { if (shop.data && !line.serviceId) setLine(l => ({ ...l, serviceId: shop.data!.services[0]?.id ?? 0 })); }, [shop.data, line.serviceId]);
-  const changeLines = (value: CartLine[]) => { setLines(value); setQuote(null); setConsent(false); };
+  const [consentFingerprint, setConsentFingerprint] = useState("");
+  const [receipt, setReceipt] = useState<{ reference: string; secret: string } | null>(null);
+  const action = useStorefrontAction(), submitLock = useRef(false), heading = useRef<HTMLHeadingElement>(null);
+  const cartSignature = JSON.stringify(lines), [debouncedCart, setDebouncedCart] = useState(cartSignature);
+  useEffect(() => { const timer = setTimeout(() => setDebouncedCart(cartSignature), 350); return () => clearTimeout(timer); }, [cartSignature]);
+  useEffect(() => { try { sessionStorage.setItem(cartKey, cartSignature); } catch { /* Storage is optional. */ } }, [cartKey, cartSignature]);
+  useEffect(() => { if (shop.data && !serviceId) setServiceId(shop.data.services[0]?.id ?? 0); }, [shop.data, serviceId]);
+  const estimate = useQuery<StorefrontQuote>({
+    queryKey: [base, "quote", debouncedCart], queryFn: () => storefrontApi(`${base}/quote`, { lines: JSON.parse(debouncedCart) }),
+    enabled: !!shop.data && JSON.parse(debouncedCart).length > 0, retry: false, staleTime: 0, refetchOnWindowFocus: true,
+  });
+  const quote = lines.length && debouncedCart === cartSignature && !estimate.isFetching && !estimate.error ? estimate.data : undefined;
+  const count = lines.reduce((n, l) => n + l.count, 0);
+  const change = (item: Omit<CartLine, "count">, delta: number) => { setConsentFingerprint(""); action.setError(""); setLines(v => updateCart(v, item, delta)); };
+  const go = (next: typeof step) => { setStep(next); requestAnimationFrame(() => { heading.current?.focus(); heading.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }); };
+  const pendingSubmission = useRef<{ signature: string; requestKey: string; trackingSecret: string } | null>(null);
+  const send = () => action.run(async () => {
+    if (!quote || consentFingerprint !== quote.fingerprint || submitLock.current) return;
+    submitLock.current = true;
+    try {
+      const key = `storefront-pending:${slug}`, payload = { lines, ...contact, quoteFingerprint: quote.fingerprint }, signature = JSON.stringify(payload);
+      let saved = pendingSubmission.current;
+      try { saved ??= JSON.parse(sessionStorage.getItem(key) || "null"); } catch { /* Fall back to the in-memory key. */ }
+      if (!saved || saved.signature !== signature) saved = { signature, requestKey: crypto.randomUUID(), trackingSecret: newSecret() };
+      pendingSubmission.current = saved;
+      try { sessionStorage.setItem(key, JSON.stringify(saved)); } catch { /* A retry in this page still uses the same key. */ }
+      const result = await storefrontApi(`${base}/requests`, { ...payload, requestKey: saved.requestKey, trackingSecret: saved.trackingSecret });
+      setReceipt({ reference: result.reference, secret: saved.trackingSecret });
+      setLines([]);
+    } catch (error) { setConsentFingerprint(""); void estimate.refetch(); throw error; }
+    finally { submitLock.current = false; }
+  });
   if (shop.isPending) return <main className="sf sf-public"><div className="sf-wrap"><Message>Ouverture de la boutique…</Message></div></main>;
   if (shop.error || !shop.data) return <main className="sf sf-public"><div className="sf-wrap"><Message error>{shop.error?.message ?? "Boutique indisponible"}</Message></div></main>;
-  const data = shop.data;
-  const send = () => action.run(async () => {
-    if (!quote) return;
-    // Keep the same idempotency credentials after a timeout or a repeated click.
-    const key = `storefront-pending:${slug}`;
-    const payload = { lines, ...contact, quoteFingerprint: quote.fingerprint };
-    const signature = JSON.stringify(payload);
-    let saved;
-    try { saved = JSON.parse(sessionStorage.getItem(key) || "null"); } catch { saved = null; }
-    if (!saved || saved.signature !== signature) { saved = { signature, requestKey: crypto.randomUUID(), trackingSecret: newSecret() }; sessionStorage.setItem(key, JSON.stringify(saved)); }
-    const result = await storefrontApi(`${base}/requests`, { ...payload, requestKey: saved.requestKey, trackingSecret: saved.trackingSecret });
-    setReceipt({ reference: result.reference, secret: saved.trackingSecret });
-  });
-  return <main className="sf sf-public">
-    <header className="sf-top"><div className="sf-brand">Xpress<span>Pro</span></div><span className="sf-pill">Boutique du pressing</span></header>
-    <div className="sf-wrap"><div className="sf-hero"><span className="sf-eyebrow">Votre linge, en quelques gestes</span><h1>{data.name}</h1><p className="sf-muted">{data.description}</p><p className="sf-muted">{data.address} · {data.hours}</p></div>
-    {receipt ? <section className="sf-card sf-stack"><span className="sf-pill">Demande enregistrée</span><h2>Merci, votre demande est arrivée au pressing.</h2><p>Référence : <strong>{receipt.reference}</strong>. Attendez la confirmation du dépôt avant de vous déplacer.</p><Message>Conservez votre lien de suivi. Il permet de consulter votre demande et d’accepter le devis définitif.</Message><div className="sf-actions"><a className="sf-button" href={`/suivi-boutique#${receipt.secret}`}>Ouvrir mon suivi</a><a className="sf-button sf-secondary" href={whatsappHref(data.whatsapp, `Bonjour ${data.name}, j’ai déposé la demande ${receipt.reference} dans votre boutique.`)} target="_blank" rel="noopener noreferrer">Préparer un message WhatsApp</a></div><small>Le message s’ouvre dans WhatsApp. Vous choisissez ensuite de l’envoyer. La demande est déjà enregistrée.</small></section> : <>
-    <div className="sf-progress"><span>1 · Choisir mes vêtements</span><span>2 · Voir mon estimation</span><span>3 · Envoyer ma demande</span></div>
-    <div className="sf-grid"><div className="sf-stack"><section className="sf-card"><h2>Les services du pressing</h2>{!data.services.length && <Message>Aucun service disponible actuellement.</Message>}{data.services.map(s => <div className="sf-service" key={s.id}><div className="sf-row"><strong>{s.name}</strong><span className="sf-pill">{s.mode === "quote" ? "Sur devis" : `${money(s.price, data.currency)} / ${s.mode === "kg" ? "kg" : "pièce"}`}</span></div><p className="sf-muted">{s.description}</p>{s.mode === "kg" && Number(s.minimumCharge) > 0 && <small>Minimum par lot : {money(s.minimumCharge, data.currency)}</small>}</div>)}</section>
-    <form className="sf-card sf-stack" onSubmit={e => { e.preventDefault(); changeLines([...lines, line]); }}><h2>Quels vêtements confiez-vous ?</h2><label>Service<select value={line.serviceId} onChange={e => setLine({ ...line, serviceId: Number(e.target.value) })}>{data.services.map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label><label>Type de vêtement<select value={line.garment} onChange={e => setLine({ ...line, garment: e.target.value as CartLine["garment"] })}>{Object.entries(GARMENT_LABELS).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><div className="sf-fields"><label>Gabarit<select value={line.size} onChange={e => setLine({ ...line, size: e.target.value as CartLine["size"] })}>{Object.entries(SIZE_LABELS).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><label>Nombre de pièces<input required type="number" min="1" max="100" value={line.count || ""} onChange={e => setLine({ ...line, count: Number(e.target.value) })} /></label></div><small>Choisissez le gabarit du vêtement, plutôt que l’âge exact de la personne. Vous pouvez mélanger les gabarits dans le panier.</small><button disabled={!line.serviceId || lines.length >= 40} type="submit">+ Ajouter au panier</button></form></div>
-    <div className="sf-stack"><section className="sf-card sf-stack"><h2>Mon panier <span className="sf-pill">{lines.reduce((n, l) => n + l.count, 0)} pièces</span></h2>{!lines.length && <p className="sf-muted">Ajoutez vos premiers vêtements pour obtenir une estimation.</p>}<ul className="sf-list">{lines.map((l, i) => <li key={i} className="sf-row"><div><strong>{l.count} × {GARMENT_LABELS[l.garment]}</strong><small>{SIZE_LABELS[l.size]} · {data.services.find(s => s.id === l.serviceId)?.name}</small></div><button className="sf-secondary" aria-label={`Retirer la ligne ${i + 1}`} onClick={() => changeLines(lines.filter((_, index) => index !== i))}>Retirer</button></li>)}</ul>{lines.length > 0 && <button disabled={action.busy} onClick={() => action.run(async () => setQuote(await storefrontApi(`${base}/quote`, { lines })))}>Calculer mon estimation</button>}{quote && <QuoteSummary quote={quote} />}</section>
-    {quote && <form className="sf-card sf-stack" onSubmit={e => { e.preventDefault(); void send(); }}><h2>Mes coordonnées</h2><label>Votre nom<input autoComplete="name" required minLength={2} maxLength={120} value={contact.customerName} onChange={e => setContact({ ...contact, customerName: e.target.value })} /></label><label>Téléphone / WhatsApp<input autoComplete="tel" type="tel" placeholder="+237…" required pattern="\+[1-9][0-9]{7,14}" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value.replace(/\s/g, "") })} /></label><label>Précisions pour le pressing<textarea maxLength={600} value={contact.note} onChange={e => setContact({ ...contact, note: e.target.value })} /></label><Message>Dépôt au pressing · Paiement au pressing après validation. Vos coordonnées servent au traitement de cette demande.</Message><label className="sf-check"><input required type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />Je comprends que le prix est estimatif et que je devrai accepter le devis confirmé par le pressing.</label><button type="submit" disabled={action.busy || !consent}>{action.busy ? "Enregistrement…" : "Envoyer ma demande"}</button></form>}
-    {action.error && <Message error>{action.error}</Message>}</div></div></>}
-    <footer className="sf-muted" style={{ marginTop: 32 }}>Une boutique propulsée par Xpress Pro · <a href={whatsappHref(data.whatsapp, `Bonjour, j’ai une question sur votre boutique.`)} target="_blank" rel="noopener noreferrer">Contacter le pressing</a></footer></div></main>;
+  const data = shop.data, selectedService = data.services.find(s => s.id === serviceId);
+  return <main className="sf sf-public sf-storefront" style={brandStyle(data.branding)}>
+    <header className="sf-top"><a href="#boutique" className="sf-shop-name">{data.name}</a><a href={whatsappHref(data.whatsapp, `Bonjour ${data.name}, j’ai une question.`)}>Nous contacter</a></header>
+    <div className="sf-wrap" id="boutique"><ShopHeader {...data} />
+      {receipt ? <section className="sf-card sf-stack sf-success"><span className="sf-success-icon"><Check /></span><h2>Votre demande est enregistrée.</h2><p>Le pressing a reçu votre sélection. Référence : <strong>{receipt.reference}</strong>.</p><Message>Attendez la confirmation du dépôt avant de vous déplacer. Conservez votre lien de suivi pour accepter le devis définitif.</Message><a className="sf-button" href={`/suivi-boutique#${receipt.secret}`}>Ouvrir mon suivi</a><a href={whatsappHref(data.whatsapp, `Bonjour ${data.name}, ma demande porte la référence ${receipt.reference}.`)}>Une question ? Écrire au pressing</a></section> : <>
+        <nav className="sf-steps" aria-label="Étapes de la demande"><button className="sf-secondary" aria-current={step === "choose" ? "step" : undefined} onClick={() => go("choose")}>1 <span>Mes vêtements</span></button><button className="sf-secondary" disabled={!quote} aria-current={step === "confirm" ? "step" : undefined} onClick={() => go("confirm")}>2 <span>Confirmer</span></button></nav>
+        <div className="sf-order-grid"><section className="sf-stack">
+          {step === "choose" ? <><div><span className="sf-eyebrow">Simple, rapide, sans compte</span><h2 ref={heading} tabIndex={-1}>Que souhaitez-vous nous confier ?</h2></div>
+            <div className="sf-service-options" role="group" aria-label="Choisir un service">{data.services.map(s => <button type="button" key={s.id} className="sf-service-option" aria-pressed={serviceId === s.id} onClick={() => setServiceId(s.id)}>
+              {data.branding.serviceImages[s.id] && <img src={data.branding.serviceImages[s.id]} alt="" loading="lazy" />}
+              <span><strong>{s.name}</strong><small>{s.mode === "quote" ? "Sur devis" : `${money(s.price, data.currency)} / ${s.mode === "kg" ? "kg" : "pièce"}`}</small></span>
+            </button>)}</div>
+            {!data.services.length && <Message>Aucun service disponible actuellement.</Message>}
+            {selectedService && <section className="sf-card sf-stack"><div><h3>{selectedService.name}</h3><p className="sf-muted">{selectedService.description}</p>{selectedService.mode === "kg" && Number(selectedService.minimumCharge) > 0 && <small>Minimum par lot : {money(selectedService.minimumCharge, data.currency)}</small>}</div>
+              {selectedService.mode === "kg" && <div><label>Vêtements pour<select aria-label="Vêtements pour" value={size} onChange={e => setSize(e.target.value as SizeGroup)}>{Object.entries(SIZE_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><small>Vous pouvez mélanger les gabarits dans votre panier. Ils servent uniquement à estimer le poids.</small></div>}
+              <div className="sf-garments">{Object.entries(GARMENT_LABELS).map(([garment, label]) => {
+                const item = { serviceId, garment: garment as Garment, size: selectedService.mode === "kg" ? size : "adult" as SizeGroup };
+                const n = lines.find(l => l.serviceId === serviceId && l.garment === garment && l.size === item.size)?.count ?? 0;
+                return <div className={`sf-garment ${n ? "sf-picked" : ""}`} key={garment}><Shirt size={22} aria-hidden="true" /><strong>{label}</strong><div className="sf-quantity"><button className="sf-secondary" aria-label={`Retirer ${label}`} disabled={!n} onClick={() => change(item, -1)}><Minus size={16} /></button><output aria-label={`Quantité ${label}`}>{n}</output><button className="sf-secondary" aria-label={`Ajouter ${label}`} disabled={n >= 100 || count >= 500 || (!n && lines.length >= 40)} onClick={() => change(item, 1)}><Plus size={16} /></button></div></div>;
+              })}</div>
+              {(lines.length >= 40 || count >= 500) && <Message>Maximum 40 types de vêtements et 500 pièces par demande.</Message>}
+            </section>}
+          </> : <section className="sf-card sf-stack"><button type="button" className="sf-secondary sf-back" onClick={() => go("choose")}><ChevronLeft size={16} />Modifier mes vêtements</button><h2 ref={heading} tabIndex={-1}>Confirmer ma demande</h2>
+            <form className="sf-stack" onSubmit={e => { e.preventDefault(); void send(); }}><label>Votre nom<input autoComplete="name" required minLength={2} maxLength={120} value={contact.customerName} onChange={e => setContact({ ...contact, customerName: e.target.value })} /></label><label>Téléphone / WhatsApp<input autoComplete="tel" type="tel" placeholder="+237…" required pattern="\+[1-9][0-9]{7,14}" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value.replace(/\s/g, "") })} /></label>
+              <details><summary>Ajouter une précision (facultatif)</summary><label>Précisions pour le pressing<textarea maxLength={600} value={contact.note} onChange={e => setContact({ ...contact, note: e.target.value })} /></label></details>
+              <Message>Dépôt et paiement au pressing après validation. Vos coordonnées servent à traiter cette demande.</Message>
+              <label className="sf-check"><input type="checkbox" required checked={!!quote && consentFingerprint === quote.fingerprint} disabled={!quote} onChange={e => setConsentFingerprint(e.target.checked ? quote!.fingerprint : "")} />Je comprends que ce prix est estimatif. J’accepterai le devis confirmé par le pressing avant facturation.</label>
+              <button type="submit" disabled={action.busy || !quote || consentFingerprint !== quote.fingerprint}>{action.busy ? "Enregistrement…" : "Envoyer ma demande"}</button>
+              {action.error && <Message error>{action.error}</Message>}
+            </form></section>}
+        </section>
+        <aside className="sf-card sf-stack sf-cart" aria-label="Mon panier"><div className="sf-row"><h2>Mon panier</h2><span className="sf-pill">{count} pièce{count > 1 ? "s" : ""}</span></div>
+          {!lines.length ? <div className="sf-cart-empty"><ShoppingBag size={32} /><p>Votre prochain moment de tranquillité commence ici.</p><small>Ajoutez vos vêtements avec le bouton +.</small></div> : <ul className="sf-list">{lines.map(l => <li key={`${l.serviceId}-${l.garment}-${l.size}`}><div className="sf-row"><div><strong>{l.count} × {GARMENT_LABELS[l.garment]}</strong><small>{data.services.find(s => s.id === l.serviceId)?.name ?? "Service indisponible"}{data.services.find(s => s.id === l.serviceId)?.mode === "kg" ? ` · ${SIZE_LABELS[l.size]}` : ""}</small></div><button type="button" className="sf-secondary" aria-label={`Supprimer ${GARMENT_LABELS[l.garment]} ${SIZE_LABELS[l.size]}`} onClick={() => change(l, -l.count)}>×</button></div></li>)}</ul>}
+          {lines.length > 0 && <div aria-live="polite">{estimate.error && debouncedCart === cartSignature ? <Message error>{estimate.error.message}<button type="button" className="sf-secondary" onClick={() => estimate.refetch()}>Réessayer</button></Message> : quote ? <QuoteSummary quote={quote} /> : <p className="sf-muted">Mise à jour de l’estimation…</p>}</div>}
+          {step === "choose" && <button type="button" className="sf-desktop-continue" disabled={!quote} onClick={() => go("confirm")}>Continuer avec {count} pièce{count > 1 ? "s" : ""}</button>}
+        </aside></div>
+        {step === "choose" && <div className="sf-mobile-cart"><div><small>{count} pièce{count > 1 ? "s" : ""} · estimation</small><strong>{quote ? money(quote.total, data.currency) : lines.length ? "Calcul en cours…" : money("0", data.currency)}</strong></div><button disabled={!quote} onClick={() => go("confirm")}>Continuer <span aria-hidden="true">→</span></button></div>}
+      </>}
+      <footer className="sf-footer">Propulsé par <strong>Xpress Pro</strong> · Dépôt au pressing</footer>
+    </div>
+  </main>;
 }

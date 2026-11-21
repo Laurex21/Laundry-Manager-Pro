@@ -1,0 +1,325 @@
+{
+  "version": "7.3",
+  "data_api_version": "4.0",
+  "routing_model": {
+    "ITEMS": [
+      "CART"
+    ],
+    "CART": [
+      "CONTACT"
+    ],
+    "CONTACT": []
+  },
+  "screens": [
+    {
+      "id": "ITEMS",
+      "title": "Mes vêtements",
+      "data": {
+        "shop_name": {
+          "type": "string",
+          "__example__": "Pressing Horizon"
+        },
+        "cart_token": {
+          "type": "string",
+          "__example__": "ENCRYPTED_CART_TOKEN"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "Lavage",
+              "description": "1000 XAF / kg"
+            }
+          ]
+        },
+        "garments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "Lavage"
+            }
+          ]
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "Lavage"
+            }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.shop_name}"
+          },
+          {
+            "type": "Form",
+            "name": "selection",
+            "children": [
+              {
+                "type": "Dropdown",
+                "name": "service_id",
+                "label": "Service",
+                "required": true,
+                "data-source": "${data.services}"
+              },
+              {
+                "type": "Dropdown",
+                "name": "garment",
+                "label": "Vêtement",
+                "required": true,
+                "data-source": "${data.garments}"
+              },
+              {
+                "type": "Dropdown",
+                "name": "size",
+                "label": "Gabarit du vêtement",
+                "required": true,
+                "data-source": "${data.sizes}"
+              },
+              {
+                "type": "TextInput",
+                "name": "count",
+                "label": "Nombre de pièces",
+                "input-type": "number",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Ajouter au panier",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "operation": "add",
+                    "cart_token": "${data.cart_token}",
+                    "service_id": "${form.service_id}",
+                    "garment": "${form.garment}",
+                    "size": "${form.size}",
+                    "count": "${form.count}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CART",
+      "title": "Mon estimation",
+      "data": {
+        "cart_token": {
+          "type": "string",
+          "__example__": "ENCRYPTED_CART_TOKEN"
+        },
+        "summary": {
+          "type": "string",
+          "__example__": "3 × T-shirt · Enfant · Lavage"
+        },
+        "estimate": {
+          "type": "string",
+          "__example__": "Estimation : 300 XAF"
+        },
+        "recipient": {
+          "type": "string",
+          "__example__": "+237600000001"
+        },
+        "explanation": {
+          "type": "string",
+          "__example__": "Lavage : 300 XAF"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "${data.summary}"
+          },
+          {
+            "type": "TextHeading",
+            "text": "${data.estimate}"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.explanation}"
+          },
+          {
+            "type": "TextCaption",
+            "text": "Estimation sous réserve de validation au pressing. Les vêtements sans poids connu ou sur devis restent à chiffrer."
+          },
+          {
+            "type": "EmbeddedLink",
+            "text": "Ajouter d’autres vêtements",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "operation": "more",
+                "cart_token": "${data.cart_token}"
+              }
+            }
+          },
+          {
+            "type": "EmbeddedLink",
+            "text": "Recommencer le panier",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "operation": "reset",
+                "cart_token": "${data.cart_token}"
+              }
+            }
+          },
+          {
+            "type": "Footer",
+            "label": "Continuer",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "operation": "checkout",
+                "cart_token": "${data.cart_token}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONTACT",
+      "title": "Confirmer ma demande",
+      "terminal": true,
+      "success": true,
+      "sensitive": [
+        "customer_name",
+        "note"
+      ],
+      "data": {
+        "cart_token": {
+          "type": "string",
+          "__example__": "ENCRYPTED_CART_TOKEN"
+        },
+        "summary": {
+          "type": "string",
+          "__example__": "3 × T-shirt · Enfant · Lavage"
+        },
+        "estimate": {
+          "type": "string",
+          "__example__": "Estimation : 300 XAF"
+        },
+        "recipient": {
+          "type": "string",
+          "__example__": "+237600000001"
+        },
+        "explanation": {
+          "type": "string",
+          "__example__": "Lavage : 300 XAF"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.estimate}"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary}"
+          },
+          {
+            "type": "TextCaption",
+            "text": "${data.explanation}"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.recipient}"
+          },
+          {
+            "type": "Form",
+            "name": "contact",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "customer_name",
+                "label": "Votre nom",
+                "required": true
+              },
+              {
+                "type": "TextArea",
+                "name": "note",
+                "label": "Précisions (facultatif)",
+                "required": false
+              },
+              {
+                "type": "OptIn",
+                "name": "accepted",
+                "label": "Je comprends que le prix est estimatif. J’accepterai le devis confirmé par le pressing avant facturation.",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Envoyer ma demande",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "operation": "confirm",
+                    "cart_token": "${data.cart_token}",
+                    "customer_name": "${form.customer_name}",
+                    "note": "${form.note}",
+                    "accepted": "${form.accepted}"
+                  }
+                }
+              }
+            ],
+            "init-values": {
+              "accepted": false
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

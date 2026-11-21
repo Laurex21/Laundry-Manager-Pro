@@ -4,6 +4,7 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { CartLine, PublicService, StorefrontQuote, WeightReference } from "./storefront";
+import { DEFAULT_BRANDING, type StorefrontBranding } from "./storefront-branding";
 
 export * from "./models/auth";
 import { users } from "./models/auth";
@@ -1315,6 +1316,7 @@ export const storefronts = pgTable("storefronts", {
   hours: text("hours").notNull(), whatsapp: varchar("whatsapp", { length: 20 }).notNull(), currency: varchar("currency", { length: 3 }).notNull(),
   published: boolean("published").notNull().default(false), weightsAcknowledged: boolean("weights_acknowledged").notNull().default(false),
   weights: jsonb("weights").$type<WeightReference[]>().notNull(), version: integer("version").notNull().default(1),
+  branding: jsonb("branding").$type<StorefrontBranding>().notNull().default(DEFAULT_BRANDING),
   minimumAdjustmentServiceId: integer("minimum_adjustment_service_id").references(() => services.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [check("storefront_version_positive", sql`${t.version} > 0`)]);
