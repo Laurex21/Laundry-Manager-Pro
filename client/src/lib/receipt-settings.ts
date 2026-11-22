@@ -144,6 +144,8 @@ const RECEIPT_PT_LABELS: Record<string, string> = {
   "This Payment": "Este Pagamento",
   "Method": "Método",
   "Cash": "Numerário",
+  "Bank Transfer": "Transferência bancária",
+  "Client Credit": "Crédito do cliente",
   "Order Total": "Total do Pedido",
 };
 

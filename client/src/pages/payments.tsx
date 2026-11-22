@@ -8,16 +8,24 @@ import { usePaymentsByOrder, useCreatePayment } from "@/hooks/use-payments";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/use-currency";
 import { PAYMENT_METHODS, PAYMENT_REGIONS, getMethodDef } from "@/lib/payment-methods";
-import { generatePaymentReceipt, generateThermalPaymentReceipt, reserveReceiptPrintWindow } from "@/lib/receipt";
-import { receiptSettingsForOrder } from "@/lib/receipt-settings";
+import {
+  downloadRecordedPaymentReceipt,
+  generatePaymentReceipt,
+  generateThermalPaymentReceipt,
+  reserveReceiptPrintWindow,
+  type PaymentReceiptOrder,
+} from "@/lib/receipt";
+import { receiptSettingsForOrder, type ReceiptSettings } from "@/lib/receipt-settings";
 import { orderDisplayId } from "@/lib/order-display";
 import { paymentDateWithRegistrationTime } from "@/lib/payment-date";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { useSearch } from "wouter";
 import {
   CreditCard,
   CheckCircle2,
   Download,
+  Loader2,
   Printer,
   Banknote,
   Calendar,
@@ -63,17 +71,116 @@ function todayInputDate() {
 
 const NON_PAYABLE_ORDER_STATUSES = new Set(["cancelled", "cancellation_requested"]);
 
+type LedgerPayment = {
+  id: number;
+  orderId: number;
+  orderNumber: number | string;
+  customerName: string;
+  siteId: number;
+  siteName: string;
+  date: string;
+  method: string;
+  reference: string | null;
+  paymentStatus: string;
+  employeeName: string | null;
+  amount: string;
+};
+
+type LedgerResponse = {
+  payments: LedgerPayment[];
+  totals: { amount: number; count: number; byMethod: Record<string, number> };
+};
+
 function PaymentLedger() {
   const { t } = useTranslation(); const { getSymbol } = useCurrency(); const symbol = getSymbol();
-  const { allSites, currentSite, isOwner } = useAuth();
+  const { allSites, isOwner } = useAuth();
+  const { toast } = useToast();
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [to, setTo] = useState(todayInputDate); const [siteId, setSiteId] = useState(""); const [method, setMethod] = useState(""); const [search, setSearch] = useState("");
+  const [downloadingPayment, setDownloadingPayment] = useState<number | null>(null);
+  const receiptDownloadLock = useRef(false);
   const query = new URLSearchParams({ from, to }); if (siteId) query.set("siteId", siteId); if (method) query.set("method", method); if (search.trim()) query.set("search", search.trim());
-  const { data, isLoading, isError } = useQuery<any>({ queryKey: ["/api/payments/ledger", from, to, siteId, method, search], queryFn: async () => { const r = await fetch(`/api/payments/ledger?${query}`, { credentials: "include" }); if (!r.ok) throw new Error(); return r.json(); } });
+  const { data, isLoading, isError } = useQuery<LedgerResponse>({ queryKey: ["/api/payments/ledger", from, to, siteId, method, search], queryFn: async () => { const r = await fetch(`/api/payments/ledger?${query}`, { credentials: "include" }); if (!r.ok) throw new Error(); return r.json(); } });
   const rows = data?.payments || [];
-  function exportCsv() { const cells = [[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")], ...rows.map((p: any) => [p.date, p.orderNumber, p.customerName, p.siteName, t(p.method, { defaultValue: p.method }), p.reference || "", paymentStatusLabel(p.paymentStatus), p.employeeName || "", p.amount])]; const csv = cells.map((row: any[]) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `payments-${from}-${to}.csv`; a.click(); URL.revokeObjectURL(a.href); }
+  function exportCsv() { const cells = [[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")], ...rows.map((p) => [p.date, p.orderNumber, p.customerName, p.siteName, t(p.method, { defaultValue: p.method }), p.reference || "", paymentStatusLabel(p.paymentStatus), p.employeeName || "", p.amount])]; const csv = cells.map((row) => row.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\n"); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `payments-${from}-${to}.csv`; a.click(); URL.revokeObjectURL(a.href); }
+
+  async function downloadFrenchReceipt(payment: LedgerPayment) {
+    if (receiptDownloadLock.current) return;
+    receiptDownloadLock.current = true;
+    setDownloadingPayment(payment.id);
+    try {
+      const [order, settings] = await Promise.all([
+        requestReceipt<PaymentReceiptOrder>(`/api/orders/${payment.orderId}`, response => {
+          if (!response.ok) throw new Error("Receipt order unavailable");
+          return response.json();
+        }),
+        requestReceipt<Partial<ReceiptSettings>>("/api/settings", response => {
+          if (!response.ok) throw new Error("Receipt settings unavailable");
+          return response.json();
+        }),
+      ]);
+      if (order.id !== payment.orderId || order.siteId !== payment.siteId) throw new Error("Receipt order mismatch");
+      const site = { id: payment.siteId, name: payment.siteName };
+      const receiptSettings = receiptSettingsForOrder(settings, "fr", order.siteId, site, []);
+      await downloadRecordedPaymentReceipt(order, payment.id, symbol, receiptSettings);
+    } catch {
+      toast({ title: t("payment_receipt_download_error"), variant: "destructive" });
+    } finally {
+      receiptDownloadLock.current = false;
+      setDownloadingPayment(null);
+    }
+  }
+
   const paymentStatusLabel = (status: string) => status === "paid" ? t("paid") : status === "partial" ? t("partial") : t("unpaid");
-  return <div className="space-y-5" data-testid="payment-ledger-redesign"><div className="grid gap-4 rounded-2xl border border-primary/10 bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5"><div><label className="text-xs font-medium">{t("start_date")}</label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div><div><label className="text-xs font-medium">{t("end_date")}</label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>{(isOwner || allSites.length > 1) && <div><label className="text-xs font-medium">{t("site")}</label><Select value={siteId || "all"} onValueChange={(v) => setSiteId(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all_sites")}</SelectItem>{allSites.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent></Select></div>}<div><label className="text-xs font-medium">{t("payment_method")}</label><Select value={method || "all"} onValueChange={(v) => setMethod(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all")}</SelectItem>{PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{t(m.label, { defaultValue: m.label })}</SelectItem>)}</SelectContent></Select></div><div><label className="text-xs font-medium">{t("search")}</label><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("search_order_placeholder")} /></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("total")}</p><p className="text-xl font-bold">{symbol}{Number(data?.totals?.amount || 0).toLocaleString()}</p></div><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("payments")}</p><p className="text-xl font-bold">{data?.totals?.count || 0}</p></div><Button variant="outline" className="h-full min-h-14" onClick={exportCsv} disabled={!rows.length}><Download className="mr-2 h-4 w-4" />CSV</Button></div>{data?.totals?.byMethod && <div className="flex flex-wrap gap-2">{Object.entries(data.totals.byMethod).map(([key, value]) => <Badge key={key} variant="secondary">{t(key, { defaultValue: key })}: {symbol}{Number(value).toLocaleString()}</Badge>)}</div>}{isLoading ? <p>{t("loading")}</p> : isError ? <p className="text-destructive">{t("error")}</p> : <div className="overflow-x-auto rounded-2xl border border-primary/10 bg-card shadow-sm"><table className="w-full min-w-[1000px] text-sm"><thead className="bg-[#082D5B] text-white"><tr>{[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")].map((h) => <th key={h} className="p-3 text-left text-xs">{h}</th>)}</tr></thead><tbody>{rows.map((p: any) => <tr key={p.id} className="border-t"><td className="p-3">{new Date(p.date).toLocaleString()}</td><td className="p-3">#{p.orderNumber}</td><td className="p-3">{p.customerName}</td><td className="p-3">{p.siteName}</td><td className="p-3">{t(p.method, { defaultValue: p.method })}</td><td className="p-3">{p.reference || "—"}</td><td className="p-3"><Badge variant={p.paymentStatus === "paid" ? "default" : "secondary"}>{paymentStatusLabel(p.paymentStatus)}</Badge></td><td className="p-3">{p.employeeName || "—"}</td><td className="p-3 font-mono font-semibold">{symbol}{Number(p.amount).toLocaleString()}</td></tr>)}</tbody></table>{!rows.length && <p className="p-8 text-center text-muted-foreground">{t("no_payments")}</p>}</div>}</div>;
+  return <div className="space-y-5" data-testid="payment-ledger-redesign"><div className="grid gap-4 rounded-2xl border border-primary/10 bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5"><div><label className="text-xs font-medium">{t("start_date")}</label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div><div><label className="text-xs font-medium">{t("end_date")}</label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>{(isOwner || allSites.length > 1) && <div><label className="text-xs font-medium">{t("site")}</label><Select value={siteId || "all"} onValueChange={(v) => setSiteId(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all_sites")}</SelectItem>{allSites.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent></Select></div>}<div><label className="text-xs font-medium">{t("payment_method")}</label><Select value={method || "all"} onValueChange={(v) => setMethod(v === "all" ? "" : v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("all")}</SelectItem>{PAYMENT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{t(m.label, { defaultValue: m.label })}</SelectItem>)}</SelectContent></Select></div><div><label className="text-xs font-medium">{t("search")}</label><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("search_order_placeholder")} /></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("total")}</p><p className="text-xl font-bold">{symbol}{Number(data?.totals?.amount || 0).toLocaleString()}</p></div><div className="rounded-2xl border border-primary/10 bg-card p-4 shadow-sm"><p className="text-xs text-muted-foreground">{t("payments")}</p><p className="text-xl font-bold">{data?.totals?.count || 0}</p></div><Button variant="outline" className="h-full min-h-14" onClick={exportCsv} disabled={!rows.length}><Download className="mr-2 h-4 w-4" />CSV</Button></div>{data?.totals?.byMethod && <div className="flex flex-wrap gap-2">{Object.entries(data.totals.byMethod).map(([key, value]) => <Badge key={key} variant="secondary">{t(key, { defaultValue: key })}: {symbol}{Number(value).toLocaleString()}</Badge>)}</div>}{isLoading ? <p>{t("loading")}</p> : isError ? <p className="text-destructive">{t("error")}</p> : (
+    <div className="overflow-x-auto rounded-2xl border border-primary/10 bg-card shadow-sm">
+      <table className="w-full min-w-[1000px] text-sm">
+        <thead className="bg-[#082D5B] text-white">
+          <tr>
+            {[t("date"), t("order"), t("customer"), t("site"), t("payment_method"), t("transaction_reference"), t("current_payment_status"), t("employee"), t("amount")].map(heading => (
+              <th key={heading} className="p-3 text-left text-xs">{heading}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(p => (
+            <tr key={p.id} className="border-t">
+              <td className="p-3">{new Date(p.date).toLocaleString()}</td>
+              <td className="p-3">
+                <div>#{p.orderNumber}</div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-1 gap-1.5 whitespace-nowrap"
+                  aria-label={`${t("payment_receipt_pdf_fr")} — ${p.orderNumber}`}
+                  aria-busy={downloadingPayment === p.id}
+                  disabled={downloadingPayment !== null}
+                  onClick={() => void downloadFrenchReceipt(p)}
+                  data-testid={`payment-receipt-fr-${p.id}`}
+                >
+                  {downloadingPayment === p.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  {t("payment_receipt_pdf_fr")}
+                </Button>
+              </td>
+              <td className="p-3">{p.customerName}</td>
+              <td className="p-3">{p.siteName}</td>
+              <td className="p-3">{t(p.method, { defaultValue: p.method })}</td>
+              <td className="p-3">{p.reference || "—"}</td>
+              <td className="p-3"><Badge variant={p.paymentStatus === "paid" ? "default" : "secondary"}>{paymentStatusLabel(p.paymentStatus)}</Badge></td>
+              <td className="p-3">{p.employeeName || "—"}</td>
+              <td className="p-3 font-mono font-semibold">{symbol}{Number(p.amount).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!rows.length && <p className="p-8 text-center text-muted-foreground">{t("no_payments")}</p>}
+    </div>
+  )}</div>;
 }
 
 export default function Payments() {

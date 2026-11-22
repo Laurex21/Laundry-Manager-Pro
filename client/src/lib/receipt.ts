@@ -6,7 +6,8 @@ import { enUS, fr, pt } from "date-fns/locale";
 import { type ReceiptSettings, DEFAULT_SETTINGS, label, getDefaultTerms } from "./receipt-settings";
 import { garmentColorSwatch } from "./garment-colors";
 import { orderDisplayId } from "./order-display";
-import { formatExactMoney } from "@shared/exact-decimal";
+import { addDecimals, compareDecimals, formatExactMoney } from "@shared/exact-decimal";
+import type { OrderWithDetails, PaymentWithEmployee } from "@shared/schema";
 
 const PIPELINE_LABELS: Record<string, { en: string; fr: string }> = {
   received: { en: "Received", fr: "Reçu" },
@@ -60,7 +61,12 @@ function paymentReference(reference: string | null | undefined, lang: string): s
 }
 
 function receiptPaymentMethod(method: string | null | undefined, lang: string): string {
-  return method?.trim().toLowerCase() === "cash" ? label("Cash", "Espèces", lang) : method ?? "";
+  switch (method?.trim().toLowerCase()) {
+    case "cash": return label("Cash", "Espèces", lang);
+    case "bank transfer": return label("Bank Transfer", "Virement bancaire", lang);
+    case "client credit": return label("Client Credit", "Avoir client", lang);
+    default: return method ?? "";
+  }
 }
 
 function serviceUnitLabel(unit: string | null | undefined, lang: string): string {
@@ -844,6 +850,44 @@ export function generateThermalPaymentReceipt(
   return openThermalReceiptPrintWindow(html, reservedWindow);
 }
 
+type RecordedPayment = Pick<PaymentWithEmployee, "id" | "orderId" | "amount" | "method" | "reference"> & {
+  date: string | null;
+  collectedByEmployee?: { name: string } | null;
+};
+
+export type PaymentReceiptOrder = Pick<OrderWithDetails,
+  "id" | "siteId" | "orderReference" | "customer" | "items" | "garmentItems" | "discount" | "pickupCost" | "totalAmount"
+> & {
+  orderNumber?: number | string;
+  entryDate: string | null;
+  pickupDate: string | null;
+  payments: RecordedPayment[];
+};
+
+export function downloadRecordedPaymentReceipt(
+  order: PaymentReceiptOrder,
+  paymentId: number,
+  symbol: string,
+  settings: ReceiptSettings,
+  format: ReceiptFormat = "pdf",
+) {
+  const payment = order.payments.find(record => record.id === paymentId && record.orderId === order.id);
+  if (!payment?.date) throw new Error("Recorded payment unavailable");
+
+  // Payment IDs reflect recording order. A later entry can carry an earlier accounting date.
+  const paymentsThroughSelection = order.payments.filter(record => record.orderId === order.id && record.id <= paymentId);
+  const paid = paymentsThroughSelection.reduce((sum, record) => addDecimals(sum, record.amount), "0");
+  const newStatus = compareDecimals(paid, order.totalAmount) >= 0 ? "paid" : "partial";
+
+  return generatePaymentReceipt(
+    orderDisplayId(order), order.customer, order.items, order.garmentItems,
+    { amount: payment.amount, method: payment.method, date: payment.date, newStatus, agentName: payment.collectedByEmployee?.name },
+    paymentsThroughSelection, order.entryDate || payment.date, order.pickupDate || "", Number(order.discount || 0),
+    symbol, { ...settings, receiptLanguage: "fr" }, Number(order.pickupCost || 0), format, undefined,
+    { paymentId, orderTotal: order.totalAmount },
+  );
+}
+
 export function generatePaymentReceipt(
   orderId: number | string,
   customer: any,
@@ -858,7 +902,8 @@ export function generatePaymentReceipt(
   settings: ReceiptSettings = DEFAULT_SETTINGS,
   pickupCost: number = 0,
   action: ReceiptAction = "download",
-  archiveIdentity?: { orderId: number; paymentId: number }
+  archiveIdentity?: { orderId: number; paymentId: number },
+  recordedCopy?: { paymentId: number; orderTotal: string },
 ) {
   const lang = settings.receiptLanguage || "en";
   const displayEntryDate = dateOnlyParts(entryDate) ? formatReceiptDateOnly(entryDate, lang) : formatReceiptDateTime(entryDate, lang);
@@ -888,7 +933,7 @@ export function generatePaymentReceipt(
   const garmentTotal = receiptRegisteredItemTotal(garments, items);
 
   const subtotalAmount = orderSubtotal(items);
-  const orderTotal = orderTotalFromParts(subtotalAmount, discount, pickupCost);
+  const orderTotal = recordedCopy ? Number(recordedCopy.orderTotal) : orderTotalFromParts(subtotalAmount, discount, pickupCost);
   const currentPaymentAmount = Number(payment.amount || 0) + Number(payment.creditApplied || 0);
   const totalPaid = allPayments.length > 0
     ? allPayments.reduce((sum: number, p: any) => sum + Number(p.amount), 0)
@@ -908,7 +953,7 @@ export function generatePaymentReceipt(
   const headerHtml = buildHeader(settings.businessName, tagline, contactLines, settings.receiptHeaderColor, settings.logoBase64, settings.showLogo);
   const termsHtml = settings.showTerms ? buildTermsHtml(settings, lang) : "";
   const footerNote = settings.receiptFooterNote || label("Thank you for your trust", "Merci de votre confiance", lang);
-  const receiptTitle = label("Payment Receipt", "Reçu de Paiement", lang);
+  const receiptTitle = recordedCopy ? "Copie du reçu de paiement" : label("Payment Receipt", "Reçu de Paiement", lang);
   const generatedLabel = label("Receipt generated on", "Reçu généré le", lang);
   const orderTitle = label("Order No.", "N° Commande", lang);
   const emptyValue = label("N/A", "N/D", lang);
@@ -962,11 +1007,12 @@ export function generatePaymentReceipt(
           <div class="label">${label("Order No.", "N° Commande", lang)}</div>
           <div class="id">#${orderId}</div>
         </div>
+        ${recordedCopy ? `<p style="margin-top:8px;font-size:13px;">${receiptTitle} · Paiement n° ${recordedCopy.paymentId}</p>` : ""}
       </div>
     </div>
 
     <div class="meta">
-      <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${customer.name || emptyValue}</div></div>
+      <div class="meta-item"><div class="label">${label("Customer", "Client", lang)}</div><div class="value">${escapeHtml(customer.name || emptyValue)}</div></div>
       <div class="meta-item"><div class="label">${label("Order Date", "Date de commande", lang)}</div><div class="value">${displayEntryDate}</div></div>
       <div class="meta-item"><div class="label">${label("Receipt Date", "Date du reçu", lang)}</div><div class="value">${formatReceiptDateTime(payment.date, lang)}</div></div>
       <div class="meta-item"><div class="label">${label("Payment received by", "Paiement reçu par", lang)}</div><div class="value">${escapeHtml(receivedBy)}</div></div>
@@ -1043,6 +1089,16 @@ export function generatePaymentReceipt(
   if (action === "print") {
     openReceiptPrintWindow(html);
     return;
+  }
+
+  if (recordedCopy) {
+    // A French copy uses the recorded payment without replacing the archived original.
+    const filename = `recu-paiement-${orderId}-${recordedCopy.paymentId}-fr.html`;
+    if (typeof (globalThis as any).__captureReceiptHtml === "function" && (action === "download" || action === "html")) {
+      downloadReceiptHtml(html, filename);
+      return;
+    }
+    return downloadReceiptDocument(html, filename, action === "download" ? "html" : action);
   }
 
   if (typeof (globalThis as any).__captureReceiptHtml === "function" && (action === "download" || action === "html")) {
