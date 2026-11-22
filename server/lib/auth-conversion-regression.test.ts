@@ -33,7 +33,7 @@ assert.match(auth, /minLength=\{tab === "register" \? 10 : undefined\}/, "regist
 assert.match(auth, /password !== confirmPassword/, "registration must validate password confirmation");
 assert.match(auth, /data-testid="input-confirm-password"/, "registration must expose a confirmation field");
 assert.match(auth, /registration_password_rule/, "registration must explain password rules before submission");
-assert.match(auth, /xpresspro-mark\.svg/, "authentication must use the approved XpressPro mark");
+assert.match(auth, /<BrandLogo brand="pro" size="header" priority/, "authentication must use the approved XpressPro logo");
 assert.match(auth, /back_to_public_site/, "authentication must provide a localized route back to the public site");
 
 assert.doesNotMatch(landing, /href="#"/, "the public landing must not contain empty footer links");
