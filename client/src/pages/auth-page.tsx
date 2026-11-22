@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { Link } from "wouter";
 import { SALES_CODE } from "@shared/sales-referrals";
 import { readPlanIntent, planIntentUrl } from "@/lib/saas-plan-intent";
@@ -421,8 +422,7 @@ export default function AuthPage() {
         {/* Zone 1: Brand + Language */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-7 pb-5 shrink-0 sm:px-8">
           <div className="flex items-center gap-2.5">
-            <img src="/xpresspro-mark.svg" alt="" className="h-8 w-8" />
-            <span className="font-display font-bold text-lg tracking-tight text-foreground">XpressPro</span>
+            <BrandLogo brand="pro" size="header" priority />
           </div>
           <div
             className="flex items-center gap-0.5 bg-muted rounded-lg p-1"

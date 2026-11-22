@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { TRAINING_VISIBLE } from "@/lib/training-availability";
 import { consumeRegistrationWelcome } from "@/lib/onboarding-welcome";
 import { OnboardingIntroduction } from "@/components/onboarding-introduction";
@@ -419,10 +420,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       {/* Logo */}
       <div className="px-4 py-4 border-b border-white/10 lg:py-2 lg:px-4">
         <div className="flex items-center gap-3" data-testid="xpresspro-brand">
-          <img src="/xpresspro-mark-white.svg" alt="" className="h-9 w-9 shrink-0" aria-hidden="true" />
-          <h1 className="font-display text-[20px] font-bold leading-none tracking-[-0.035em] text-white">
-            Xpress<span className="text-[#8B82FF]">Pro</span>
-          </h1>
+          <BrandLogo brand="pro" theme="dark" size="header" priority />
         </div>
       </div>
 

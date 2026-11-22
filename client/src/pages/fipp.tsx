@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import FippCountdown from "@/components/fipp-countdown";
@@ -11,6 +12,7 @@ export default function FippPage() {
   useEffect(() => {
     const id = window.location.hash.slice(1);
     if (id === "programme" || id === "billets") document.getElementById(id)?.scrollIntoView();
+    else if (!id) window.scrollTo(0, 0);
   }, []);
   const schedule = [
   { time: "08:00 – 09:00", title: copy("Accueil & networking", "Welcome & networking"), detail: copy("Enregistrement, visite de l’exposition et café d’accueil", "Registration, exhibition tour and welcome coffee") },
@@ -48,13 +50,13 @@ const registrationUrl = (offer: string) => `https://wa.me/237651638889?text=${en
 const exhibitorUrl = `https://wa.me/237651638889?text=${encodeURIComponent(copy("Bonjour, notre entreprise souhaite exposer au FIPP Africa le 19 décembre 2026. Nom de l’entreprise : [nom]. Activité : [activité]. Besoin en espace : [précisez].", "Hello, our company would like to exhibit at FIPP Africa on 19 December 2026. Company name: [name]. Business activity: [activity]. Space requirements: [please specify]."))}`;
   useEffect(() => { document.title = fr ? "FIPP Africa · Forum international des professionnels du pressing" : "FIPP Africa · International Forum for Laundry Professionals"; }, [fr]);
   return <div className="min-h-screen bg-[#fffaf0] text-[#082550]">
-    <header className="border-b border-[#cba52a]/25 bg-white"><nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4" aria-label={copy("Navigation FIPP Africa", "FIPP Africa navigation")}><Link href="/" className="inline-flex items-center gap-2 text-sm font-bold"><ArrowLeft className="h-4 w-4" />XpressGroup</Link><a href="#programme" className="text-sm font-bold hover:text-[#ad831c]">Programme</a><button type="button" onClick={() => void i18n.changeLanguage(fr ? "en" : "fr")} aria-label={fr ? "Switch to English" : "Passer en français"} className="min-h-11 min-w-11 rounded-lg border border-[#082550]/20 px-3 text-sm font-bold">{fr ? "EN" : "FR"}</button></nav></header>
+    <header className="border-b border-[#cba52a]/25 bg-white"><nav className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4" aria-label={copy("Navigation FIPP Africa", "FIPP Africa navigation")}><Link href="/rencontre" aria-label="FIPP Africa" aria-current="page" className="min-w-0 shrink-0"><BrandLogo brand="fipp" size="header" priority /></Link><Link href="/" className="inline-flex min-h-11 items-center gap-2 text-sm font-bold" aria-label="XpressGroup — Accueil"><ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">XpressGroup</span></Link><a href="#programme" className="hidden text-sm font-bold hover:text-[#ad831c] sm:inline">Programme</a><button type="button" onClick={() => void i18n.changeLanguage(fr ? "en" : "fr")} aria-label={fr ? "Switch to English" : "Passer en français"} className="min-h-11 min-w-11 rounded-lg border border-[#082550]/20 px-3 text-sm font-bold">{fr ? "EN" : "FR"}</button></nav></header>
     <main>
       <section className="relative overflow-hidden px-4 py-16 sm:py-24">
         <div className="pointer-events-none absolute -left-24 top-4 h-72 w-72 rotate-45 border-[30px] border-[#cba52a]/10" />
         <div className="relative mx-auto max-w-4xl">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-[.25em] text-[#a57d1b]">{copy("2ᵉ édition · Une initiative de XpressGroup", "2nd edition · An initiative by XpressGroup")}</p>
+            <BrandLogo brand="fipp" size="hero" className="mb-6" priority /><p className="text-xs font-extrabold uppercase tracking-[.25em] text-[#a57d1b]">{copy("2ᵉ édition · Une initiative de XpressGroup", "2nd edition · An initiative by XpressGroup")}</p>
             <h1 className="mt-5 font-serif text-5xl font-bold leading-tight tracking-tight sm:text-7xl">FIPP <span className="text-[#cba52a]">AFRICA</span></h1>
             <p className="mt-3 max-w-2xl text-sm font-bold uppercase tracking-[.12em] sm:text-base">{copy("Forum international des professionnels du pressing", "International Forum for Laundry Professionals")}</p>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700">{copy("Moderniser et développer les entreprises de pressing en Afrique grâce à l’innovation, au digital et à la professionnalisation.", "Modernise and grow laundry businesses across Africa through innovation, digital tools and professional development.")}</p>

@@ -10,8 +10,9 @@ const shell = fs.readFileSync(path.join(root, "client/src/components/layout-shel
 const mark = fs.readFileSync(path.join(root, "client/public/xpresspro-mark.svg"), "utf8");
 const whiteMark = fs.readFileSync(path.join(root, "client/public/xpresspro-mark-white.svg"), "utf8");
 
-expect(shell.includes('src="/xpresspro-mark-white.svg"'), "Dark sidebar must use the approved white XpressPro mark");
-expect(shell.includes('Xpress<span className="text-[#8B82FF]">Pro</span>'), "Dark sidebar must use the accessible two-colour wordmark");
+expect(shell.includes('<BrandLogo brand="pro" theme="dark"'), "Dark sidebar must use the approved XpressPro logo adapted to dark backgrounds");
+const proDarkLogo = fs.readFileSync(path.join(root, "client/public/brands/pro-on-dark.svg"), "utf8");
+expect(proDarkLogo.includes('#6B5CFF') && proDarkLogo.includes('#F9F5EC'), "Dark logo must retain the original violet accent and readable light wordmark");
 expect(!shell.includes('t("laundry_manager")</p>'), "The duplicated grey brand subtitle must be removed");
 expect(shell.includes('function BackButton'), "Shared layout must provide a back button for secondary pages");
 expect(shell.includes('window.history.back()'), "Back button must respect browser navigation history");
