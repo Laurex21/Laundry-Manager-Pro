@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import FippHomeBanner from "@/components/fipp-home-banner";
 import { SaasPublicPlans, SaasTrialInfo } from "@/components/saas-public-plans";
 import { trackMarketingEvent } from "@/lib/marketing";
@@ -155,6 +156,7 @@ export default function LandingPage() {
   const demoUrl = demoEmbedUrl(i18n.language);
   const fipp = FIPP_HOME[i18n.language.startsWith("fr") ? "fr" : "en"];
   useLandingReveal(); useLandingMeta(i18n.language);
+  useEffect(() => { if (!window.location.hash) window.scrollTo(0, 0); }, []);
   useEffect(() => { const fn = () => setScrolled(window.scrollY > 20); window.addEventListener("scroll", fn, { passive: true }); return () => window.removeEventListener("scroll", fn); }, []);
   const footerLinks: Record<string, Array<{ href: string; label: string }>> = {
     resources: [
@@ -170,7 +172,7 @@ export default function LandingPage() {
     <a href="#main-content" className="fixed left-3 top-3 z-[100] -translate-y-20 rounded bg-white px-4 py-2 font-semibold text-blue-700 focus:translate-y-0">{t("landing_v3.skip")}</a>
     <header className={`fixed inset-x-0 top-0 z-50 border-b border-slate-200 bg-white/95 text-[#0D1B4B] backdrop-blur ${scrolled ? "shadow-sm" : ""}`}>
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4" aria-label={t("landing_v3.main_nav")}>
-        <Link href="/" className="shrink-0 text-lg font-black tracking-tight sm:text-2xl">Xpress<span className="text-blue-600">Group</span></Link>
+        <Link href="/" aria-label="XpressGroup — Accueil" aria-current="page" className="shrink-0"><BrandLogo brand="group" size="header" priority /></Link>
         <div className="hidden items-center gap-5 xl:flex"><a href="/xpresspro" className="text-sm font-semibold hover:text-blue-600">XpressPro</a><a href="/xpress-consulting" className="text-sm font-semibold hover:text-amber-700">Xpress Consulting</a><a href="/xpress-clean" className="text-sm font-semibold hover:text-cyan-700">Xpress Clean</a><a href="/rencontre" className="text-sm font-semibold hover:text-[#ad831c]">FIPP Africa</a></div>
         <div className="hidden items-center gap-2 xl:flex"><button className="min-h-11 rounded-lg px-3 text-sm font-bold" onClick={() => i18n.changeLanguage(i18n.language.startsWith("fr") ? "en" : "fr")}>{i18n.language.startsWith("fr") ? "EN" : "FR"}</button><Link href="/auth" className="min-h-11 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white">{loginLabel}</Link><Link href="/auth?tab=register" className="min-h-11 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white">{t("landing_v3.start_free")}</Link></div>
         <div className="flex shrink-0 items-center gap-1 xl:hidden"><Link href="/auth" aria-label={french ? "Connexion XpressPro" : "XpressPro sign-in"} className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white"><span className="min-[380px]:hidden">{french ? "Connexion" : "Sign in"}</span><span className="hidden min-[380px]:inline">{french ? "Connexion XpressPro" : "XpressPro sign-in"}</span></Link><button className="grid min-h-11 min-w-11 place-items-center xl:hidden" aria-label={t(menu ? "landing_v3.close_menu" : "landing_v3.menu")} aria-controls="home-mobile-menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X /> : <Menu />}</button></div>
@@ -223,7 +225,7 @@ export default function LandingPage() {
     <footer id="contact" className="bg-[#081337] py-16 text-slate-300">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <Link href="/" className="text-2xl font-black tracking-tight text-white">Xpress<span className="text-blue-400">Group</span></Link>
+          <Link href="/" aria-label="XpressGroup — Accueil"><BrandLogo brand="group" theme="dark" size="footer" /></Link>
           <p className="mt-4 max-w-xs text-sm leading-6">{i18n.language.startsWith("fr") ? "XpressGroup réunit une plateforme de gestion, la formation et le conseil, et des services de pressing pour faire avancer l’entretien textile en Afrique." : "XpressGroup brings together management software, training and consulting, and laundry services to advance textile care across Africa."}</p>
           <p className="mt-4 text-sm">xpressclean23@gmail.com<br/>+237 651 638 889</p>
         </div>

@@ -1,3 +1,4 @@
+import { BrandLogo } from "@/components/brand-logo";
 import { ArrowRight } from "lucide-react";
 
 type Copy = {
@@ -37,7 +38,7 @@ export default function XpressGroupGateway({ language }: { language: string }) {
   return <>
     <section id="branches" className="scroll-mt-20 bg-[#fafaf5] bg-[linear-gradient(#dfe8e84d_1px,transparent_1px),linear-gradient(90deg,#dfe8e84d_1px,transparent_1px)] bg-[size:60px_60px] pb-16 pt-9 sm:pt-14 text-[#0D1B4B]">
       <div className="mx-auto max-w-7xl px-4">
-        <div className="mx-auto max-w-5xl text-center">
+        <div className="mx-auto max-w-5xl text-center"><BrandLogo brand="group" size="hero" className="mx-auto mb-6" priority />
           <p className="text-xs font-extrabold uppercase tracking-[.2em] text-blue-700">{copy.eyebrow}</p>
           <h1 className="mt-4 text-3xl font-black leading-[1.06] tracking-[-.055em] sm:text-6xl lg:text-7xl"><span className="text-blue-600">{copy.first}</span><br />{copy.second}</h1>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">{copy.subtitle}</p>
@@ -50,7 +51,7 @@ export default function XpressGroupGateway({ language }: { language: string }) {
           {copy.branches.map((branch) => <article key={branch.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_16px_36px_rgba(13,27,75,.08)]">
             <img src={branch.image} alt={branch.alt} width="640" height="420" className="h-48 w-full object-cover" loading="lazy" />
             <div className={`flex min-h-[220px] flex-col p-6 ${branch.tone}`}>
-              <p className={`text-[11px] font-extrabold uppercase tracking-[.17em] ${branch.accent}`}>{branch.category}</p>
+              <BrandLogo brand={branch.href === "/xpresspro" ? "pro" : branch.href === "/xpress-consulting" ? "consulting" : "clean"} size="card" className="mb-4" /><p className={`text-[11px] font-extrabold uppercase tracking-[.17em] ${branch.accent}`}>{branch.category}</p>
               <h2 className="mt-2 text-2xl font-black tracking-tight">{branch.name}</h2>
               <p className="mt-3 flex-1 text-sm leading-6 text-slate-700">{branch.description}</p>
               <a href={branch.href} className={`mt-5 inline-flex min-h-11 items-center gap-2 text-sm font-bold ${branch.accent}`}>{branch.action}<ArrowRight className="h-4 w-4" /></a>

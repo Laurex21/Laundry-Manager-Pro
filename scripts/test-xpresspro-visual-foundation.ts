@@ -11,7 +11,7 @@ assert.match(css, /--sidebar:\s*212 84% 19%/);
 assert.match(css, /prefers-reduced-motion/);
 assert.match(shell, /bg-sidebar text-sidebar-foreground/);
 assert.match(shell, /bg-sidebar-primary text-white/);
-assert.match(shell, /xpresspro-mark-white\.svg/);
+assert.match(shell, /<BrandLogo brand="pro" theme="dark"/);
 assert.doesNotMatch(shell, /laundry_manager/);
 assert.match(dashboard, /text-xl font-bold text-foreground/);
 assert.match(dashboard, /hover:border-primary\/30/);
