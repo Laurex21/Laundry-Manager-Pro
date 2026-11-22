@@ -28,7 +28,7 @@ assert.equal(receiptQuantity('2.125000','fr'), '2,125');
 assert.equal(receiptQuantity('2.125000','en'), '2.125');
 assert.equal(receiptQuantity('0.000001','fr'), '0,000001');
 assert.equal(receiptQuantity('0.000000','fr'), '0');
-const { generateDepositReceipt, generatePaymentReceipt } = await import('../../client/src/lib/receipt');
+const { downloadRecordedPaymentReceipt, generateDepositReceipt, generatePaymentReceipt } = await import('../../client/src/lib/receipt');
 const { DEFAULT_SETTINGS, receiptSettingsForOrder } = await import('../../client/src/lib/receipt-settings');
 const xpressSite = { id: 14, name: 'Xpress 0' };
 const otherSite = { id: 15, name: 'Autre agence' };
@@ -40,7 +40,11 @@ const starter = receiptSettingsForOrder({ businessName: 'XpressPro', starterServ
 assert.equal(starter.businessName, 'XpressPro');
 assert.equal(starter.starterServiceProvider, 'Xpress 0');
 let receiptHtml = '';
-(globalThis as any).__captureReceiptHtml = (html: string) => { receiptHtml = html; };
+let receiptFilename = '';
+(globalThis as any).__captureReceiptHtml = (html: string, filename: string) => {
+  receiptHtml = html;
+  receiptFilename = filename;
+};
 const items = [{quantity:'2.125000',priceAtOrder:'1000',service:{name:'Lavage',unit:'kg'}}];
 try {
   for(const receiptLanguage of ['fr','en']) {
@@ -61,5 +65,39 @@ try {
     assert.ok(receiptHtml.includes(`&bull; ${receiptLanguage === 'fr' ? 'Espèces' : 'Cash'}<`));
     assert.ok(receiptHtml.includes('Chipper Cash'));
   }
+
+  const order = {
+    id: 42,
+    orderReference: 'LP-26-3429JM2',
+    siteId: 14,
+    customer: { name: 'Client fictif' },
+    items: [],
+    garmentItems: [],
+    totalAmount: '15.000000',
+    discount: null,
+    pickupCost: null,
+    entryDate: '2026-11-21T10:38:00Z',
+    pickupDate: null,
+    payments: [
+      { id: 100, orderId: 42, method: 'Cash', date: '2026-11-21T10:39:00Z', amount: '5.000000', reference: null },
+      { id: 101, orderId: 42, method: 'Bank Transfer', date: '2026-11-20T09:00:00Z', amount: '10.000000', reference: 'VIR-101' },
+    ],
+  } as import('../../client/src/lib/receipt').PaymentReceiptOrder;
+  const englishSettings = { ...DEFAULT_SETTINGS, businessName: 'Laurepressing' };
+  downloadRecordedPaymentReceipt(order, 100, 'FCFA ', englishSettings, 'html');
+  assert.equal(receiptFilename, 'recu-paiement-LP-26-3429JM2-100-fr.html');
+  assert.match(receiptHtml, /<h1[^>]*>Laurepressing<\/h1>/);
+  assert.match(receiptHtml, /Copie du reçu de paiement · Paiement n° 100/);
+  assert.match(receiptHtml, /Méthode: Espèces/);
+  assert.match(receiptHtml, /PARTIEL/);
+  assert.match(receiptHtml, /Solde dû<\/span><span[^>]*>FCFA 10\.00/);
+  assert.doesNotMatch(receiptHtml, /VIR-101|ENTIÈREMENT PAYÉ|\bCash\b/);
+  assert.equal(englishSettings.receiptLanguage, 'en');
+  downloadRecordedPaymentReceipt(order, 101, 'FCFA ', englishSettings, 'html');
+  assert.equal(receiptFilename, 'recu-paiement-LP-26-3429JM2-101-fr.html');
+  assert.match(receiptHtml, /Méthode: Virement bancaire/);
+  assert.match(receiptHtml, /Réf : VIR-101/);
+  assert.match(receiptHtml, /ENTIÈREMENT PAYÉ/);
+  assert.throws(() => downloadRecordedPaymentReceipt(order, 102, 'FCFA ', englishSettings, 'html'), /Recorded payment unavailable/);
 } finally {delete (globalThis as any).__captureReceiptHtml;}
 console.log('Receipt quantities: integer and fractional precision preserved in FR/EN deposit and payment HTML.');
