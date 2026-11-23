@@ -1,11 +1,13 @@
 import { passwordResetTokens, sessions, users, type PasswordResetToken, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { loginPhoneAliases, LOGIN_PHONE_SEPARATORS } from "@shared/login-identifier";
 
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByLoginEmail(email: string): Promise<User | undefined>;
+  getUserByLoginPhone(phone: string): Promise<User | undefined>;
   getUserByPhone(phone: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   createPasswordResetToken(data: { userId: string; tokenHash: string; accountType: "owner" | "staff"; expiresAt: Date }): Promise<PasswordResetToken>;
@@ -36,6 +38,14 @@ class AuthStorage implements IAuthStorage {
   async getUserByPhone(phone: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.phone, phone));
     return user;
+  }
+
+  async getUserByLoginPhone(phone: string, executor = db): Promise<User | undefined> {
+    const matches = await executor.select().from(users)
+      .where(inArray(sql`translate(${users.phone}, ${LOGIN_PHONE_SEPARATORS}, '')`, loginPhoneAliases(phone)))
+      .limit(2);
+    // A phone may be stored on more than one account.
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {

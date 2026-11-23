@@ -88,7 +88,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
       if (tab === "register") await waitForAcquisition();
       const body =
         tab === "login"
-          ? { email: email.trim().toLowerCase(), password }
+          ? { identifier: email.trim(), password }
           : { email: email.trim().toLowerCase(), password, firstName, lastName, phone, businessName, acceptedLegal, salesReferralCode, ...acquisitionRegistrationConsent() };
 
       const res = await fetch(endpoint, {
@@ -213,11 +213,12 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
 
         <div className="space-y-1.5">
           <label htmlFor="auth-email" className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
-            {t("email")}
+            {t(tab === "login" ? "auth_login_identifier" : "email")}
           </label>
           <Input
-            id="auth-email" name="email" type="email" inputMode="email" autoCapitalize="none" spellCheck={false} aria-describedby="auth-email-hint"
-            placeholder={t("email_placeholder")}
+            id="auth-email" name={tab === "login" ? "identifier" : "email"}
+            type={tab === "login" ? "text" : "email"} inputMode="email" autoCapitalize="none" spellCheck={false} aria-describedby="auth-email-hint"
+            placeholder={t(tab === "login" ? "auth_login_identifier" : "email_placeholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -225,7 +226,7 @@ function AuthForm({ tab, setTab }: { tab: "login" | "register"; setTab: (t: "log
             data-testid="input-email"
             className="h-11 text-base"
           />
-          <p id="auth-email-hint" className="text-xs text-muted-foreground">{t("auth_email_hint")}</p>
+          <p id="auth-email-hint" className="text-xs text-muted-foreground">{t(tab === "login" ? "auth_login_identifier_hint" : "auth_email_hint")}</p>
         </div>
 
         <div className="space-y-1.5">

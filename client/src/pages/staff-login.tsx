@@ -31,7 +31,7 @@ export default function StaffLogin() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: credential.trim().toLowerCase(), password }),
+        body: JSON.stringify({ identifier: credential.trim(), password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -68,15 +68,17 @@ export default function StaffLogin() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="staff-email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("email")}</label>
+              <label htmlFor="staff-identifier" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("auth_login_identifier")}</label>
               <Input
-                id="staff-email" type="email" inputMode="email" autoCapitalize="none" spellCheck={false} className="h-11 text-base"
+                id="staff-identifier" name="identifier" type="text" inputMode="email" autoCapitalize="none" spellCheck={false} className="h-11 text-base"
+                aria-describedby="staff-identifier-hint"
                 value={credential}
                 onChange={(event) => setCredential(event.target.value)}
                 required
                 autoComplete="username"
                 data-testid="input-staff-login-credential"
               />
+              <p id="staff-identifier-hint" className="text-xs text-muted-foreground">{t("auth_login_identifier_hint")}</p>
             </div>
             <div className="space-y-1.5">
               <label htmlFor="staff-password" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("password")}</label>
