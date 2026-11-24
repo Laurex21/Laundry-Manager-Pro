@@ -2,9 +2,10 @@ import { passwordResetTokens } from "@shared/models/auth";
 import { adminResetTokenMatchesEmail, adminResetTargetExcluded, adminResetLockedTargetMatches } from "../../lib/admin-password-reset";
 import { createSalesRegistrationUser, completeSalesRegistration, SalesReferralError } from "../../lib/sales-referrals";
 import { normalizeLoginEmail } from "@shared/login-email";
+import { normalizeLoginIdentifier } from "@shared/login-identifier";
 import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
 import { saasOrganisationAccessEnabled, saasAccessEnabled, saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
@@ -277,7 +278,43 @@ async function sendPasswordResetLink(user: { phone: string | null; email: string
   return false;
 }
 
-const authAttemptLimiter = loginRateLimits("auth-attempt");
+function readLoginIdentifier(body: { identifier?: unknown; email?: unknown } | undefined) {
+  return normalizeLoginIdentifier(body?.identifier ?? body?.email);
+}
+
+const authAttemptLimiter = loginRateLimits("auth-attempt", 10, req =>
+  readLoginIdentifier(req.body)?.value ?? "invalid-identifier",
+);
+const loginAccountLimiter = rateLimit({
+  name: "auth-attempt:resolved-account",
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyOnly: true,
+  key: (_req, res) => res.locals.loginAccount.id,
+});
+
+const resolveLoginAccount: RequestHandler = async (req, res, next) => {
+  const identifier = readLoginIdentifier(req.body);
+  const { password } = req.body ?? {};
+  if (!identifier || typeof password !== "string" || !password) {
+    res.status(400).json({ message: "AUTH_IDENTIFIER_REQUIRED" });
+    return;
+  }
+  try {
+    const user = identifier.kind === "phone"
+      ? await authStorage.getUserByLoginPhone(identifier.value)
+      : await authStorage.getUserByLoginEmail(identifier.value);
+    if (!user?.passwordHash) {
+      res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
+      return;
+    }
+    res.locals.loginAccount = user;
+    next();
+  } catch (error) {
+    console.error("Login account lookup error:", error);
+    res.status(500).json({ message: "AUTH_UNAVAILABLE" });
+  }
+};
 
 const passwordResetLimiter = rateLimit({
   name: "password-reset",
@@ -389,20 +426,10 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/auth/login", ...authAttemptLimiter, async (req, res) => {
+  app.post("/api/auth/login", ...authAttemptLimiter, resolveLoginAccount, loginAccountLimiter, async (req, res) => {
     try {
-      const email = normalizeLoginEmail(req.body.email);
       const { password } = req.body;
-      if (!email || typeof password !== "string" || !password) {
-        return res.status(400).json({ message: "AUTH_EMAIL_REQUIRED" });
-      }
-
-      // Email only; matching does not modify historical account records.
-      const user = await authStorage.getUserByLoginEmail(email);
-
-      if (!user || !user.passwordHash) {
-        return res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
-      }
+      const user = res.locals.loginAccount;
 
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
@@ -438,18 +465,10 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/staff/login", ...authAttemptLimiter, async (req, res) => {
+  app.post("/api/staff/login", ...authAttemptLimiter, resolveLoginAccount, loginAccountLimiter, async (req, res) => {
     try {
-      const email = normalizeLoginEmail(req.body.email);
       const { password } = req.body;
-      if (!email || typeof password !== "string" || !password) {
-        return res.status(400).json({ message: "AUTH_EMAIL_REQUIRED" });
-      }
-
-      const user = await authStorage.getUserByLoginEmail(email);
-      if (!user || !user.passwordHash) {
-        return res.status(401).json({ message: "AUTH_INVALID_CREDENTIALS" });
-      }
+      const user = res.locals.loginAccount;
 
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {

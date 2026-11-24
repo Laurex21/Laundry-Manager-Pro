@@ -2,7 +2,8 @@ import type { TFunction } from 'i18next';
 /** Never expose arbitrary server text or English fallbacks in an authentication screen. */
 export function authErrorMessage(message: unknown, status: number, retryAfter: string | null, t: TFunction): string {
   const keys: Record<string, string> = {
-    AUTH_NETWORK_ERROR: 'network_error_retry', AUTH_EMAIL_REQUIRED: 'auth_email_required', AUTH_INVALID_CREDENTIALS: 'auth_invalid_credentials',
+    AUTH_NETWORK_ERROR: 'network_error_retry', AUTH_EMAIL_REQUIRED: 'auth_email_required',
+    AUTH_IDENTIFIER_REQUIRED: 'auth_login_identifier_required', AUTH_INVALID_CREDENTIALS: 'auth_invalid_credentials',
     AUTH_USE_STAFF_LOGIN: 'auth_use_staff', AUTH_USE_OWNER_LOGIN: 'auth_use_owner', AUTH_UNAVAILABLE: 'auth_unavailable',
     'Invalid credentials': 'auth_invalid_credentials',
     'An account with this email already exists': 'auth_email_exists',

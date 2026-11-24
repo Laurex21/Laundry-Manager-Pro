@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { RequestHandler } from "express";
+import type { RequestHandler, Response } from "express";
 import { pool } from "../db";
 
 function requestIp(req: any): string {
@@ -14,12 +14,12 @@ export function rateLimit(options: {
   name: string;
   windowMs: number;
   max: number;
-  key?: (req: any) => string;
+  key?: (req: any, res: Response) => string;
   keyOnly?: boolean;
 }): RequestHandler {
   return async (req, res, next) => {
     try {
-      const keyPart = options.key?.(req) || "";
+      const keyPart = options.key?.(req, res) || "";
       const rawKey = options.keyOnly
         ? `${options.name}:${keyPart || requestIp(req)}`
         : `${options.name}:${requestIp(req)}:${keyPart}`;
@@ -55,9 +55,12 @@ export function rateLimit(options: {
  * Fixed expiry never extends on rejected requests; no permanent account lock.
  * Owner/staff share a namespace so switching login screens does not reset it.
  */
-export function loginRateLimits(name: string, pairMax = 10): RequestHandler[] {
-  const key = (req: any) => typeof req.body?.email === "string"
-    ? req.body.email.trim().toLowerCase() : "invalid-email";
+export function loginRateLimits(
+  name: string,
+  pairMax = 10,
+  key: (req: any) => string = req => typeof req.body?.email === "string"
+    ? req.body.email.trim().toLowerCase() : "invalid-email",
+): RequestHandler[] {
   const windowMs = 15 * 60 * 1000;
   return [
     rateLimit({ name: `${name}:ip`, windowMs, max: 60 }),
