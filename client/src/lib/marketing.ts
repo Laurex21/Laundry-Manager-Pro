@@ -1,7 +1,8 @@
 import { recordAcquisition, withdrawAcquisition, waitForAcquisition } from "./acquisition";
-import { marketingHostAllowed, campaignFromSearch, marketingPage, pixelSafeSearch, MARKETING_EVENTS, TIKTOK_PIXEL_ID, type MarketingEvent } from "@shared/marketing";
+import { trackMetaEvent, metaPixelLoaded, revokeMetaConsent } from "./meta-pixel";
+import { MARKETING_CONSENT_KEY, metaPixelHost, metaPixelSafeSearch, marketingHostAllowed, campaignFromSearch, marketingPage, pixelSafeSearch, MARKETING_EVENTS, TIKTOK_PIXEL_ID, type MarketingEvent } from "@shared/marketing";
 
-export const MARKETING_CONSENT_KEY = "xpresspro.marketing-consent.v1";
+const LEGACY_CONSENT_KEY = "xpresspro.marketing-consent.v1";
 const CAMPAIGN_KEY = "xpresspro.marketing-campaign.v1";
 type Consent = "accepted" | "rejected" | null;
 type PixelQueue = any[] & Record<string, any>;
@@ -15,7 +16,9 @@ declare global { interface Window { ttq?: PixelQueue; TiktokAnalyticsObject?: st
 export function marketingConsent(): Consent {
   try {
     const value = window.localStorage.getItem(MARKETING_CONSENT_KEY);
-    return value === "accepted" || value === "rejected" ? value : memoryConsent;
+    if (value === "accepted" || value === "rejected") return value;
+    // An existing refusal still applies. Adding Meta needs a fresh acceptance.
+    return window.localStorage.getItem(LEGACY_CONSENT_KEY) === "rejected" ? "rejected" : null;
   } catch { return memoryConsent; }
 }
 
@@ -23,19 +26,21 @@ export function saveMarketingConsent(value: Exclude<Consent, null>): void {
   memoryConsent = value;
   try { window.localStorage.setItem(MARKETING_CONSENT_KEY, value); } catch { /* Optional storage. */ }
   if (value === "rejected") {
+    lastPage = "";
     withdrawAcquisition();
     try { window.sessionStorage.removeItem(CAMPAIGN_KEY); } catch { /* Optional storage. */ }
+    revokeMetaConsent();
     window.ttq?.revokeConsent?.();
     // A full reload removes the SDK, its event listeners and pending queues.
-    if (pixelLoaded) window.location.reload();
+    if (pixelWasLoaded()) window.location.reload();
   }
 }
 
-export function pixelWasLoaded(): boolean { return pixelLoaded; }
+export function pixelWasLoaded(): boolean { return pixelLoaded || metaPixelLoaded(); }
 
 export async function waitForMarketingDispatch(): Promise<void> {
   await waitForAcquisition();
-  if (!pixelLoaded) return;
+  if (!pixelWasLoaded()) return;
   // Give the asynchronous SDK a bounded chance to send a completed signup.
   await new Promise<void>((resolve) => {
     const timeout = window.setTimeout(resolve, 450);
@@ -91,7 +96,9 @@ function campaign(): Record<string, string> {
 
 export function setMarketingScope(allowed: boolean): void {
   active = allowed;
-  if (!allowed && pixelLoaded) {
+  if (!allowed) lastPage = "";
+  if (pixelWasLoaded() && (!allowed || (pixelLoaded && !pixelSafeSearch(window.location.search)))) {
+    revokeMetaConsent();
     window.ttq?.revokeConsent?.();
     window.location.reload();
   }
@@ -99,7 +106,11 @@ export function setMarketingScope(allowed: boolean): void {
 
 export function trackMarketingEvent(event: MarketingEvent): void {
   const page = marketingPage(window.location.pathname, window.location.search);
-  if (!marketingHostAllowed(window.location.hostname) || !active || !page || !pixelSafeSearch(window.location.search) || window.location.hash || marketingConsent() !== "accepted" || !(event in MARKETING_EVENTS)) return;
+  if (!marketingHostAllowed(window.location.hostname) || !active || !page || window.location.hash || marketingConsent() !== "accepted" || !(event in MARKETING_EVENTS)) return;
+  if (metaPixelHost(window.location.hostname) && metaPixelSafeSearch(window.location.search)) {
+    try { trackMetaEvent(event); } catch { /* Optional measurement must not block the visitor. */ }
+  }
+  if (!pixelSafeSearch(window.location.search)) return;
   try {
     recordAcquisition(event, page);
     const attribution = campaign();
@@ -116,7 +127,7 @@ export function trackMarketingPage(): void {
   const page = marketingPage(window.location.pathname, window.location.search);
   if (!marketingHostAllowed(window.location.hostname) || !page || !active || marketingConsent() !== "accepted") return;
   const key = `${page}:${window.location.search === "?tab=register" ? "register" : "public"}`;
-  if (lastPage === key) return;
+  if (window.location.hash || !metaPixelSafeSearch(window.location.search) || lastPage === key) return;
   lastPage = key;
   trackMarketingEvent("marketing_visit");
 }

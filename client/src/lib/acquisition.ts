@@ -1,4 +1,4 @@
-import { campaignFromSearch } from "@shared/marketing";
+import { campaignFromSearch, MARKETING_CONSENT_KEY } from "@shared/marketing";
 import { referralSource, ACQUISITION_SESSION_MS, type AcquisitionInput } from "@shared/acquisition";
 const KEY = "xpresspro.acquisition.v1";
 let memory:any = null;
@@ -29,7 +29,7 @@ export function recordAcquisition(event:string,page:string):void {
 export function waitForAcquisition():Promise<unknown> { return Promise.race([pending,new Promise(resolve=>setTimeout(resolve,1000))]); }
 export function acquisitionRegistrationConsent():Record<string,unknown> {
   try {
-    if (localStorage.getItem("xpresspro.marketing-consent.v1") !== "accepted") return {};
+    if (localStorage.getItem(MARKETING_CONSENT_KEY) !== "accepted") return {};
     const saved = JSON.parse(sessionStorage.getItem(KEY) || "null") || memory;
     return saved && Date.now()-saved.updatedAt<=ACQUISITION_SESSION_MS ? {marketingConsent:true, marketingJourneyId:saved.journeyId} : {};
   } catch { return {}; }

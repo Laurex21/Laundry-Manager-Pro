@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { marketingPage, marketingHostAllowed } from "../../shared/marketing";
+import { marketingPage, marketingHostAllowed, metaPixelHost } from "../../shared/marketing";
 
 const PRODUCTION_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -30,6 +30,12 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
     contentSecurityPolicy = contentSecurityPolicy
       .replace("script-src 'self'", "script-src 'self' https://analytics.tiktok.com")
       .replace("connect-src 'self'", "connect-src 'self' https://analytics.tiktok.com https://analytics-sg.tiktok.com https://analytics.us.tiktok.com");
+  }
+
+  if (metaPixelHost(_req.hostname) && marketingPage(_req.path, search)) {
+    contentSecurityPolicy = contentSecurityPolicy
+      .replace("script-src 'self'", "script-src 'self' https://connect.facebook.net")
+      .replace("connect-src 'self'", "connect-src 'self' https://www.facebook.com https://connect.facebook.net");
   }
 
   res.setHeader("Content-Security-Policy", contentSecurityPolicy);
