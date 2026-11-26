@@ -3,7 +3,6 @@ import { hasSaasFeature, type SaasFeature, type SaasState } from "../../shared/s
 import { saasAccessEnabled, saasEnabled, saasStore, saasForOrganisation } from "./saas-runtime";
 import { SaasError } from "./saas-store";
 
-export const SAAS_CUSTOM_FIELDS = ["logoBase64", "receiptHeaderColor", "receiptFooterNote", "receiptQrCodeBase64", "receiptQrCodeTarget", "receiptQrCodeLabel", "showLogo", "showPickupDate", "showGarmentList", "showPaymentHistory", "showTerms", "termsOfService"];
 export function standardSaasSettings<T extends Record<string, any>>(settings: T, plan: string): T {
   if (plan !== "starter") return settings;
   return starterReceiptSettings(settings);

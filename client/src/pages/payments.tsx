@@ -93,7 +93,7 @@ type LedgerResponse = {
 
 function PaymentLedger() {
   const { t } = useTranslation(); const { getSymbol } = useCurrency(); const symbol = getSymbol();
-  const { allSites, isOwner } = useAuth();
+  const { allSites, isOwner, planSlug } = useAuth();
   const { toast } = useToast();
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [to, setTo] = useState(todayInputDate); const [siteId, setSiteId] = useState(""); const [method, setMethod] = useState(""); const [search, setSearch] = useState("");
@@ -121,7 +121,7 @@ function PaymentLedger() {
       ]);
       if (order.id !== payment.orderId || order.siteId !== payment.siteId) throw new Error("Receipt order mismatch");
       const site = { id: payment.siteId, name: payment.siteName };
-      const receiptSettings = receiptSettingsForOrder(settings, "fr", order.siteId, site, []);
+      const receiptSettings = receiptSettingsForOrder(settings, "fr", order.siteId, site, [], planSlug);
       await downloadRecordedPaymentReceipt(order, payment.id, symbol, receiptSettings);
     } catch {
       toast({ title: t("payment_receipt_download_error"), variant: "destructive" });
@@ -185,12 +185,12 @@ function PaymentLedger() {
 
 export default function Payments() {
   const { data: allOrders, isLoading: ordersLoading } = useOrders();
-  const { currentSite, allSites } = useAuth();
+  const { currentSite, allSites, planSlug } = useAuth();
   const { t, i18n } = useTranslation();
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const formatMoney = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 2 })} ${symbol}`;
-  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
+  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings", planSlug] });
 
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
@@ -392,7 +392,7 @@ export default function Payments() {
       const displayOrderId = orderDisplayId(orderDetails) || successPayment.orderId;
 
       const siteId = orderDetails?.siteId ?? allOrders?.find(order => order.id === successPayment.orderId)?.siteId;
-      const mergedSettings = receiptSettingsForOrder(settings, i18n.language, siteId, currentSite, allSites);
+      const mergedSettings = receiptSettingsForOrder(settings, i18n.language, siteId, currentSite, allSites, planSlug);
       const allPayments = orderDetails?.payments || [];
       const currentPayment = successPayment.paymentId
         ? allPayments.find((p: any) => p.id === successPayment.paymentId)

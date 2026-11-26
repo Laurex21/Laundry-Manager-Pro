@@ -282,7 +282,7 @@ async function calculateDraftCoverage(organisationId: number, subscriptionId: nu
   return computeCoverage(row, included, items, garmentPieceCount);
 }
 
-export function registerMembershipRoutes(app: Express) {
+export function registerMembershipRoutes(app: Express, effectivePlanSlug: (req: any, ownerId?: string) => Promise<string>) {
   const subscriptionWriteLimiter = rateLimit({
     name: "subscription-write",
     windowMs: 60_000,
@@ -568,7 +568,7 @@ export function registerMembershipRoutes(app: Express) {
     };
     const coverage = { coveredAmount: Number(row.transaction.amountCovered ?? 0), extraAmount: Number(row.transaction.extraAmountCharged ?? 0), savingsAchieved: Number(row.transaction.amountCovered ?? 0), kgConsumed: Number(row.transaction.kgConsumed ?? 0), piecesConsumed: Number(row.transaction.piecesConsumed ?? 0) };
     const format = z.enum(["a4", "thermal58", "thermal80"]).catch("a4").parse(req.query.format);
-    const data = { ...row, order, items, garments, settings: req.saas ? standardSaasSettings(settings || {}, req.saas.plan) : settings, coverage, paymentSummary };
+    const data = { ...row, order, items, garments, settings: standardSaasSettings(settings ?? {}, await effectivePlanSlug(req, org?.ownerId)), coverage, paymentSummary };
     const html = format === "thermal58" ? generateSubscriberThermalReceiptHTML(data, 58) : format === "thermal80" ? generateSubscriberThermalReceiptHTML(data, 80) : generateSubscriberReceiptHTML(data);
     res.type("html").send(html);
   });
@@ -906,7 +906,7 @@ export function registerMembershipRoutes(app: Express) {
     }
     const [org] = await db.select({ ownerId: organisations.ownerId }).from(organisations).where(eq(organisations.id, organisationId)).limit(1);
     const [settings] = org ? await db.select().from(businessSettings).where(eq(businessSettings.userId, org.ownerId)).limit(1) : [];
-    const html = generateSubscriptionPaymentReceiptHTML({ ...row, settings: req.saas ? standardSaasSettings(settings || {}, req.saas.plan) : settings, paymentPosition, receiptStatus });
+    const html = generateSubscriptionPaymentReceiptHTML({ ...row, settings: standardSaasSettings(settings ?? {}, await effectivePlanSlug(req, org?.ownerId)), paymentPosition, receiptStatus });
     res.setHeader("Content-Disposition", `attachment; filename="subscription-payment-${paymentId}.html"`);
     res.type("html").send(html);
   });

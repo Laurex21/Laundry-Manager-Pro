@@ -337,7 +337,7 @@ function buildOrderConfirmationWhatsAppMessage({
 
 export default function Orders() {
   const { data: orders, isLoading } = useOrders();
-  const { currentSite, allSites, switchSite, isOwner } = useAuth() as any;
+  const { currentSite, allSites, switchSite, isOwner, planSlug } = useAuth() as any;
   const [search, setSearch] = useState("");
   const [savedDraft, setSavedDraft] = useState<any | null>(null);
   const initialDashboardFilters = useMemo(dashboardOrderFilters, []);
@@ -350,7 +350,7 @@ export default function Orders() {
   const { openWhatsApp } = useWhatsAppLauncher();
   const symbol = getSymbol();
   const formatListMoney = (value: unknown) => `${Number(value || 0).toLocaleString(i18n.language, { maximumFractionDigits: 2 })} ${symbol}`;
-  const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
+  const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings", planSlug] });
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const { toast } = useToast();
   const [notifyingCustomer, setNotifyingCustomer] = useState(false);
@@ -395,7 +395,7 @@ export default function Orders() {
     if (notifyingCustomer) return;
     setNotifyingCustomer(true);
     try {
-      const receiptSettings = receiptSettingsForOrder(settings, i18n.language, createdOrder.siteId, currentSite, allSites);
+      const receiptSettings = receiptSettingsForOrder(settings, i18n.language, createdOrder.siteId, currentSite, allSites, planSlug);
       await generateDepositReceipt(createdOrder, symbol, receiptSettings, "download");
       openWhatsApp({
         phone: createdOrderWhatsAppPhone,
@@ -881,7 +881,7 @@ function InlineOrderStatus({ order, mobile = false }: { order: any; mobile?: boo
 
 function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: any) => void; correctionOrder?: any }) {
   const { t, i18n } = useTranslation();
-  const { isOwner, currentSite, allSites } = useAuth();
+  const { isOwner, currentSite, allSites, planSlug } = useAuth();
   const { mutate: createOrder, isPending: isOrderPending } = useCreateOrder();
   const { mutate: createCustomer, isPending: isCustomerPending } = useCreateCustomer();
   const { toast } = useToast();
@@ -896,7 +896,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
 
-  const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings"] });
+  const { data: settings } = useSettingsQuery<any>({ queryKey: ["/api/settings", planSlug] });
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [discountMode, setDiscountMode] = useState<"fixed" | "percentage">("fixed");
@@ -1268,7 +1268,7 @@ function OrderForm({ onSuccess, correctionOrder }: { onSuccess: (orderDetails: a
               const html = await subscriberReceipt.text();
               await downloadReceiptDocument(html, `subscriber-receipt-order-${orderDisplayId(orderDetails)}.html`, "html", { orderId: newOrder.id, kind: "subscriber" });
             } else {
-              const receiptSettings = receiptSettingsForOrder(settings, i18n.language, orderDetails.siteId, currentSite, allSites);
+              const receiptSettings = receiptSettingsForOrder(settings, i18n.language, orderDetails.siteId, currentSite, allSites, planSlug);
               await generateDepositReceipt(orderDetails, symbol, receiptSettings, "download");
             }
           }

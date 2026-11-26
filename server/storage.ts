@@ -2,7 +2,7 @@ import { canDeliverGarments } from "@shared/garment-delivery";
 import { currentCustomerRisk } from "./lib/customer-risk";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { requireExistingColumns } from "./lib/existing-schema-check";
-import { saasAccessEnabled, saasEnabled, saasOrganisationAccessEnabled, saasStore, saasForOrganisation, drizzleSaasExecutor } from "./lib/saas-runtime";
+import { saasOrganisationAccessEnabled, saasStore, drizzleSaasExecutor } from "./lib/saas-runtime";
 import { standardSaasSettings } from "./lib/saas-access";
 import { db } from "./db";
 import { insertOrderRecords, type OrderCreationRecords } from "./lib/order-creation";
@@ -165,7 +165,7 @@ export interface IStorage {
   getCustomerBehaviorAnalytics(period: string, siteId: number | number[] | null): Promise<any>;
   getStorageOccupancyAlerts(siteId: number | number[] | null): Promise<any[]>;
 
-  getSettings(userId: string): Promise<BusinessSettings>;
+  getSettings(userId: string, plan: string): Promise<BusinessSettings>;
   upsertSettings(userId: string, data: Partial<InsertBusinessSettings>): Promise<BusinessSettings>;
 
   getOrganisationByOwner(ownerId: string): Promise<Organisation | null>;
@@ -1666,22 +1666,16 @@ export class DatabaseStorage implements IStorage {
 
   // ─── Business Settings (Prompt A) ───────────────────────────────────────────
 
-  async getSettings(userId: string): Promise<BusinessSettings> {
+  async getSettings(userId: string, plan: string): Promise<BusinessSettings> {
     await ensureBusinessSettingsSchema();
     const [existing] = await db.select().from(businessSettings).where(eq(businessSettings.userId, userId));
-    const effective = async (value: BusinessSettings) => {
-      if (!saasAccessEnabled()) return value;
-      const org = await this.getOrganisationByOwner(userId);
-      const state = org ? await saasForOrganisation(org.id) : null;
-      return state ? standardSaasSettings(value, state.plan) : value;
-    };
-    if (existing) return effective(existing);
+    if (existing) return standardSaasSettings(existing, plan);
     const [userRow] = await db.select().from(users).where(eq(users.id, userId));
     const [created] = await db.insert(businessSettings).values({
       userId,
       businessName: userRow?.businessName || "My Laundry",
     }).returning();
-    return effective(created);
+    return standardSaasSettings(created, plan);
   }
 
   async upsertSettings(userId: string, data: Partial<InsertBusinessSettings>, executor: any = db): Promise<BusinessSettings> {

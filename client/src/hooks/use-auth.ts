@@ -84,7 +84,7 @@ export function useAuth() {
     },
   });
 
-  const planSlug: string = (user as any)?.subscription?.plan?.slug ?? (user as any)?.planSlug ?? "starter";
+  const planSlug: string = user?.saas?.plan ?? user?.planSlug ?? (user as any)?.subscription?.plan?.slug ?? "starter";
   const userRole: string = (user as any)?.role ?? "owner";
   const currentSite = (user as any)?.currentSite ?? null;
   const allSites: any[] = (user as any)?.allSites ?? [];
