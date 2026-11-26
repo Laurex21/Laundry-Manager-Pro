@@ -7,6 +7,9 @@ import { verifyReceiptRelease } from "../scripts/verify-receipt-release.mjs";
 // @ts-expect-error Release guard is shared with its Node test runner.
 import { verifySuperadminRelease } from "../scripts/verify-superadmin-release.mjs";
 
+// @ts-expect-error Shared Node release verifier.
+import { verifyStarterRelease } from "../scripts/verify-starter-release.mjs";
+
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 const allowlist = [
@@ -40,6 +43,7 @@ const allowlist = [
 async function buildAll() {
   const receiptReleaseGuard = verifyReceiptRelease();
   const superadminReleaseGuard = verifySuperadminRelease();
+  const starterBrandingReleaseGuard = verifyStarterRelease();
   execFileSync(process.execPath, ["--import", "tsx", "server/lib/platform-admin-capacity.integration.test.ts"], { stdio: "inherit" });
   execFileSync(process.execPath, ["--import", "tsx", "client/src/lib/admin-capacity.test.tsx"], { stdio: "inherit" });
   execFileSync(process.execPath, ["--import", "tsx", "server/lib/receipt-export.test.ts"], { stdio: "inherit" });
@@ -81,6 +85,7 @@ async function buildAll() {
         commit,
         receiptReleaseGuard,
         superadminReleaseGuard,
+        starterBrandingReleaseGuard,
         buildStartedAt,
         buildCompletedAt: new Date().toISOString(),
       },

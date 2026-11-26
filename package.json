@@ -96,6 +96,7 @@
     "test:admin-capacity": "node --import tsx server/lib/platform-admin-capacity.integration.test.ts && node --import tsx client/src/lib/admin-capacity.test.tsx",
     "test:receipt-release": "node --test scripts/receipt-release.test.mjs",
     "verify:receipt-release": "node scripts/verify-receipt-release.mjs",
+    "test:starter-release": "node --test scripts/starter-release.test.mjs",
     "test:superadmin-release": "node --test scripts/superadmin-release.test.mjs",
     "verify:superadmin-release": "node scripts/verify-superadmin-release.mjs",
     "test:storefront-approval": "node --test scripts/storefront-approval-guard.test.mjs",
