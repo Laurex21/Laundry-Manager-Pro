@@ -736,7 +736,9 @@ function TeamTab() {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(await res.text());
-      return await res.json() as Omit<TeamInvitation, "siteName"> & { siteId: number };
+      const invitation = await res.json() as Omit<TeamInvitation, "siteName"> & { siteId: number };
+      if (!invitation.token) throw new Error(t("invite_link_unavailable"));
+      return invitation;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["/api/invitations/pending"] });
