@@ -1,4 +1,5 @@
 import { AmbassadorAccess } from './lib/ambassador-access';
+import { invitationPhone } from "@shared/team-invitation";
 import { registerStorefrontRoutes } from "./lib/storefront-routes";
 import { StorefrontService } from "./lib/storefront-service";
 import { StorefrontError } from "./lib/storefront-pricing";
@@ -2640,7 +2641,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         role: z.enum(["manager", "operator"]),
       }).safeParse(req.body);
       if (!invitation.success) return res.status(400).json({ message: "A valid site, identifier and staff role are required" });
-      const { siteId, identifier, role } = invitation.data;
+      const { siteId, role } = invitation.data;
+      const phone = invitationPhone(invitation.data.identifier);
+      if (!phone) return res.status(400).json({ message: "A valid WhatsApp phone number is required" });
+      const identifier = `+${phone}`;
       if (!(await canManageSite(req, Number(siteId)))) return res.status(403).json({ message: "Forbidden" });
       const inv = await db.transaction(async (tx) => {
         const created = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role }, tx);

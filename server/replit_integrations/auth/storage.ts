@@ -3,6 +3,10 @@ import { db } from "../../db";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { loginPhoneAliases, LOGIN_PHONE_SEPARATORS } from "@shared/login-identifier";
 
+function loginPhoneMatches(phone: string) {
+  return inArray(sql`translate(${users.phone}, ${LOGIN_PHONE_SEPARATORS}, '')`, loginPhoneAliases(phone));
+}
+
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -42,10 +46,17 @@ class AuthStorage implements IAuthStorage {
 
   async getUserByLoginPhone(phone: string, executor = db): Promise<User | undefined> {
     const matches = await executor.select().from(users)
-      .where(inArray(sql`translate(${users.phone}, ${LOGIN_PHONE_SEPARATORS}, '')`, loginPhoneAliases(phone)))
+      .where(loginPhoneMatches(phone))
       .limit(2);
     // A phone may be stored on more than one account.
     return matches.length === 1 ? matches[0] : undefined;
+  }
+
+  async hasLoginPhone(phone: string, executor: Pick<typeof db, "select">): Promise<boolean> {
+    const rows = await executor.select({ id: users.id }).from(users)
+      .where(loginPhoneMatches(phone))
+      .limit(1);
+    return rows.length > 0;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {

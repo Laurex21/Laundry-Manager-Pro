@@ -1,4 +1,6 @@
 import { canDeliverGarments } from "@shared/garment-delivery";
+import { matchingInvitationCredential } from "@shared/team-invitation";
+import { authStorage } from "./replit_integrations/auth/storage";
 import { currentCustomerRisk } from "./lib/customer-risk";
 import { automaticMaintenanceSuspended } from "./lib/automatic-maintenance";
 import { requireExistingColumns } from "./lib/existing-schema-check";
@@ -1855,22 +1857,23 @@ export class DatabaseStorage implements IStorage {
     const [inv] = await db.select().from(siteInvitations).where(eq(siteInvitations.token, token));
     if (!inv || inv.status !== "pending" || inv.expiresAt < new Date()) return null;
 
-    const normalisedIdentifier = inv.identifier.trim().toLowerCase();
-    const candidateIdentifiers = [data.email, data.phone]
-      .filter((value): value is string => !!value)
-      .map((value) => value.trim().toLowerCase());
-    if (candidateIdentifiers.length === 0 || !candidateIdentifiers.includes(normalisedIdentifier)) {
-      return null;
-    }
+    const credential = matchingInvitationCredential(inv.identifier, data);
+    if (!credential) return null;
 
     if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
+      const [live] = await tx.select().from(siteInvitations).where(eq(siteInvitations.id, inv.id)).for("update");
+      if (!live || live.status !== "pending" || live.expiresAt <= new Date()) return null;
       const [site] = await tx.select().from(sites).where(eq(sites.id, inv.siteId));
       if (!site || site.organisationId !== inv.organisationId) return null;
 
+      if (credential.kind === "phone") {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"staff-phone:" + credential.value}, 0))`);
+        if (await authStorage.hasLoginPhone(credential.value, tx)) throw new Error("STAFF_PHONE_IN_USE");
+      }
       const [staffUser] = await tx.insert(users).values({
-        email: data.email || null,
-        phone: data.phone || null,
+        email: credential.kind === "email" ? credential.value : null,
+        phone: credential.kind === "phone" ? credential.value : null,
         firstName: data.firstName || null,
         lastName: data.lastName || null,
         passwordHash: data.passwordHash,
@@ -1897,15 +1900,13 @@ export class DatabaseStorage implements IStorage {
     if (user.organisationId !== null && user.organisationId !== inv.organisationId) {
       throw new Error("CROSS_ORGANISATION_INVITATION");
     }
-    const invitedIdentifier = inv.identifier.trim().toLowerCase();
-    const userIdentifiers = [user.email, user.phone]
-      .filter((value): value is string => !!value)
-      .map((value) => value.trim().toLowerCase());
-    if (!userIdentifiers.includes(invitedIdentifier)) {
+    if (!matchingInvitationCredential(inv.identifier, user)) {
       throw new Error("INVITATION_IDENTIFIER_MISMATCH");
     }
     if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.ensure(inv.organisationId);
     return await db.transaction(async (tx) => {
+      const [live] = await tx.select().from(siteInvitations).where(eq(siteInvitations.id, inv.id)).for("update");
+      if (!live || live.status !== "pending" || live.expiresAt <= new Date()) return null;
       if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, userId, inv.siteId);
       const [site] = await tx.select().from(sites).where(and(
         eq(sites.id, inv.siteId),

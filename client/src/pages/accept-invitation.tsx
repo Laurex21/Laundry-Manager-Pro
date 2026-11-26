@@ -51,6 +51,7 @@ export default function AcceptInvitation() {
     enabled: !!token,
     retry: false,
   });
+  const invitedByEmail = invitation?.identifier.includes("@") === true;
 
   const acceptMut = useMutation({
     mutationFn: async () => {
@@ -77,7 +78,6 @@ export default function AcceptInvitation() {
   const onboardMut = useMutation({
     mutationFn: async () => {
       const identifier = credential.trim();
-      const isEmail = identifier.includes("@");
       const res = await fetch(`/api/staff/onboard/${token}`, {
         method: "POST",
         credentials: "include",
@@ -86,8 +86,8 @@ export default function AcceptInvitation() {
           firstName,
           lastName,
           password,
-          email: isEmail ? identifier : undefined,
-          phone: isEmail ? undefined : identifier,
+          email: invitedByEmail ? identifier : undefined,
+          phone: invitedByEmail ? undefined : identifier,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -199,8 +199,11 @@ export default function AcceptInvitation() {
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">{t("email_or_phone")}</label>
+                <label htmlFor="staff-invited-credential" className="text-xs font-medium text-muted-foreground">{t(invitedByEmail ? "email" : "phone_number")}</label>
                 <Input
+                  id="staff-invited-credential"
+                  type={invitedByEmail ? "email" : "tel"}
+                  autoComplete={invitedByEmail ? "email" : "tel"}
                   value={credential}
                   onChange={(e) => setCredential(e.target.value)}
                   placeholder={invitation.identifier}
