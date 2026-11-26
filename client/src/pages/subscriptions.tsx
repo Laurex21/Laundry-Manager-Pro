@@ -6,6 +6,7 @@ import ProPilot from "./pro-pilot";
 import CollectionPilot from "./collection-pilot";
 import SaasSubscriptions from "./saas-subscriptions";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth, type AuthUser } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -16,17 +17,27 @@ import type { SubscriptionWithPlan } from "@shared/schema";
 
 export default function Subscriptions() {
   const selection = readPlanIntent(useSearch());
-  const config = useQuery<{ enabled: boolean; collectionPilot?: boolean; subscriptionPilot?: boolean }>({ queryKey: ["/api/saas/config"] });
-  if (config.isLoading) return <Skeleton className="h-48 w-full" />;
-  if (config.isError || !config.data?.enabled) return <><SaasPlanIntent selection={selection} /><DisabledSubscriptions configUnavailable={config.isError} onRetry={() => void config.refetch()} /></>;
+  const { user } = useAuth();
+  // The public signup offer and the owner's billing permissions share an endpoint.
+  const config = useQuery<{ enabled: boolean; collectionPilot?: boolean; subscriptionPilot?: boolean }>({
+    queryKey: ["/api/saas/config", user?.id],
+    enabled: !!user,
+  });
+  if (!user || config.isPending) return <Skeleton className="h-48 w-full" />;
+  if (config.isError || !config.data?.enabled) return <><SaasPlanIntent selection={selection} /><DisabledSubscriptions user={user} configUnavailable={config.isError} onRetry={() => void config.refetch()} /></>;
   if (config.data.subscriptionPilot) return <ProPilot />;
   if (config.data.collectionPilot) return <CollectionPilot />;
   return <><SaasPlanIntent selection={selection} /><SaasSubscriptions /></>;
 }
 
-function DisabledSubscriptions({ configUnavailable, onRetry }: { configUnavailable: boolean; onRetry: () => void }) {
+function DisabledSubscriptions({ user, configUnavailable, onRetry }: { user: AuthUser; configUnavailable: boolean; onRetry: () => void }) {
   const { t, i18n } = useTranslation();
-  const current = useQuery<SubscriptionWithPlan | null>({ queryKey: ["/api/subscriptions/current"] });
+  const saas = user.saas;
+  const current = useQuery<SubscriptionWithPlan | null>({
+    queryKey: ["/api/subscriptions/current", user.id],
+    enabled: !saas,
+  });
+  const validUntil = saas?.phase === "trialing" ? saas.trialEndsAt : saas?.cycleEnd;
   return <div className="space-y-6" data-testid="subscription-disabled">
     <header>
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">{t("administration")}</p>
@@ -40,7 +51,10 @@ function DisabledSubscriptions({ configUnavailable, onRetry }: { configUnavailab
     <Card data-testid="card-current-subscription">
       <CardHeader><CardTitle>{t("current_plan")}</CardTitle></CardHeader>
       <CardContent className="space-y-2">
-        {current.isLoading ? <Skeleton className="h-6 w-40" /> : current.isError ? <p role="alert">{t("billing_current_unavailable")}</p> : current.data ? <>
+        {saas ? <>
+          <p className="font-semibold">{SAAS_PLANS[saas.plan].name}{saas.phase === "trialing" && ` · ${t("billing_free_trial")}`}</p>
+          {validUntil && <p>{t("valid_until")}: {new Date(validUntil).toLocaleString(i18n.language)}</p>}
+        </> : current.isLoading ? <Skeleton className="h-6 w-40" /> : current.isError ? <p role="alert">{t("billing_current_unavailable")}</p> : current.data ? <>
           <p className="font-semibold">{current.data.plan.name}</p>
           {current.data.endDate && <p>{t("valid_until")}: {new Date(current.data.endDate).toLocaleDateString(i18n.language)}</p>}
         </> : <p>{t("billing_no_current")}</p>}

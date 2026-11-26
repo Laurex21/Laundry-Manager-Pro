@@ -1,5 +1,6 @@
 export const subscriptionUiTranslations = {
   "en": {
+    "billing_free_trial": "Free trial",
     "billing_catalogue_intro": "Compare the new XpressPro plans. This preview does not change your current subscription.",
     "billing_disabled_notice": "Subscription payments and plan changes are temporarily unavailable. No payment can be started from this page.",
     "billing_config_unavailable": "Subscription settings are unavailable. Payments and plan changes remain blocked. Please try again.",
@@ -25,6 +26,7 @@ export const subscriptionUiTranslations = {
     "employees_upgrade_description": "Track staff productivity, quantities processed and salaries."
   },
   "fr": {
+    "billing_free_trial": "Essai gratuit",
     "billing_catalogue_intro": "Comparez les nouvelles formules XpressPro. Cet aperçu ne change pas votre abonnement actuel.",
     "billing_disabled_notice": "Les paiements d’abonnement et les changements de formule sont temporairement indisponibles. Aucun paiement ne peut être lancé depuis cette page.",
     "billing_config_unavailable": "Les paramètres d’abonnement sont indisponibles. Les paiements et changements de formule restent bloqués. Réessayez.",
@@ -50,6 +52,7 @@ export const subscriptionUiTranslations = {
     "employees_upgrade_description": "Suivez la productivité, les quantités traitées et les salaires de votre équipe."
   },
   "pt": {
+    "billing_free_trial": "Teste gratuito",
     "billing_catalogue_intro": "Compare os novos planos XpressPro. Esta pré-visualização não altera a sua assinatura atual.",
     "billing_disabled_notice": "Os pagamentos e as alterações de plano estão temporariamente indisponíveis. Nenhum pagamento pode ser iniciado nesta página.",
     "billing_config_unavailable": "As configurações da assinatura estão indisponíveis. Os pagamentos e as alterações de plano continuam bloqueados. Tente novamente.",
