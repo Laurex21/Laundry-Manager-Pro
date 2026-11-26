@@ -1,5 +1,12 @@
 // Marketing measurement is restricted to public acquisition journeys.
 export const TIKTOK_PIXEL_ID = "DBCLIORC77U3JBDSA280";
+export const META_PIXEL_ID = "1691831585937487";
+export const MARKETING_CONSENT_KEY = "xpresspro.marketing-consent.v2";
+
+export function metaPixelHost(hostname: string): boolean {
+  return hostname === "app.xpressclean.cm";
+}
+
 export const MARKETING_PATHS = ["/", "/xpresspro", "/xpress-consulting", "/xpress-clean", "/rencontre"] as const;
 
 export function marketingPage(pathname: string, search = ""): string | null {
@@ -27,6 +34,15 @@ export function pixelSafeSearch(search: string): boolean {
   const safe = campaignFromSearch(search);
   return Array.from(params.entries()).every(([key, value]) =>
     (key === "tab" && value === "register") || safe[key] === value);
+}
+
+// Facebook appends its click ID to landing links. Only Meta may receive it.
+export function metaPixelSafeSearch(search: string): boolean {
+  const params = new URLSearchParams(search);
+  const ids = params.getAll("fbclid");
+  if (ids.length && (ids.length !== 1 || !/^[A-Za-z0-9_-]{12,512}$/.test(ids[0]))) return false;
+  params.delete("fbclid");
+  return pixelSafeSearch(params.toString());
 }
 
 export const MARKETING_EVENTS = {

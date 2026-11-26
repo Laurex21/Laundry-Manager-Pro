@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
-import { marketingPage, marketingHostAllowed, pixelSafeSearch } from "@shared/marketing";
-import { marketingConsent, saveMarketingConsent, setMarketingScope, trackMarketingEvent, trackMarketingPage } from "@/lib/marketing";
+import { marketingPage, marketingHostAllowed, metaPixelSafeSearch, MARKETING_CONSENT_KEY } from "@shared/marketing";
+import { marketingConsent, pixelWasLoaded, saveMarketingConsent, setMarketingScope, trackMarketingEvent, trackMarketingPage } from "@/lib/marketing";
 
 export default function MarketingMeasurement() {
   const [path] = useLocation();
@@ -15,13 +15,13 @@ export default function MarketingMeasurement() {
   const publicPage = marketingHostAllowed(window.location.hostname) && !isLoading && !user && marketingPage(path, search) !== null;
   const language = i18n.language.startsWith("fr") ? "fr" : i18n.language.startsWith("pt") ? "pt" : "en";
   const copy = {
-    fr: { title: "Mesure des visites", body: "Avec votre accord, nous utilisons TikTok et notre outil de mesure pour comprendre les visites, contacts et inscriptions. Ce choix est facultatif et modifiable ici.", accept: "Accepter", reject: "Refuser", settings: "Choix de mesure", privacy: "Confidentialité" },
-    en: { title: "Visit measurement", body: "With your permission, we use TikTok and our analytics tool to understand visits, contacts and registrations. This is optional and you can change your choice here.", accept: "Accept", reject: "Decline", settings: "Measurement choices", privacy: "Privacy" },
-    pt: { title: "Medição de visitas", body: "Com a sua autorização, usamos o TikTok e a nossa ferramenta de análise para compreender visitas, contactos e registos. É opcional e pode alterar a sua escolha aqui.", accept: "Aceitar", reject: "Recusar", settings: "Opções de medição", privacy: "Privacidade" },
+    fr: { title: "Mesure des visites", body: "Avec votre accord, Meta (Facebook), TikTok et XpressPro mesurent les visites, les clics WhatsApp et les inscriptions pour évaluer nos campagnes. Ce choix est facultatif et modifiable ici.", accept: "Accepter", reject: "Refuser", settings: "Choix de mesure", privacy: "Confidentialité" },
+    en: { title: "Visit measurement", body: "With your permission, Meta (Facebook), TikTok and XpressPro measure visits, WhatsApp clicks and registrations to evaluate our campaigns. This is optional and you can change your choice here.", accept: "Accept", reject: "Decline", settings: "Measurement choices", privacy: "Privacy" },
+    pt: { title: "Medição de visitas", body: "Com a sua autorização, a Meta (Facebook), o TikTok e a XpressPro medem visitas, cliques no WhatsApp e registos para avaliar as nossas campanhas. É opcional e pode alterar a sua escolha aqui.", accept: "Aceitar", reject: "Recusar", settings: "Opções de medição", privacy: "Privacidade" },
   }[language];
 
   useEffect(() => {
-    setMarketingScope(publicPage && pixelSafeSearch(search));
+    setMarketingScope(publicPage && metaPixelSafeSearch(search) && !window.location.hash);
     if (publicPage && consent === "accepted") trackMarketingPage();
   }, [publicPage, path, search, consent]);
 
@@ -39,6 +39,18 @@ export default function MarketingMeasurement() {
     document.addEventListener("click", click);
     return () => document.removeEventListener("click", click);
   }, [publicPage]);
+
+  useEffect(() => {
+    const sync = (e: StorageEvent) => {
+      if (e.key !== null && e.key !== MARKETING_CONSENT_KEY) return;
+      const choice = marketingConsent();
+      setConsent(choice);
+      setOpen(choice === null);
+      if (choice !== "accepted" && pixelWasLoaded()) setMarketingScope(false);
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
 
   function choose(value: "accepted" | "rejected") {
     saveMarketingConsent(value);
