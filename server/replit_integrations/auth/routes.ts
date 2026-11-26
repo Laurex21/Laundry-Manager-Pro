@@ -3,6 +3,7 @@ import { adminResetTokenMatchesEmail, adminResetTargetExcluded, adminResetLocked
 import { createSalesRegistrationUser, completeSalesRegistration, SalesReferralError } from "../../lib/sales-referrals";
 import { normalizeLoginEmail } from "@shared/login-email";
 import { normalizeLoginIdentifier } from "@shared/login-identifier";
+import { matchingInvitationCredential } from "@shared/team-invitation";
 import { registrationJourney, recordAcquisitionRegistration } from "../../lib/acquisition";
 import { saasOrganisationAccessEnabled, saasAccessEnabled, saasEnabled, saasOrganisationEnabled, saasStore, saasForOrganisation } from "../../lib/saas-runtime";
 import type { Express, RequestHandler } from "express";
@@ -511,24 +512,19 @@ export function registerAuthRoutes(app: Express): void {
       if (!invitation || invitation.status !== "pending" || invitation.expiresAt < new Date()) {
         return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
       }
-      const invitedIdentifier = invitation.identifier.trim().toLowerCase();
-      const suppliedIdentifiers = [email, phone]
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-        .map((value) => value.trim().toLowerCase());
-      if (!suppliedIdentifiers.includes(invitedIdentifier)) {
+      const credential = matchingInvitationCredential(invitation.identifier, { email, phone });
+      if (!credential) {
         return res.status(400).json({ message: "Invalid, expired, or already accepted invitation" });
       }
 
-      const existingByEmail = email ? await authStorage.getUserByEmail(email) : undefined;
-      const existingByPhone = phone ? await authStorage.getUserByPhone(phone) : undefined;
-      if (existingByEmail || existingByPhone) {
+      if (credential.kind === "email" && await authStorage.getUserByEmail(credential.value)) {
         return res.status(409).json({ message: "An account already exists. Use staff login instead." });
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
       const user = await storage.createStaffFromInvitation(invitationToken, {
-        email: email || null,
-        phone: phone || null,
+        email: credential.kind === "email" ? credential.value : null,
+        phone: credential.kind === "phone" ? credential.value : null,
         passwordHash,
         firstName: firstName || null,
         lastName: lastName || null,
@@ -546,6 +542,9 @@ export function registerAuthRoutes(app: Express): void {
       const response = await buildUserResponse(user.id);
       res.status(201).json(response);
     } catch (error) {
+      if (error instanceof Error && error.message === "STAFF_PHONE_IN_USE") {
+        return res.status(409).json({ message: "An account already exists. Use staff login instead." });
+      }
       console.error("Staff onboarding error:", error);
       res.status(500).json({ message: "Staff onboarding failed" });
     }
