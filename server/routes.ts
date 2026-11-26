@@ -1,5 +1,5 @@
 import { AmbassadorAccess } from './lib/ambassador-access';
-import { invitationPhone } from "@shared/team-invitation";
+import { newTeamInvitation } from "@shared/team-invitation";
 import { registerStorefrontRoutes } from "./lib/storefront-routes";
 import { StorefrontService } from "./lib/storefront-service";
 import { StorefrontError } from "./lib/storefront-pricing";
@@ -2635,19 +2635,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = (req.session as any).userId;
       const org = await requireOwnerOrganisation(req, res);
       if (!org) return;
-      const invitation = z.object({
-        siteId: z.coerce.number().int().positive(),
-        identifier: z.string().trim().min(3).max(255),
-        role: z.enum(["manager", "operator"]),
-      }).safeParse(req.body);
-      if (!invitation.success) return res.status(400).json({ message: "A valid site, identifier and staff role are required" });
+      const invitation = newTeamInvitation.safeParse(req.body);
+      if (!invitation.success) return res.status(400).json({ message: invitation.error.issues[0].message });
       const { siteId, role } = invitation.data;
-      const phone = invitationPhone(invitation.data.identifier);
-      if (!phone) return res.status(400).json({ message: "A valid WhatsApp phone number is required" });
-      const identifier = `+${phone}`;
-      if (!(await canManageSite(req, Number(siteId)))) return res.status(403).json({ message: "Forbidden" });
+      if (!(await canManageSite(req, siteId))) return res.status(403).json({ message: "Forbidden" });
       const inv = await db.transaction(async (tx) => {
-        const created = await storage.createInvitation({ siteId: Number(siteId), organisationId: org.id, invitedBy: userId, identifier, role }, tx);
+        const created = await storage.createInvitation({ ...invitation.data, organisationId: org.id, invitedBy: userId }, tx);
         await recordSecurityAudit({
           req,
           organisationId: org.id,
@@ -2711,7 +2704,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const inv = await storage.getInvitationByToken(req.params.token);
       if (!inv) return res.status(404).json({ message: "Invitation not found or expired" });
-      res.json(inv);
+      const { notificationPhone, ...invitation } = inv;
+      res.json(invitation);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch invitation" });
     }
@@ -2726,7 +2720,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await new Promise<void>((resolve, reject) =>
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
-      res.json({ success: true, invitation: result });
+      const { notificationPhone, ...invitation } = result;
+      res.json({ success: true, invitation });
     } catch (err) {
       if (err instanceof Error && err.message === "CROSS_ORGANISATION_INVITATION") {
         return res.status(409).json({ message: "A staff account cannot be moved between organisations by accepting an invitation." });

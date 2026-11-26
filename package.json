@@ -25,7 +25,7 @@
     "test:public-journey": "node --import tsx client/src/lib/public-journey.test.tsx",
     "test:email-login": "node --import tsx server/lib/email-login.integration.test.ts",
     "test:auth-i18n": "tsx server/lib/auth-login-i18n.test.ts",
-    "test:staff-invitation-boundary": "tsx server/lib/staff-invitation-account-boundary.test.ts",
+    "test:staff-invitation-boundary": "node --import tsx server/lib/staff-invitation-account-boundary.test.ts && node --import tsx server/lib/team-invitation.integration.test.ts",
     "test:business-registration-settings": "tsx server/lib/business-registration-settings.test.ts",
     "test:new-order-service-search": "tsx server/lib/new-order-service-search.test.ts",
     "test:order-dialog-viewport": "tsx server/lib/order-dialog-viewport.test.ts",

@@ -834,6 +834,7 @@ export const siteInvitations = pgTable("site_invitations", {
   organisationId: integer("organisation_id").notNull().references(() => organisations.id),
   invitedBy: varchar("invited_by").notNull(),
   identifier: varchar("identifier", { length: 255 }).notNull(),
+  notificationPhone: varchar("notification_phone", { length: 15 }),
   role: varchar("role", { length: 50 }).notNull(),
   token: varchar("token", { length: 64 }).notNull().unique(),
   status: varchar("status", { length: 20 }).notNull().default("pending"),

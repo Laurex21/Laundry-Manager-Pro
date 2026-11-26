@@ -542,7 +542,7 @@ export function registerAuthRoutes(app: Express): void {
       const response = await buildUserResponse(user.id);
       res.status(201).json(response);
     } catch (error) {
-      if (error instanceof Error && error.message === "STAFF_PHONE_IN_USE") {
+      if (error instanceof Error && ["STAFF_PHONE_IN_USE", "STAFF_EMAIL_IN_USE"].includes(error.message)) {
         return res.status(409).json({ message: "An account already exists. Use staff login instead." });
       }
       console.error("Staff onboarding error:", error);
