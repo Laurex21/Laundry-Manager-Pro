@@ -38,7 +38,7 @@ assert.equal(receiptSettingsForOrder(companySettings, 'fr', 14, otherSite, [xpre
 assert.equal(receiptSettingsForOrder(companySettings, 'fr', 14, otherSite, []).businessName, 'Xpress Clean');
 const starter = receiptSettingsForOrder({ businessName: 'XpressPro', starterServiceProvider: '' }, 'fr', 14, xpressSite, []);
 assert.equal(starter.businessName, 'XpressPro');
-assert.equal(starter.starterServiceProvider, 'Xpress 0');
+assert.equal(starter.starterServiceProvider, '');
 let receiptHtml = '';
 let receiptFilename = '';
 (globalThis as any).__captureReceiptHtml = (html: string, filename: string) => {

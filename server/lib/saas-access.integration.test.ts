@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { createServer } from 'node:http';
+import express from 'express';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
@@ -124,4 +126,51 @@ try{
  assert.equal(blocked,404,'Payment route stays disabled during Business trial');
  console.log('PASS disabled billing: new Business trial exactly 30 days, stable expiry, paid routes disabled, four exclusions retained');
  console.log('PASS SaaS access: archived sites, direct mutation scopes, open staff sessions, premium APIs, standard receipts, atomic site quota and production opt-out');
+
+ // Exercise the registered settings handlers with the authenticated organisation context.
+ process.env.SESSION_SECRET = 'isolated-receipt-settings-fixture-secret';
+ const { registerRoutes } = await import('../routes');
+ const settingsApp = express();
+ await registerRoutes(createServer(), settingsApp);
+ await pg.exec(`CREATE TABLE security_audit_events (
+   organisation_id integer, site_id integer, actor_user_id text, action text, target_type text, target_id text,
+   before_state jsonb, after_state jsonb, request_id text, ip_hash text, user_agent text
+ )`);
+ await testDb.insert(schema.businessSettings).values({ userId: 'owner', businessName: 'Marque enregistrée' });
+ async function settingsRequest(method: 'get' | 'put', userId: string, plan?: string, body?: object) {
+   const route = settingsApp.router.stack.find((layer: any) => layer.route?.path === '/api/settings' && layer.route.methods[method]).route;
+   const req = { session: { userId }, saas: plan ? { plan } : undefined, body, ip: '127.0.0.1', get: () => 'test' };
+   let status = 200;
+   let result: any;
+   const res = { status(code: number) { status = code; return res; }, json(value: any) { result = value; } };
+   await route.stack.at(-1).handle(req, res);
+   return { status, result };
+ }
+ for (const plan of [undefined, 'starter']) {
+   assert.equal((await settingsRequest('get', 'owner', plan)).result.businessName, 'XpressPro');
+   const rename = await settingsRequest('put', 'owner', plan, { businessName: 'Nouvelle marque', city: 'Douala' });
+   assert.equal(rename.status, 403);
+   assert.equal(rename.result.code, 'SAAS_CUSTOMIZATION_REQUIRED');
+ }
+ const basic = await settingsRequest('put', 'owner', 'starter', { phone: '000' });
+ assert.equal(basic.status, 200);
+ assert.equal(basic.result.businessName, 'XpressPro');
+ const [stored] = (await query("SELECT business_name, city, phone FROM business_settings WHERE user_id='owner'")).rows;
+ assert.equal(stored.business_name, 'Marque enregistrée');
+ assert.notEqual(stored.city, 'Douala');
+ assert.equal(stored.phone, '000');
+ assert.equal((await settingsRequest('get', 'owner', 'pro')).result.businessName, stored.business_name);
+ for (const plan of ['pro', 'business']) {
+   const rename = await settingsRequest('put', 'owner', plan, { businessName: 'Marque ' + plan });
+   assert.equal(rename.status, 200);
+   assert.equal(rename.result.businessName, 'Marque ' + plan);
+ }
+ // The legacy subscription belongs to the owner even when an employee requests a receipt.
+ await testDb.insert(schema.plans).values({ id: 781, slug: 'pro', name: 'Pro', price: '15000' });
+ await testDb.insert(schema.subscriptions).values({ userId: 'owner', planId: 781 });
+ assert.equal((await settingsRequest('get', 'staff')).result.businessName, 'Marque business');
+ assert.equal((await settingsRequest('get', 'owner', 'starter')).result.businessName, 'XpressPro');
+ assert.equal((await settingsRequest('put', 'owner', 'starter', { businessName: 'Refusé' })).status, 403);
+ assert.equal((await settingsRequest('put', 'staff', 'pro', { businessName: 'Refusé' })).status, 403);
+ console.log('PASS Starter and legacy settings read/write, preserved paid name, owner and staff plan resolution');
 }finally{await pg.close();await pool.end();delete process.env.SAAS_BILLING_MODE;}

@@ -1,3 +1,5 @@
+import { starterReceiptSettings } from "@shared/starter-receipt";
+
 export interface ReceiptSettings {
   starterServiceProvider?: string;
   businessName: string;
@@ -61,19 +63,18 @@ export function receiptSettingsForOrder(
   siteId: number | null | undefined,
   currentSite: ReceiptSite | null,
   allSites: readonly ReceiptSite[],
+  planSlug?: string,
 ): ReceiptSettings {
-  const site = currentSite?.id === siteId ? currentSite : allSites.find(site => site.id === siteId);
-  const siteName = site?.name.trim();
   const result = {
     ...DEFAULT_SETTINGS,
     ...settings,
     receiptLanguage: settings?.receiptLanguage || language,
   };
-  if (siteName) {
-    if (settings?.starterServiceProvider !== undefined) result.starterServiceProvider = siteName;
-    else result.businessName = siteName;
+  if (planSlug === "starter" || settings?.starterServiceProvider !== undefined) {
+    return starterReceiptSettings(result);
   }
-  return result;
+  const site = currentSite?.id === siteId ? currentSite : allSites.find(site => site.id === siteId);
+  return { ...result, businessName: site?.name.trim() || result.businessName };
 }
 
 export const DEFAULT_TERMS_EN = `Liability: Our liability for any lost or damaged garment shall not exceed 3x the cleaning cost of that item.

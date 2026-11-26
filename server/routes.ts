@@ -19,8 +19,8 @@ import { getPilotageOverview } from "./lib/pilotage-overview";
 import { registerCashbookRoutes } from "./lib/cashbook-routes";
 import { registerSaasRoutes } from "./lib/saas-routes";
 import { registerPawapayNotificationReceivers } from "./lib/pawapay-notification-receivers";
-import { saasAccessEnabled, saasEnabled, saasRequestEnabled, saasStore, saasForOrganisation, saasUserDeferred } from "./lib/saas-runtime";
-import { SAAS_CUSTOM_FIELDS, standardSaasSettings } from "./lib/saas-access";
+import { saasEnabled, saasRequestEnabled, saasStore, saasUserDeferred } from "./lib/saas-runtime";
+import { standardSaasSettings } from "./lib/saas-access";
 import { SAAS_PLANS } from "@shared/saas-plans";
 import type { Express } from "express";
 import type { Server } from "http";
@@ -301,25 +301,10 @@ async function effectiveSettingsOwnerId(req: any): Promise<string> {
   return userId;
 }
 
-async function effectivePlanSlug(req: any): Promise<string> {
-  const userId = (req.session as any).userId as string;
-  const { db } = await import("./db");
-  const { users } = await import("@shared/models/auth");
-  const { organisations } = await import("@shared/schema");
-  const { eq } = await import("drizzle-orm");
-  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  let subscriptionOwnerId = userId;
-  if (user?.organisationId) {
-    const [org] = await db.select().from(organisations).where(eq(organisations.id, user.organisationId)).limit(1);
-    subscriptionOwnerId = org?.ownerId || userId;
-  }
-  if (saasAccessEnabled()) {
-    const orgId = Number((req as any).organisationId);
-    const state = orgId ? await saasForOrganisation(orgId,userId) : null;
-    if (state) return state.plan;
-  }
-  const sub = await storage.getUserSubscription(subscriptionOwnerId);
-  return sub?.plan?.slug || "starter";
+async function effectivePlanSlug(req: any, ownerId?: string): Promise<string> {
+  if (req.saas) return req.saas.plan;
+  const subscription = await storage.getUserSubscription(ownerId ?? await effectiveSettingsOwnerId(req));
+  return subscription?.plan?.slug ?? "starter";
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -346,7 +331,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerCalculatorRoutes(app);
   registerDiagnosticRoutes(app);
   registerRentabiliteRoutes(app);
-  registerMembershipRoutes(app);
+  registerMembershipRoutes(app, effectivePlanSlug);
   registerGarmentReturnRoutes(app);
   registerInventoryRoutes(app);
   registerDailySiteReportRoutes(app);
@@ -2434,9 +2419,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
       const settingsOwnerId = await effectiveSettingsOwnerId(req);
-      const settings = await storage.getSettings(settingsOwnerId);
-      const state = (req as any).saas;
-      res.json(state ? standardSaasSettings(settings, state.plan) : settings);
+      const plan = await effectivePlanSlug(req, settingsOwnerId);
+      res.json(await storage.getSettings(settingsOwnerId, plan));
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch settings" });
     }
@@ -2451,18 +2435,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid settings", errors: parsed.error.flatten() });
       }
-      if ((req as any).saas?.plan === "starter") {
-        const disallowed = Object.keys(parsed.data).filter(key => !(STARTER_SETTINGS_FIELDS as readonly string[]).includes(key));
-        if (disallowed.length) return res.status(403).json({code:"SAAS_CUSTOMIZATION_REQUIRED",message:"Starter only allows basic account information. Receipt customization requires Pro or Business."});
-
-        const visible = standardSaasSettings(await storage.getSettings(userId), "starter");
-        for (const field of SAAS_CUSTOM_FIELDS) {
-          if (!Object.hasOwn(parsed.data, field)) continue;
-          if (JSON.stringify((parsed.data as any)[field]) !== JSON.stringify((visible as any)[field])) {
-            return res.status(403).json({ code: "SAAS_CUSTOMIZATION_REQUIRED", message: "Receipt customization requires Pro or Business." });
-          }
-          delete (parsed.data as any)[field]; // Preserve stored Pro settings, including masked defaults.
-        }
+      const plan = await effectivePlanSlug(req, userId);
+      if (plan === "starter" && Object.keys(parsed.data).some(key => !STARTER_SETTINGS_FIELDS.includes(key))) {
+        return res.status(403).json({ code: "SAAS_CUSTOMIZATION_REQUIRED", message: "Receipt customization requires Pro or Business." });
       }
       if (parsed.data.receiptQrCodeBase64) {
         const allowedQrImage = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -2496,7 +2471,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }, tx);
         return updated;
       });
-      res.json(settings);
+      res.json(standardSaasSettings(settings, plan));
     } catch (err) {
       res.status(500).json({ message: "Failed to save settings" });
     }

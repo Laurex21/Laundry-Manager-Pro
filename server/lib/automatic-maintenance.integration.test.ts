@@ -67,7 +67,7 @@ try {
   await testDb.insert(schema.businessSettings).values({ userId: "synthetic-owner" });
   const { storage } = await import("../storage");
   const settingsBefore = (await memory.query("SELECT to_jsonb(s) AS row FROM business_settings s")).rows;
-  await storage.getSettings("synthetic-owner");
+  await storage.getSettings("synthetic-owner", "starter");
   assert.deepEqual((await memory.query("SELECT to_jsonb(s) AS row FROM business_settings s")).rows, settingsBefore);
   assert.ok(statements.every(sql => /^\s*SELECT\b/i.test(sql)), "Reading existing settings does not run schema DDL");
   assert.deepEqual((await memory.query("SELECT to_jsonb(c) AS row FROM customers c")).rows, before);

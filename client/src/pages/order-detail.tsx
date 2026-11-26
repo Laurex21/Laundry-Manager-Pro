@@ -105,8 +105,8 @@ export default function OrderDetail() {
   const { getSymbol } = useCurrency();
   const symbol = getSymbol();
   const { toast } = useToast();
-  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
-  const { isOwner, userRole, user, hasFeature, currentSite, allSites } = useAuth();
+  const { isOwner, userRole, user, hasFeature, currentSite, allSites, planSlug } = useAuth();
+  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings", planSlug] });
   const { data: machines } = useQuery<any[]>({ queryKey: ["/api/machines"], enabled: !!user && hasFeature("machines") && !historicalSite(user, order?.siteId) });
   const isManager = userRole === "manager" || isOwner;
 
@@ -143,7 +143,7 @@ export default function OrderDetail() {
   }
 
   const readOnly = historicalSite(user, order.siteId);
-  const receiptSettings = receiptSettingsForOrder(settings, i18n.language, order.siteId, currentSite, allSites);
+  const receiptSettings = receiptSettingsForOrder(settings, i18n.language, order.siteId, currentSite, allSites, planSlug);
   const currentStageIndex = getStageIndex(order.status);
   const nextPipelineStage = PIPELINE_STAGES[currentStageIndex + 1];
   const activeMachines = machines?.filter((machine: any) => machine.status !== "inactive") ?? [];

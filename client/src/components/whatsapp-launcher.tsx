@@ -104,9 +104,9 @@ const WhatsAppLauncherContext = createContext<WhatsAppLauncherContextValue | nul
 
 export function WhatsAppLauncherProvider({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, planSlug } = useAuth();
   const { data: settings } = useQuery<any>({
-    queryKey: ["/api/settings"],
+    queryKey: ["/api/settings", planSlug],
     enabled: Boolean(user),
   });
   const [pendingRequest, setPendingRequest] = useState<WhatsAppLaunchRequest | null>(null);
