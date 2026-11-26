@@ -1,6 +1,9 @@
 import { readFile, readdir, stat } from "fs/promises";
 import path from "path";
 
+// @ts-expect-error Shared dependency-free runtime verifier.
+import starterAnchor from "./replit-starter-release-anchor.cjs";
+
 const requiredFiles = [
   "dist/public/index.html",
   "dist/index.cjs",
@@ -12,6 +15,7 @@ const requiredMarkers = [
   "payments-page-redesign",
   "analytics-page-redesign",
   "settings-page-redesign",
+  "starter-settings-basic",
   "admin-capacity",
   "capacity-preview",
 ];
@@ -42,6 +46,7 @@ async function verifyProductionBuild() {
       manifest.superadminReleaseGuard.commit !== manifest.commit) {
     throw new Error("Production build verification failed: superadmin release guard is missing.");
   }
+  starterAnchor.verifyStarterManifest(manifest);
   const serverBundle = await readFile("dist/index.cjs", "utf8");
   for (const marker of ["/api/platform-admin/organisations/:organisationId/capacity", "/api/platform-admin/organisations/:organisationId/capacity-preview", "platform_admin.capacity_grant"]) {
     if (!serverBundle.includes(marker)) throw new Error(`Production build verification failed: superadmin endpoint/audit marker ${marker} is missing.`);

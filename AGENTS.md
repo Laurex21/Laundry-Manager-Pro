@@ -11,7 +11,7 @@ migration. This supersedes earlier storefront publication permission.
   `xpresspro_storefront_approval_*` event triggers to publish another feature.
 - Present the exact storefront SQL and impact to the owner for new validation.
   A feature request, prior approval, successful tests or merged PR is insufficient.
-- Keep receipt and Super Admin release anchors enabled in production.
+- Keep receipt, Super Admin and Starter branding release anchors enabled in production.
 - These constraints do not prevent development work or isolated tests.
 
 ## Explicit owner-approved exception — 21 November 2026
