@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DEFAULT_SETTINGS, DEFAULT_TERMS_EN, type ReceiptSettings } from "@/lib/receipt-settings";
 import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
-import { invitationPhone } from "@shared/team-invitation";
+import { invitationEmail, invitationPhone, invitationWhatsAppRecipient } from "@shared/team-invitation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Building2, Receipt, FileText, Users, Save, Plus, Trash2, Copy,
   Link as LinkIcon, Shield, Clock, Upload, X, Globe2, MoreVertical,
-  MessageCircle, QrCode, Download,
+  Mail, MessageCircle, QrCode, Download,
   Gift,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -590,6 +590,7 @@ type TeamInvitation = {
   id: number;
   token: string;
   identifier: string;
+  notificationPhone?: string | null;
   role: string;
   expiresAt: string;
   siteName: string;
@@ -609,8 +610,9 @@ function TeamTab() {
   const [shareInvite, setShareInvite] = useState<TeamInvitation | null>(null);
   const [newSiteOpen, setNewSiteOpen] = useState(false);
   const [editSite, setEditSite] = useState<any | null>(null);
-  const [inviteForm, setInviteForm] = useState({ siteId: "", identifier: "", role: "operator" });
-  const invitePhone = invitationPhone(inviteForm.identifier);
+  const [inviteForm, setInviteForm] = useState({ siteId: "", identifier: "", notificationPhone: "", role: "operator" });
+  const validInviteEmail = invitationEmail.safeParse(inviteForm.identifier).success;
+  const invalidInvitePhone = Boolean(inviteForm.notificationPhone.trim() && !invitationPhone(inviteForm.notificationPhone));
   const [newSiteName, setNewSiteName] = useState("");
   const [newSiteAddress, setNewSiteAddress] = useState("");
   const [newSiteCity, setNewSiteCity] = useState("");
@@ -743,7 +745,7 @@ function TeamTab() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["/api/invitations/pending"] });
       setInviteOpen(false);
-      setInviteForm({ siteId: "", identifier: "", role: "operator" });
+      setInviteForm({ siteId: "", identifier: "", notificationPhone: "", role: "operator" });
       setShareInvite({ ...data, siteName: sites.find(site => site.id === data.siteId)?.name ?? "" });
       void navigator.clipboard?.writeText(invitationLink(data.token)).catch(() => {});
     },
@@ -772,21 +774,24 @@ function TeamTab() {
     }
   }
 
+  function invitationMessage(invitation: TeamInvitation) {
+    return t("team_invite_message", { site: invitation.siteName || "XpressPro", link: invitationLink(invitation.token) });
+  }
+
+  function emailInviteLink(invitation: TeamInvitation) {
+    const address = encodeURIComponent(invitation.identifier).replace("%40", "@");
+    return `mailto:${address}?subject=${encodeURIComponent(t("team_invite_subject"))}&body=${encodeURIComponent(invitationMessage(invitation))}`;
+  }
+
   function notifyInvite(invitation: TeamInvitation) {
     if (!(Date.parse(invitation.expiresAt) > Date.now())) {
       toast({ title: t("invitation_not_found_or_expired"), variant: "destructive" });
       return;
     }
-    const phone = invitationPhone(invitation.identifier);
+    const phone = invitationWhatsAppRecipient(invitation);
     if (!phone) return;
     setShareInvite(null);
-    openWhatsApp({
-      phone,
-      text: t("invite_whatsapp_message", {
-        site: invitation.siteName || "XpressPro",
-        link: invitationLink(invitation.token),
-      }),
-    });
+    openWhatsApp({ phone, text: invitationMessage(invitation) });
   }
 
   const ROLE_COLORS: Record<string, string> = {
@@ -944,7 +949,12 @@ function TeamTab() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {invitationPhone(inv.identifier) && <Button
+                  {invitationEmail.safeParse(inv.identifier).success && Date.parse(inv.expiresAt) > Date.now() && <Button asChild variant="ghost" size="icon">
+                    <a href={emailInviteLink(inv)} aria-label={t("invite_share_email")} title={t("invite_share_email")}>
+                      <Mail className="h-4 w-4" />
+                    </a>
+                  </Button>}
+                  {invitationWhatsAppRecipient(inv) && <Button
                     variant="outline"
                     size="sm"
                     onClick={() => notifyInvite(inv)}
@@ -985,14 +995,17 @@ function TeamTab() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t("invitation_created")}</DialogTitle>
-              <DialogDescription>{invitationPhone(shareInvite.identifier) ? t("share_invitation_link", { identifier: shareInvite.identifier }) : shareInvite.identifier}</DialogDescription>
+              <DialogDescription>{t("share_invitation_link", { identifier: shareInvite.identifier })}</DialogDescription>
             </DialogHeader>
             <Input aria-label={t("copy_invite_link")} readOnly value={invitationLink(shareInvite.token)} onFocus={e => e.target.select()} />
-            <DialogFooter className="gap-2">
+            <DialogFooter className="flex-wrap gap-2">
               <Button variant="outline" onClick={() => copyInviteLink(shareInvite)}>
                 <Copy className="mr-2 h-4 w-4" />{copiedLink === shareInvite.token ? t("invite_link_copied") : t("copy_invite_link")}
               </Button>
-              {invitationPhone(shareInvite.identifier) && <Button onClick={() => notifyInvite(shareInvite)} data-testid="button-whatsapp-created-invite">
+              {invitationEmail.safeParse(shareInvite.identifier).success && Date.parse(shareInvite.expiresAt) > Date.now() && <Button asChild variant="outline">
+                <a href={emailInviteLink(shareInvite)}><Mail className="mr-2 h-4 w-4" />{t("invite_share_email")}</a>
+              </Button>}
+              {invitationWhatsAppRecipient(shareInvite) && <Button onClick={() => notifyInvite(shareInvite)} data-testid="button-whatsapp-created-invite">
                 <MessageCircle className="mr-2 h-4 w-4" />{t("invite_notify_whatsapp")}
               </Button>}
             </DialogFooter>
@@ -1019,20 +1032,33 @@ function TeamTab() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-identifier">{t("invite_whatsapp_phone")}</Label>
+              <Label htmlFor="invite-identifier">{t("email")}</Label>
               <Input
                 id="invite-identifier"
-                type="tel"
+                type="email"
                 autoComplete="off"
                 required
-                aria-describedby="invite-phone-hint"
-                aria-invalid={Boolean(inviteForm.identifier && !invitePhone)}
+                aria-invalid={Boolean(inviteForm.identifier && !validInviteEmail)}
                 value={inviteForm.identifier}
                 onChange={(e) => setInviteForm((f) => ({ ...f, identifier: e.target.value }))}
-                placeholder={t("phone_placeholder")}
+                placeholder={t("invite_email_placeholder")}
                 data-testid="input-invite-identifier"
               />
-              <p id="invite-phone-hint" className="text-xs text-muted-foreground">{t("invite_phone_hint")}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-phone">{t("invite_whatsapp_phone")}</Label>
+              <Input
+                id="invite-phone"
+                type="tel"
+                autoComplete="off"
+                aria-describedby="invite-phone-hint"
+                aria-invalid={invalidInvitePhone}
+                value={inviteForm.notificationPhone}
+                onChange={(e) => setInviteForm((f) => ({ ...f, notificationPhone: e.target.value }))}
+                placeholder={t("phone_placeholder")}
+                data-testid="input-invite-notification-phone"
+              />
+              <p id="invite-phone-hint" className="text-xs text-muted-foreground">{t(invalidInvitePhone ? "invite_invalid_phone" : "invite_phone_hint")}</p>
             </div>
             <div className="space-y-2">
               <Label>{t("employee_role")}</Label>
@@ -1052,7 +1078,7 @@ function TeamTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>{t("cancel")}</Button>
-            <Button onClick={() => inviteMut.mutate(inviteForm)} disabled={inviteMut.isPending || !inviteForm.siteId || !invitePhone} data-testid="button-send-invite">
+            <Button onClick={() => inviteMut.mutate(inviteForm)} disabled={inviteMut.isPending || !inviteForm.siteId || !validInviteEmail || invalidInvitePhone} data-testid="button-send-invite">
               <LinkIcon className="w-4 h-4 mr-2" />
               {inviteMut.isPending ? t("sending") : t("create_invite_link")}
             </Button>

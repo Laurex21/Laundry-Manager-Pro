@@ -66,6 +66,9 @@ async function ensureBusinessSettingsSchema(): Promise<void> {
   businessSettingsSchemaReady = true;
 }
 
+type NewSiteInvitation = Pick<typeof siteInvitations.$inferInsert,
+  "siteId" | "organisationId" | "invitedBy" | "identifier" | "role" | "notificationPhone">;
+
 export interface IStorage {
   getCustomers(): Promise<Customer[]>;
   getCustomer(id: number): Promise<Customer | undefined>;
@@ -181,7 +184,7 @@ export interface IStorage {
   addSiteMember(siteId: number, userId: string, role: string): Promise<SiteMember>;
   removeSiteMember(siteId: number, userId: string): Promise<boolean>;
   updateSiteMemberRole(siteId: number, userId: string, role: string): Promise<SiteMember | undefined>;
-  createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }): Promise<SiteInvitation>;
+  createInvitation(data: NewSiteInvitation): Promise<SiteInvitation>;
   getInvitationByToken(token: string): Promise<(SiteInvitation & { siteName: string; organisationName: string; inviterName: string }) | null>;
   createStaffFromInvitation(token: string, data: { email?: string | null; phone?: string | null; passwordHash: string; firstName?: string | null; lastName?: string | null }): Promise<User | null>;
   acceptInvitation(token: string, userId: string): Promise<SiteInvitation | null>;
@@ -1811,7 +1814,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async createInvitation(data: { siteId: number; organisationId: number; invitedBy: string; identifier: string; role: string }, executor: any = db): Promise<SiteInvitation> {
+  async createInvitation(data: NewSiteInvitation, executor: any = db): Promise<SiteInvitation> {
     const [scope] = await executor
       .select({
         siteOrganisationId: sites.organisationId,
@@ -1870,6 +1873,10 @@ export class DatabaseStorage implements IStorage {
       if (credential.kind === "phone") {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"staff-phone:" + credential.value}, 0))`);
         if (await authStorage.hasLoginPhone(credential.value, tx)) throw new Error("STAFF_PHONE_IN_USE");
+      } else {
+        const [existing] = await tx.select({ id: users.id }).from(users)
+          .where(sql`lower(trim(${users.email})) = ${credential.value}`).limit(1);
+        if (existing) throw new Error("STAFF_EMAIL_IN_USE");
       }
       const [staffUser] = await tx.insert(users).values({
         email: credential.kind === "email" ? credential.value : null,
@@ -1881,7 +1888,8 @@ export class DatabaseStorage implements IStorage {
         role: inv.role,
         organisationId: inv.organisationId,
         currentSiteId: inv.siteId,
-      }).returning();
+      }).onConflictDoNothing({ target: users.email }).returning();
+      if (!staffUser) throw new Error("STAFF_EMAIL_IN_USE");
 
       if (saasOrganisationAccessEnabled(inv.organisationId)) await saasStore.allocateStaff(drizzleSaasExecutor(tx), inv.organisationId, staffUser.id, inv.siteId);
       await tx.insert(siteMembers).values({ siteId: inv.siteId, userId: staffUser.id, role: inv.role });
