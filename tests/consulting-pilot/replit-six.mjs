@@ -9,8 +9,8 @@ const base = '/api/consulting-pilot';
 const evidence = process.env.PILOT_EVIDENCE;
 const fixtureFile = process.env.PILOT_FIXTURE;
 const roleNames = ['payant','non-payant'];
-const ids = process.env.PILOT_YOUTUBE_IDS?.split(',') ?? [];
-assert.equal(ids.length, 6, 'Provide the six expected video identifiers');
+const expected = JSON.parse(await readFile(process.env.PILOT_DESTINATIONS, 'utf8'));
+assert.equal(Object.keys(expected).length,57);
 const browser = await chromium.launch({channel:'chrome', headless:true,args:['--disable-background-networking']});
 let accounts;
 try {
@@ -45,8 +45,9 @@ try {
     if(mobile) await page.getByTestId('bottom-nav-more').click();
     const menu = page.getByRole('link',{name:'Mes formations',exact:true}).filter({visible:true});
     await menu.click();
-    await page.getByRole('heading',{name:'Lavage de robe de soirée et de veste'}).waitFor();
-    assert.equal(await page.locator('main ol li').count(),6);
+    await page.getByRole('heading',{name:'Formation complète aux métiers du pressing'}).waitFor();
+    assert.equal(await page.locator('main ol li').count(),57);
+    assert.equal(await page.locator('main details').count(),7);
     return {page,context};
   }
   const initial=await open(accounts[0],false);
@@ -67,16 +68,24 @@ try {
     const state=await (await context.request.get(base)).json();
     assert.equal(state.amount,100);
     assert.equal(state.status,purchased?'COMPLETED':'UNPAID');
-    assert.equal(await page.locator('ol a').count(),purchased?6:0);
+    assert.equal(await page.locator('ol a').count(),purchased?57:0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
-    for(const [i,m] of state.modules.entries()){
+    assert.deepEqual(state.themes.map(t=>t.lessons.length),[9,2,2,8,6,9,21]);
+    assert.deepEqual(state.modules.map(m=>m.id).sort(),Object.keys(expected).sort());
+    for(const theme of state.themes){
+      const group=page.locator('details').filter({has:page.locator('summary',{hasText:theme.title})});
+      await group.locator('summary').click();
+      assert.equal(await group.getByText(theme.lessons[0].title,{exact:true}).isVisible(),true);
+      await group.locator('summary').click();
+    }
+    for(const m of state.modules){
       const res=await context.request.get(base+'/modules/'+m.id,{maxRedirects:0});
       assert.equal(res.status(),purchased?303:403);
-      if(purchased) assert.equal(res.headers().location,'https://www.youtube.com/watch?v='+ids[i]);
+      if(purchased) assert.ok(res.headers().location==='https://www.youtube.com/watch?v='+expected[m.id], 'Destination de '+m.id);
     }
     const screen=(mobile?'mobile':'pc')+'-'+account.role;
     if(evidence) await page.screenshot({path:evidence+'/'+screen+'.png',fullPage:true});
-    console.log('PASS '+screen+' reconnexion, menu et six droits vérifiés');
+    console.log('PASS '+screen+' reconnexion, menu, sept thèmes et 57 droits vérifiés');
     await context.close();
   }
 } finally {await browser.close()}
