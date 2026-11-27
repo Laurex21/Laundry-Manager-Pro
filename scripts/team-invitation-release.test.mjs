@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import anchor from './replit-team-invitation-anchor.cjs';
+import phone from './replit-phone-login-anchor.cjs';
 import { verifyTeamInvitationRelease } from './verify-team-invitation-release.mjs';
 import { receiptBaseline } from './verify-receipt-release.mjs';
 import { superadminBaseline } from './verify-superadmin-release.mjs';
@@ -51,22 +52,27 @@ test('Replit preload blocks old source and stale manifests before server startup
   mkdirSync(path.join(dir, 'scripts'));
   mkdirSync(path.join(dir, 'dist/public'), { recursive: true });
   writeFileSync(path.join(dir, 'dist/index.cjs'), 'console.log("server started")');
-  const last = 'replit-team-invitation-anchor.cjs';
-  const preloads = ['replit-release-anchor.cjs', 'replit-superadmin-release-anchor.cjs', 'replit-starter-release-anchor.cjs', last];
+  const inviteFile = 'replit-team-invitation-anchor.cjs';
+  const phoneFile = 'replit-phone-login-anchor.cjs';
+  const preloads = ['replit-release-anchor.cjs', 'replit-superadmin-release-anchor.cjs', 'replit-starter-release-anchor.cjs', inviteFile, phoneFile];
   const copy = file => copyFileSync(path.join(root, 'scripts', file), path.join(dir, 'scripts', file));
   const run = args => spawnSync(process.execPath, args, { cwd: dir, encoding: 'utf8',
     env: { NODE_OPTIONS: preloads.map(f => '--require=./scripts/' + f).join(' ') + ' --no-warnings' } });
-  preloads.slice(0, -1).forEach(copy);
+  preloads.slice(0, -2).forEach(copy);
   const old = run(['-e', 'console.log("starting build")']);
   assert.notEqual(old.status, 0);
   assert.match(old.stderr, /Cannot find module.*replit-team-invitation-anchor/);
-  copy(last);
+  copy(inviteFile);
+  const beforePhoneGuard = run(['-e', 'console.log("starting build")']);
+  assert.notEqual(beforePhoneGuard.status, 0);
+  assert.match(beforePhoneGuard.stderr, /Cannot find module.*replit-phone-login-anchor/);
+  copy(phoneFile);
   const nested = run(['-e', "require('node:child_process').execFileSync(process.execPath, ['-e', \"if (!process.env.NODE_OPTIONS.includes('--no-warnings')) process.exit(1)\"], { cwd: './dist' })"]);
   assert.equal(nested.status, 0, nested.stderr);
   const commit = anchor.baseline;
   const guard = baseline => ({ version: 1, commit, baseline });
   const manifest = { commit, receiptReleaseGuard: guard(receiptBaseline), superadminReleaseGuard: guard(superadminBaseline),
-    starterBrandingReleaseGuard: guard(starter.starterBaseline), teamInvitationReleaseGuard: guard(anchor.baseline) };
+    starterBrandingReleaseGuard: guard(starter.starterBaseline), teamInvitationReleaseGuard: guard(anchor.baseline), phoneLoginReleaseGuard: guard(phone.baseline) };
   function start(overrides) {
     writeFileSync(path.join(dir, 'dist/public/build-manifest.json'), JSON.stringify({ ...manifest, ...overrides }));
     return run(['dist/index.cjs']);
@@ -77,7 +83,13 @@ test('Replit preload blocks old source and stale manifests before server startup
     assert.doesNotMatch(rejected.stdout, /server started/);
   }
   const verified = start({});
+  for (const invalid of [undefined, { ...guard(phone.baseline), version: 0 }, guard(receiptBaseline), { ...guard(phone.baseline), commit: receiptBaseline }]) {
+    const rejected = start({ phoneLoginReleaseGuard: invalid });
+    assert.notEqual(rejected.status, 0);
+    assert.doesNotMatch(rejected.stdout, /server started/);
+  }
   assert.equal(verified.status, 0, verified.stderr);
   assert.match(verified.stdout, /Team invitation release anchor active/);
+  assert.match(verified.stdout, /Phone login release anchor active/);
   assert.match(verified.stdout, /server started/);
 });

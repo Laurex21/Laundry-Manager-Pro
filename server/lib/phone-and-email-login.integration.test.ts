@@ -1,4 +1,4 @@
-/** Owner and staff sign-in against disposable PostgreSQL only. */
+/** Release check for existing owner and staff accounts against disposable PostgreSQL. */
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import { PGlite } from '@electric-sql/pglite';
@@ -28,8 +28,10 @@ try {
  await testDb.insert(schema.users).values([
   { id: "owner", email: "Owner.Mixed@Example.invalid", passwordHash: fixtureHash, phone: "+237600000000" },
   { id: "staff", email: "staff@example.invalid", passwordHash: fixtureHash, userType: "staff" },
+  { id: "email-owner", email: "email.owner@example.invalid", passwordHash: fixtureHash, organisationId: 102 },
  ]);
  await testDb.insert(schema.organisations).values({ id: 101, name: "Legacy phone account", ownerId: "legacy-owner" });
+ await testDb.insert(schema.organisations).values({ id: 102, name: "Email test account", ownerId: "email-owner" });
  await testDb.insert(schema.users).values([
   { id: "legacy-owner", email: null, phone: "6 00 00 00 01", passwordHash: fixtureHash, organisationId: 101 },
   { id: "legacy-staff", email: null, phone: "00237 (600) 000-002", passwordHash: fixtureHash, userType: "staff", role: "operator", organisationId: 101 },
@@ -84,6 +86,9 @@ try {
 
  const ownerLogin = "/api/auth/login";
  const staffLogin = "/api/staff/login";
+ const ownerByEmail = await attempt(ownerLogin, { identifier: " Email.Owner@example.invalid ", password: fixturePassword });
+ assert.equal(ownerByEmail.userId, "email-owner");
+ assert.ok(ownerByEmail.regenerated && ownerByEmail.saved);
  for (const identifier of ["600000001", "+237 600 000 001", "237600000001", "00237-600-000-001"]) {
   const response = await attempt(ownerLogin, { identifier, password: fixturePassword });
   assert.equal(response.status, 200, JSON.stringify(response.body));

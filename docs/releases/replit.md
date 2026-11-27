@@ -7,7 +7,7 @@ Les téléchargements Android et le cadrage nom/logo ont été validés sur Tecn
 La variable **de production** `NODE_OPTIONS` doit conserver :
 
 ```
---require=./scripts/replit-release-anchor.cjs --require=./scripts/replit-superadmin-release-anchor.cjs --require=./scripts/replit-starter-release-anchor.cjs --require=./scripts/replit-team-invitation-anchor.cjs
+--require=./scripts/replit-release-anchor.cjs --require=./scripts/replit-superadmin-release-anchor.cjs --require=./scripts/replit-starter-release-anchor.cjs --require=./scripts/replit-team-invitation-anchor.cjs --require=./scripts/replit-phone-login-anchor.cjs
 ```
 
 Ce réglage vit dans Publishing → Adjust settings → Production app secrets, hors du dépôt. Préserver les autres options Node existantes. Une ancienne version sans l’un de ces fichiers échoue avant de démarrer, même si elle possède d'anciens scripts de compilation. Ne pas retirer cette option pour contourner un échec de publication. Les ancres ne font aucun accès Git ou réseau au démarrage du serveur.
@@ -26,7 +26,7 @@ la publication si elle propose une migration storefront non validée.
 1. Partir d'une révision revue et fusionnée de `origin/main`, avec l'historique Git complet (`git fetch --unshallow origin` si nécessaire). Préserver séparément le travail de développement non publié.
 2. Lancer `npm run test:receipt-release`, `npm run test:superadmin-release`, `npm run test:starter-release` et `npm run build`. La compilation vérifie l'ascendance de PR #90, les empreintes des fichiers des reçus, les limites de résolution et les délais réseau. Elle s'arrête avant de remplacer `dist` si un contrôle échoue.
 3. Publier cette révision précise. Ne jamais utiliser un ancien dossier de publication comme source sans le mettre à jour.
-4. Vérifier `/build-manifest.json` en production : `commit` doit correspondre à la révision prévue et les versions de `receiptReleaseGuard`, `superadminReleaseGuard` et `starterBrandingReleaseGuard` doivent valoir `1`. Les journaux `Receipt release anchor active`, `Superadmin release anchor active` et `Starter branding release anchor active` confirment le chargement des protections au démarrage. Vérifier un PDF, l'arrêt de l'icône, le nom et le logo.
+4. Vérifier `/build-manifest.json` en production : `commit` doit correspondre à la révision prévue et les versions de `receiptReleaseGuard`, `superadminReleaseGuard`, `starterBrandingReleaseGuard`, `teamInvitationReleaseGuard` et `phoneLoginReleaseGuard` doivent valoir `1`. Les journaux `Receipt release anchor active`, `Superadmin release anchor active` et `Starter branding release anchor active` confirment le chargement des protections au démarrage. Vérifier un PDF, l'arrêt de l'icône, le nom et le logo.
 
 Le contrôle accepte aussi les branches récentes qui contiennent les correctifs. Il ne valide pas automatiquement leurs autres changements. Pour revenir sur un autre problème, faire un nouveau commit de revert au-dessus de la version protégée ; ne pas republier un ancien instantané.
 
@@ -54,3 +54,9 @@ Après publication, vérifier que le manifeste et le journal de démarrage indiq
 La compilation exige la révision fusionnée de la PR #108, qui contient aussi la PR #107. Elle teste le formulaire des paramètres, le partage depuis la fenêtre de création et la liste des invitations en attente, l’acceptation en base de test et le parcours de démonstration. Le test compare le lien émis, le lien copié et les liens contenus dans les deux messages. Les contrôles utilisent des coordonnées fictives.
 
 La commande `npm run test:team-invitation-release` vérifie qu’une ancienne branche, un formulaire qui impose le téléphone, un lien WhatsApp différent et un manifeste périmé bloquent la publication. Après publication, vérifier la version `1` et le commit de `teamInvitationReleaseGuard` dans `/build-manifest.json`, puis la ligne `Team invitation release anchor active` pour ce commit dans les journaux de démarrage. Pour l’essai manuel, ouvrir `/settings?demo=1`, sélectionner **Équipe** et comparer les deux aperçus avec le lien créé.
+
+## Vérifier la connexion des comptes créés par téléphone
+
+Avant chaque compilation, les tests ouvrent les formulaires propriétaire et personnel avec un numéro et avec un e-mail. Les routes de connexion ouvrent des sessions sur une base PostgreSQL isolée contenant des comptes historiques sans e-mail. Les scénarios couvrent le numéro camerounais local, les indicatifs internationaux, les anciens formats stockés, le mot de passe existant et les numéros ambigus.
+
+La commande `npm run test:phone-login-release` vérifie le rejet d’une version antérieure à la PR #101 et de régressions sur les formulaires et la recherche de compte. Après publication, vérifier que `phoneLoginReleaseGuard` porte le commit publié et que le journal de démarrage contient `Phone login release anchor active` pour ce même commit. Sur `/auth` et `/staff-login`, vérifier que le champ accepte un numéro. Pour une connexion complète, utiliser un compte de test dédié.
