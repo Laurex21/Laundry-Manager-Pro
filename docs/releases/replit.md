@@ -1,4 +1,4 @@
-# Publication Replit des reçus, du superadmin et de la formule Starter
+# Protections de publication sur Replit
 
 Les téléchargements Android et le cadrage nom/logo ont été validés sur Tecno Spark 20 / Chrome et sur PC le 19 novembre 2026 (PR #89 et #90). Une publication provenant d'une ancienne branche les avait déjà remplacés. Le récapitulatif boutiques/personnel/coût et les attributions manuelles du superadmin (PR #88) sont également protégés.
 
@@ -7,7 +7,7 @@ Les téléchargements Android et le cadrage nom/logo ont été validés sur Tecn
 La variable **de production** `NODE_OPTIONS` doit conserver :
 
 ```
---require=./scripts/replit-release-anchor.cjs --require=./scripts/replit-superadmin-release-anchor.cjs --require=./scripts/replit-starter-release-anchor.cjs
+--require=./scripts/replit-release-anchor.cjs --require=./scripts/replit-superadmin-release-anchor.cjs --require=./scripts/replit-starter-release-anchor.cjs --require=./scripts/replit-team-invitation-anchor.cjs
 ```
 
 Ce réglage vit dans Publishing → Adjust settings → Production app secrets, hors du dépôt. Préserver les autres options Node existantes. Une ancienne version sans l’un de ces fichiers échoue avant de démarrer, même si elle possède d'anciens scripts de compilation. Ne pas retirer cette option pour contourner un échec de publication. Les ancres ne font aucun accès Git ou réseau au démarrage du serveur.
@@ -48,3 +48,9 @@ Les tests d’activation complète utilisent uniquement une base PGlite fictive,
 Chaque compilation doit inclure la révision de la PR #102. Elle lance les tests sur la page Paramètres, les routes de lecture et de modification du nom, et les reçus de dépôt et de paiement aux formats A4 et thermique. Les scénarios couvrent aussi un ancien compte Starter, la première impression pendant le chargement et le retour de Pro à Starter avec un nom personnalisé déjà en cache. Les tests de Pro et Business vérifient que la personnalisation fonctionne toujours.
 
 Après publication, vérifier que le manifeste et le journal de démarrage indiquent la même révision. Sur un compte Starter, ouvrir Paramètres et générer un reçu à partir d’une commande de test existante. Le nom affiché dans les deux cas doit être XpressPro, en lecture seule dans Paramètres.
+
+## Vérifier les invitations d’équipe
+
+La compilation exige la révision fusionnée de la PR #108, qui contient aussi la PR #107. Elle teste le formulaire des paramètres, le partage depuis la fenêtre de création et la liste des invitations en attente, l’acceptation en base de test et le parcours de démonstration. Le test compare le lien émis, le lien copié et les liens contenus dans les deux messages. Les contrôles utilisent des coordonnées fictives.
+
+La commande `npm run test:team-invitation-release` vérifie qu’une ancienne branche, un formulaire qui impose le téléphone, un lien WhatsApp différent et un manifeste périmé bloquent la publication. Après publication, vérifier la version `1` et le commit de `teamInvitationReleaseGuard` dans `/build-manifest.json`, puis la ligne `Team invitation release anchor active` pour ce commit dans les journaux de démarrage. Pour l’essai manuel, ouvrir `/settings?demo=1`, sélectionner **Équipe** et comparer les deux aperçus avec le lien créé.
