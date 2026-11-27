@@ -1,4 +1,5 @@
 import { getDemoFixture } from "./demo-data";
+import { clearDemoInvitations, demoInvitationResponse } from "./demo-invitations";
 
 const LS_KEY = "laundry-demo-mode";
 const SITE_KEY = "laundry-demo-site-id";
@@ -15,6 +16,7 @@ export function exitDemoMode(): void {
   try {
     localStorage.removeItem(LS_KEY);
     localStorage.removeItem(SITE_KEY);
+    clearDemoInvitations();
   } catch {
     // ignore
   }
@@ -81,6 +83,10 @@ function installDemoFetchPatch(): void {
     }
 
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if (url.startsWith("/api/invitations")) {
+      const simulated = demoInvitationResponse(url, method, init?.body);
+      if (simulated) return simulated;
+    }
 
     // Logout: clear demo flag and redirect
     if (url === "/api/auth/logout" && method === "POST") {

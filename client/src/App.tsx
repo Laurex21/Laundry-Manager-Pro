@@ -49,6 +49,7 @@ const Subscriptions     = lazy(() => import("@/pages/subscriptions"));
 const MembershipPlans   = lazy(() => import("@/pages/membership-plans"));
 const SettingsPage      = lazy(() => import("@/pages/settings"));
 const AcceptInvitation  = lazy(() => import("@/pages/accept-invitation"));
+const DemoInvitationPage = lazy(() => import("@/pages/demo-invitation"));
 const AmbassadorPage    = lazy(() => import("@/pages/ambassador"));
 const SalesPortal       = lazy(() => import("@/pages/sales-portal"));
 const PlatformAdmin     = lazy(() => import("@/pages/platform-admin"));
@@ -201,6 +202,7 @@ function Router() {
         <Route path="/reset-password" component={ResetPasswordPage} />
         <Route path="/reset-password/:token" component={ResetPasswordPage} />
         <Route path="/join/:token" component={AcceptInvitation} />
+        <Route path="/demo/invitation/:token" component={DemoInvitationPage} />
         <Route path="/platform-admin" component={PlatformAdmin} />
         <Route path="/superadmin" component={PlatformAdmin} />
 
