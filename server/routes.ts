@@ -5,6 +5,7 @@ import { StorefrontService } from "./lib/storefront-service";
 import { StorefrontError } from "./lib/storefront-pricing";
 import { respondCashbookDatabaseError } from './lib/cashbook-errors';
 import { registerPromoRoutes } from "./lib/saas-promo-routes";
+import { registerConsultingPilot } from "./lib/consulting-pilot";
 import { registerTrainingRoutes } from "./lib/training";
 import {CustomerFollowUps} from "./lib/customer-follow-ups";
 import {registerCustomerFollowUpRoutes} from "./lib/customer-follow-up-routes";
@@ -324,6 +325,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   });
   registerCashbookRoutes(app, { db: pool, auth: isAuthenticated, siteIds: orgScopedSites, role: effectiveSiteRole });
+  registerConsultingPilot(app, isAuthenticated, pool);
   registerTrainingRoutes(app, isAuthenticated, undefined, requirePlatformAdmin, async req => !!(await new AmbassadorAccess().principal((req.session as any).userId)));
   registerCustomerFollowUpRoutes(app,isAuthenticated,new CustomerFollowUps(pool),effectivePlanSlug);
   registerSaasRoutes(app);

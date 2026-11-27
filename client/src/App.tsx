@@ -1,4 +1,5 @@
 import { TRAINING_VISIBLE } from "@/lib/training-availability";
+import MyCourses from "@/pages/mes-formations";
 import TrainingPage from "@/pages/training";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
@@ -273,6 +274,7 @@ function Router() {
         <Route path="/subscription-dashboard">
           <ProtectedRoute component={LegacySubscriptionDashboardRoute} page="customers" />
         </Route>
+        {import.meta.env.DEV && <Route path="/mes-formations"><ProtectedRoute component={MyCourses} /></Route>}
         {TRAINING_VISIBLE && <Route path="/formation"><ProtectedRoute component={TrainingPage} /></Route>}
         <Route path="/settings">
           <ProtectedRoute component={SettingsPage} page="settings" />
