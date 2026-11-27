@@ -9,6 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { DEFAULT_SETTINGS, DEFAULT_TERMS_EN, type ReceiptSettings } from "@/lib/receipt-settings";
 import { clearWhatsAppDevicePreference, useWhatsAppLauncher } from "@/components/whatsapp-launcher";
 import { invitationEmail, invitationPhone, invitationWhatsAppRecipient } from "@shared/team-invitation";
+import { isDemoInvitation } from "@/lib/demo-invitations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -587,7 +588,7 @@ function LoyaltyTab({ settings }: { settings: any }) {
 // ─── Team & Sites Tab ─────────────────────────────────────────────────────────
 
 type TeamInvitation = {
-  id: number;
+  id: number | string;
   token: string;
   identifier: string;
   notificationPhone?: string | null;
@@ -597,7 +598,8 @@ type TeamInvitation = {
 };
 
 function invitationLink(token: string) {
-  return `${window.location.origin}/join/${encodeURIComponent(token)}`;
+  const path = isDemoInvitation(token) ? "/demo/invitation/" : "/join/";
+  return `${window.location.origin}${path}${encodeURIComponent(token)}`;
 }
 
 function TeamTab() {
@@ -608,6 +610,7 @@ function TeamTab() {
   const qc = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [shareInvite, setShareInvite] = useState<TeamInvitation | null>(null);
+  const [messagePreview, setMessagePreview] = useState<{ invitation: TeamInvitation; channel: "email" | "whatsapp" } | null>(null);
   const [newSiteOpen, setNewSiteOpen] = useState(false);
   const [editSite, setEditSite] = useState<any | null>(null);
   const [inviteForm, setInviteForm] = useState({ siteId: "", identifier: "", notificationPhone: "", role: "operator" });
@@ -753,7 +756,7 @@ function TeamTab() {
   });
 
   const revokeInviteMut = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: TeamInvitation["id"]) => {
       const res = await fetch(`/api/invitations/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
     },
@@ -779,8 +782,16 @@ function TeamTab() {
   }
 
   function emailInviteLink(invitation: TeamInvitation) {
+    if (isDemoInvitation(invitation.token)) return invitationLink(invitation.token);
     const address = encodeURIComponent(invitation.identifier).replace("%40", "@");
     return `mailto:${address}?subject=${encodeURIComponent(t("team_invite_subject"))}&body=${encodeURIComponent(invitationMessage(invitation))}`;
+  }
+
+  function previewDemoEmail(event: React.MouseEvent, invitation: TeamInvitation) {
+    if (!isDemoInvitation(invitation.token)) return;
+    event.preventDefault();
+    setShareInvite(null);
+    setMessagePreview({ invitation, channel: "email" });
   }
 
   function notifyInvite(invitation: TeamInvitation) {
@@ -791,6 +802,10 @@ function TeamTab() {
     const phone = invitationWhatsAppRecipient(invitation);
     if (!phone) return;
     setShareInvite(null);
+    if (isDemoInvitation(invitation.token)) {
+      setMessagePreview({ invitation, channel: "whatsapp" });
+      return;
+    }
     openWhatsApp({ phone, text: invitationMessage(invitation) });
   }
 
@@ -950,7 +965,7 @@ function TeamTab() {
                 </div>
                 <div className="flex items-center gap-1">
                   {invitationEmail.safeParse(inv.identifier).success && Date.parse(inv.expiresAt) > Date.now() && <Button asChild variant="ghost" size="icon">
-                    <a href={emailInviteLink(inv)} aria-label={t("invite_share_email")} title={t("invite_share_email")}>
+                    <a href={emailInviteLink(inv)} onClick={event => previewDemoEmail(event, inv)} aria-label={t("invite_share_email")} title={t("invite_share_email")}>
                       <Mail className="h-4 w-4" />
                     </a>
                   </Button>}
@@ -990,11 +1005,24 @@ function TeamTab() {
       )}
 
       {/* Dialogs */}
+      {messagePreview && (
+        <Dialog open onOpenChange={open => { if (!open) setMessagePreview(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t(messagePreview.channel === "email" ? "demo_team_email_preview" : "demo_team_whatsapp_preview")}</DialogTitle>
+              <DialogDescription>{t("demo_team_invite_notice")}</DialogDescription>
+            </DialogHeader>
+            <p className="break-words text-sm font-medium">{messagePreview.channel === "email" ? messagePreview.invitation.identifier : "+" + invitationWhatsAppRecipient(messagePreview.invitation)}</p>
+            <p className="whitespace-pre-line break-words text-sm">{invitationMessage(messagePreview.invitation)}</p>
+            <Button asChild><a href={invitationLink(messagePreview.invitation.token)}>{t("demo_team_open")}</a></Button>
+          </DialogContent>
+        </Dialog>
+      )}
       {shareInvite && (
         <Dialog open onOpenChange={open => { if (!open) setShareInvite(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{t("invitation_created")}</DialogTitle>
+              <DialogTitle>{t(isDemoInvitation(shareInvite.token) ? "demo_team_invite_title" : "invitation_created")}</DialogTitle>
               <DialogDescription>{t("share_invitation_link", { identifier: shareInvite.identifier })}</DialogDescription>
             </DialogHeader>
             <Input aria-label={t("copy_invite_link")} readOnly value={invitationLink(shareInvite.token)} onFocus={e => e.target.select()} />
@@ -1003,7 +1031,7 @@ function TeamTab() {
                 <Copy className="mr-2 h-4 w-4" />{copiedLink === shareInvite.token ? t("invite_link_copied") : t("copy_invite_link")}
               </Button>
               {invitationEmail.safeParse(shareInvite.identifier).success && Date.parse(shareInvite.expiresAt) > Date.now() && <Button asChild variant="outline">
-                <a href={emailInviteLink(shareInvite)}><Mail className="mr-2 h-4 w-4" />{t("invite_share_email")}</a>
+                <a href={emailInviteLink(shareInvite)} onClick={event => previewDemoEmail(event, shareInvite)}><Mail className="mr-2 h-4 w-4" />{t("invite_share_email")}</a>
               </Button>}
               {invitationWhatsAppRecipient(shareInvite) && <Button onClick={() => notifyInvite(shareInvite)} data-testid="button-whatsapp-created-invite">
                 <MessageCircle className="mr-2 h-4 w-4" />{t("invite_notify_whatsapp")}

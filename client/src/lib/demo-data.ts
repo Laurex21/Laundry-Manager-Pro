@@ -530,8 +530,5 @@ export function getDemoFixture(url: string, selectedSiteId: number | null = null
     ];
   }
 
-  // Invitations
-  if (path === "/api/invitations/pending") return [];
-
   return undefined;
 }
