@@ -80,4 +80,5 @@ jobs:
       - run: npm run test:pawapay-private-diagnostic
       - run: npm run test:starter-release
       - run: npm run test:team-invitation-release
+      - run: npm run test:phone-login-release
       - run: npm run build
