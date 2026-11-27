@@ -9,6 +9,8 @@ import { verifySuperadminRelease } from "../scripts/verify-superadmin-release.mj
 
 // @ts-expect-error Shared Node release verifier.
 import { verifyStarterRelease } from "../scripts/verify-starter-release.mjs";
+// @ts-expect-error Shared Node release verifier.
+import { verifyTeamInvitationRelease } from "../scripts/verify-team-invitation-release.mjs";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -44,6 +46,7 @@ async function buildAll() {
   const receiptReleaseGuard = verifyReceiptRelease();
   const superadminReleaseGuard = verifySuperadminRelease();
   const starterBrandingReleaseGuard = verifyStarterRelease();
+  const teamInvitationReleaseGuard = verifyTeamInvitationRelease();
   execFileSync(process.execPath, ["--import", "tsx", "server/lib/platform-admin-capacity.integration.test.ts"], { stdio: "inherit" });
   execFileSync(process.execPath, ["--import", "tsx", "client/src/lib/admin-capacity.test.tsx"], { stdio: "inherit" });
   execFileSync(process.execPath, ["--import", "tsx", "server/lib/receipt-export.test.ts"], { stdio: "inherit" });
@@ -86,6 +89,7 @@ async function buildAll() {
         receiptReleaseGuard,
         superadminReleaseGuard,
         starterBrandingReleaseGuard,
+        teamInvitationReleaseGuard,
         buildStartedAt,
         buildCompletedAt: new Date().toISOString(),
       },

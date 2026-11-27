@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import express from "express";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { generateDrizzleJson, generateMigration } from "drizzle-kit/api";
@@ -9,6 +11,8 @@ import { newTeamInvitation, invitationWhatsAppRecipient } from "../../shared/tea
 process.env.DATABASE_URL = "postgresql://unused:unused@127.0.0.1:1/team_invitation_test";
 process.env.SAAS_BILLING_MODE = "disabled";
 process.env.SAAS_DEFERRED_ORGANISATION_IDS = "100";
+process.env.SESSION_SECRET = "isolated-team-invitation-test-fixture";
+process.env.XPRESSPRO_AUTOMATIC_MAINTENANCE_SUSPENDED = "true";
 const pg = new PGlite();
 const testDb = drizzle(pg, { schema });
 const { db, pool } = await import("../db");
@@ -44,11 +48,32 @@ try {
   for (const notificationPhone of [undefined, "", "  "]) {
     assert.equal(newTeamInvitation.parse({ ...site, identifier: "agent@example.test", notificationPhone }).notificationPhone, null);
   }
-  const simple = await storage.createInvitation({ ...scope, ...newTeamInvitation.parse({ ...site, identifier: " Agent@Example.test " }) });
-  const notified = await storage.createInvitation({ ...scope, ...newTeamInvitation.parse({
-    ...site, identifier: "agent2@example.test", notificationPhone: "+237 699 11 22 33",
-  }) });
-  const pending = await storage.getPendingInvitations(100);
+  // Exercise the registered HTTP handlers against the isolated database, including the audit write.
+  await pg.exec(`CREATE TABLE security_audit_events (
+    organisation_id integer, site_id integer, actor_user_id text, action text, target_type text, target_id text,
+    before_state jsonb, after_state jsonb, request_id text, ip_hash text, user_agent text
+  )`);
+  const app = express();
+  const { registerRoutes } = await import("../routes");
+  await registerRoutes(createServer(), app);
+  async function request(method: "get" | "post", path: string, body?: object) {
+    const handler = app.router.stack.find((layer: any) => layer.route?.path === path && layer.route.methods[method])?.route.stack.at(-1).handle;
+    assert.ok(handler, `Missing ${method} ${path}`);
+    let status = 200;
+    let result: any;
+    const req = { method: method.toUpperCase(), session: { userId: scope.invitedBy }, body, ip: "127.0.0.1", protocol: "https", get: () => "pressing.example.invalid" };
+    const res = { status(code: number) { status = code; return res; }, json(value: any) { result = value; } };
+    await handler(req, res);
+    assert.equal(status, method === "post" ? 201 : 200, JSON.stringify(result));
+    return result;
+  }
+  const simple = await request("post", "/api/invitations", { ...site, identifier: " Agent@Example.test " });
+  const notified = await request("post", "/api/invitations", { ...site, identifier: "agent2@example.test", notificationPhone: "+237 699 11 22 33" });
+  for (const invitation of [simple, notified]) {
+    assert.ok(invitation.token);
+    assert.equal(invitation.invitationLink, "https://pressing.example.invalid/join/" + invitation.token);
+  }
+  const pending: Awaited<ReturnType<typeof storage.getPendingInvitations>> = await request("get", "/api/invitations/pending");
   const stored = pending.find(inv => inv.token === notified.token)!;
   assert.equal(stored.identifier, "agent2@example.test");
   assert.equal(invitationWhatsAppRecipient(stored), "237699112233");
