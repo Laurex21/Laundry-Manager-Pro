@@ -1,5 +1,6 @@
 import { TRAINING_VISIBLE } from "@/lib/training-availability";
-import MyCourses from "@/pages/mes-formations";
+import FormationHub from "@/pages/formation-hub";
+import MyCourses, { CoachingPage } from "@/pages/mes-formations";
 import TrainingPage from "@/pages/training";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
@@ -275,7 +276,9 @@ function Router() {
           <ProtectedRoute component={LegacySubscriptionDashboardRoute} page="customers" />
         </Route>
         <Route path="/mes-formations"><ProtectedRoute component={MyCourses} /></Route>
-        {TRAINING_VISIBLE && <Route path="/formation"><ProtectedRoute component={TrainingPage} /></Route>}
+        <Route path="/formation/accompagnement"><ProtectedRoute component={CoachingPage} /></Route>
+        <Route path="/formation"><ProtectedRoute component={FormationHub} /></Route>
+        {TRAINING_VISIBLE && <Route path="/formation/xpresspro"><ProtectedRoute component={TrainingPage} /></Route>}
         <Route path="/settings">
           <ProtectedRoute component={SettingsPage} page="settings" />
         </Route>

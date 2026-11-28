@@ -34,7 +34,8 @@ try {
     await page.getByTestId('button-auth-submit').click();
     await page.waitForURL(url => url.origin === site.origin && url.pathname !== '/auth');
     if (mobile) await page.getByTestId('bottom-nav-more').click();
-    await page.getByRole('link',{name:'Mes formations',exact:true}).filter({visible:true}).click();
+    await page.getByRole('link',{name:'Formation',exact:true}).filter({visible:true}).click();
+    await page.getByRole('link',{name:'Voir la formation',exact:true}).click();
     const card = page.locator('main section');
     await card.getByText('7 thèmes · 57 leçons').waitFor();
     await card.getByText(total).waitFor();

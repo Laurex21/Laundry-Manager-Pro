@@ -43,8 +43,9 @@ try {
     assert.equal((await logged).status(),200,'login '+account.role);
     await page.waitForURL(u=>u.pathname!=='/auth');
     if(mobile) await page.getByTestId('bottom-nav-more').click();
-    const menu = page.getByRole('link',{name:'Mes formations',exact:true}).filter({visible:true});
+    const menu = page.getByRole('link',{name:'Formation',exact:true}).filter({visible:true});
     await menu.click();
+    await page.getByRole('link',{name:'Voir la formation',exact:true}).click();
     await page.getByRole('heading',{name:'Formation complète aux métiers du pressing'}).waitFor();
     assert.equal(await page.locator('main ol li').count(),57);
     assert.equal(await page.locator('main details').count(),7);

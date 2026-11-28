@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
+import { Readable } from "node:stream";
 import { test } from "node:test";
 import express from "express";
 import { PGlite } from "@electric-sql/pglite";
@@ -34,14 +35,17 @@ test("live course uses its own verified purchases, links and single-use access g
       if (!req.headers.user) { res.sendStatus(401); return; }
       Object.assign(req,{session:{userId:req.headers.user},organisationId:Number(req.headers.org || 1)});
       next();
-    }, db);
+    }, db, {filename:"support-test.txt", open: () => Readable.from(["Document fictif du cours"])});
     if (!http.listening) await once(http,"listening");
     const addr = http.address();
     assert.ok(addr && typeof addr !== "string");
     const api = 'http://127.0.0.1:' + addr.port + '/api/consulting-pilot';
     const get = (user: string, path="", method="GET", org="1") =>
       realFetch(api + path,{method,headers:{user,org},redirect:"manual"});
+    await pg.exec(readFileSync("migrations/20261128_consulting_coaching_live.sql","utf8"));
+    await pg.exec(readFileSync("migrations/development/20261128_consulting_coaching_sandbox.sql","utf8"));
     let creates = 0;
+    let returnPath = "/mes-formations";
     let checkout = "";
     let expectedAmount = "100000";
     globalThis.fetch = async (input,init) => {
@@ -54,7 +58,7 @@ test("live course uses its own verified purchases, links and single-use access g
         const request = JSON.parse(String(init.body));
         checkout = request.checkoutId;
         assert.deepEqual(request.amounts,[amount]);
-        assert.equal(request.returnUrl,"https://app.xpressclean.cm/mes-formations");
+        assert.equal(request.returnUrl,"https://app.xpressclean.cm"+returnPath);
         return Response.json({status:"ACCEPTED",checkoutId:checkout,checkoutCode:"test",redirectUrl:"https://checkout.pawapay.io/test"});
       }
       assert.ok(url.endsWith("/" + checkout));
@@ -65,6 +69,9 @@ test("live course uses its own verified purchases, links and single-use access g
     const lessons = themes.flatMap(t=>t.lessons);
     assert.equal(list.amount,100000);
     assert.equal(list.mode,"live");
+    assert.equal(list.materialAvailable,false);
+    assert.equal((await realFetch(api+"/document")).status,401);
+    assert.equal((await get("bob","/document")).status,403);
     assert.equal(list.themes.length,7);
     assert.equal(lessons.length,57);
     const first = "/modules/" + lessons[0].id;
@@ -81,10 +88,39 @@ test("live course uses its own verified purchases, links and single-use access g
     assert.equal((await get("alice",first)).status,403);
     expectedAmount = "100000";
     assert.equal((await (await get("alice")).json()).status,"COMPLETED");
+    const document = await get("alice","/document");
+    assert.equal(document.status,200);
+    assert.match(document.headers.get("Content-Disposition") ?? "",/attachment;.*support-test.txt/);
+    assert.match(document.headers.get("Cache-Control") ?? "",/private, no-store/);
+    assert.equal(await document.text(),"Document fictif du cours");
+    assert.equal((await (await get("alice")).json()).materialAvailable,true);
+    assert.equal((await get("bob","/document")).status,403);
+    assert.equal((await get("alice","/document","GET","3")).status,403);
     for (const lesson of lessons) assert.equal((await get("alice","/modules/" + lesson.id)).status,303);
     assert.equal((await get("bob",first)).status,403);
     assert.equal((await (await get("alice","/checkout","POST")).json()).status,"COMPLETED");
     assert.equal(creates,1);
+
+    // Buying the course preserves its own access only. Coaching has a separate checkout.
+    const coaching = "/coaching";
+    assert.equal((await (await get("alice", coaching)).json()).contact,null);
+    assert.equal((await get("alice",coaching+"/checkout","POST","100")).status,403);
+    expectedAmount = "50000";
+    returnPath = "/formation/accompagnement";
+    assert.equal((await (await get("bob",coaching+"/checkout","POST")).json()).status,"PENDING");
+    expectedAmount = "100000";
+    const unverified = await (await get("bob",coaching)).json();
+    assert.equal(unverified.contact,null);
+    assert.equal(unverified.status,"PENDING");
+    expectedAmount = "50000";
+    const paidCoaching = await (await get("bob",coaching)).json();
+    assert.equal(paidCoaching.status,"COMPLETED");
+    assert.equal(paidCoaching.amount,50000);
+    assert.equal(paidCoaching.contact,"237651638889");
+    assert.equal((await get("bob",first)).status,403);
+    assert.equal((await get("bob","/document")).status,403);
+    assert.equal((await (await get("bob",coaching+"/checkout","POST")).json()).status,"COMPLETED");
+    assert.equal(creates,2);
   } finally {
     globalThis.fetch = realFetch;
     process.env = originalEnv;
