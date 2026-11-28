@@ -50,24 +50,15 @@ try {
     assert.equal(await page.locator('main details').count(),7);
     return {page,context};
   }
-  const initial=await open(accounts[0],false);
-  const start=initial.page.getByRole('button',{name:'Simuler un paiement Mobile Money'});
-  if(await start.isVisible()) {
-    await start.click();
-    const pay=initial.page.getByRole('button',{name:'Confirmer les 100 FCFA fictifs'});
-    await pay.waitFor();
-    assert.equal((await initial.context.request.get(base+'/modules/prelavage',{maxRedirects:0})).status(),403);
-    const done=initial.page.waitForResponse(r=>r.url().endsWith('/simulate'));
-    await pay.click();assert.equal((await done).status(),204);
-    console.log('PASS simulation pawaPay de 100 FCFA et verrouillage pendant attente');
-  }
-  await initial.page.close();await initial.context.close();
+  // Verify access only after provisioning the official sandbox scenarios.
+  // Creating an entitlement by clicking a local confirmation would invalidate this test.
   for(const mobile of [false,true]) for (const account of accounts) {
     const {page,context}=await open(account,mobile);
     const purchased=account.role==='payant';
     const state=await (await context.request.get(base)).json();
     assert.equal(state.amount,100);
-    assert.equal(state.status,purchased?'COMPLETED':'UNPAID');
+    if(purchased) assert.equal(state.status,'COMPLETED');
+    else assert.ok(['UNPAID','PENDING','FAILED','EXPIRED','CANCELLED'].includes(state.status));
     assert.equal(await page.locator('ol a').count(),purchased?57:0);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
     assert.deepEqual(state.themes.map(t=>t.lessons.length),[9,2,2,8,6,9,21]);
