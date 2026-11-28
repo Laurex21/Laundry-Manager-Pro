@@ -7,6 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 
 const api = "/api/consulting-pilot";
 type Course = {
+  mode: "sandbox" | "live";
   title: string;
   amount: number;
   checkoutAmount: number;
@@ -45,13 +46,14 @@ export default function MyCourses() {
     },
   });
   const data = course.data;
+  const sandbox = data?.mode === "sandbox";
   const lessonCount = data?.themes.reduce((sum, theme) => sum + theme.lessons.length, 0);
   return <main className="mx-auto max-w-3xl space-y-5 p-4 sm:p-8">
     <h1 className="text-3xl font-bold">Mes formations</h1>
     {course.isLoading && <p role="status">Chargement…</p>}
     {course.isError && <p role="alert">Chargement impossible. <button className="underline" onClick={() => course.refetch()}>Réessayer</button></p>}
     {data && <section className="space-y-4 rounded-2xl border bg-card p-5">
-      <p className="text-sm text-muted-foreground">{data.status === "COMPLETED" ? "Formation débloquée · Paiement de test confirmé" : "Formation disponible à l’achat"}</p>
+      <p className="text-sm text-muted-foreground">{data.status === "COMPLETED" ? "Formation débloquée · Paiement confirmé" : "Formation disponible à l’achat"}</p>
       <h2 className="text-xl font-semibold">{data.title}</h2>
       <p>{data.themes.length} thèmes · {lessonCount} leçons</p>
       <p><strong>{formatPrice(data.amount)}</strong> · Paiement unique pour toute la formation</p>
@@ -61,11 +63,11 @@ export default function MyCourses() {
       {data.status === "CANCELLED" && <p role="status">Le paiement a été annulé.</p>}
       {data.verificationDelayed && <p role="status">La vérification auprès de pawaPay reprend dans quelques instants.</p>}
       {data.status !== "COMPLETED" && <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
-        <DialogTrigger asChild><Button>{data.status === "PENDING" ? "Reprendre le paiement de test" : "Acheter la formation"}</Button></DialogTrigger>
+        <DialogTrigger asChild><Button>{data.status === "PENDING" ? (sandbox ? "Reprendre le paiement de test" : "Reprendre le paiement") : "Acheter la formation"}</Button></DialogTrigger>
         <DialogContent className="w-[calc(100%-2rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Récapitulatif de votre achat</DialogTitle>
-            <DialogDescription>Paiement unique par Mobile Money · pawaPay Sandbox</DialogDescription>
+            <DialogDescription>Paiement unique par Mobile Money{sandbox && " · pawaPay Sandbox"}</DialogDescription>
           </DialogHeader>
           <div>
             <p className="font-semibold">{data.title}</p>
@@ -75,7 +77,7 @@ export default function MyCourses() {
             <span>Total à payer</span><strong>{formatPrice(data.checkoutAmount)}</strong>
           </div>
           {data.checkoutAmount !== data.amount && <p>Ce lien de test conserve le tarif auquel il a été créé.</p>}
-          <p className="text-sm text-muted-foreground">Vous allez ouvrir la page de test Mobile Money. Aucun débit réel.</p>
+          <p className="text-sm text-muted-foreground">{sandbox ? "Vous allez ouvrir la page de test Mobile Money. Aucun débit réel." : "Validez votre paiement sur votre téléphone. Retrouvez ensuite vos 57 leçons ici."}</p>
           {payment.isError && <p role="alert">La page de paiement est indisponible. Réessayez dans quelques instants.</p>}
           <DialogFooter>
             <Button disabled={payment.isPending} onClick={() => payment.mutate()}>

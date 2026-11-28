@@ -274,7 +274,7 @@ function Router() {
         <Route path="/subscription-dashboard">
           <ProtectedRoute component={LegacySubscriptionDashboardRoute} page="customers" />
         </Route>
-        {import.meta.env.DEV && <Route path="/mes-formations"><ProtectedRoute component={MyCourses} /></Route>}
+        <Route path="/mes-formations"><ProtectedRoute component={MyCourses} /></Route>
         {TRAINING_VISIBLE && <Route path="/formation"><ProtectedRoute component={TrainingPage} /></Route>}
         <Route path="/settings">
           <ProtectedRoute component={SettingsPage} page="settings" />

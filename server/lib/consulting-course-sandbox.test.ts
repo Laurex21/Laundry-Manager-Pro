@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { checkedStatus, coursePrice } from "./consulting-course-sandbox";
+import { checkedStatus, coursePrice } from "./consulting-course-payments";
 
 const id = "course-attempt";
 const amount = { country:"CMR", currency:"XAF", amount:"100000.00" };
