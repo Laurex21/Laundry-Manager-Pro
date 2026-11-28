@@ -21,6 +21,7 @@ export function registerConsultingPilot(app: Express, auth: RequestHandler, db: 
         try { attempt = await refreshAttempt(db, attempt); } catch { verificationDelayed = true; }
       }
       res.json({title:"Formation complète aux métiers du pressing", amount:coursePrice, themes, modules,
+        checkoutAmount:attempt?.status === "PENDING" ? attempt.amount_xaf : coursePrice,
         status:attempt?.status ?? "UNPAID", lastAttemptFailed:attempt?.lastAttemptFailed === true, verificationDelayed});
     } catch { res.sendStatus(503); }
   });

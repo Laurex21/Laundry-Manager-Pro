@@ -56,7 +56,7 @@ try {
     const {page,context}=await open(account,mobile);
     const purchased=account.role==='payant';
     const state=await (await context.request.get(base)).json();
-    assert.equal(state.amount,100);
+    assert.equal(state.amount,100_000);
     if(purchased) assert.equal(state.status,'COMPLETED');
     else assert.ok(['UNPAID','PENDING','FAILED','EXPIRED','CANCELLED'].includes(state.status));
     assert.equal(await page.locator('ol a').count(),purchased?57:0);

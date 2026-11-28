@@ -29,3 +29,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS consulting_course_one_purchase
   ON consulting_course_sandbox_attempts(learner_id) WHERE status IN ('PENDING','COMPLETED');
 CREATE INDEX IF NOT EXISTS consulting_course_attempt_history
   ON consulting_course_sandbox_attempts(learner_id, created_at DESC);
+
+-- Existing sandbox links were issued at 100 XAF. New checkouts explicitly store the current price.
+ALTER TABLE consulting_course_sandbox_attempts
+  ADD COLUMN IF NOT EXISTS amount_xaf integer NOT NULL DEFAULT 100 CHECK (amount_xaf > 0);
