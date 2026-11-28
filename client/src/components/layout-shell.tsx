@@ -77,7 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
       { icon: Handshake, labelKey: "ambassador", href: "/ambassador", page: "ambassador" },
-      ...(import.meta.env.DEV ? [{ icon: GraduationCap, labelKey: "Mes formations", href: "/mes-formations", page: "training" }] : []),
+      { icon: GraduationCap, labelKey: "Mes formations", href: "/mes-formations", page: "training" },
       ...(TRAINING_VISIBLE ? [{ icon: GraduationCap, labelKey: "Formation", href: "/formation", page: "training" }] : []),
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
