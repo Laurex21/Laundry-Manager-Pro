@@ -3,9 +3,9 @@ import type { Pool } from "pg";
 
 const sandbox = "https://api.sandbox.pawapay.io/v2/checkouts";
 const openStatus = "PENDING";
-export const coursePrice = 100;
+export const coursePrice = 100_000;
 
-type Attempt = { checkout_id: string; status: string; checkout_code: string | null; redirect_url: string | null; lastAttemptFailed?: boolean };
+type Attempt = { amount_xaf: number; checkout_id: string; status: string; checkout_code: string | null; redirect_url: string | null; lastAttemptFailed?: boolean };
 type DB = Pick<Pool, "query">;
 type Amount = { country?: string; currency?: string; amount?: string };
 type Checkout = {
@@ -13,16 +13,16 @@ type Checkout = {
   status?: string; amounts?: Amount[]; deposit?: Amount & { status?: string };
 };
 
-function correctAmount(amount?: Amount) {
-  return amount?.country === "CMR" && amount.currency === "XAF" && /^100(?:\.0+)?$/.test(String(amount.amount));
+function correctAmount(expected: number, amount?: Amount) {
+  return amount?.country === "CMR" && amount.currency === "XAF" && /^\d+(?:\.0+)?$/.test(String(amount.amount)) && Number(amount.amount) === expected;
 }
 
-export function checkedStatus(id: string, code: string | null, data: Checkout) {
+export function checkedStatus(id: string, code: string | null, data: Checkout, expectedAmount: number) {
   if (data.checkoutId !== id || data.clientReferenceId !== id || !data.checkoutCode ||
       (code && code !== data.checkoutCode) || !Array.isArray(data.amounts) ||
-      data.amounts.length !== 1 || !correctAmount(data.amounts[0])) throw Error("Course checkout mismatch");
+      data.amounts.length !== 1 || !correctAmount(expectedAmount, data.amounts[0])) throw Error("Course checkout mismatch");
   if (data.status === "COMPLETED") {
-    if (data.deposit?.status !== "COMPLETED" || !correctAmount(data.deposit)) throw Error("Course deposit mismatch");
+    if (data.deposit?.status !== "COMPLETED" || !correctAmount(expectedAmount, data.deposit)) throw Error("Course deposit mismatch");
     return "COMPLETED";
   }
   if (["FAILED","EXPIRED","CANCELLED"].includes(data.status ?? "")) return data.status!;
@@ -71,7 +71,7 @@ export async function refreshAttempt(db: DB, attempt: Attempt) {
   if (result.status === "NOT_FOUND") return attempt;
   if (result.status !== "FOUND" || !result.data) throw Error("Unknown checkout");
   const data = result.data as Checkout;
-  const status = checkedStatus(attempt.checkout_id, attempt.checkout_code, data);
+  const status = checkedStatus(attempt.checkout_id, attempt.checkout_code, data, attempt.amount_xaf);
   const redirect = data.redirectUrl ? redirectUrl(data.redirectUrl) : null;
   const unchanged = status === attempt.status && data.checkoutCode === attempt.checkout_code &&
     (!redirect || redirect === attempt.redirect_url);
@@ -83,8 +83,8 @@ export async function startAttempt(db: DB, user: string) {
   const host = process.env.REPLIT_DEV_DOMAIN;
   if (!host || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.replit\.dev$/i.test(host) || !process.env.PAWAPAY_SANDBOX_API_TOKEN)
     throw Error("Development sandbox not configured");
-  const inserted = await db.query<Attempt>(`INSERT INTO consulting_course_sandbox_attempts(checkout_id,learner_id,status)
-    VALUES ($1,$2,'PENDING') ON CONFLICT DO NOTHING RETURNING *`, [randomUUID(),user]);
+  const inserted = await db.query<Attempt>(`INSERT INTO consulting_course_sandbox_attempts(checkout_id,learner_id,status,amount_xaf)
+    VALUES ($1,$2,'PENDING',$3) ON CONFLICT DO NOTHING RETURNING *`, [randomUUID(),user,coursePrice]);
   const attempt = inserted.rows[0] ?? await latestAttempt(db,user);
   if (!attempt) throw Error("No course attempt");
   if (attempt.status !== openStatus) return attempt;
@@ -94,7 +94,7 @@ export async function startAttempt(db: DB, user: string) {
   }
   const id = attempt.checkout_id;
   const data = await call("", { checkoutId:id, clientReferenceId:id, returnUrl:`https://${host}/mes-formations`,
-    defaultLanguage:"fr", countries:["CMR"], expiresAfter:15, amounts:[{country:"CMR",currency:"XAF",amount:String(coursePrice)}],
+    defaultLanguage:"fr", countries:["CMR"], expiresAfter:15, amounts:[{country:"CMR",currency:"XAF",amount:String(attempt.amount_xaf)}],
     reason:{fr:"Formation pressing",en:"Pressing course"} });
   if (data.status === "REJECTED" && data.checkoutId === id) {
     const rejected = await db.query<Attempt>(`UPDATE consulting_course_sandbox_attempts SET status='FAILED'
