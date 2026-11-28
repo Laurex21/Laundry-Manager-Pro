@@ -1,3 +1,4 @@
+import { coachingPrice, coursePrice } from "../../shared/consulting-offers";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
@@ -9,8 +10,15 @@ export function courseMode(env: NodeJS.ProcessEnv = process.env): SaasMode | nul
   return null;
 }
 
+export type ConsultingProduct = "course" | "coaching";
+const offers = {
+  course: { price: coursePrice, path: "/mes-formations", reason: {fr:"Formation pressing", en:"Pressing course"} },
+  coaching: { price: coachingPrice, path: "/formation/accompagnement", reason: {fr:"Accompagnement", en:"Coaching"} },
+};
+
 // These table names come exclusively from the server-selected environment.
-export function attemptsTable(mode: SaasMode) {
+export function attemptsTable(mode: SaasMode, product: ConsultingProduct = "course") {
+  if (product === "coaching") return mode === "live" ? "consulting_coaching_live_attempts" : "consulting_coaching_sandbox_attempts";
   return mode === "live" ? "consulting_course_live_attempts" : "consulting_course_sandbox_attempts";
 }
 function provider(mode: SaasMode) {
@@ -28,7 +36,7 @@ function provider(mode: SaasMode) {
   return { origin: "https://" + host, token };
 }
 const openStatus = "PENDING";
-export const coursePrice = 100_000;
+export { coursePrice };
 
 type Attempt = { amount_xaf: number; checkout_id: string; status: string; checkout_code: string | null; redirect_url: string | null; lastAttemptFailed?: boolean };
 type DB = Pick<Pool, "query">;
@@ -71,25 +79,25 @@ async function call(mode: SaasMode, path: string, body?: object) {
   return response.json();
 }
 
-export async function latestAttempt(db: DB, user: string, mode: SaasMode) {
-  const result = await db.query<Attempt>(`SELECT * FROM ${attemptsTable(mode)} WHERE learner_id=$1 ORDER BY created_at DESC LIMIT 1`, [user]);
+export async function latestAttempt(db: DB, user: string, mode: SaasMode, product: ConsultingProduct = "course") {
+  const result = await db.query<Attempt>(`SELECT * FROM ${attemptsTable(mode, product)} WHERE learner_id=$1 ORDER BY created_at DESC LIMIT 1`, [user]);
   return result.rows[0];
 }
 
 // A delayed response cannot replace a terminal result or update another attempt.
-async function save(db: DB, mode: SaasMode, attempt: Attempt, status: string, code: string, redirect: string | null) {
-  const result = await db.query<Attempt>(`UPDATE ${attemptsTable(mode)}
+async function save(db: DB, mode: SaasMode, attempt: Attempt, status: string, code: string, redirect: string | null, product: ConsultingProduct) {
+  const result = await db.query<Attempt>(`UPDATE ${attemptsTable(mode, product)}
     SET status=$2, checkout_code=$3, redirect_url=COALESCE($4,redirect_url),
         confirmed_at=CASE WHEN $2='COMPLETED' THEN now() END
     WHERE checkout_id=$1 AND status='PENDING' AND (checkout_code IS NULL OR checkout_code=$3)
     RETURNING *`, [attempt.checkout_id, status, code, redirect]);
   if (result.rows[0]) return result.rows[0];
-  const current = await db.query<Attempt>(`SELECT * FROM ${attemptsTable(mode)} WHERE checkout_id=$1`, [attempt.checkout_id]);
+  const current = await db.query<Attempt>(`SELECT * FROM ${attemptsTable(mode, product)} WHERE checkout_id=$1`, [attempt.checkout_id]);
   if (!current.rows[0] || current.rows[0].checkout_code !== code) throw Error("Course attempt changed");
   return current.rows[0];
 }
 
-export async function refreshAttempt(db: DB, attempt: Attempt, mode: SaasMode) {
+export async function refreshAttempt(db: DB, attempt: Attempt, mode: SaasMode, product: ConsultingProduct = "course") {
   if (attempt.status !== openStatus) return attempt;
   const result = await call(mode, "/" + attempt.checkout_id);
   if (result.status === "NOT_FOUND") return attempt;
@@ -99,30 +107,30 @@ export async function refreshAttempt(db: DB, attempt: Attempt, mode: SaasMode) {
   const redirect = data.redirectUrl ? redirectUrl(mode,data.redirectUrl) : null;
   const unchanged = status === attempt.status && data.checkoutCode === attempt.checkout_code &&
     (!redirect || redirect === attempt.redirect_url);
-  const updated = unchanged ? attempt : await save(db, mode, attempt, status, data.checkoutCode!, redirect);
+  const updated = unchanged ? attempt : await save(db, mode, attempt, status, data.checkoutCode!, redirect, product);
   return { ...updated, lastAttemptFailed: updated.status === openStatus && data.deposit?.status === "FAILED" };
 }
 
-export async function startAttempt(db: DB, user: string, mode: SaasMode) {
+export async function startAttempt(db: DB, user: string, mode: SaasMode, product: ConsultingProduct = "course") {
   const { origin } = provider(mode);
-  const inserted = await db.query<Attempt>(`INSERT INTO ${attemptsTable(mode)}(checkout_id,learner_id,status,amount_xaf)
-    VALUES ($1,$2,'PENDING',$3) ON CONFLICT DO NOTHING RETURNING *`, [randomUUID(),user,coursePrice]);
-  const attempt = inserted.rows[0] ?? await latestAttempt(db,user,mode);
+  const inserted = await db.query<Attempt>(`INSERT INTO ${attemptsTable(mode, product)}(checkout_id,learner_id,status,amount_xaf)
+    VALUES ($1,$2,'PENDING',$3) ON CONFLICT DO NOTHING RETURNING *`, [randomUUID(),user,offers[product].price]);
+  const attempt = inserted.rows[0] ?? await latestAttempt(db,user,mode,product);
   if (!attempt) throw Error("No course attempt");
   if (attempt.status !== openStatus) return attempt;
   if (!inserted.rowCount) {
-    const current = await refreshAttempt(db,attempt,mode);
+    const current = await refreshAttempt(db,attempt,mode,product);
     if (current.status !== openStatus || current.redirect_url) return current;
   }
   const id = attempt.checkout_id;
-  const data = await call(mode, "", { checkoutId:id, clientReferenceId:id, returnUrl:`${origin}/mes-formations`,
+  const data = await call(mode, "", { checkoutId:id, clientReferenceId:id, returnUrl:origin + offers[product].path,
     defaultLanguage:"fr", countries:["CMR"], expiresAfter:15, amounts:[{country:"CMR",currency:"XAF",amount:String(attempt.amount_xaf)}],
-    reason:{fr:"Formation pressing",en:"Pressing course"} });
+    reason:offers[product].reason });
   if (mode === "sandbox" && data.status === "REJECTED" && data.checkoutId === id) {
-    const rejected = await db.query<Attempt>(`UPDATE ${attemptsTable(mode)} SET status='FAILED'
+    const rejected = await db.query<Attempt>(`UPDATE ${attemptsTable(mode, product)} SET status='FAILED'
       WHERE checkout_id=$1 AND status='PENDING' AND checkout_code IS NULL RETURNING *`, [id]);
     if (rejected.rows[0]) return rejected.rows[0];
   }
   if (data.status !== "ACCEPTED" || data.checkoutId !== id || !data.checkoutCode) throw Error("Checkout not accepted");
-  return save(db,mode,attempt,openStatus,data.checkoutCode,redirectUrl(mode,data.redirectUrl));
+  return save(db,mode,attempt,openStatus,data.checkoutCode,redirectUrl(mode,data.redirectUrl),product);
 }

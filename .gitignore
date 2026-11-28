@@ -10,4 +10,5 @@ visual-test/
 
 # Local training verification assets (not application deployment files)
 .local/training-media/
+.local/consulting-materials/
 qa-training/

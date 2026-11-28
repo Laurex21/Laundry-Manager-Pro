@@ -1,3 +1,4 @@
+import { consultingWhatsApp } from "@shared/consulting-offers";
 import { BrandLogo } from "@/components/brand-logo";
 import { SaasPublicPlans } from "@/components/saas-public-plans";
 import { useTranslation } from "react-i18next";
@@ -10,7 +11,7 @@ type Branch = "pro" | "consulting" | "clean";
 type PublicStats = { totalOrders: number; totalCustomers: number; totalLaundries: number; totalCountries: number };
 const money = (amount: number) => `${new Intl.NumberFormat("fr-FR").format(amount)} FCFA`;
 const wa = (number: string, text: string) => `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
-const consultingContact = wa("237651638889", "Bonjour, je souhaite en savoir plus sur Xpress Consulting.");
+const consultingContact = wa(consultingWhatsApp, "Bonjour, je souhaite en savoir plus sur Xpress Consulting.");
 const cleanContact = wa("237655615806", "Bonjour, je souhaite en savoir plus sur les services Xpress Clean.");
 const carePrices: [string, number][] = [
   ["Chemise, T-shirt, pantalon, jean ou robe simple", 500], ["Kaba", 1000], ["Pull-over", 1000],

@@ -77,8 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: CreditCard, labelKey: "subscription", href: "/subscriptions", page: "subscriptions" },
       { icon: Handshake, labelKey: "ambassador", href: "/ambassador", page: "ambassador" },
-      { icon: GraduationCap, labelKey: "Mes formations", href: "/mes-formations", page: "training" },
-      ...(TRAINING_VISIBLE ? [{ icon: GraduationCap, labelKey: "Formation", href: "/formation", page: "training" }] : []),
+      { icon: GraduationCap, labelKey: "Formation", href: "/formation", page: "training" },
       { icon: Settings, labelKey: "settings", href: "/settings", page: "settings" },
     ],
   },
@@ -118,7 +117,9 @@ const PAGE_TITLES: Record<string, string> = {
   "/membership-plans": "subscription_plans",
   "/settings": "settings",
   "/ambassador": "ambassador",
-  "/mes-formations": "Mes formations",
+  "/mes-formations": "Formation",
+  "/formation/accompagnement": "Formation",
+  "/formation/xpresspro": "Formation",
   "/formation": "Formation",
 };
 
@@ -443,7 +444,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </p>
               <div className="space-y-0.5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:space-y-0">
                 {items.map((item) => {
-                  const isActive = location === item.href || (item.href === "/customers" && currentPath.startsWith("/customer-follow-ups"));
+                  const isActive = location === item.href || (item.href === "/formation" && (currentPath === "/mes-formations" || currentPath.startsWith("/formation/"))) || (item.href === "/customers" && currentPath.startsWith("/customer-follow-ups"));
                   return (
                     <Link key={item.href} href={item.href} className="lg:flex lg:min-h-0 lg:flex-1">
                       <div
@@ -565,7 +566,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>{t("help", "Help")}</DropdownMenuLabel>
-                {TRAINING_VISIBLE && <DropdownMenuItem asChild><Link href="/formation" data-testid="help-training"><GraduationCap className="mr-2 h-4 w-4" />Formation vidéo</Link></DropdownMenuItem>}
+                {TRAINING_VISIBLE && <DropdownMenuItem asChild><Link href="/formation/xpresspro" data-testid="help-training"><GraduationCap className="mr-2 h-4 w-4" />Formation vidéo</Link></DropdownMenuItem>}
                 {(user as any)?.role === "owner" && <DropdownMenuItem onClick={() => { setGuideIntro(null); setGuideOpen(true); }} data-testid="menu-item-getting-started-guide">
                   <ListChecks className="mr-2 h-4 w-4 text-blue-600" aria-hidden="true" />
                   {i18n.language.startsWith("fr") ? "Guide de prise en main" : "Getting started guide"}
@@ -607,7 +608,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         data-testid="bottom-nav"
       >
         {bottomNavItems.map((item) => {
-          const isActive = location === item.href || (item.href === "/customers" && currentPath.startsWith("/customer-follow-ups"));
+          const isActive = location === item.href || (item.href === "/formation" && (currentPath === "/mes-formations" || currentPath.startsWith("/formation/"))) || (item.href === "/customers" && currentPath.startsWith("/customer-follow-ups"));
           return (
             <Link key={item.href} href={item.href} className="flex-1">
               <div

@@ -45,6 +45,7 @@ export default function TrainingPage(){
  const duration=lesson.variants[mode].duration;
  const pct=progress.completed?100:Math.min(100,Math.round(progress.position/duration*100));
  return <div className="space-y-6" data-testid="training-page">
+  <Link href="/formation" className="text-sm font-medium text-primary underline">Toutes les formations</Link>
   <div className="rounded-2xl bg-[#102f57] p-5 text-white md:p-7">
    <p className="mb-2 flex items-center gap-2 text-sm text-violet-200"><GraduationCap className="h-5 w-5"/> APPRENDRE À UTILISER XPRESSPRO</p>
    <h1 className="font-display text-2xl font-bold md:text-3xl">Votre formation, à votre rythme</h1>
